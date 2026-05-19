@@ -1,0 +1,136 @@
+[
+  {
+    "cardID": "atk_001",
+    "cardName": "基础攻击",
+    "rarity": "White",
+    "cardType": "Attack",
+    "isClashable": true,
+    "minPoint": 10,
+    "maxPoint": 10,
+    "cooldown": 0,
+    "guiltCost": 0,
+    "isSinCard": true,
+    "consumeOnUse": true,
+    "maxUseCount": 3,
+    "sinCardUseRule": "UseCount",
+    "sinCardCategory": "Clash",
+    "guiltGain": 2,
+    "useConditions": [
+      {
+        "conditionType": "BuffStackAtLeast",
+        "target": "Self",
+        "buffType": "Bullet",
+        "value": 3
+      }
+    ],
+    "damageFormula": "DoublePointDamage",
+    "effects": [
+      {
+        "trigger": "BeforeUse",
+        "effectType": "ApplyBuff",
+        "target": "Self",
+        "buffType": "Strength",
+        "buffName": "强壮",
+        "buffCategory": "UpBuff",
+        "value": 0,
+        "stack": 1,
+        "duration": 1,
+        "checkTiming": "TurnEnd",
+        "expireRule": "DurationDown"
+      },
+      {
+        "trigger": "AfterDamage",
+        "effectType": "ApplyBuff",
+        "target": "Self",
+        "buffType": "DamageUp",
+        "buffName": "伤害提升",
+        "buffCategory": "UpBuff",
+        "value": 0,
+        "stack": 1,
+        "duration": 1,
+        "checkTiming": "TurnEnd",
+        "expireRule": "DurationDown",
+        "applyTiming": "Delayed",
+        "delayTurns": 1,
+        "applyTimes": 1,
+        "intervalTurns": 1
+      }
+
+    ]
+  },
+  {
+    "cardID": "sin_ability_001",
+    "cardName": "罪卡测试：能力强化",
+    "rarity": "Sin",
+    "cardType": "Ability",
+    "isClashable": false,
+    "minPoint": 0,
+    "maxPoint": 0,
+    "cooldown": 0,
+    "isSinCard": true,
+    "consumeOnUse": true,
+    "maxUseCount": 2,
+    "sinCardUseRule": "UseCount",
+    "sinCardCategory": "Ability",
+    "guiltGain": 2,
+    "useConditions": [
+      {
+        "conditionType": "BuffStackAtLeast",
+        "target": "Self",
+        "buffType": "Bullet",
+        "value": 3
+      }
+    ],
+    "effects": [
+      {
+        "trigger": "OnPlay",
+        "effectType": "ApplyBuff",
+        "target": "Self",
+        "buffType": "AbilityPower",
+        "buffName": "能力强化",
+        "buffCategory": "UpBuff",
+        "value": 0,
+        "stack": 1,
+        "duration": 1,
+        "checkTiming": "TurnEnd",
+        "expireRule": "DurationDown"
+      }
+    ]
+  },
+  {
+    "cardID": "dodge_001",
+    "cardName": "基础闪避",
+    "rarity": "White",
+    "cardType": "Dodge",
+    "isClashable": true,
+    "minPoint": 1,
+    "maxPoint": 12,
+    "cooldown": 1,
+    "guiltCost": 0
+  },
+  {
+    "cardID": "enemy_atk_001",
+    "cardName": "敌人爪击",
+    "rarity": "White",
+    "cardType": "Attack",
+    "isClashable": true,
+    "minPoint": 2,
+    "maxPoint": 8,
+    "cooldown": 0,
+    "guiltCost": 0,
+    "damageFormula": "PointAsDamage",
+    "effects": []
+  },
+  {
+    "cardID": "def_001",
+    "cardName": "基础防御",
+    "rarity": "White",
+    "cardType": "Defense",
+    "isClashable": false,
+    "minPoint": 2,
+    "maxPoint": 5,
+    "cooldown": 1,
+    "guiltCost": 0,
+    "defenseFormula": "PointAsDefense"
+  }
+]
