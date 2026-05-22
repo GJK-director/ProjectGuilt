@@ -398,6 +398,8 @@ public class CardLoadTest : MonoBehaviour
             actionSlot.actor,
             actionSlot.cardState
         );
+
+        actionSlot.MarkUsed();
     }
 
     // ExecuteFreeActionSlot = 执行不直接响应敌人意图的槽位
@@ -416,6 +418,7 @@ public class CardLoadTest : MonoBehaviour
                 actionSlot.target
             );
 
+            actionSlot.MarkUsed();
             return;
         }
 

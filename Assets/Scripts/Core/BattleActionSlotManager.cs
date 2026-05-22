@@ -162,6 +162,7 @@ public static class BattleActionSlotManager
                 " / 行动者：" + slot.GetActorName() +
                 " / 卡牌：" + slot.GetCardName() +
                 " / 目标：" + slot.GetTargetName() +
+                " / 已使用：" + slot.isUsed +
                 intentText
             );
         }

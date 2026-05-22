@@ -17,6 +17,7 @@ public class BattleActionSlot
     public BattleCardState cardState;
     public CharacterData target;
     public BattleEnemyIntent enemyIntent;
+    public bool isUsed;
 
     public BattleActionSlot(int slotIndex)
     {
@@ -39,6 +40,7 @@ public class BattleActionSlot
         this.actor = actor;
         this.cardState = cardState;
         this.enemyIntent = enemyIntent;
+        isUsed = false;
 
         if (enemyIntent != null)
         {
@@ -62,6 +64,12 @@ public class BattleActionSlot
         this.cardState = cardState;
         this.target = target;
         enemyIntent = null;
+        isUsed = false;
+    }
+
+    public void MarkUsed()
+    {
+        isUsed = true;
     }
 
     public void Clear()
@@ -71,6 +79,7 @@ public class BattleActionSlot
         cardState = null;
         target = null;
         enemyIntent = null;
+        isUsed = false;
     }
 
     public string GetActorName()
