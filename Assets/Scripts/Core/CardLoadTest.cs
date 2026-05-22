@@ -136,6 +136,10 @@ public class CardLoadTest : MonoBehaviour
         PrintAbilitySinCardTestState();
     }
 
+    // ================================
+    // Action Slot 测试流程
+    // ================================
+
     // RunActionSlotBasicTestSequence = 执行行动槽位基础测试流程
     void RunActionSlotBasicTestSequence()
     {
@@ -176,7 +180,7 @@ public class CardLoadTest : MonoBehaviour
         ExecuteActionSlots(actionSlots);
 
         BattleActionSlotManager.PrintSlotStates(actionSlots);
-        BattleCardManager.PrintCardStates(allyA);
+        PrintCharacterCardStates(allyA);
     }
 
     // RunActionSlotInterceptFailTestSequence = 执行速度不足无法介入测试
@@ -187,9 +191,8 @@ public class CardLoadTest : MonoBehaviour
         CharacterData slowAlly = new CharacterData("低速角色", 30, 3, 3);
         battleUnits.Add(slowAlly);
 
-        BattleCardState slowAllyAttackCardState = BattleCardManager.CreateBattleCard(
+        BattleCardState slowAllyAttackCardState = CreateTestAttackCardForCharacter(
             slowAlly,
-            allyAAttackCardState.cardData,
             "slowAlly_atk_001_copy_0"
         );
 
@@ -212,9 +215,9 @@ public class CardLoadTest : MonoBehaviour
             Debug.Log("低速角色响应敌人意图失败，未执行拼点");
         }
 
-        Debug.Log("敌人意图实际目标仍为：" + enemyIntent.GetActualTargetSlotText());
+        PrintEnemyIntentActualTarget(enemyIntent);
         BattleActionSlotManager.PrintSlotStates(actionSlots);
-        BattleCardManager.PrintCardStates(slowAlly);
+        PrintCharacterCardStates(slowAlly);
     }
 
     // RunActionSlotInterceptEqualFailTestSequence = 执行速度相等无法介入测试
@@ -229,9 +232,8 @@ public class CardLoadTest : MonoBehaviour
         enemy.minSpeed = 6;
         enemy.maxSpeed = 6;
 
-        BattleCardState sameSpeedAllyAttackCardState = BattleCardManager.CreateBattleCard(
+        BattleCardState sameSpeedAllyAttackCardState = CreateTestAttackCardForCharacter(
             sameSpeedAlly,
-            allyAAttackCardState.cardData,
             "sameSpeedAlly_atk_001_copy_0"
         );
 
@@ -254,9 +256,41 @@ public class CardLoadTest : MonoBehaviour
             Debug.Log("同速角色响应敌人意图失败，未执行拼点");
         }
 
-        Debug.Log("敌人意图实际目标仍为：" + enemyIntent.GetActualTargetSlotText());
+        PrintEnemyIntentActualTarget(enemyIntent);
         BattleActionSlotManager.PrintSlotStates(actionSlots);
-        BattleCardManager.PrintCardStates(sameSpeedAlly);
+        PrintCharacterCardStates(sameSpeedAlly);
+    }
+
+    // ================================
+    // Action Slot 测试辅助方法
+    // ================================
+
+    // CreateTestAttackCardForCharacter = 给测试角色创建一张基础攻击卡实例
+    BattleCardState CreateTestAttackCardForCharacter(CharacterData owner, string instanceID)
+    {
+        return BattleCardManager.CreateBattleCard(
+            owner,
+            allyAAttackCardState.cardData,
+            instanceID
+        );
+    }
+
+    // PrintEnemyIntentActualTarget = 打印敌人意图当前实际目标
+    void PrintEnemyIntentActualTarget(BattleEnemyIntent enemyIntent)
+    {
+        if (enemyIntent == null)
+        {
+            Debug.LogWarning("敌人意图实际目标打印失败：敌人意图为空");
+            return;
+        }
+
+        Debug.Log("敌人意图实际目标仍为：" + enemyIntent.GetActualTargetSlotText());
+    }
+
+    // PrintCharacterCardStates = 打印指定角色的战斗卡牌状态
+    void PrintCharacterCardStates(CharacterData character)
+    {
+        BattleCardManager.PrintCardStates(character);
     }
 
     // CreateTestEnemyIntent = 创建测试用敌人意图
@@ -283,6 +317,10 @@ public class CardLoadTest : MonoBehaviour
 
         return enemyIntent;
     }
+
+    // ================================
+    // Action Slot 执行辅助方法
+    // ================================
 
     // ExecuteActionSlots = 按槽位顺序执行已安排的行动
     void ExecuteActionSlots(List<BattleActionSlot> actionSlots)
