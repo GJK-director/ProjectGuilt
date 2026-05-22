@@ -8,7 +8,8 @@ public enum BattleTestMode
     AbilityUseCount,
     ActionSlotBasic,
     ActionSlotInterceptFail,
-    ActionSlotInterceptEqualFail
+    ActionSlotInterceptEqualFail,
+    ActionSlotMultiIntentBasic
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -88,6 +89,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.ActionSlotInterceptEqualFail)
         {
             RunActionSlotInterceptEqualFailTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotMultiIntentBasic)
+        {
+            RunActionSlotMultiIntentBasicTestSequence();
             return;
         }
     }
@@ -259,6 +266,57 @@ public class CardLoadTest : MonoBehaviour
         PrintEnemyIntentActualTarget(enemyIntent);
         BattleActionSlotManager.PrintSlotStates(actionSlots);
         PrintCharacterCardStates(sameSpeedAlly);
+    }
+
+    // RunActionSlotMultiIntentBasicTestSequence = 执行多敌人意图基础数据测试
+    void RunActionSlotMultiIntentBasicTestSequence()
+    {
+        Debug.Log("===== Action Slot 多敌人意图基础测试开始 =====");
+
+        // 多意图指定响应仍依赖速度判断，所以先进入回合开始流程
+        StartTurn();
+
+        BattleCardState secondEnemyAttackCardState = BattleCardManager.CreateBattleCard(
+            enemy,
+            enemyAttackCardState.cardData,
+            "enemy_atk_001_copy_1"
+        );
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        BattleEnemyIntent intent2 = new BattleEnemyIntent(
+            "enemy_intent_002",
+            enemy,
+            secondEnemyAttackCardState,
+            allyB,
+            1,
+            2
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1, intent2);
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        BattleEnemyIntent selectedIntent = BattleEnemyIntentManager.FindIntentByOrder(intentQueue, 2);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            allyA,
+            allyAAttackCardState,
+            selectedIntent
+        );
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+        PrintCharacterCardStates(allyA);
     }
 
     // ================================

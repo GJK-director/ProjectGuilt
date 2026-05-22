@@ -3,6 +3,7 @@
 public class BattleEnemyIntent
 {
     public string intentID;
+    public int intentOrder;
     public CharacterData enemy;
     public BattleCardState enemyCardState;
     public CharacterData originalTargetCharacter;
@@ -15,10 +16,12 @@ public class BattleEnemyIntent
         CharacterData enemy,
         BattleCardState enemyCardState,
         CharacterData originalTargetCharacter,
-        int originalTargetSlotIndex
+        int originalTargetSlotIndex,
+        int intentOrder = 1
     )
     {
         this.intentID = intentID;
+        this.intentOrder = intentOrder;
         this.enemy = enemy;
         this.enemyCardState = enemyCardState;
         this.originalTargetCharacter = originalTargetCharacter;
