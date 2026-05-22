@@ -172,7 +172,8 @@ public class CardLoadTest : MonoBehaviour
             "enemy_intent_001",
             enemy,
             enemyAttackCardState,
-            allyB
+            allyB,
+            2
         );
 
         Debug.Log(
@@ -181,7 +182,9 @@ public class CardLoadTest : MonoBehaviour
             " 使用 " +
             enemyIntent.GetCardName() +
             " 攻击 " +
-            enemyIntent.GetOriginalTargetName()
+            enemyIntent.GetOriginalTargetName() +
+            " 的槽位" +
+            enemyIntent.originalTargetSlotIndex
         );
 
         return enemyIntent;

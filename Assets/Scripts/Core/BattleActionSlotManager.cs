@@ -45,17 +45,19 @@ public static class BattleActionSlotManager
             return false;
         }
 
-        if (actor == null || enemyIntent == null || enemyIntent.enemy == null || enemyIntent.originalTarget == null)
+        if (actor == null || enemyIntent == null || enemyIntent.enemy == null || enemyIntent.originalTargetCharacter == null)
         {
             Debug.LogWarning("安排响应行动失败：响应行动数据不完整");
             return false;
         }
 
-        if (!BattleTargeting.CanInterceptAttack(actor, enemyIntent.enemy, enemyIntent.originalTarget))
+        if (!BattleTargeting.CanInterceptAttack(actor, enemyIntent.enemy, enemyIntent.originalTargetCharacter))
         {
             Debug.Log("速度不足，无法介入该敌人意图");
             return false;
         }
+
+        string originalTargetText = enemyIntent.GetOriginalTargetSlotText();
 
         slot.AssignResponse(actor, cardState, enemyIntent);
 
@@ -66,6 +68,13 @@ public static class BattleActionSlotManager
             " 使用 " +
             slot.GetCardName() +
             " 介入敌人意图"
+        );
+
+        Debug.Log(
+            "敌人意图目标从 " +
+            originalTargetText +
+            " 改为 " +
+            enemyIntent.GetActualTargetSlotText()
         );
 
         return true;
@@ -144,7 +153,7 @@ public static class BattleActionSlotManager
                     " 使用 " +
                     slot.enemyIntent.GetCardName() +
                     " 攻击 " +
-                    slot.enemyIntent.GetOriginalTargetName();
+                    slot.enemyIntent.GetOriginalTargetSlotText();
             }
 
             Debug.Log(

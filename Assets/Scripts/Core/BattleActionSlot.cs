@@ -43,6 +43,7 @@ public class BattleActionSlot
         if (enemyIntent != null)
         {
             target = enemyIntent.enemy;
+            enemyIntent.SetActualTarget(actor, slotIndex);
         }
         else
         {
