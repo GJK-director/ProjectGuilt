@@ -7,7 +7,8 @@ public enum BattleTestMode
     ClashUseCount,
     AbilityUseCount,
     ActionSlotBasic,
-    ActionSlotInterceptFail
+    ActionSlotInterceptFail,
+    ActionSlotInterceptEqualFail
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -81,6 +82,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.ActionSlotInterceptFail)
         {
             RunActionSlotInterceptFailTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotInterceptEqualFail)
+        {
+            RunActionSlotInterceptEqualFailTestSequence();
             return;
         }
     }
@@ -208,6 +215,48 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("敌人意图实际目标仍为：" + enemyIntent.GetActualTargetSlotText());
         BattleActionSlotManager.PrintSlotStates(actionSlots);
         BattleCardManager.PrintCardStates(slowAlly);
+    }
+
+    // RunActionSlotInterceptEqualFailTestSequence = 执行速度相等无法介入测试
+    void RunActionSlotInterceptEqualFailTestSequence()
+    {
+        Debug.Log("===== Action Slot 速度相等测试开始 =====");
+
+        CharacterData sameSpeedAlly = new CharacterData("同速角色", 30, 6, 6);
+        battleUnits.Add(sameSpeedAlly);
+
+        // 固定敌人速度，确保同速角色和敌人当前速度相等
+        enemy.minSpeed = 6;
+        enemy.maxSpeed = 6;
+
+        BattleCardState sameSpeedAllyAttackCardState = BattleCardManager.CreateBattleCard(
+            sameSpeedAlly,
+            allyAAttackCardState.cardData,
+            "sameSpeedAlly_atk_001_copy_0"
+        );
+
+        // 速度判断依赖当前速度，所以先进入回合开始流程
+        StartTurn();
+
+        BattleEnemyIntent enemyIntent = CreateTestEnemyIntent();
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+
+        bool assignResult = BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            sameSpeedAlly,
+            sameSpeedAllyAttackCardState,
+            enemyIntent
+        );
+
+        if (!assignResult)
+        {
+            Debug.Log("同速角色响应敌人意图失败，未执行拼点");
+        }
+
+        Debug.Log("敌人意图实际目标仍为：" + enemyIntent.GetActualTargetSlotText());
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+        BattleCardManager.PrintCardStates(sameSpeedAlly);
     }
 
     // CreateTestEnemyIntent = 创建测试用敌人意图
