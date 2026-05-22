@@ -10,6 +10,7 @@ public class BattleEnemyIntent
     public int originalTargetSlotIndex;
     public CharacterData actualTargetCharacter;
     public int actualTargetSlotIndex;
+    public bool isResponded;
 
     public BattleEnemyIntent(
         string intentID,
@@ -28,12 +29,18 @@ public class BattleEnemyIntent
         this.originalTargetSlotIndex = originalTargetSlotIndex;
         actualTargetCharacter = originalTargetCharacter;
         actualTargetSlotIndex = originalTargetSlotIndex;
+        isResponded = false;
     }
 
     public void SetActualTarget(CharacterData actualTargetCharacter, int actualTargetSlotIndex)
     {
         this.actualTargetCharacter = actualTargetCharacter;
         this.actualTargetSlotIndex = actualTargetSlotIndex;
+    }
+
+    public void MarkResponded()
+    {
+        isResponded = true;
     }
 
     public string GetEnemyName()

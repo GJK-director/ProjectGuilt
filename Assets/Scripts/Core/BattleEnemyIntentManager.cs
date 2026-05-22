@@ -77,7 +77,8 @@ public static class BattleEnemyIntentManager
             " / 敌人：" + intent.GetEnemyName() +
             " / 卡牌：" + intent.GetCardName() +
             " / 原目标：" + intent.GetOriginalTargetSlotText() +
-            " / 实际目标：" + intent.GetActualTargetSlotText()
+            " / 实际目标：" + intent.GetActualTargetSlotText() +
+            " / 已响应：" + intent.isResponded
         );
     }
 }

@@ -60,6 +60,7 @@ public static class BattleActionSlotManager
         string originalTargetText = enemyIntent.GetOriginalTargetSlotText();
 
         slot.AssignResponse(actor, cardState, enemyIntent);
+        enemyIntent.MarkResponded();
 
         Debug.Log(
             "槽位 " + slot.slotIndex +
