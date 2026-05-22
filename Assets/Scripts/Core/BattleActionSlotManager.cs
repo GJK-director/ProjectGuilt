@@ -53,7 +53,7 @@ public static class BattleActionSlotManager
 
         if (!BattleTargeting.CanInterceptAttack(actor, enemyIntent.enemy, enemyIntent.originalTargetCharacter))
         {
-            Debug.Log("速度不足，无法介入该敌人意图");
+            Debug.Log("速度不足，无法改变该敌人卡牌目标");
             return false;
         }
 

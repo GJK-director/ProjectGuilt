@@ -6,7 +6,8 @@ public enum BattleTestMode
 {
     ClashUseCount,
     AbilityUseCount,
-    ActionSlotBasic
+    ActionSlotBasic,
+    ActionSlotInterceptFail
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -74,6 +75,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.ActionSlotBasic)
         {
             RunActionSlotBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotInterceptFail)
+        {
+            RunActionSlotInterceptFailTestSequence();
             return;
         }
     }
@@ -163,6 +170,44 @@ public class CardLoadTest : MonoBehaviour
 
         BattleActionSlotManager.PrintSlotStates(actionSlots);
         BattleCardManager.PrintCardStates(allyA);
+    }
+
+    // RunActionSlotInterceptFailTestSequence = 执行速度不足无法介入测试
+    void RunActionSlotInterceptFailTestSequence()
+    {
+        Debug.Log("===== Action Slot 速度不足测试开始 =====");
+
+        CharacterData slowAlly = new CharacterData("低速角色", 30, 3, 3);
+        battleUnits.Add(slowAlly);
+
+        BattleCardState slowAllyAttackCardState = BattleCardManager.CreateBattleCard(
+            slowAlly,
+            allyAAttackCardState.cardData,
+            "slowAlly_atk_001_copy_0"
+        );
+
+        // 速度判断依赖当前速度，所以先进入回合开始流程
+        StartTurn();
+
+        BattleEnemyIntent enemyIntent = CreateTestEnemyIntent();
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+
+        bool assignResult = BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            slowAlly,
+            slowAllyAttackCardState,
+            enemyIntent
+        );
+
+        if (!assignResult)
+        {
+            Debug.Log("低速角色响应敌人意图失败，未执行拼点");
+        }
+
+        Debug.Log("敌人意图实际目标仍为：" + enemyIntent.GetActualTargetSlotText());
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+        BattleCardManager.PrintCardStates(slowAlly);
     }
 
     // CreateTestEnemyIntent = 创建测试用敌人意图
