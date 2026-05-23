@@ -107,6 +107,42 @@ public static class BattleEnemyIntentManager
         return unrespondedIntents;
     }
 
+    public static void PrintIntentHandlingPreview(List<BattleEnemyIntent> intentQueue)
+    {
+        Debug.Log("===== 敌人意图处理预览 =====");
+
+        if (intentQueue == null || intentQueue.Count == 0)
+        {
+            Debug.Log("当前没有敌人意图，无法生成处理预览");
+            return;
+        }
+
+        foreach (BattleEnemyIntent intent in intentQueue)
+        {
+            if (intent == null)
+            {
+                continue;
+            }
+
+            if (intent.isResponded)
+            {
+                Debug.Log(
+                    "敌人意图" + intent.intentOrder +
+                    "：已响应，未来将进入玩家响应处理，当前实际目标：" +
+                    intent.GetActualTargetSlotText()
+                );
+            }
+            else
+            {
+                Debug.Log(
+                    "敌人意图" + intent.intentOrder +
+                    "：未响应，未来将按当前 actualTarget 执行，目标：" +
+                    intent.GetActualTargetSlotText()
+                );
+            }
+        }
+    }
+
     public static void PrintIntentState(BattleEnemyIntent intent)
     {
         if (intent == null)

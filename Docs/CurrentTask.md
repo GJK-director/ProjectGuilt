@@ -590,7 +590,123 @@ isResponded 保持 false 的情况：
 - UseCount 增加。
 - slot.MarkUsed()。
 
-## 十八、Action Slot / Enemy Intent 后续设计记录
+## 十八、GetUnrespondedIntents 未响应敌人意图查询方法已完成
+
+当前已完成小目标：
+
+- BattleEnemyIntentManager 新增 GetUnrespondedIntents(List<BattleEnemyIntent> intentQueue)。
+- 用于返回当前敌人意图队列中 isResponded == false 的敌人意图列表。
+- 让系统不只可以打印未响应敌人意图，也可以拿到未响应敌人意图数据。
+- 当前只做数据层查询，不执行任何敌人意图。
+
+修改范围记录：
+
+- BattleEnemyIntentManager.cs 新增 GetUnrespondedIntents(...)。
+- BattleEnemyIntentManager.cs 返回新的 List<BattleEnemyIntent>。
+- BattleEnemyIntentManager.cs 只收集 intent != null && !intent.isResponded 的敌人意图。
+- BattleEnemyIntentManager.cs null 或空队列返回空列表。
+- BattleEnemyIntentManager.cs 不修改任何状态。
+- BattleEnemyIntentManager.cs 不执行任何敌人意图。
+- BattleEnemyIntentManager.cs 中 PrintUnrespondedIntents(...) 改为复用 GetUnrespondedIntents(...)。
+- BattleEnemyIntentManager.cs 保持原有日志语义：队列为空打印 当前没有敌人意图；无未响应意图打印 当前没有未响应敌人意图。
+- CardLoadTest.cs 在 RunActionSlotMultiIntentBasicTestSequence() 中轻量验证新方法。
+- CardLoadTest.cs 响应后完整队列打印之后调用 GetUnrespondedIntents(intentQueue)。
+- CardLoadTest.cs 打印 当前未响应敌人意图数量：1。
+- CardLoadTest.cs 随后继续调用 PrintUnrespondedIntents(intentQueue)。
+
+已通过 Unity 测试：
+
+- ActionSlotMultiIntentBasic 通过：完整队列显示敌人意图1 已响应：False。
+- ActionSlotMultiIntentBasic 通过：完整队列显示敌人意图2 已响应：True。
+- ActionSlotMultiIntentBasic 通过：数量日志显示 当前未响应敌人意图数量：1。
+- ActionSlotMultiIntentBasic 通过：未响应列表只打印敌人意图1。
+- ActionSlotMultiIntentBasic 通过：未响应列表不打印敌人意图2。
+- ActionSlotMultiIntentBasic 通过：槽位1仍显示 已使用：False。
+- ActionSlotMultiIntentBasic 通过：基础攻击使用次数仍为 0 / 3。
+- ActionSlotMultiIntentBasic 通过：Ability 罪卡使用次数仍为 0 / 2。
+
+当前结论：
+
+- 当前已经可以通过 GetUnrespondedIntents(...) 拿到未响应敌人意图列表。
+- PrintUnrespondedIntents(...) 现在基于查询结果进行打印。
+- 该方法为后续未响应敌人意图正式结算、无人响应效果、防御/闪避自动处理未响应意图提供数据入口。
+- 当前仍然只做数据层查询，不执行这些意图。
+
+当前不实现：
+
+- 未响应敌人意图正式结算。
+- 敌人攻击执行。
+- 无人响应效果。
+- 防御 / 闪避自动响应。
+- 完整速度队列。
+- isCompleted。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+
+## 十九、PrintIntentHandlingPreview 敌人意图处理预览日志工具已完成
+
+当前已完成小目标：
+
+- BattleEnemyIntentManager 新增 PrintIntentHandlingPreview(List<BattleEnemyIntent> intentQueue)。
+- 用于根据当前敌人意图队列打印每个敌人意图未来可能进入的处理路径。
+- 当前只做数据层日志预览，不执行任何敌人意图。
+
+修改范围记录：
+
+- BattleEnemyIntentManager.cs 新增 PrintIntentHandlingPreview(...)。
+- BattleEnemyIntentManager.cs 队列为空或 null 时打印：当前没有敌人意图，无法生成处理预览。
+- BattleEnemyIntentManager.cs 遍历敌人意图队列。
+- BattleEnemyIntentManager.cs 在 isResponded == false 时打印未响应路径。
+- BattleEnemyIntentManager.cs 在 isResponded == true 时打印已响应路径。
+- BattleEnemyIntentManager.cs 只读取 isResponded、intentOrder、actualTarget 文本。
+- BattleEnemyIntentManager.cs 不修改任何字段。
+- BattleEnemyIntentManager.cs 不执行任何敌人意图。
+- CardLoadTest.cs 在 RunActionSlotMultiIntentBasicTestSequence() 中追加调用 BattleEnemyIntentManager.PrintIntentHandlingPreview(intentQueue);。
+- CardLoadTest.cs 调用位置在响应后完整队列打印、未响应数量打印、未响应列表打印之后，槽位状态打印之前。
+
+已通过 Unity 测试：
+
+- ActionSlotMultiIntentBasic 通过：完整队列显示敌人意图1 已响应：False。
+- ActionSlotMultiIntentBasic 通过：完整队列显示敌人意图2 已响应：True。
+- ActionSlotMultiIntentBasic 通过：未响应数量显示 当前未响应敌人意图数量：1。
+- ActionSlotMultiIntentBasic 通过：未响应列表只打印敌人意图1。
+- ActionSlotMultiIntentBasic 通过：处理预览显示敌人意图1 未响应，未来将按当前 actualTarget 执行，目标为 allyB 槽位2。
+- ActionSlotMultiIntentBasic 通过：处理预览显示敌人意图2 已响应，未来将进入玩家响应处理，当前实际目标为 allyA 槽位1。
+- ActionSlotMultiIntentBasic 通过：槽位1仍显示 已使用：False。
+- ActionSlotMultiIntentBasic 通过：基础攻击使用次数仍为 0 / 3。
+- ActionSlotMultiIntentBasic 通过：Ability 罪卡使用次数仍为 0 / 2。
+
+当前结论：
+
+- 当前可以通过 PrintIntentHandlingPreview(...) 直观看到敌人意图未来可能进入的处理路径。
+- 未响应意图会被标记为未来按当前 actualTarget 执行。
+- 已响应意图会被标记为未来进入玩家响应处理。
+- 该工具只是日志预览，不是正式结算。
+
+当前不实现：
+
+- 未响应敌人意图正式结算。
+- 已响应敌人意图正式结算。
+- 敌人攻击执行。
+- 无人响应效果。
+- 响应失败效果。
+- 拼点执行。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- isCompleted。
+- 完整速度队列。
+
+命名记录：
+
+- 当前使用 PrintIntentHandlingPreview(...)。
+- 暂不使用 PrintIntentResolutionPreview(...)。
+- 原因是当前只是处理路径预览，不是正式结算，并且避免和现有 Resolved 战斗事件混淆。
+
+## 二十、Action Slot / Enemy Intent 后续设计记录
 
 当前阶段只记录以下设计规则，不实现。
 
@@ -1042,7 +1158,7 @@ isCompleted 含义：这个敌人意图是否已经完成结算。
 - 不修改当前 ActionSlotBasic 测试。
 - 不修改 BattleResolver、BattleCardManager、GuiltManager、CardEffectExecutor、CardsTest.json。
 
-## 十九、下一步候选方向
+## 二十一、下一步候选方向
 
 后续候选方向：
 
@@ -1053,7 +1169,7 @@ isCompleted 含义：这个敌人意图是否已经完成结算。
 - 敌人防御逻辑暂缓。
 - 负罪感阈值暂缓。
 
-## 二十、当前规则提醒
+## 二十二、当前规则提醒
 
 - 负罪感不是消耗资源，而是从 0 开始累计增加。
 - 使用罪卡会增加 guiltGain。

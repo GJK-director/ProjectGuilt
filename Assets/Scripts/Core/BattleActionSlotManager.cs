@@ -169,6 +169,59 @@ public static class BattleActionSlotManager
         }
     }
 
+    public static void PrintActionSlotIntentHandlingPreview(
+        List<BattleActionSlot> actionSlots,
+        List<BattleEnemyIntent> intentQueue
+    )
+    {
+        Debug.Log("===== 行动槽位处理敌人意图预览 =====");
+
+        if (intentQueue == null || intentQueue.Count == 0)
+        {
+            Debug.Log("当前没有敌人意图，无法生成行动槽位处理预览");
+            return;
+        }
+
+        foreach (BattleEnemyIntent intent in intentQueue)
+        {
+            if (intent == null)
+            {
+                continue;
+            }
+
+            if (!intent.isResponded)
+            {
+                Debug.Log(
+                    "敌人意图" + intent.intentOrder +
+                    "：未响应，未来按当前 actualTarget 执行，目标：" +
+                    intent.GetActualTargetSlotText()
+                );
+                continue;
+            }
+
+            BattleActionSlot boundSlot = FindSlotByEnemyIntent(actionSlots, intent);
+
+            if (boundSlot == null)
+            {
+                Debug.Log(
+                    "敌人意图" + intent.intentOrder +
+                    "：已响应，但未找到绑定的行动槽位"
+                );
+                continue;
+            }
+
+            Debug.Log(
+                "敌人意图" + intent.intentOrder +
+                "：已响应，未来由 " +
+                boundSlot.GetActorName() +
+                " 槽位" +
+                boundSlot.slotIndex +
+                " 处理，当前实际目标：" +
+                intent.GetActualTargetSlotText()
+            );
+        }
+    }
+
     static BattleActionSlot GetSlot(List<BattleActionSlot> slots, int slotIndex)
     {
         if (slots == null)
@@ -240,5 +293,31 @@ public static class BattleActionSlotManager
         }
 
         return false;
+    }
+
+    static BattleActionSlot FindSlotByEnemyIntent(
+        List<BattleActionSlot> slots,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        if (slots == null || enemyIntent == null)
+        {
+            return null;
+        }
+
+        foreach (BattleActionSlot slot in slots)
+        {
+            if (slot == null)
+            {
+                continue;
+            }
+
+            if (object.ReferenceEquals(slot.enemyIntent, enemyIntent))
+            {
+                return slot;
+            }
+        }
+
+        return null;
     }
 }
