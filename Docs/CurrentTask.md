@@ -706,7 +706,118 @@ isResponded 保持 false 的情况：
 - 暂不使用 PrintIntentResolutionPreview(...)。
 - 原因是当前只是处理路径预览，不是正式结算，并且避免和现有 Resolved 战斗事件混淆。
 
-## 二十、Action Slot / Enemy Intent 后续设计记录
+## 二十、PrintActionSlotIntentHandlingPreview 行动槽位处理敌人意图预览日志工具已完成
+
+当前已完成小目标：
+
+- BattleActionSlotManager 新增 PrintActionSlotIntentHandlingPreview(List<BattleActionSlot> actionSlots, List<BattleEnemyIntent> intentQueue)。
+- 用于根据当前行动槽位列表和敌人意图队列，打印敌人意图未来由哪个槽位处理，或未响应时按当前 actualTarget 执行。
+- 当前只做数据层日志预览，不执行任何玩家槽位或敌人意图。
+
+修改范围记录：
+
+- BattleActionSlotManager.cs 新增公共日志方法 PrintActionSlotIntentHandlingPreview(...)。
+- BattleActionSlotManager.cs 新增私有辅助方法 FindSlotByEnemyIntent(...)。
+- BattleActionSlotManager.cs 对 isResponded == false 的敌人意图，打印未响应路径：未来按当前 actualTarget 执行。
+- BattleActionSlotManager.cs 对 isResponded == true 的敌人意图，通过扫描 actionSlots 查找 slot.enemyIntent == intent。
+- BattleActionSlotManager.cs 找到绑定槽位时，打印未来由哪个角色的哪个槽位处理。
+- BattleActionSlotManager.cs 找不到绑定槽位时，打印已响应但未找到绑定槽位。
+- BattleActionSlotManager.cs 队列为空或 null 时打印无法生成预览。
+- BattleActionSlotManager.cs 在 actionSlots 为空或 null 时不报错。
+- CardLoadTest.cs 在 RunActionSlotMultiIntentBasicTestSequence() 中追加调用 BattleActionSlotManager.PrintActionSlotIntentHandlingPreview(actionSlots, intentQueue);。
+- CardLoadTest.cs 调用位置在 BattleEnemyIntentManager.PrintIntentHandlingPreview(intentQueue); 之后，BattleActionSlotManager.PrintSlotStates(actionSlots); 之前。
+
+已通过 Unity 测试：
+
+- ActionSlotMultiIntentBasic 通过：敌人意图1 显示 已响应：False。
+- ActionSlotMultiIntentBasic 通过：敌人意图2 显示 已响应：True。
+- ActionSlotMultiIntentBasic 通过：未响应数量为 1。
+- ActionSlotMultiIntentBasic 通过：PrintIntentHandlingPreview(...) 正常显示敌人意图1 未响应路径。
+- ActionSlotMultiIntentBasic 通过：PrintIntentHandlingPreview(...) 正常显示敌人意图2 已响应路径。
+- ActionSlotMultiIntentBasic 通过：PrintActionSlotIntentHandlingPreview(...) 显示敌人意图1 未响应，未来按当前 actualTarget 执行，目标为 allyB 槽位2。
+- ActionSlotMultiIntentBasic 通过：PrintActionSlotIntentHandlingPreview(...) 显示敌人意图2 已响应，未来由 allyA 槽位1 处理，当前实际目标为 allyA 槽位1。
+- ActionSlotMultiIntentBasic 通过：槽位1仍显示 已使用：False。
+- ActionSlotMultiIntentBasic 通过：基础攻击使用次数仍为 0 / 3。
+- ActionSlotMultiIntentBasic 通过：Ability 罪卡使用次数仍为 0 / 2。
+
+当前结论：
+
+- 当前已经可以通过日志看到哪些敌人意图未响应。
+- 当前已经可以通过日志看到哪些敌人意图已响应。
+- 当前已经可以通过日志看到已响应敌人意图未来由哪个行动槽位处理。
+- 当前已经可以通过日志看到未响应敌人意图未来按当前 actualTarget 执行。
+- 当前通过扫描 actionSlots 反查绑定关系，不新增 respondingSlot。
+- 这样避免提前引入 BattleEnemyIntent -> BattleActionSlot 的双向引用。
+- 当前仍然只是日志预览，不是正式执行队列。
+
+当前不实现：
+
+- 正式执行队列。
+- 完整速度队列。
+- 未响应敌人意图正式结算。
+- 已响应敌人意图正式结算。
+- 敌人攻击执行。
+- 玩家槽位执行。
+- 拼点执行。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- isCompleted。
+- respondingSlot。
+- 响应覆盖 / 旧槽位解除绑定。
+
+## 二十一、行动槽位处理敌人意图预览日志说明已补充
+
+当前已完成小目标：
+
+- 在 BattleActionSlotManager.PrintActionSlotIntentHandlingPreview(...) 中补充说明性日志。
+- 明确该日志工具当前只是“行动槽位与敌人意图绑定关系 / 处理路径预览”。
+- 明确它不代表正式执行顺序。
+- 明确未来正式执行队列采用“速度响应优先”方向。
+
+修改范围记录：
+
+- BattleActionSlotManager.cs 只在 PrintActionSlotIntentHandlingPreview(...) 中新增两条 Debug.Log。
+- 日志位置在标题之后、空队列检查之前。
+- 新增日志：提示：当前仅为行动槽位与敌人意图绑定关系 / 处理路径预览，不代表正式执行顺序。
+- 新增日志：提示：未来正式执行队列采用速度响应优先方向，高速响应行动可能提前处理其指定敌人意图。
+
+当前结论：
+
+- PrintActionSlotIntentHandlingPreview(...) 仍然只是日志预览工具。
+- 当前不做正式执行顺序。
+- 当前不做速度排序。
+- 当前不调整敌人意图顺序。
+- 当前不执行玩家槽位或敌人意图。
+- 当前只是防止后续误把预览日志理解成正式执行队列。
+
+当前不实现：
+
+- 正式执行队列。
+- 速度排序。
+- 敌人意图提前 / 延后正式处理。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- isCompleted。
+- respondingSlot。
+- 响应覆盖 / 旧槽位解除绑定。
+
+基础编译检查：
+
+- dotnet build ProjectGuilt.sln 已通过。
+- 结果为 0 warnings / 0 errors。
+- 普通运行曾因 sandbox 无法访问 Windows SDK 目录失败，提升权限后通过。
+
+## 二十二、Action Slot / Enemy Intent 后续设计记录
 
 当前阶段只记录以下设计规则，不实现。
 
@@ -1102,7 +1213,66 @@ isCompleted 含义：这个敌人意图是否已经完成结算。
 
 速度相等时，玩家不能改变敌人目标和顺序。
 
-### 13. 未来扩展：不可预测卡
+### 13. 正式执行队列未来采用速度响应优先方向
+
+正式执行队列未来不采用简单的固定敌人意图顺序。
+
+也就是说，不是永远按照：
+
+- 敌人意图1。
+- 敌人意图2。
+- 敌人意图3。
+
+依次固定处理。
+
+未来正式执行队列采用“速度响应优先”的设计方向。
+
+如果玩家角色速度高于敌人，并且该玩家槽位指定响应某个敌人意图，那么该响应行动未来可以提前处理它指定的敌人意图。
+
+速度优势的含义：
+
+- 不仅可以改变敌人意图的实际目标 actualTargetCharacter / actualTargetSlotIndex。
+- 也可以改变该敌人意图的处理顺序。
+- 高速角色可以提前介入敌人原本靠后的意图。
+
+当前例子：
+
+- 敌人意图1：攻击 allyB 槽位2，未响应。
+- 敌人意图2：攻击 allyB 槽位1，被 allyA 槽位1 响应。
+- allyA 速度高于敌人。
+
+未来正式执行方向应允许：
+
+- 先处理 allyA 槽位1 对敌人意图2的响应。
+- 再处理敌人意图1的未响应路径。
+
+这条规则与当前已有设计一致：
+
+- 速度大可以改变敌人攻击顺序与拼点目标。
+- 速度等于敌人时不能改变敌人的目标与顺序。
+- 速度低于敌人时不能改变敌人的目标与顺序。
+
+当前阶段不实现：
+
+- 正式执行队列。
+- 完整速度排序。
+- 敌人意图提前 / 延后正式处理。
+- 拼点执行。
+- 敌人攻击执行。
+- 未响应敌人意图正式结算。
+- 已响应敌人意图正式结算。
+- slot.MarkUsed()。
+- isCompleted。
+- 响应失败效果。
+- 无人响应效果。
+
+当前结论：
+
+- 方案B为正式方向。
+- 当前只记录设计方向。
+- 当前已有的处理预览日志仍只是观察工具，不代表正式执行队列已经实现。
+
+### 14. 未来扩展：不可预测卡
 
 后续可以加入“不可预测卡”机制。
 
@@ -1125,7 +1295,7 @@ isCompleted 含义：这个敌人意图是否已经完成结算。
 
 当前只记录，不实现。
 
-### 14. 未来扩展：槽位 Buff / 特殊槽位
+### 15. 未来扩展：槽位 Buff / 特殊槽位
 
 槽位本身未来也可以成为卡牌效果作用对象。
 
@@ -1143,7 +1313,7 @@ isCompleted 含义：这个敌人意图是否已经完成结算。
 
 这些都属于后续扩展方向，当前阶段只记录，不实现。
 
-### 15. 当前阶段不实现内容
+### 16. 当前阶段不实现内容
 
 当前只做设计记录，不实现以下功能：
 
@@ -1158,7 +1328,7 @@ isCompleted 含义：这个敌人意图是否已经完成结算。
 - 不修改当前 ActionSlotBasic 测试。
 - 不修改 BattleResolver、BattleCardManager、GuiltManager、CardEffectExecutor、CardsTest.json。
 
-## 二十一、下一步候选方向
+## 二十三、下一步候选方向
 
 后续候选方向：
 
@@ -1169,7 +1339,7 @@ isCompleted 含义：这个敌人意图是否已经完成结算。
 - 敌人防御逻辑暂缓。
 - 负罪感阈值暂缓。
 
-## 二十二、当前规则提醒
+## 二十四、当前规则提醒
 
 - 负罪感不是消耗资源，而是从 0 开始累计增加。
 - 使用罪卡会增加 guiltGain。

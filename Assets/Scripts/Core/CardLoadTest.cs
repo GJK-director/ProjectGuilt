@@ -320,6 +320,7 @@ public class CardLoadTest : MonoBehaviour
         BattleEnemyIntentManager.PrintUnrespondedIntents(intentQueue);
         BattleEnemyIntentManager.PrintIntentHandlingPreview(intentQueue);
         BattleActionSlotManager.PrintActionSlotIntentHandlingPreview(actionSlots, intentQueue);
+        BattleActionSlotManager.PrintSpeedPriorityHandlingPreview(actionSlots, intentQueue);
         BattleActionSlotManager.PrintSlotStates(actionSlots);
         PrintCharacterCardStates(allyA);
     }

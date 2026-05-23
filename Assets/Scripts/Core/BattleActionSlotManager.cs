@@ -175,6 +175,8 @@ public static class BattleActionSlotManager
     )
     {
         Debug.Log("===== 行动槽位处理敌人意图预览 =====");
+        Debug.Log("提示：当前仅为行动槽位与敌人意图绑定关系 / 处理路径预览，不代表正式执行顺序");
+        Debug.Log("提示：未来正式执行队列采用速度响应优先方向，高速响应行动可能提前处理其指定敌人意图");
 
         if (intentQueue == null || intentQueue.Count == 0)
         {
@@ -219,6 +221,76 @@ public static class BattleActionSlotManager
                 " 处理，当前实际目标：" +
                 intent.GetActualTargetSlotText()
             );
+        }
+    }
+
+    public static void PrintSpeedPriorityHandlingPreview(
+        List<BattleActionSlot> actionSlots,
+        List<BattleEnemyIntent> intentQueue
+    )
+    {
+        Debug.Log("===== 速度响应优先处理顺序预览 =====");
+        Debug.Log("提示：当前只是第一版处理顺序预览，不执行任何槽位或敌人意图");
+        Debug.Log("提示：当前预览采用“已响应优先、未响应补后”的简化规则，不代表最终完整速度队列");
+
+        if (intentQueue == null || intentQueue.Count == 0)
+        {
+            Debug.Log("当前没有敌人意图，无法生成速度响应优先处理顺序预览");
+            return;
+        }
+
+        int previewIndex = 1;
+
+        foreach (BattleEnemyIntent intent in intentQueue)
+        {
+            if (intent == null || !intent.isResponded)
+            {
+                continue;
+            }
+
+            BattleActionSlot boundSlot = FindSlotByEnemyIntent(actionSlots, intent);
+
+            if (boundSlot == null)
+            {
+                Debug.Log(
+                    previewIndex +
+                    ". 已响应：敌人意图" +
+                    intent.intentOrder +
+                    " 已响应，但未找到绑定槽位"
+                );
+                previewIndex++;
+                continue;
+            }
+
+            Debug.Log(
+                previewIndex +
+                ". 已响应：" +
+                boundSlot.GetActorName() +
+                " 槽位" +
+                boundSlot.slotIndex +
+                " 处理 敌人意图" +
+                intent.intentOrder +
+                "，当前实际目标：" +
+                intent.GetActualTargetSlotText()
+            );
+            previewIndex++;
+        }
+
+        foreach (BattleEnemyIntent intent in intentQueue)
+        {
+            if (intent == null || intent.isResponded)
+            {
+                continue;
+            }
+
+            Debug.Log(
+                previewIndex +
+                ". 未响应：敌人意图" +
+                intent.intentOrder +
+                " 未来按当前 actualTarget 执行，目标：" +
+                intent.GetActualTargetSlotText()
+            );
+            previewIndex++;
         }
     }
 
