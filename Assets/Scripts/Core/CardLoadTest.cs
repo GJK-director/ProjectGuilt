@@ -315,6 +315,8 @@ public class CardLoadTest : MonoBehaviour
         );
 
         BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        List<BattleEnemyIntent> unrespondedIntents = BattleEnemyIntentManager.GetUnrespondedIntents(intentQueue);
+        Debug.Log("当前未响应敌人意图数量：" + unrespondedIntents.Count);
         BattleEnemyIntentManager.PrintUnrespondedIntents(intentQueue);
         BattleActionSlotManager.PrintSlotStates(actionSlots);
         PrintCharacterCardStates(allyA);

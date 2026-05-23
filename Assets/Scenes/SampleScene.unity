@@ -224,7 +224,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 2f240f77f5e607749bd09e30ffe0a7ce, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CardLoadTest
-  testMode: 4
+  testMode: 5
 --- !u!1 &934278682
 GameObject:
   m_ObjectHideFlags: 0

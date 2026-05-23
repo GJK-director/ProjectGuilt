@@ -74,23 +74,37 @@ public static class BattleEnemyIntentManager
             return;
         }
 
-        bool hasUnrespondedIntent = false;
+        List<BattleEnemyIntent> unrespondedIntents = GetUnrespondedIntents(intentQueue);
 
-        foreach (BattleEnemyIntent intent in intentQueue)
+        foreach (BattleEnemyIntent intent in unrespondedIntents)
         {
-            if (intent == null || intent.isResponded)
-            {
-                continue;
-            }
-
-            hasUnrespondedIntent = true;
             PrintIntentState(intent);
         }
 
-        if (!hasUnrespondedIntent)
+        if (unrespondedIntents.Count == 0)
         {
             Debug.Log("当前没有未响应敌人意图");
         }
+    }
+
+    public static List<BattleEnemyIntent> GetUnrespondedIntents(List<BattleEnemyIntent> intentQueue)
+    {
+        List<BattleEnemyIntent> unrespondedIntents = new List<BattleEnemyIntent>();
+
+        if (intentQueue == null || intentQueue.Count == 0)
+        {
+            return unrespondedIntents;
+        }
+
+        foreach (BattleEnemyIntent intent in intentQueue)
+        {
+            if (intent != null && !intent.isResponded)
+            {
+                unrespondedIntents.Add(intent);
+            }
+        }
+
+        return unrespondedIntents;
     }
 
     public static void PrintIntentState(BattleEnemyIntent intent)
