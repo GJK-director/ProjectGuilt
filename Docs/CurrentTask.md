@@ -542,7 +542,55 @@ isResponded 保持 false 的情况：
 - 特殊槽位。
 - 已使用槽位再次被敌人攻击的正式结算。
 
-## 十七、Action Slot / Enemy Intent 后续设计记录
+## 十七、PrintUnrespondedIntents 未响应敌人意图日志工具已完成
+
+当前已完成小目标：
+
+- BattleEnemyIntentManager 新增 PrintUnrespondedIntents(List<BattleEnemyIntent> intentQueue)。
+- 用于打印当前敌人意图队列中尚未被玩家槽位响应的敌人意图。
+- 该方法只做日志输出，不修改任何状态，不进入正式结算。
+
+修改范围记录：
+
+- BattleEnemyIntentManager.cs 新增 PrintUnrespondedIntents(...)。
+- BattleEnemyIntentManager.cs 打印标题：===== 当前未响应敌人意图 =====。
+- BattleEnemyIntentManager.cs 队列为空时打印：当前没有敌人意图。
+- BattleEnemyIntentManager.cs 遍历队列，只打印 isResponded == false 的意图。
+- BattleEnemyIntentManager.cs 复用现有 PrintIntentState(...)。
+- BattleEnemyIntentManager.cs 如果没有未响应意图，打印：当前没有未响应敌人意图。
+- CardLoadTest.cs 在 RunActionSlotMultiIntentBasicTestSequence() 中追加调用 BattleEnemyIntentManager.PrintUnrespondedIntents(intentQueue);。
+- CardLoadTest.cs 调用位置在响应后完整队列打印之后、槽位状态打印之前。
+
+已通过 Unity 测试：
+
+- ActionSlotMultiIntentBasic 通过：完整队列显示敌人意图1 已响应：False。
+- ActionSlotMultiIntentBasic 通过：完整队列显示敌人意图2 已响应：True。
+- ActionSlotMultiIntentBasic 通过：新增的未响应列表只打印敌人意图1。
+- ActionSlotMultiIntentBasic 通过：新增的未响应列表不打印敌人意图2。
+- ActionSlotMultiIntentBasic 通过：槽位1仍显示 已使用：False。
+- ActionSlotMultiIntentBasic 通过：基础攻击使用次数仍为 0 / 3。
+- ActionSlotMultiIntentBasic 通过：Ability 罪卡使用次数仍为 0 / 2。
+
+当前结论：
+
+- 当前可以通过日志快速查看哪些敌人意图仍未被玩家响应。
+- 该工具为后续无人响应效果、剩余敌人意图结算、防御/闪避自动处理未响应意图提供数据观察基础。
+- 当前仍然只做数据层日志，不执行任何敌人意图。
+
+当前不实现：
+
+- 未响应敌人意图正式结算。
+- 敌人攻击执行。
+- 无人响应效果。
+- 防御 / 闪避自动响应。
+- 完整速度队列。
+- isCompleted。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+
+## 十八、Action Slot / Enemy Intent 后续设计记录
 
 当前阶段只记录以下设计规则，不实现。
 
@@ -729,7 +777,61 @@ respondingSlot 的用途：
 - 完整速度队列。
 - 防御 / 闪避 / TargetedResponse / AutoResponse。
 
-### 8. 防御卡 / 闪避卡后续规则
+### 8. 敌人意图的响应状态与结算状态需要分开
+
+当前已有 BattleEnemyIntent.isResponded。
+
+isResponded 含义：这个敌人意图是否已经被玩家槽位指定响应过。
+
+isResponded 不等于“已经结算完成”。
+
+例如：
+
+- 玩家在准备阶段用槽位1响应敌人意图2。
+- 此时 isResponded = true。
+- 但回合执行还没有开始。
+- 拼点 / 防御 / 闪避 / 敌人攻击结算都还没有发生。
+- 所以这个敌人意图不能视为已完成。
+
+未来可能需要另一个状态，暂定名为 isCompleted。
+
+isCompleted 含义：这个敌人意图是否已经完成结算。
+
+不建议现在使用 isResolved 作为字段名。
+
+原因：
+
+- 当前战斗事件系统里已经有 Resolved 事件。
+- 如果敌人意图也叫 isResolved，容易和卡牌事件混淆。
+- 所以未来更倾向于使用 isCompleted 表示敌人意图完成。
+
+未来可能让 isCompleted = true 的情况包括：
+
+- 拼点完成。
+- 无人响应时，敌人攻击结算完成。
+- 防御处理完成。
+- 闪避处理完成。
+- 敌人意图被取消 / 打断后完成。
+- 具体完成原因以后可能需要单独记录。
+
+当前阶段不实现：
+
+- isCompleted 字段。
+- 敌人意图完成状态切换。
+- 完成原因。
+- 正式速度队列。
+- 敌人多意图正式结算。
+- 防御 / 闪避。
+- 无人响应效果。
+- 取消 / 打断逻辑。
+
+当前结论：
+
+- isResponded 只表示“是否被玩家响应”。
+- 未来 isCompleted 才表示“是否完成结算”。
+- 当前只保留 isResponded，不急着实现结算状态。
+
+### 9. 防御卡 / 闪避卡后续规则
 
 防御卡 / 闪避卡是响应类卡，但后续需要区分两种使用方式：
 
@@ -761,7 +863,7 @@ respondingSlot 的用途：
 - 如果闪避是高速指定响应某个顺序，例如指定处理顺序2，则它只处理顺序2，不会自动处理顺序1。
 - 闪避连续处理能力属于后续设计记录，当前不实现。
 
-### 9. 执行顺序设计记录
+### 10. 执行顺序设计记录
 
 战斗执行顺序需要综合：
 
@@ -781,7 +883,7 @@ respondingSlot 的用途：
 
 速度相等时，玩家不能改变敌人目标和顺序。
 
-### 10. 未来扩展：不可预测卡
+### 11. 未来扩展：不可预测卡
 
 后续可以加入“不可预测卡”机制。
 
@@ -804,7 +906,7 @@ respondingSlot 的用途：
 
 当前只记录，不实现。
 
-### 11. 未来扩展：槽位 Buff / 特殊槽位
+### 12. 未来扩展：槽位 Buff / 特殊槽位
 
 槽位本身未来也可以成为卡牌效果作用对象。
 
@@ -822,7 +924,7 @@ respondingSlot 的用途：
 
 这些都属于后续扩展方向，当前阶段只记录，不实现。
 
-### 12. 当前阶段不实现内容
+### 13. 当前阶段不实现内容
 
 当前只做设计记录，不实现以下功能：
 
@@ -837,7 +939,7 @@ respondingSlot 的用途：
 - 不修改当前 ActionSlotBasic 测试。
 - 不修改 BattleResolver、BattleCardManager、GuiltManager、CardEffectExecutor、CardsTest.json。
 
-## 十八、下一步候选方向
+## 十九、下一步候选方向
 
 后续候选方向：
 
@@ -848,7 +950,7 @@ respondingSlot 的用途：
 - 敌人防御逻辑暂缓。
 - 负罪感阈值暂缓。
 
-## 十九、当前规则提醒
+## 二十、当前规则提醒
 
 - 负罪感不是消耗资源，而是从 0 开始累计增加。
 - 使用罪卡会增加 guiltGain。

@@ -315,6 +315,7 @@ public class CardLoadTest : MonoBehaviour
         );
 
         BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleEnemyIntentManager.PrintUnrespondedIntents(intentQueue);
         BattleActionSlotManager.PrintSlotStates(actionSlots);
         PrintCharacterCardStates(allyA);
     }
