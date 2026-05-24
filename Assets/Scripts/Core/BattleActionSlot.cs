@@ -72,6 +72,13 @@ public class BattleActionSlot
         isUsed = true;
     }
 
+    public void UnbindEnemyIntent()
+    {
+        enemyIntent = null;
+        target = null;
+        isUsed = false;
+    }
+
     public void Clear()
     {
         slotType = BattleActionSlotType.FreeAction;

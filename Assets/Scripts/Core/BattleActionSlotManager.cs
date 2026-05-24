@@ -58,6 +58,18 @@ public static class BattleActionSlotManager
         }
 
         string originalTargetText = enemyIntent.GetOriginalTargetSlotText();
+        List<BattleActionSlot> oldBoundSlots = FindSlotsByEnemyIntent(slots, enemyIntent);
+
+        foreach (BattleActionSlot oldSlot in oldBoundSlots)
+        {
+            if (object.ReferenceEquals(oldSlot, slot))
+            {
+                continue;
+            }
+
+            oldSlot.UnbindEnemyIntent();
+            Debug.Log("槽位 " + oldSlot.slotIndex + " 已解除对敌人意图" + enemyIntent.intentOrder + "的响应绑定");
+        }
 
         slot.AssignResponse(actor, cardState, enemyIntent);
         enemyIntent.MarkResponded();
@@ -155,6 +167,10 @@ public static class BattleActionSlotManager
                     slot.enemyIntent.GetCardName() +
                     " 攻击 " +
                     slot.enemyIntent.GetOriginalTargetSlotText();
+            }
+            else if (slot.slotType == BattleActionSlotType.RespondToEnemyIntent && slot.enemyIntent == null)
+            {
+                intentText = " / 响应意图：无 / 已解除绑定";
             }
 
             Debug.Log(
@@ -292,22 +308,25 @@ public static class BattleActionSlotManager
 
         foreach (BattleEnemyIntent intent in previewIntentOrder)
         {
-            BattleHandlingPreviewItem previewItem = new BattleHandlingPreviewItem();
-            previewItem.order = order;
-            previewItem.enemyIntent = intent;
-
             if (intent.isResponded)
             {
-                previewItem.handlingType = BattleHandlingPreviewType.RespondedIntent;
-                previewItem.actionSlot = FindSlotByEnemyIntent(actionSlots, intent);
+                previewItems.Add(new BattleHandlingPreviewItem(
+                    order,
+                    BattleHandlingPreviewType.RespondedIntent,
+                    intent,
+                    FindSlotByEnemyIntent(actionSlots, intent)
+                ));
             }
             else
             {
-                previewItem.handlingType = BattleHandlingPreviewType.UnrespondedIntent;
-                previewItem.actionSlot = null;
+                previewItems.Add(new BattleHandlingPreviewItem(
+                    order,
+                    BattleHandlingPreviewType.UnrespondedIntent,
+                    intent,
+                    null
+                ));
             }
 
-            previewItems.Add(previewItem);
             order++;
         }
 
@@ -413,6 +432,34 @@ public static class BattleActionSlotManager
         }
 
         return false;
+    }
+
+    static List<BattleActionSlot> FindSlotsByEnemyIntent(
+        List<BattleActionSlot> slots,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        List<BattleActionSlot> boundSlots = new List<BattleActionSlot>();
+
+        if (slots == null || enemyIntent == null)
+        {
+            return boundSlots;
+        }
+
+        foreach (BattleActionSlot slot in slots)
+        {
+            if (slot == null || slot.IsEmpty())
+            {
+                continue;
+            }
+
+            if (object.ReferenceEquals(slot.enemyIntent, enemyIntent))
+            {
+                boundSlots.Add(slot);
+            }
+        }
+
+        return boundSlots;
     }
 
     static BattleActionSlot FindSlotByEnemyIntent(
