@@ -239,59 +239,107 @@ public static class BattleActionSlotManager
             return;
         }
 
-        int previewIndex = 1;
+        List<BattleHandlingPreviewItem> previewItems = CreateSpeedPriorityHandlingPreviewItems(actionSlots, intentQueue);
 
-        foreach (BattleEnemyIntent intent in intentQueue)
+        foreach (BattleHandlingPreviewItem previewItem in previewItems)
         {
-            if (intent == null || !intent.isResponded)
+            if (previewItem.handlingType == BattleHandlingPreviewType.RespondedIntent)
             {
-                continue;
-            }
+                if (previewItem.actionSlot == null)
+                {
+                    Debug.Log(
+                        previewItem.order +
+                        ". 已响应：敌人意图" +
+                        previewItem.enemyIntent.intentOrder +
+                        " 已响应，但未找到绑定槽位"
+                    );
+                    continue;
+                }
 
-            BattleActionSlot boundSlot = FindSlotByEnemyIntent(actionSlots, intent);
-
-            if (boundSlot == null)
-            {
                 Debug.Log(
-                    previewIndex +
-                    ". 已响应：敌人意图" +
-                    intent.intentOrder +
-                    " 已响应，但未找到绑定槽位"
+                    previewItem.order +
+                    ". 已响应：" +
+                    previewItem.actionSlot.GetActorName() +
+                    " 槽位" +
+                    previewItem.actionSlot.slotIndex +
+                    " 处理 敌人意图" +
+                    previewItem.enemyIntent.intentOrder +
+                    "，当前实际目标：" +
+                    previewItem.enemyIntent.GetActualTargetSlotText()
                 );
-                previewIndex++;
                 continue;
             }
 
             Debug.Log(
-                previewIndex +
-                ". 已响应：" +
-                boundSlot.GetActorName() +
-                " 槽位" +
-                boundSlot.slotIndex +
-                " 处理 敌人意图" +
-                intent.intentOrder +
-                "，当前实际目标：" +
-                intent.GetActualTargetSlotText()
+                previewItem.order +
+                ". 未响应：敌人意图" +
+                previewItem.enemyIntent.intentOrder +
+                " 未来按当前 actualTarget 执行，目标：" +
+                previewItem.enemyIntent.GetActualTargetSlotText()
             );
-            previewIndex++;
+        }
+    }
+
+    public static List<BattleHandlingPreviewItem> CreateSpeedPriorityHandlingPreviewItems(
+        List<BattleActionSlot> actionSlots,
+        List<BattleEnemyIntent> intentQueue
+    )
+    {
+        List<BattleHandlingPreviewItem> previewItems = new List<BattleHandlingPreviewItem>();
+        List<BattleEnemyIntent> previewIntentOrder = GetSpeedPriorityPreviewIntentOrder(intentQueue);
+
+        int order = 1;
+
+        foreach (BattleEnemyIntent intent in previewIntentOrder)
+        {
+            BattleHandlingPreviewItem previewItem = new BattleHandlingPreviewItem();
+            previewItem.order = order;
+            previewItem.enemyIntent = intent;
+
+            if (intent.isResponded)
+            {
+                previewItem.handlingType = BattleHandlingPreviewType.RespondedIntent;
+                previewItem.actionSlot = FindSlotByEnemyIntent(actionSlots, intent);
+            }
+            else
+            {
+                previewItem.handlingType = BattleHandlingPreviewType.UnrespondedIntent;
+                previewItem.actionSlot = null;
+            }
+
+            previewItems.Add(previewItem);
+            order++;
+        }
+
+        return previewItems;
+    }
+
+    static List<BattleEnemyIntent> GetSpeedPriorityPreviewIntentOrder(List<BattleEnemyIntent> intentQueue)
+    {
+        List<BattleEnemyIntent> previewIntentOrder = new List<BattleEnemyIntent>();
+
+        if (intentQueue == null || intentQueue.Count == 0)
+        {
+            return previewIntentOrder;
         }
 
         foreach (BattleEnemyIntent intent in intentQueue)
         {
-            if (intent == null || intent.isResponded)
+            if (intent != null && intent.isResponded)
             {
-                continue;
+                previewIntentOrder.Add(intent);
             }
-
-            Debug.Log(
-                previewIndex +
-                ". 未响应：敌人意图" +
-                intent.intentOrder +
-                " 未来按当前 actualTarget 执行，目标：" +
-                intent.GetActualTargetSlotText()
-            );
-            previewIndex++;
         }
+
+        foreach (BattleEnemyIntent intent in intentQueue)
+        {
+            if (intent != null && !intent.isResponded)
+            {
+                previewIntentOrder.Add(intent);
+            }
+        }
+
+        return previewIntentOrder;
     }
 
     static BattleActionSlot GetSlot(List<BattleActionSlot> slots, int slotIndex)

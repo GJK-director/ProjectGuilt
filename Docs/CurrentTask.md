@@ -817,7 +817,130 @@ isResponded 保持 false 的情况：
 - 结果为 0 warnings / 0 errors。
 - 普通运行曾因 sandbox 无法访问 Windows SDK 目录失败，提升权限后通过。
 
-## 二十二、Action Slot / Enemy Intent 后续设计记录
+## 二十二、PrintSpeedPriorityHandlingPreview 速度响应优先处理顺序预览日志工具已完成
+
+当前已完成小目标：
+
+- BattleActionSlotManager 新增 PrintSpeedPriorityHandlingPreview(List<BattleActionSlot> actionSlots, List<BattleEnemyIntent> intentQueue)。
+- 用于打印“速度响应优先方向下的第一版处理顺序预览”。
+- 当前只做日志预览，不执行任何玩家槽位或敌人意图。
+
+修改范围记录：
+
+- BattleActionSlotManager.cs 新增公共日志方法 PrintSpeedPriorityHandlingPreview(...)。
+- BattleActionSlotManager.cs 复用现有私有方法 FindSlotByEnemyIntent(...)。
+- BattleActionSlotManager.cs 第一轮按 intentQueue 原顺序扫描，只打印 isResponded == true 的敌人意图。
+- BattleActionSlotManager.cs 第二轮按 intentQueue 原顺序扫描，只打印 isResponded == false 的敌人意图。
+- BattleActionSlotManager.cs 不改变 intentQueue。
+- BattleActionSlotManager.cs 不改变 actionSlots。
+- BattleActionSlotManager.cs 不创建正式执行队列对象。
+- BattleActionSlotManager.cs 不做完整速度排序。
+- CardLoadTest.cs 在 RunActionSlotMultiIntentBasicTestSequence() 中追加调用 BattleActionSlotManager.PrintSpeedPriorityHandlingPreview(actionSlots, intentQueue);。
+- CardLoadTest.cs 调用位置在 PrintActionSlotIntentHandlingPreview(...) 之后、PrintSlotStates(...) 之前。
+
+已通过 Unity 测试：
+
+- ActionSlotMultiIntentBasic 通过：敌人意图1 显示 已响应：False。
+- ActionSlotMultiIntentBasic 通过：敌人意图2 显示 已响应：True。
+- ActionSlotMultiIntentBasic 通过：未响应数量为 1。
+- ActionSlotMultiIntentBasic 通过：速度响应优先处理顺序预览第1项为 allyA 槽位1 处理敌人意图2，当前实际目标为 allyA 槽位1。
+- ActionSlotMultiIntentBasic 通过：速度响应优先处理顺序预览第2项为敌人意图1 未响应，未来按当前 actualTarget 执行，目标为 allyB 槽位2。
+- ActionSlotMultiIntentBasic 通过：槽位1仍显示 已使用：False。
+- ActionSlotMultiIntentBasic 通过：基础攻击使用次数仍为 0 / 3。
+- ActionSlotMultiIntentBasic 通过：Ability 罪卡使用次数仍为 0 / 2。
+
+当前结论：
+
+- 当前日志已经能体现方案B方向：已响应项优先。
+- 当前日志已经能体现方案B方向：未响应项补后。
+- 当前日志已经能体现方案B方向：高速响应行动在预览中排到未响应敌人意图前面。
+- 当前只是第一版简化预览。
+- 当前不代表最终完整速度队列。
+- 当前不执行任何战斗逻辑。
+
+当前不实现：
+
+- 正式执行队列。
+- 完整速度排序。
+- 敌人意图提前 / 延后正式处理。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- isCompleted。
+- respondingSlot。
+- 响应覆盖 / 旧槽位解除绑定。
+
+基础编译检查：
+
+- dotnet build ProjectGuilt.sln 已通过。
+- 结果为 0 warnings / 0 errors。
+- 普通运行曾因 sandbox 无法访问 Windows SDK 目录失败，提升权限后通过。
+
+## 二十三、PrintSpeedPriorityHandlingPreview 预览顺序收集逻辑已完成轻量整理
+
+当前已完成小目标：
+
+- 将 BattleActionSlotManager.PrintSpeedPriorityHandlingPreview(...) 中原本内联的“两轮扫描敌人意图队列”逻辑提取为私有辅助方法。
+- 新增私有方法 GetSpeedPriorityPreviewIntentOrder(List<BattleEnemyIntent> intentQueue)。
+- 当前只是代码整理，不是新功能。
+
+修改范围记录：
+
+- BattleActionSlotManager.cs 新增私有方法 GetSpeedPriorityPreviewIntentOrder(...)。
+- GetSpeedPriorityPreviewIntentOrder(...) 返回新的 List<BattleEnemyIntent>。
+- GetSpeedPriorityPreviewIntentOrder(...) 第一轮收集 intent != null && intent.isResponded。
+- GetSpeedPriorityPreviewIntentOrder(...) 第二轮收集 intent != null && !intent.isResponded。
+- GetSpeedPriorityPreviewIntentOrder(...) 在 null 或空队列时返回空列表。
+- GetSpeedPriorityPreviewIntentOrder(...) 不修改 intentQueue。
+- GetSpeedPriorityPreviewIntentOrder(...) 不修改任何 BattleEnemyIntent 状态。
+- PrintSpeedPriorityHandlingPreview(...) 改为复用该私有方法获取预览顺序。
+
+保持不变：
+
+- Console 输出语义不变。
+- 标题和提示日志不变。
+- 每条预览输出文本不变。
+- previewIndex 仍从 1 开始。
+- ActionSlotMultiIntentBasic 预期仍是第1项：allyA 槽位1 处理敌人意图2。
+- ActionSlotMultiIntentBasic 预期仍是第2项：敌人意图1 未响应，按 actualTarget 执行。
+
+当前结论：
+
+- 当前仍然只是速度响应优先处理顺序预览。
+- 现在“收集预览顺序”和“打印预览内容”的职责比之前更清晰。
+- 该整理为未来升级到 BattleHandlingPreviewItem 或类似预览项数据结构预留入口。
+- 当前没有真正创建预览项数据结构。
+
+当前不实现：
+
+- BattleHandlingPreviewItem。
+- BattleExecutionItem。
+- enum。
+- 正式执行队列数据结构。
+- 完整速度排序。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- isCompleted。
+- respondingSlot。
+
+基础编译检查：
+
+- dotnet build ProjectGuilt.sln 已通过。
+- 结果为 0 warnings / 0 errors。
+- 普通运行曾因 sandbox 无法访问 Windows SDK 目录失败，提升权限后通过。
+
+## 二十四、Action Slot / Enemy Intent 后续设计记录
 
 当前阶段只记录以下设计规则，不实现。
 
@@ -1272,7 +1395,79 @@ isCompleted 含义：这个敌人意图是否已经完成结算。
 - 当前只记录设计方向。
 - 当前已有的处理预览日志仍只是观察工具，不代表正式执行队列已经实现。
 
-### 14. 未来扩展：不可预测卡
+### 14. 未来可能需要处理预览项数据结构
+
+当前已有以下日志预览工具：
+
+- PrintIntentHandlingPreview(...)。
+- PrintActionSlotIntentHandlingPreview(...)。
+- PrintSpeedPriorityHandlingPreview(...)。
+
+它们目前都是直接通过 Debug.Log 打印处理路径或顺序预览。
+
+当前没有真正生成队列数据结构。
+
+未来如果要从日志预览升级到正式执行队列，中间可以先增加“处理预览项 / 处理计划项”数据结构。
+
+命名倾向：
+
+- 暂时倾向使用 BattleHandlingPreviewItem。
+- 不建议现在直接叫 BattleExecutionItem。
+
+原因是当前仍然只是预览，不是真正执行。
+
+Execution 容易让人误解为已经进入正式战斗执行队列。
+
+BattleHandlingPreviewItem 未来可能包含的信息：
+
+- order：预览顺序编号。
+- handlingType：处理类型，例如已响应意图 / 未响应意图。
+- enemyIntent：关联的敌人意图。
+- actionSlot：如果是已响应意图，则记录对应行动槽位；如果是未响应意图，可以为空。
+
+handlingType 未来更建议使用 enum，而不是 string。
+
+例如未来可能有：
+
+- RespondedIntent。
+- UnrespondedIntent。
+
+原因是 string 容易写错，不利于后续扩展。
+
+当前暂不实现该数据结构，原因：
+
+- 还没有正式执行队列。
+- 还没有 isCompleted。
+- 还没有完整速度排序。
+- 还没有未响应敌人意图正式结算。
+- 还没有已响应敌人意图正式结算。
+- 现在过早创建 BattleExecutionItem 容易把预览和执行混在一起。
+
+当前结论：
+
+- 未来确实可能需要从纯日志预览升级为“预览项列表”。
+- 当前阶段仍然只保留日志预览。
+- 等需要从预览走向正式队列时，再单独小步实现 BattleHandlingPreviewItem 或类似结构。
+
+当前不实现：
+
+- BattleHandlingPreviewItem。
+- BattleExecutionItem。
+- 正式执行队列。
+- 处理计划列表。
+- 完整速度排序。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- isCompleted。
+- respondingSlot。
+
+### 15. 未来扩展：不可预测卡
 
 后续可以加入“不可预测卡”机制。
 
@@ -1295,7 +1490,7 @@ isCompleted 含义：这个敌人意图是否已经完成结算。
 
 当前只记录，不实现。
 
-### 15. 未来扩展：槽位 Buff / 特殊槽位
+### 16. 未来扩展：槽位 Buff / 特殊槽位
 
 槽位本身未来也可以成为卡牌效果作用对象。
 
@@ -1313,7 +1508,7 @@ isCompleted 含义：这个敌人意图是否已经完成结算。
 
 这些都属于后续扩展方向，当前阶段只记录，不实现。
 
-### 16. 当前阶段不实现内容
+### 17. 当前阶段不实现内容
 
 当前只做设计记录，不实现以下功能：
 
@@ -1328,7 +1523,7 @@ isCompleted 含义：这个敌人意图是否已经完成结算。
 - 不修改当前 ActionSlotBasic 测试。
 - 不修改 BattleResolver、BattleCardManager、GuiltManager、CardEffectExecutor、CardsTest.json。
 
-## 二十三、下一步候选方向
+## 二十五、下一步候选方向
 
 后续候选方向：
 
@@ -1339,7 +1534,7 @@ isCompleted 含义：这个敌人意图是否已经完成结算。
 - 敌人防御逻辑暂缓。
 - 负罪感阈值暂缓。
 
-## 二十四、当前规则提醒
+## 二十六、当前规则提醒
 
 - 负罪感不是消耗资源，而是从 0 开始累计增加。
 - 使用罪卡会增加 guiltGain。
