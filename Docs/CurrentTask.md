@@ -1246,7 +1246,108 @@ Preview：
 - 结果为 0 warnings / 0 errors。
 - 普通 sandbox 运行曾因 Windows SDK 目录权限失败，提升权限后通过。
 
-## 二十八、Action Slot / Enemy Intent 后续设计记录
+## 二十八、ActionSlotResponseOverwriteFailKeepOld 响应覆盖失败保持旧响应测试已完成
+
+当前已完成小目标：
+
+- 新增测试模式 ActionSlotResponseOverwriteFailKeepOld。
+- 验证后一次响应如果失败，不会误清理前一次已经成功的响应。
+- 验证低速角色尝试覆盖失败时，旧响应槽位保持绑定。
+- 验证敌人意图 actualTarget 保持旧响应槽位。
+- 当前只验证安排阶段和 Preview，不进入正式结算。
+
+修改范围记录：
+
+- CardLoadTest.cs 中 BattleTestMode 新增 ActionSlotResponseOverwriteFailKeepOld。
+- CardLoadTest.cs 中 Start() 增加该模式分支。
+- CardLoadTest.cs 新增 RunActionSlotResponseOverwriteFailKeepOldTestSequence()。
+- CardLoadTest.cs 测试中创建低速角色 覆盖失败角色，速度范围 3-3。
+- CardLoadTest.cs 中低速角色使用独立攻击卡尝试覆盖。
+- CardLoadTest.cs 中测试只做安排、失败验证、状态打印和 Preview。
+- CardLoadTest.cs 中不调用 ExecuteActionSlots(...)。
+- 未修改 BattleActionSlotManager.cs。
+- 未修改覆盖逻辑本体。
+- 未修改 BattleActionSlot.cs。
+- 未修改 BattleResolver、BattleCardManager、CardsTest.json 或 .csproj。
+
+Unity 测试结果：
+
+- 第一次响应：allyA 槽位1成功响应敌人意图1。
+- 第一次响应：敌人意图1的实际目标从 allyB 槽位1 改为 allyA 槽位1。
+- 第一次响应：槽位1绑定敌人意图1。
+- 第二次响应：覆盖失败角色 速度为 3。
+- 第二次响应：敌人速度为 5。
+- 第二次响应：覆盖失败角色 速度不足，无法介入保护 allyB。
+- 第二次响应失败。
+- 第二次响应打印 覆盖失败角色响应敌人意图失败，旧响应应保持不变。
+
+最终敌人意图状态：
+
+- 敌人意图1 已响应：True。
+- 敌人意图1 实际目标仍为 allyA 槽位1。
+
+最终槽位状态：
+
+- 槽位1仍绑定敌人意图1。
+- 槽位1 已使用：False。
+- 槽位2为空。
+
+Preview：
+
+- 速度响应优先处理预览项数量：1。
+- 只显示 allyA 槽位1 处理敌人意图1。
+- 不显示 覆盖失败角色 或槽位2处理敌人意图1。
+
+重点确认没有出现：
+
+- 槽位 1 已解除对敌人意图1的响应绑定。
+- 槽位1 响应意图：无 / 已解除绑定。
+- 敌人意图 actualTarget 变成 覆盖失败角色 槽位2。
+- 拼点日志。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- 已使用：True。
+
+当前结论：
+
+- 响应覆盖逻辑的安全性得到验证。
+- 成功响应会覆盖旧响应。
+- 失败响应不会覆盖旧响应。
+- 覆盖清理逻辑的位置是安全的。
+- 当前覆盖逻辑可以作为进入正式执行队列设计阶段前的稳定基础。
+
+当前不实现：
+
+- 同速覆盖失败单独测试。
+- 多敌人意图 + 覆盖组合测试。
+- 旧槽位转 FreeAction。
+- 旧槽位重新指定目标。
+- 旧槽位自动清空。
+- 取消所有响应。
+- UnmarkResponded()。
+- respondingSlot。
+- 正式执行队列。
+- 完整速度排序。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- isCompleted。
+
+编译检查：
+
+- dotnet build ProjectGuilt.sln 已通过。
+- 结果为 0 warnings / 0 errors。
+- 普通 sandbox 运行曾因 Windows SDK 目录权限失败，提升权限后通过。
+
+## 二十九、Action Slot / Enemy Intent 后续设计记录
 
 当前阶段只记录以下设计规则，不实现。
 
@@ -2174,7 +2275,7 @@ BattleHandlingPreviewItem 与未来 BattleExecutionItem 的职责区别：
 - 不修改当前 ActionSlotBasic 测试。
 - 不修改 BattleResolver、BattleCardManager、GuiltManager、CardEffectExecutor、CardsTest.json。
 
-## 二十九、下一步候选方向
+## 三十、下一步候选方向
 
 后续候选方向：
 
@@ -2185,7 +2286,7 @@ BattleHandlingPreviewItem 与未来 BattleExecutionItem 的职责区别：
 - 敌人防御逻辑暂缓。
 - 负罪感阈值暂缓。
 
-## 三十、当前规则提醒
+## 三十一、当前规则提醒
 
 - 负罪感不是消耗资源，而是从 0 开始累计增加。
 - 使用罪卡会增加 guiltGain。

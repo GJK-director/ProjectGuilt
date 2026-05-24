@@ -10,7 +10,8 @@ public enum BattleTestMode
     ActionSlotInterceptFail,
     ActionSlotInterceptEqualFail,
     ActionSlotMultiIntentBasic,
-    ActionSlotResponseOverwriteBasic
+    ActionSlotResponseOverwriteBasic,
+    ActionSlotResponseOverwriteFailKeepOld
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -102,6 +103,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.ActionSlotResponseOverwriteBasic)
         {
             RunActionSlotResponseOverwriteBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotResponseOverwriteFailKeepOld)
+        {
+            RunActionSlotResponseOverwriteFailKeepOldTestSequence();
             return;
         }
     }
@@ -391,6 +398,75 @@ public class CardLoadTest : MonoBehaviour
         BattleActionSlotManager.PrintSpeedPriorityHandlingPreview(actionSlots, intentQueue);
         BattleActionSlotManager.PrintSlotStates(actionSlots);
         PrintCharacterCardStates(allyA);
+    }
+
+    // RunActionSlotResponseOverwriteFailKeepOldTestSequence = 执行响应覆盖失败保持旧响应测试
+    void RunActionSlotResponseOverwriteFailKeepOldTestSequence()
+    {
+        Debug.Log("===== Action Slot 响应覆盖失败保持旧响应测试开始 =====");
+
+        CharacterData slowAlly = new CharacterData("覆盖失败角色", 30, 3, 3);
+        battleUnits.Add(slowAlly);
+
+        BattleCardState slowAllyAttackCardState = CreateTestAttackCardForCharacter(
+            slowAlly,
+            "slowAlly_overwrite_fail_atk_001_copy_0"
+        );
+
+        // 响应覆盖失败测试依赖当前速度判断，所以先进入回合开始流程
+        StartTurn();
+
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            "enemy_intent_overwrite_fail_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(enemyIntent);
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+
+        Debug.Log("===== 第一次响应：槽位1响应敌人意图1 =====");
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            allyA,
+            allyAAttackCardState,
+            enemyIntent
+        );
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        Debug.Log("===== 第二次响应：覆盖失败角色尝试用槽位2覆盖敌人意图1 =====");
+        bool overwriteResult = BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            2,
+            slowAlly,
+            slowAllyAttackCardState,
+            enemyIntent
+        );
+
+        if (!overwriteResult)
+        {
+            Debug.Log("覆盖失败角色响应敌人意图失败，旧响应应保持不变");
+        }
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleEnemyIntentManager.PrintIntentHandlingPreview(intentQueue);
+        BattleActionSlotManager.PrintActionSlotIntentHandlingPreview(actionSlots, intentQueue);
+
+        List<BattleHandlingPreviewItem> previewItems = BattleActionSlotManager.CreateSpeedPriorityHandlingPreviewItems(actionSlots, intentQueue);
+        Debug.Log("速度响应优先处理预览项数量：" + previewItems.Count);
+
+        BattleActionSlotManager.PrintSpeedPriorityHandlingPreview(actionSlots, intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+        PrintCharacterCardStates(allyA);
+        PrintCharacterCardStates(slowAlly);
     }
 
     // ================================
