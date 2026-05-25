@@ -1347,7 +1347,639 @@ Preview：
 - 结果为 0 warnings / 0 errors。
 - 普通 sandbox 运行曾因 Windows SDK 目录权限失败，提升权限后通过。
 
-## 二十九、Action Slot / Enemy Intent 后续设计记录
+## 二十九、BattleExecutionItem / BattleExecutionPlan 纯数据结构第一版已完成
+
+当前已完成小目标：
+
+- 新增 BattleExecutionItem.cs。
+- 新增 BattleExecutionPlan.cs。
+- 当前只是正式执行队列的数据结构第一版。
+- 当前没有接入生成、打印、执行、测试模式或正式结算。
+
+修改范围记录：
+
+- BattleExecutionItem.cs 新增 enum：BattleExecutionItemType。
+- BattleExecutionItemType 包含 RespondedEnemyIntent。
+- BattleExecutionItemType 包含 UnrespondedEnemyIntent。
+- BattleExecutionItemType 包含 FreeAction。
+- BattleExecutionItem.cs 新增数据类 BattleExecutionItem。
+- BattleExecutionItem 包含 public int order;。
+- BattleExecutionItem 包含 public BattleExecutionItemType executionType;。
+- BattleExecutionItem 包含 public BattleEnemyIntent enemyIntent;。
+- BattleExecutionItem 包含 public BattleActionSlot actionSlot;。
+- BattleExecutionItem 包含 public bool isCompleted;。
+- BattleExecutionItem 新增构造函数，接收 order / executionType / enemyIntent / actionSlot。
+- BattleExecutionItem 构造函数负责设置字段。
+- BattleExecutionItem 构造函数中 isCompleted = false。
+- BattleExecutionPlan.cs 新增 using System.Collections.Generic;。
+- BattleExecutionPlan.cs 新增数据类 BattleExecutionPlan。
+- BattleExecutionPlan 包含 public List<BattleExecutionItem> executionItems;。
+- BattleExecutionPlan 包含 public bool isCompleted;。
+- BattleExecutionPlan 构造函数中 executionItems = new List<BattleExecutionItem>();。
+- BattleExecutionPlan 构造函数中 isCompleted = false;。
+- BattleExecutionPlan 新增轻量方法 AddItem(BattleExecutionItem item)。
+- AddItem(...) 只做 null 防护和加入列表。
+
+当前保持不变：
+
+- 没有修改 BattleActionSlotManager.cs。
+- 没有修改 CardLoadTest.cs。
+- 没有修改 BattleActionSlot.cs。
+- 没有修改 BattleEnemyIntent.cs。
+- 没有修改 BattleHandlingPreviewItem.cs。
+- 没有修改 BattleResolver、BattleCardManager、GuiltManager、CardEffectExecutor。
+- 没有修改 CardsTest.json。
+- 没有修改 .csproj。
+
+当前结论：
+
+- BattleExecutionItem 是未来正式执行队列中的单个执行项。
+- BattleExecutionPlan 是未来正式执行计划的容器。
+- 当前只是数据承载层。
+- 当前还没有生成计划。
+- 当前还没有打印计划。
+- 当前还没有执行计划。
+- 当前还没有和 Preview 系统或 Action Slot Manager 接入。
+
+当前不实现：
+
+- CreateExecutionPlan(...)。
+- PrintExecutionPlan(...)。
+- ExecuteExecutionPlan(...)。
+- 正式执行计划生成逻辑。
+- 正式执行器。
+- 完整速度排序。
+- FreeAction 混排。
+- 旧槽位中间状态处理。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+
+基础编译检查：
+
+- dotnet build ProjectGuilt.sln 已通过。
+- 结果为 0 warnings / 0 errors。
+- 普通 sandbox 运行曾因 Windows SDK 目录权限失败，提升权限后通过。
+
+## 三十、ActionSlotExecutionPlanBasic / BattleExecutionPlanManager 第一版执行计划生成预览已完成
+
+当前已完成小目标：
+
+- 新增 BattleExecutionPlanManager.cs。
+- 新增 CreateBasicExecutionPlan(...)。
+- 新增 PrintExecutionPlan(...)。
+- 新增测试模式 ActionSlotExecutionPlanBasic。
+- 当前只生成并打印 BattleExecutionPlan。
+- 当前不执行 BattleExecutionPlan。
+
+修改范围记录：
+
+- BattleExecutionPlanManager.cs 新增静态类 BattleExecutionPlanManager。
+- BattleExecutionPlanManager.cs 新增公共方法 CreateBasicExecutionPlan(List<BattleActionSlot> actionSlots, List<BattleEnemyIntent> intentQueue)。
+- CreateBasicExecutionPlan(...) 第一轮按 intentQueue 原顺序生成 RespondedEnemyIntent。
+- CreateBasicExecutionPlan(...) 第二轮按 intentQueue 原顺序生成 UnrespondedEnemyIntent。
+- CreateBasicExecutionPlan(...) 中 order 从 1 开始递增。
+- CreateBasicExecutionPlan(...) 使用 executionPlan.AddItem(...) 加入计划。
+- CreateBasicExecutionPlan(...) 暂不处理 FreeAction。
+- CreateBasicExecutionPlan(...) 暂不处理旧槽位解除绑定后的中间状态。
+- CreateBasicExecutionPlan(...) 暂不做完整速度排序。
+- BattleExecutionPlanManager.cs 新增公共方法 PrintExecutionPlan(BattleExecutionPlan executionPlan)。
+- PrintExecutionPlan(...) 只打印计划，不执行 item。
+- PrintExecutionPlan(...) 支持空计划日志。
+- PrintExecutionPlan(...) 支持 RespondedEnemyIntent / UnrespondedEnemyIntent / FreeAction 安全打印分支。
+- BattleExecutionPlanManager.cs 新增私有辅助方法 FindSlotByEnemyIntent(...)。
+- FindSlotByEnemyIntent(...) 只扫描槽位引用关系，不修改状态。
+- CardLoadTest.cs 中 BattleTestMode 新增 ActionSlotExecutionPlanBasic。
+- CardLoadTest.cs 中 Start() 增加该模式分支。
+- CardLoadTest.cs 新增 RunActionSlotExecutionPlanBasicTestSequence()。
+- RunActionSlotExecutionPlanBasicTestSequence() 中创建两个敌人意图。
+- RunActionSlotExecutionPlanBasicTestSequence() 中 allyA 槽位1响应敌人意图2。
+- RunActionSlotExecutionPlanBasicTestSequence() 中生成并打印 BattleExecutionPlan。
+- RunActionSlotExecutionPlanBasicTestSequence() 中打印 allyA 卡牌状态。
+- RunActionSlotExecutionPlanBasicTestSequence() 不调用 ExecuteActionSlots(...)。
+
+Unity 测试结果：
+
+- 测试模式：ActionSlotExecutionPlanBasic。
+- 敌人意图1未响应。
+- 敌人意图1原目标 / 实际目标为 allyB 槽位2。
+- 敌人意图2已响应。
+- allyA 槽位1处理敌人意图2。
+- 敌人意图2实际目标为 allyA 槽位1。
+- 打印 BattleExecutionPlan。
+- BattleExecutionPlan 第1项为 RespondedEnemyIntent，allyA 槽位1处理敌人意图2。
+- BattleExecutionPlan 第2项为 UnrespondedEnemyIntent，敌人意图1未响应，未来按 actualTarget 执行。
+- ExecutionPlan 项数量：2。
+
+当前验证结论：
+
+- CreateBasicExecutionPlan(...) 可以根据 intentQueue + actionSlots 生成第一版执行计划。
+- 第一版执行计划顺序为“已响应敌人意图优先、未响应敌人意图补后”。
+- PrintExecutionPlan(...) 可以正确打印计划内容。
+- 当前仍然只是计划生成和打印，不执行任何 item。
+
+当前没有进入正式结算：
+
+- 槽位已使用：False。
+- allyA 基础攻击 UseCount 仍为 0 / 3。
+- 罪卡测试卡 UseCount 仍为 0 / 2。
+- 没有拼点日志。
+- 没有 Resolved。
+- 没有负罪感增加。
+- 没有 UseCount 增加。
+- 没有调用 slot.MarkUsed()。
+
+当前不实现：
+
+- ExecuteExecutionPlan(...)。
+- 正式执行器。
+- 完整速度排序。
+- FreeAction 混排。
+- 旧槽位中间状态处理。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+
+编译说明：
+
+- 本次新增了 BattleExecutionPlanManager.cs。
+- 普通 dotnet build ProjectGuilt.sln 曾因 Unity 工程文件未刷新而找不到新增脚本。
+- 没有手动修改 .csproj。
+- 回到 Unity 自动刷新后，Unity 测试已通过。
+- 如后续再次运行 dotnet build，应在 Unity 刷新工程文件后再检查。
+
+## 三十一、ActionSlotExecutionPlanEmpty 空计划 / 空队列安全测试已完成
+
+当前已完成小目标：
+
+- 新增测试模式 ActionSlotExecutionPlanEmpty。
+- 验证 BattleExecutionPlanManager 对空计划 / 空队列 / null 输入的安全处理。
+- 当前只测试生成和打印。
+- 当前不进入正式执行或正式结算。
+
+修改范围记录：
+
+- CardLoadTest.cs 中 BattleTestMode 新增 ActionSlotExecutionPlanEmpty。
+- CardLoadTest.cs 中 Start() 增加该模式分支。
+- CardLoadTest.cs 新增 RunActionSlotExecutionPlanEmptyTestSequence()。
+- 没有修改 BattleExecutionPlanManager.cs。
+- 没有修改 BattleExecutionPlan.cs。
+- 没有修改 BattleExecutionItem.cs。
+- 没有修改 BattleActionSlotManager.cs。
+- 没有修改任何战斗核心逻辑。
+
+测试覆盖内容：
+
+- BattleExecutionPlanManager.PrintExecutionPlan(null)。
+- BattleExecutionPlanManager.CreateBasicExecutionPlan(null, null) 后打印。
+- 空 List<BattleActionSlot> + 空 List<BattleEnemyIntent> 生成后打印。
+- new BattleExecutionPlan() 后打印。
+
+Unity 测试结果：
+
+- 4 组输入都能正常打印空计划。
+- 每组都显示：===== 当前 BattleExecutionPlan =====。
+- 每组都显示：提示：当前只生成并打印执行计划，不执行任何 item。
+- 每组都显示：当前 BattleExecutionPlan 没有执行项。
+- 每组都显示：ExecutionPlan 项数量：0。
+- 没有红色报错。
+- 没有空引用异常。
+
+当前没有进入正式结算：
+
+- 没有执行 BattleExecutionPlan。
+- 没有调用 ExecuteActionSlots(...)。
+- 没有调用 BattleResolver。
+- 没有调用 slot.MarkUsed()。
+- 没有拼点。
+- 没有敌人攻击。
+- 没有 Resolved。
+- 没有负罪感增加。
+- 没有 UseCount 增加。
+
+当前结论：
+
+- BattleExecutionPlanManager 对 null plan 能安全处理。
+- BattleExecutionPlanManager 对 null actionSlots / null intentQueue 能安全处理。
+- BattleExecutionPlanManager 对空 actionSlots / intentQueue 能安全处理。
+- BattleExecutionPlanManager 对空 BattleExecutionPlan 能安全处理。
+- 空计划 / 空队列边界已经有测试模式固定。
+- 当前 ExecutionPlan 生成与打印阶段更加稳定。
+
+当前不实现：
+
+- ExecuteExecutionPlan(...)。
+- 正式执行器。
+- 完整速度排序。
+- FreeAction 混排。
+- 旧槽位中间状态处理。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+
+编译检查：
+
+- dotnet build ProjectGuilt.sln 已通过。
+- 结果为 0 warnings / 0 errors。
+- 普通 sandbox 运行曾因 Windows SDK 目录权限失败，提升权限后通过。
+
+## 三十二、ActionSlotExecutionPlanMissingSlot 已响应但缺少绑定槽位安全测试已完成
+
+当前已完成小目标：
+
+- 新增测试模式 ActionSlotExecutionPlanMissingSlot。
+- 验证敌人意图 isResponded == true，但 actionSlots 中找不到绑定槽位时，BattleExecutionPlanManager 能安全生成并打印计划。
+- 当前只测试 ExecutionPlan 生成和打印。
+- 当前不进入正式执行或正式结算。
+
+修改范围记录：
+
+- CardLoadTest.cs 中 BattleTestMode 新增 ActionSlotExecutionPlanMissingSlot。
+- CardLoadTest.cs 中 Start() 增加该模式分支。
+- CardLoadTest.cs 新增 RunActionSlotExecutionPlanMissingSlotTestSequence()。
+- 没有修改 BattleExecutionPlanManager.cs。
+- 没有修改 BattleExecutionPlan.cs。
+- 没有修改 BattleExecutionItem.cs。
+- 没有修改 BattleActionSlotManager.cs。
+- 没有修改 BattleActionSlot.cs。
+- 没有修改任何战斗核心逻辑。
+
+测试构造方式：
+
+- 创建一个敌人意图，攻击 allyB 槽位1。
+- 创建 1 个行动槽位。
+- 正常调用 AssignResponseToEnemyIntent(...)。
+- 让 allyA 槽位1 成功响应该敌人意图。
+- 敌人意图变为 已响应：True。
+- 敌人意图实际目标变为 allyA 槽位1。
+- 随后手动调用槽位的 UnbindEnemyIntent()。
+- 构造出：敌人意图仍为 已响应：True。
+- 构造出：敌人意图实际目标仍为 allyA 槽位1。
+- 构造出：没有任何槽位绑定该敌人意图。
+
+Unity 测试结果：
+
+- 敌人意图1已响应：True。
+- 敌人意图1实际目标为 allyA 槽位1。
+- 槽位1仍有行动者和卡牌。
+- 槽位1目标显示为 无目标。
+- 槽位1已使用：False。
+- 槽位1响应意图显示为 无 / 已解除绑定。
+- BattleExecutionPlan 打印结果中，第1项为 RespondedEnemyIntent。
+- BattleExecutionPlan 打印提示：敌人意图1已响应，但未找到绑定槽位。
+- BattleExecutionPlan 打印当前实际目标为 allyA 槽位1。
+- ExecutionPlan 项数量：1。
+
+当前验证结论：
+
+- CreateBasicExecutionPlan(...) 在“已响应但缺少绑定槽位”的异常状态下可以安全生成 item。
+- 生成的 BattleExecutionItem 类型为 RespondedEnemyIntent。
+- 该 item 的 actionSlot == null。
+- PrintExecutionPlan(...) 能安全打印异常提示。
+- 不会空引用报错。
+- 这个测试固定了 ExecutionPlan 对异常数据边界的处理能力。
+
+当前没有进入正式结算：
+
+- 没有执行 BattleExecutionPlan。
+- 没有调用 ExecuteActionSlots(...)。
+- 没有调用 BattleResolver。
+- 没有调用 slot.MarkUsed()。
+- 没有拼点。
+- 没有敌人攻击。
+- 没有 Resolved。
+- 没有负罪感增加。
+- 没有 UseCount 增加。
+
+当前不实现：
+
+- ExecuteExecutionPlan(...)。
+- 正式执行器。
+- 完整速度排序。
+- FreeAction 混排。
+- 旧槽位中间状态正式处理。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+
+编译检查：
+
+- dotnet build ProjectGuilt.sln 已通过。
+- 结果为 0 warnings / 0 errors。
+- 普通 sandbox 运行曾因 Windows SDK 目录权限失败，提升权限后通过。
+
+## 三十三、ActionSlotExecutionPlanMultiBasic 多项执行计划顺序测试已完成
+
+当前已完成小目标：
+
+- 新增测试模式 ActionSlotExecutionPlanMultiBasic。
+- 验证多个已响应敌人意图 + 多个未响应敌人意图时，BattleExecutionPlanManager.CreateBasicExecutionPlan(...) 的第一版简化顺序稳定。
+- 验证第一轮按 intentQueue 原顺序收集已响应项。
+- 验证第二轮按 intentQueue 原顺序收集未响应项。
+- 验证 order 从 1 开始递增。
+- 当前只测试 ExecutionPlan 生成和打印。
+- 当前不进入正式执行或正式结算。
+
+修改范围记录：
+
+- CardLoadTest.cs 中 BattleTestMode 新增 ActionSlotExecutionPlanMultiBasic。
+- CardLoadTest.cs 中 Start() 增加该模式分支。
+- CardLoadTest.cs 新增 RunActionSlotExecutionPlanMultiBasicTestSequence()。
+- 没有修改 BattleExecutionPlanManager.cs。
+- 没有修改 BattleExecutionPlan.cs。
+- 没有修改 BattleExecutionItem.cs。
+- 没有修改 BattleActionSlotManager.cs。
+- 没有修改任何战斗核心逻辑。
+
+测试构造方式：
+
+- 创建 4 个敌人意图。
+- 队列原顺序为：敌人意图1 未响应，攻击 allyB 槽位2。
+- 队列原顺序为：敌人意图2 已响应，攻击 allyB 槽位1。
+- 队列原顺序为：敌人意图3 未响应，攻击 allyB 槽位2。
+- 队列原顺序为：敌人意图4 已响应，攻击 allyB 槽位1。
+- 创建 2 个行动槽位。
+- allyA 槽位1响应敌人意图2。
+- allyA 槽位2使用另一张独立攻击卡响应敌人意图4。
+- 使用独立攻击卡避免同一张 BattleCardState 重复安排限制。
+- 调用 CreateBasicExecutionPlan(...)。
+- 调用 PrintExecutionPlan(...)。
+
+Unity 测试结果：
+
+- 敌人意图1：已响应：False。
+- 敌人意图2：已响应：True。
+- 敌人意图3：已响应：False。
+- 敌人意图4：已响应：True。
+- BattleExecutionPlan 打印结果第1项：RespondedEnemyIntent，allyA 槽位1 处理敌人意图2。
+- BattleExecutionPlan 打印结果第2项：RespondedEnemyIntent，allyA 槽位2 处理敌人意图4。
+- BattleExecutionPlan 打印结果第3项：UnrespondedEnemyIntent，敌人意图1未响应，未来按 actualTarget 执行。
+- BattleExecutionPlan 打印结果第4项：UnrespondedEnemyIntent，敌人意图3未响应，未来按 actualTarget 执行。
+- ExecutionPlan 项数量：4。
+
+当前验证结论：
+
+- CreateBasicExecutionPlan(...) 的两轮扫描规则稳定。
+- 第一轮会按 intentQueue 原顺序生成所有 RespondedEnemyIntent。
+- 第二轮会按 intentQueue 原顺序生成所有 UnrespondedEnemyIntent。
+- order 从 1 到 4 正确递增。
+- 当前顺序仍是第一版简化规则，不代表最终完整速度队列。
+- 当前暂不混入 FreeAction。
+
+当前没有进入正式结算：
+
+- 槽位1 已使用：False。
+- 槽位2 已使用：False。
+- allyA 第一张基础攻击 UseCount 仍为 0 / 3。
+- allyA 第二张基础攻击 UseCount 仍为 0 / 3。
+- 罪卡测试卡 UseCount 仍为 0 / 2。
+- 没有拼点日志。
+- 没有敌人攻击。
+- 没有 Resolved。
+- 没有负罪感增加。
+- 没有 UseCount 增加。
+- 没有调用 slot.MarkUsed()。
+- 没有调用 ExecuteActionSlots(...)。
+
+当前不实现：
+
+- ExecuteExecutionPlan(...)。
+- BattleExecutionPlanExecutor.cs。
+- 正式执行器。
+- 完整速度排序。
+- FreeAction 混排。
+- 旧槽位中间状态正式处理。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+
+编译检查：
+
+- dotnet build ProjectGuilt.sln 已通过。
+- 结果为 0 warnings / 0 errors。
+- 普通 sandbox 运行曾因 Windows SDK 目录权限失败，提升权限后通过。
+
+## 三十四、ActionSlotExecutionPlanStepPreviewBasic / BattleExecutionPlanExecutor 第一版执行步骤预览已完成
+
+当前已完成小目标：
+
+- 新增 BattleExecutionPlanExecutor.cs。
+- 新增 BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(BattleExecutionPlan executionPlan)。
+- 新增测试模式 ActionSlotExecutionPlanStepPreviewBasic。
+- 当前只打印执行步骤预览。
+- 当前不执行 BattleExecutionPlan。
+- 当前不进入正式结算。
+
+修改范围记录：
+
+- BattleExecutionPlanExecutor.cs 新增静态类 BattleExecutionPlanExecutor。
+- BattleExecutionPlanExecutor.cs 新增公共方法 PrintExecutionPlanStepPreview(...)。
+- BattleExecutionPlanExecutor.cs 新增私有辅助方法 PrintRespondedEnemyIntentStepPreview(...)。
+- BattleExecutionPlanExecutor.cs 新增私有辅助方法 PrintUnrespondedEnemyIntentStepPreview(...)。
+- BattleExecutionPlanExecutor.cs 当前只做日志预览。
+- BattleExecutionPlanExecutor.cs 安全处理 null plan。
+- BattleExecutionPlanExecutor.cs 安全处理 null executionItems。
+- BattleExecutionPlanExecutor.cs 安全处理空列表。
+- BattleExecutionPlanExecutor.cs 安全处理 null item。
+- BattleExecutionPlanExecutor.cs 安全处理 null enemyIntent。
+- BattleExecutionPlanExecutor.cs 安全处理 null actionSlot。
+- BattleExecutionPlanExecutor.cs 根据 BattleExecutionItemType 打印未来处理方向。
+- BattleExecutionPlanExecutor.cs 不执行 item。
+- BattleExecutionPlanExecutor.cs 不修改任何状态。
+- CardLoadTest.cs 中 BattleTestMode 新增 ActionSlotExecutionPlanStepPreviewBasic。
+- CardLoadTest.cs 中 Start() 增加该模式分支。
+- CardLoadTest.cs 新增 RunActionSlotExecutionPlanStepPreviewBasicTestSequence()。
+- RunActionSlotExecutionPlanStepPreviewBasicTestSequence() 中创建 1 个未响应敌人意图和 1 个已响应敌人意图。
+- RunActionSlotExecutionPlanStepPreviewBasicTestSequence() 中调用 CreateBasicExecutionPlan(...)。
+- RunActionSlotExecutionPlanStepPreviewBasicTestSequence() 中调用 PrintExecutionPlan(...)。
+- RunActionSlotExecutionPlanStepPreviewBasicTestSequence() 中调用 BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(...)。
+- RunActionSlotExecutionPlanStepPreviewBasicTestSequence() 中打印 allyA 卡牌状态确认未执行。
+
+Unity 测试结果：
+
+- 测试模式：ActionSlotExecutionPlanStepPreviewBasic。
+- ExecutionPlan 第1项为 RespondedEnemyIntent，allyA 槽位1 处理敌人意图2。
+- ExecutionPlan 第2项为 UnrespondedEnemyIntent，敌人意图1未响应。
+- ExecutionPlan 项数量：2。
+- 执行步骤预览打印标题：===== BattleExecutionPlan 执行步骤预览 =====。
+- 执行步骤预览打印提示：提示：当前只预览执行步骤，不执行任何 item，不修改任何状态。
+- 第1项预览：RespondedEnemyIntent 未来将处理玩家槽位对敌人意图的响应。
+- 第1项预览：槽位为 allyA 槽位1。
+- 第1项预览：敌人意图为敌人意图2。
+- 第2项预览：UnrespondedEnemyIntent 未来将处理无人响应敌人意图。
+- 第2项预览：目标为 allyB 槽位2。
+
+当前验证结论：
+
+- BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(...) 可以作为第一版执行步骤预览器工作。
+- BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(...) 与 BattleExecutionPlanManager.PrintExecutionPlan(...) 职责不同。
+- BattleExecutionPlanManager.PrintExecutionPlan(...) 打印计划内容。
+- BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(...) 打印未来执行阶段会如何处理。
+- 当前没有误写成正式执行器。
+- 当前没有新增 ExecuteExecutionPlan(...)。
+
+当前没有进入正式结算：
+
+- 槽位 已使用：False。
+- allyA 基础攻击 UseCount 仍为 0 / 3。
+- 罪卡测试卡 UseCount 仍为 0 / 2。
+- 没有拼点日志。
+- 没有敌人攻击。
+- 没有 Resolved。
+- 没有负罪感增加。
+- 没有 UseCount 增加。
+- 没有调用 slot.MarkUsed()。
+- 没有调用 ExecuteActionSlots(...)。
+- 没有切换 item.isCompleted。
+- 没有切换 plan.isCompleted。
+
+当前不实现：
+
+- ExecuteExecutionPlan(...)。
+- 正式执行器方法。
+- BattleResolver 接入。
+- ExecuteActionSlots(...) 接入。
+- slot.MarkUsed()。
+- 拼点。
+- 敌人攻击。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- item.isCompleted 切换。
+- plan.isCompleted 切换。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+- FreeAction 正式执行。
+
+编译说明：
+
+- 本次新增了 BattleExecutionPlanExecutor.cs。
+- 普通 dotnet build ProjectGuilt.sln 曾因 Unity 工程文件未刷新而找不到新增脚本。
+- 没有手动修改 .csproj。
+- 回到 Unity 自动刷新后，Unity 测试已通过。
+- 如后续再次运行 dotnet build，应在 Unity 刷新工程文件后再检查。
+
+## 三十五、ActionSlotExecutionPlanStepPreviewEmpty 执行步骤预览空输入安全测试已完成
+
+当前已完成小目标：
+
+- 新增测试模式 ActionSlotExecutionPlanStepPreviewEmpty。
+- 测试 PrintExecutionPlanStepPreview(null)。
+- 测试 PrintExecutionPlanStepPreview(new BattleExecutionPlan())。
+- 测试 CreateBasicExecutionPlan(null, null) 后调用步骤预览。
+- 测试空 actionSlots / intentQueue 生成计划后调用步骤预览。
+
+Unity 测试结果：
+
+- 4 组都正常打印：===== BattleExecutionPlan 执行步骤预览 =====。
+- 4 组都正常打印：提示：当前只预览执行步骤，不执行任何 item，不修改任何状态。
+- 4 组都正常打印：当前 BattleExecutionPlan 没有可预览的执行步骤。
+- 没有红色报错。
+- 没有空引用异常。
+
+当前没有进入正式结算：
+
+- 没有拼点。
+- 没有敌人攻击。
+- 没有 Resolved。
+- 没有 UseCount 增加。
+- 没有负罪感增加。
+- 没有 slot.MarkUsed()。
+
+当前结论：
+
+- PrintExecutionPlanStepPreview(...) 的空输入安全性已验证。
+- 执行步骤预览层目前已有正常计划与空输入两类验证。
+- 后续不再继续拆更多零散安全测试，除非出现具体问题。
+
+## 三十六、UnrespondedEnemyIntent 命中目标预览文案增强已完成
+
+修改内容：
+
+- 只修改 BattleExecutionPlanExecutor.cs。
+- 增强 PrintUnrespondedEnemyIntentStepPreview(...)。
+- 将 UnrespondedEnemyIntent 的预览从单行概述改为更明确的多行命中目标预览。
+
+当前新预览内容包括：
+
+- 敌人意图编号。
+- 敌人卡牌。
+- 将命中角色。
+- 将命中槽位。
+- 当前仅预览命中目标，不造成伤害。
+
+Unity 测试结果：
+
+- 复用测试模式 ActionSlotExecutionPlanStepPreviewBasic。
+- 已正确打印：敌人意图：敌人意图1。
+- 已正确打印：敌人卡牌：敌人爪击。
+- 已正确打印：将命中角色：我方角色B。
+- 已正确打印：将命中槽位：槽位2。
+- 已正确打印：当前仅预览命中目标，不造成伤害。
+
+当前没有进入正式结算：
+
+- 没有拼点。
+- 没有敌人攻击。
+- 没有 Resolved。
+- 没有 UseCount 增加。
+- 没有负罪感增加。
+- 没有 slot.MarkUsed()。
+
+当前结论：
+
+- UnrespondedEnemyIntent 的命中目标预览已经更清楚。
+- 当前仍只是执行步骤预览。
+- 不代表正式敌人攻击或伤害结算。
+
+## 三十七、Action Slot / Enemy Intent 后续设计记录
 
 当前阶段只记录以下设计规则，不实现。
 
@@ -2219,7 +2851,968 @@ BattleHandlingPreviewItem 与未来 BattleExecutionItem 的职责区别：
 - 未来正式执行项另行设计。
 - 当前只记录职责边界，不进入代码实现。
 
-### 18. 未来扩展：不可预测卡
+### 18. BattleExecutionItem / BattleExecutionPlan 第一版设计草案
+
+当前阶段判断：
+
+- 当前 Action Slot / Enemy Intent 安排阶段已经具备进入正式执行队列设计阶段的基础。
+- 但当前只进入设计阶段。
+- 当前不进入正式执行队列代码实现。
+- 当前不执行拼点、敌人攻击、伤害、Resolved、UseCount、负罪感等逻辑。
+
+Preview 与 Execution 的边界：
+
+- BattleHandlingPreviewItem 继续作为准备阶段 / 调试 / UI 预览项。
+- BattleHandlingPreviewItem 不直接升级为正式执行项。
+- 未来正式执行队列应另行设计 BattleExecutionItem / BattleExecutionPlan。
+- PreviewItem 不改变战斗状态。
+- ExecutionItem 未来才代表真正要被系统执行的队列项。
+
+BattleExecutionItem 第一版字段草案：
+
+- int order：正式执行顺序编号。
+- BattleExecutionItemType executionType：执行项类型。
+- BattleEnemyIntent enemyIntent：关联敌人意图。
+- BattleActionSlot actionSlot：关联行动槽位。
+- bool isCompleted：该执行项是否已经完成正式结算。
+
+BattleExecutionItemType 第一版枚举草案：
+
+- RespondedEnemyIntent：玩家槽位响应敌人意图。
+- UnrespondedEnemyIntent：敌人意图无人响应，未来按当前 actualTarget 执行。
+- FreeAction：普通行动 / 偷刀。
+
+字段含义补充：
+
+- RespondedEnemyIntent 通常同时有 enemyIntent 和 actionSlot。
+- UnrespondedEnemyIntent 通常有 enemyIntent，actionSlot 可以为空。
+- FreeAction 通常有 actionSlot，enemyIntent 可以为空。
+
+关于 isCompleted：
+
+- 第一版设计倾向先放在 BattleExecutionItem 上。
+- 因为正式执行队列首先需要知道“这个执行项是否完成”。
+- BattleEnemyIntent.isCompleted 未来可能也需要，但当前暂不实现。
+- 这样可以避免过早把敌人意图自身状态、响应状态和正式执行完成状态混在一起。
+
+关于 FreeAction：
+
+- 设计草案中应保留 FreeAction 类型。
+- 因为玩家未来可以选择不响应敌人意图，转而普通攻击 / 偷刀。
+- 但第一版代码原型可以暂时不实现完整 FreeAction 混排。
+- 需要等正式执行队列排序规则更清楚后再实现。
+
+当前不实现：
+
+- BattleExecutionItem。
+- BattleExecutionPlan。
+- BattleExecutionItemType。
+- 正式执行队列代码。
+- 完整速度排序。
+- FreeAction 混排。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+
+当前结论：
+
+- 下一阶段可以围绕 BattleExecutionItem / BattleExecutionPlan 继续设计。
+- 当前只记录第一版字段和职责边界。
+- 后续如果进入代码实现，需要继续小步推进，先生成执行计划，不直接执行。
+
+BattleExecutionPlan 第一版职责草案：
+
+BattleExecutionItem 与 BattleExecutionPlan 的关系：
+
+- BattleExecutionItem 表示正式执行队列中的单个执行项。
+- BattleExecutionPlan 表示一整个回合的正式执行计划。
+- 一个 BattleExecutionPlan 内部包含多个 BattleExecutionItem。
+
+BattleExecutionPlan 第一版可能字段草案：
+
+- List<BattleExecutionItem> executionItems：保存本回合正式执行项列表。
+- bool isCompleted：表示整个执行计划是否已经全部完成。
+
+BattleExecutionPlan 未来可能扩展：
+
+- 当前执行索引。
+- 执行阶段。
+- 执行结果统计。
+- 是否中断。
+- 调试打印信息。
+
+BattleExecutionPlan 第一版职责：
+
+- 只负责保存本回合最终执行顺序。
+- 可以用于打印正式执行计划预览。
+- 可以作为未来正式执行器的输入。
+- 不直接执行战斗逻辑。
+- 不直接调用拼点、敌人攻击、卡牌消耗、负罪感、Resolved 等逻辑。
+
+BattleExecutionPlan 与 BattleHandlingPreviewItem / Preview 系统的区别：
+
+- BattleHandlingPreviewItem 用于准备阶段、调试和 UI 预览。
+- BattleExecutionPlan 用于正式回合执行阶段。
+- Preview 可以辅助玩家理解未来处理方向。
+- ExecutionPlan 应代表回合开始后系统最终确认的执行计划。
+- 两者可以参考同一批数据，但不应混用为同一个结构。
+
+BattleExecutionPlan 第一版生成方向：
+
+- 未来可以根据 actionSlots 生成正式执行项列表。
+- 未来可以根据 intentQueue 生成正式执行项列表。
+- 未来可以根据速度规则生成正式执行项列表。
+- 未来可以根据响应绑定关系生成正式执行项列表。
+- 未来可以根据未响应敌人意图生成正式执行项列表。
+- 未来可以根据 FreeAction 生成正式执行项列表。
+- 第一版可以先生成计划并打印，不立即执行。
+- 等计划生成稳定后，再进入逐项执行。
+
+当前不实现：
+
+- BattleExecutionItem。
+- BattleExecutionPlan。
+- BattleExecutionItemType。
+- 正式执行计划生成代码。
+- 正式执行器。
+- 完整速度排序。
+- FreeAction 混排。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+
+当前结论：
+
+- BattleExecutionPlan 应作为未来正式执行队列的容器。
+- BattleExecutionPlan 和 BattleHandlingPreviewItem 分属不同阶段。
+- 当前只记录职责边界和字段草案。
+- 后续如果进入代码实现，应先生成并打印 ExecutionPlan，不直接执行。
+
+BattleExecutionPlan 第一版生成规则草案：
+
+当前阶段：
+
+- 已经进入正式执行队列设计阶段。
+- 当前只记录 BattleExecutionPlan 第一版生成规则。
+- 当前不进入代码实现。
+- 当前不执行战斗逻辑。
+
+第一版生成目标：
+
+- 根据 actionSlots + intentQueue 生成一个正式执行计划。
+- 第一版只生成并打印计划。
+- 第一版不执行计划。
+- 第一版不触发拼点、敌人攻击、伤害、Resolved、UseCount、负罪感等正式结算。
+
+第一版暂时只处理两类执行项：
+
+- RespondedEnemyIntent：已经被玩家槽位成功响应的敌人意图。
+- RespondedEnemyIntent 需要关联 enemyIntent 和对应 actionSlot。
+- UnrespondedEnemyIntent：没有被任何玩家槽位响应的敌人意图。
+- UnrespondedEnemyIntent 需要关联 enemyIntent。
+- UnrespondedEnemyIntent 的 actionSlot 可以为空。
+
+第一版暂不混入：
+
+- FreeAction。
+- 旧槽位解除绑定后的中间状态。
+- 普通偷刀行动。
+- 防御 / 闪避空挂。
+- 完整速度排序。
+
+第一版生成顺序草案：
+
+- 可以沿用当前“速度响应优先方向”的简化规则。
+- 先生成 RespondedEnemyIntent 项。
+- 再生成 UnrespondedEnemyIntent 项。
+- 当前仍不代表最终完整速度队列。
+- 当前只是正式执行计划第一版生成规则。
+- 后续完整速度排序需要单独设计。
+
+与 BattleHandlingPreviewItem 的关系：
+
+- BattleHandlingPreviewItem 用于准备阶段 / 调试 / UI 预览。
+- BattleExecutionPlan 用于正式回合执行阶段。
+- 第一版生成规则可能和 Preview 规则相似，但职责不同。
+- 不应直接把 PreviewItem 当 ExecutionItem 执行。
+
+关于旧槽位中间状态：
+
+- 旧槽位解除绑定后可能存在 cardState != null。
+- 旧槽位解除绑定后可能存在 actor != null。
+- 旧槽位解除绑定后可能存在 slotType == RespondToEnemyIntent。
+- 旧槽位解除绑定后可能存在 enemyIntent == null。
+- 旧槽位解除绑定后可能存在 target == null。
+- 第一版 ExecutionPlan 生成暂不处理这种槽位。
+- 不把它自动转成 FreeAction。
+- 不自动清空。
+- 后续需要单独设计“未绑定旧槽位如何处理”。
+
+关于 FreeAction：
+
+- BattleExecutionItemType 草案中保留 FreeAction。
+- 但第一版 ExecutionPlan 生成暂不加入 FreeAction。
+- 因为普通行动 / 偷刀还涉及目标选择、速度排序、和敌人意图混排等问题。
+- 后续单独设计。
+
+当前不实现：
+
+- BattleExecutionItem。
+- BattleExecutionPlan。
+- BattleExecutionItemType。
+- ExecutionPlan 生成代码。
+- ExecutionPlan 打印代码。
+- 正式执行器。
+- 完整速度排序。
+- FreeAction 混排。
+- 旧槽位中间状态处理。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+
+当前结论：
+
+- 第一版 BattleExecutionPlan 生成应先聚焦已响应 / 未响应敌人意图。
+- 暂不混入 FreeAction。
+- 暂不执行。
+- 等生成规则稳定后，再进入代码原型。
+
+### 19. BattleExecutionPlanExecutor 第一版职责草案
+
+当前阶段判断：
+
+- BattleExecutionPlan 生成 / 打印阶段可以暂时收口。
+- 当前已经完成正常计划生成测试。
+- 当前已经完成空计划 / 空队列安全测试。
+- 当前已经完成已响应但缺少绑定槽位安全测试。
+- 当前可以进入正式执行器设计阶段。
+- 当前不进入正式执行器代码实现阶段。
+
+BattleExecutionPlanManager 与未来 BattleExecutionPlanExecutor 的分工：
+
+- BattleExecutionPlanManager 负责生成 BattleExecutionPlan。
+- BattleExecutionPlanManager 负责打印 BattleExecutionPlan。
+- BattleExecutionPlanManager 只读 actionSlots / intentQueue。
+- BattleExecutionPlanManager 不执行战斗逻辑。
+- BattleExecutionPlanManager 不修改战斗状态。
+- BattleExecutionPlanExecutor 未来负责逐项处理 BattleExecutionPlan.executionItems。
+- BattleExecutionPlanExecutor 未来才负责真正进入执行流程。
+- BattleExecutionPlanExecutor 未来可能根据 BattleExecutionItemType 分派处理逻辑。
+- 当前只做职责设计，不实现。
+
+BattleExecutionPlanExecutor 第一版定位：
+
+- 第一版可以先设计为执行计划遍历器 / 执行器。
+- 第一版代码原型即使实现，也应先只遍历并打印“将要执行什么”。
+- 第一版不应直接接入拼点、敌人攻击、Resolved、UseCount、负罪感等正式结算。
+- 真正结算应在后续阶段逐步接入。
+
+未来可能的方法名草案：
+
+- ExecuteExecutionPlan(BattleExecutionPlan executionPlan)：未来正式执行入口。
+- PreviewExecuteExecutionPlan(...)：更偏安全预览的第一版命名。
+- PrintExecutionPlanExecutionPreview(...)：更明确地表示只打印执行预览。
+- 当前暂不决定最终方法名。
+- 当前不实现任何方法。
+
+第一版执行器未来处理方向：
+
+- 遍历 BattleExecutionPlan.executionItems。
+- 根据 BattleExecutionItemType 判断类型。
+- 可处理类型包括 RespondedEnemyIntent。
+- 可处理类型包括 UnrespondedEnemyIntent。
+- 可处理类型包括 FreeAction。
+- 第一版可以先只打印每一项将如何处理。
+- 第一版不改变 item.isCompleted。
+- 第一版不改变 plan.isCompleted。
+- 第一版不调用任何结算方法。
+
+关于 isCompleted 的设计边界：
+
+- BattleExecutionItem.isCompleted 未来用于记录单个执行项是否完成。
+- BattleExecutionPlan.isCompleted 未来用于记录整个执行计划是否完成。
+- 当前不切换这些状态。
+- 未来只有真正执行 item 并完成结算后，才考虑把 item 标记为完成。
+- 只有所有 item 完成后，才考虑把 plan 标记为完成。
+- 当前暂不实现 MarkCompleted() 或类似方法。
+
+关于正式结算的边界：
+
+- 未来 RespondedEnemyIntent 可能进入拼点 / 响应处理。
+- 未来 UnrespondedEnemyIntent 可能进入敌人无人响应处理。
+- 未来 FreeAction 可能进入普通行动 / 偷刀处理。
+- 当前不实现这些逻辑。
+- 当前只记录未来方向。
+
+当前不建议做：
+
+- 不直接写 ExecuteExecutionPlan(...)。
+- 不接入 BattleResolver。
+- 不执行 RespondedEnemyIntent。
+- 不执行 UnrespondedEnemyIntent。
+- 不混入 FreeAction。
+- 不处理旧槽位中间状态。
+- 不新增 BattleEnemyIntent.isCompleted。
+- 不新增 respondingSlot。
+- 不触发 Resolved / UseCount / guiltGain / slot.MarkUsed()。
+
+可选后续测试记录：
+
+- ActionSlotExecutionPlanMultiBasic 已作为回归测试补充完成。
+- ActionSlotExecutionPlanMultiBasic 已用于验证多个已响应 / 多个未响应意图的 order 顺序。
+- ActionSlotExecutionPlanMultiBasic 仍不代表正式执行队列，只固定当前第一版简化顺序。
+- 后续进入执行器代码原型前，可以继续把它作为回归测试参考。
+
+当前结论：
+
+- 下一阶段进入 BattleExecutionPlanExecutor 职责设计。
+- 当前只记录职责边界。
+- 当前不写执行器代码。
+- 当前不进入正式结算。
+
+### 20. BattleExecutionPlanExecutor 命名与第一版方法边界记录
+
+当前结论：
+
+- 当前已在后续阶段新增 BattleExecutionPlanExecutor.cs 的第一版执行步骤预览。
+- 当前暂不实现 ExecuteExecutionPlan(...)。
+- 当前 BattleExecutionPlanManager.PrintExecutionPlan(...) 仍负责打印计划内容。
+- 当前仍不应引入真正执行 / 正式结算代码。
+
+类名判断：
+
+- BattleExecutionPlanExecutor 适合作为未来真正执行器的最终类名。
+- 当前仅创建执行步骤预览版本，不代表正式执行器已经完成。
+- Executor 语义较强，容易让人误以为已经进入正式执行 / 正式结算阶段。
+
+方法名判断：
+
+- 暂时不要使用 ExecuteExecutionPlan(...)。
+- ExecuteExecutionPlan(...) 听起来像会真正执行计划、修改状态、触发结算。
+- 如果第一版只做“遍历并打印将要执行什么”，更安全的方法名可以是 PrintExecutionPlanStepPreview(BattleExecutionPlan executionPlan)。
+- 备选方法名可以是 PrintExecutionPreview(...)。
+- 备选方法名也可以是 PrintExecutionPlanExecutionPreview(...)。
+- 当前已采用 PrintExecutionPlanStepPreview(...) 作为第一版执行步骤预览方法名。
+
+当前 BattleExecutionPlanExecutor.cs 第一版职责边界：
+
+- 遍历 BattleExecutionPlan.executionItems。
+- 根据 BattleExecutionItemType 打印每个 item 未来将如何处理。
+- 不执行任何 item。
+- 不修改 item.isCompleted。
+- 不修改 plan.isCompleted。
+- 不调用 BattleResolver。
+- 不调用 slot.MarkUsed()。
+- 不触发 Resolved / UseCount / guiltGain。
+- 不混入 FreeAction 的正式执行。
+- 不处理旧槽位中间状态的正式执行。
+
+与 BattleExecutionPlanManager.PrintExecutionPlan(...) 的区别：
+
+- PrintExecutionPlan(...) 当前打印的是计划内容。
+- PrintExecutionPlan(...) 打印第几项。
+- PrintExecutionPlan(...) 打印 item 类型。
+- PrintExecutionPlan(...) 打印关联敌人意图。
+- PrintExecutionPlan(...) 打印关联槽位。
+- PrintExecutionPlan(...) 打印当前目标。
+- 未来 PrintExecutionPlanStepPreview(...) 应打印执行阶段将如何处理。
+- 未来 RespondedEnemyIntent 将进入玩家响应处理。
+- 未来 UnrespondedEnemyIntent 将进入无人响应敌人意图处理。
+- 未来 FreeAction 将进入普通行动处理。
+- 当前已新增执行步骤预览类，用于固定两者职责差异。
+
+下一步建议：
+
+- 已新增执行步骤预览代码。
+- ActionSlotExecutionPlanMultiBasic 已补充完成。
+- ActionSlotExecutionPlanMultiBasic 已验证多个已响应 / 多个未响应敌人意图时，CreateBasicExecutionPlan(...) 的 order 顺序稳定。
+- 后续再考虑正式执行器代码和 ExecuteExecutionPlan(...)。
+
+当前仍不实现：
+
+- ExecuteExecutionPlan(...)。
+- 正式执行器。
+- item.isCompleted 切换。
+- plan.isCompleted 切换。
+- BattleResolver 接入。
+- ExecuteActionSlots(...) 接入。
+- slot.MarkUsed()。
+- 拼点。
+- 敌人攻击。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+- FreeAction 混排。
+
+### 21. BattleExecutionPlan 生成 / 打印阶段暂时收口记录
+
+当前阶段结论：
+
+- BattleExecutionPlan 生成 / 打印阶段可以暂时收口。
+- 当前已经具备进入 BattleExecutionPlanExecutor 设计阶段的基础。
+- 当前已完成 BattleExecutionPlanExecutor 第一版执行步骤预览代码。
+- 当前仍不进入正式执行器 / 正式结算代码实现。
+- 当前仍不接入拼点、敌人攻击、Resolved、UseCount、负罪感、slot.MarkUsed() 等正式结算逻辑。
+
+已完成基础结构：
+
+- BattleExecutionItem.cs 已包含 BattleExecutionItemType。
+- BattleExecutionItem.cs 已包含 BattleExecutionItem。
+- BattleExecutionPlan.cs 已包含 BattleExecutionPlan。
+- BattleExecutionPlan.cs 已包含 executionItems。
+- BattleExecutionPlan.cs 已包含 isCompleted。
+- BattleExecutionPlan.cs 已包含 AddItem(...)。
+- BattleExecutionPlanManager.cs 已包含 CreateBasicExecutionPlan(...)。
+- BattleExecutionPlanManager.cs 已包含 PrintExecutionPlan(...)。
+
+已完成测试覆盖：
+
+- ActionSlotExecutionPlanBasic：验证 1 个已响应 + 1 个未响应时，ExecutionPlan 能正确生成和打印。
+- ActionSlotExecutionPlanEmpty：验证 null plan、null 输入、空队列、空 plan 能安全打印。
+- ActionSlotExecutionPlanMissingSlot：验证已响应但缺少绑定槽位时，ExecutionPlan 能安全生成异常 item 并打印提示。
+- ActionSlotExecutionPlanMultiBasic：验证多个已响应 + 多个未响应时，两轮扫描顺序稳定，order 递增正确。
+
+当前稳定规则：
+
+- CreateBasicExecutionPlan(...) 第一版只处理 RespondedEnemyIntent。
+- CreateBasicExecutionPlan(...) 第一版只处理 UnrespondedEnemyIntent。
+- 第一轮按 intentQueue 原顺序收集所有已响应敌人意图。
+- 第二轮按 intentQueue 原顺序收集所有未响应敌人意图。
+- order 从 1 开始递增。
+- 当前暂不混入 FreeAction。
+- 当前暂不处理旧槽位中间状态。
+- 当前暂不做完整速度排序。
+- 当前规则仍是第一版简化规则，不代表最终完整执行队列。
+
+当前职责边界：
+
+- BattleExecutionPlanManager 负责生成计划。
+- BattleExecutionPlanManager 负责打印计划。
+- BattleExecutionPlanManager 只读 actionSlots / intentQueue。
+- BattleExecutionPlanManager 不执行计划。
+- BattleExecutionPlanManager 不修改战斗状态。
+- BattleExecutionPlanExecutor 第一版只负责打印执行步骤预览。
+- 未来 BattleExecutionPlanExecutor 才负责逐项正式处理计划。
+- 未来 BattleExecutionPlanExecutor 可能根据 BattleExecutionItemType 分派执行逻辑。
+- 当前只完成预览代码，不实现正式执行代码。
+
+下一阶段方向：
+
+- 进入 BattleExecutionPlanExecutor 设计阶段。
+- 先讨论执行器职责、类名、方法名、状态切换边界。
+- 当前已新增 BattleExecutionPlanExecutor.cs 的第一版执行步骤预览。
+- 当前已记录：暂不实现 ExecuteExecutionPlan(...)。
+- 当前已采用 PrintExecutionPlanStepPreview(...) 作为第一版执行步骤预览方法。
+- 后续如果进入正式执行器代码原型，应继续小步推进，不直接结算。
+
+当前仍不实现：
+
+- ExecuteExecutionPlan(...)。
+- 正式执行器代码。
+- 完整速度排序。
+- FreeAction 混排。
+- 旧槽位中间状态正式处理。
+- 玩家槽位执行。
+- 敌人意图执行。
+- 拼点。
+- 敌人攻击。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- slot.MarkUsed()。
+- item.isCompleted 切换。
+- plan.isCompleted 切换。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+
+当前结论：
+
+- ExecutionPlan 生成 / 打印阶段当前可视为阶段性完成。
+- 后续重点从“计划能否生成”转向“计划未来如何安全执行”。
+- 下一阶段仍从设计文档开始，不直接写正式执行代码。
+
+### 22. BattleExecutionPlanExecutor 第一版执行预览规则草案
+
+当前阶段：
+
+- BattleExecutionPlan 生成 / 打印阶段已经暂时收口。
+- 下一阶段进入 BattleExecutionPlanExecutor 设计阶段。
+- 当前已完成第一版执行步骤预览代码。
+- 当前仍不进入正式结算。
+
+第一版 Executor 的定位：
+
+- 未来 BattleExecutionPlanExecutor 负责处理 BattleExecutionPlan.executionItems。
+- 第一版不应直接执行战斗逻辑。
+- 第一版应先作为执行步骤预览器设计。
+- 第一版只遍历计划并打印每个 item 未来将如何处理。
+- 第一版不改变任何战斗状态。
+
+第一版建议方法名：
+
+- 暂不使用 ExecuteExecutionPlan(...)。
+- Execute 容易被误解为正式执行、结算、修改状态。
+- 如果第一版只是打印执行步骤预览，推荐未来方法名：PrintExecutionPlanStepPreview(BattleExecutionPlan executionPlan)。
+- 当前已按该命名实现第一版执行步骤预览方法。
+
+第一版执行预览规则：
+
+- 遍历 BattleExecutionPlan.executionItems。
+- 按 item 的 order 顺序打印。
+- 根据 BattleExecutionItemType 区分 RespondedEnemyIntent。
+- 根据 BattleExecutionItemType 区分 UnrespondedEnemyIntent。
+- 根据 BattleExecutionItemType 区分 FreeAction。
+- 对 RespondedEnemyIntent：打印未来将进入玩家响应敌人意图处理。
+- 对 RespondedEnemyIntent：暂不拼点。
+- 对 RespondedEnemyIntent：暂不调用 BattleResolver。
+- 对 RespondedEnemyIntent：暂不调用 slot.MarkUsed()。
+- 对 UnrespondedEnemyIntent：打印未来将进入无人响应敌人意图处理。
+- 对 UnrespondedEnemyIntent：暂不执行敌人攻击。
+- 对 UnrespondedEnemyIntent：暂不处理无人响应效果。
+- 对 FreeAction：当前暂未混入第一版 ExecutionPlan。
+- 对 FreeAction：如果未来出现，只打印暂未实现正式处理。
+
+第一版不修改状态：
+
+- 不修改 item.isCompleted。
+- 不修改 plan.isCompleted。
+- 不修改 slot.isUsed。
+- 不修改 enemyIntent.isResponded。
+- 不修改 actualTarget。
+- 不增加 UseCount。
+- 不增加负罪感。
+- 不触发 Resolved。
+
+与 BattleExecutionPlanManager.PrintExecutionPlan(...) 的区别：
+
+- PrintExecutionPlan(...) 打印的是计划内容。
+- PrintExecutionPlan(...) 打印 order。
+- PrintExecutionPlan(...) 打印 item 类型。
+- PrintExecutionPlan(...) 打印关联敌人意图。
+- PrintExecutionPlan(...) 打印关联槽位。
+- PrintExecutionPlan(...) 打印当前实际目标。
+- PrintExecutionPlanStepPreview(...) 未来打印的是执行阶段将如何处理。
+- 已响应意图将进入响应处理。
+- 未响应意图将进入无人响应处理。
+- FreeAction 将进入普通行动处理。
+- 当前已新增执行步骤预览代码，但仍只做预览，不进入正式执行。
+
+关于 isCompleted：
+
+- BattleExecutionItem.isCompleted 未来应在该执行项真正完成结算后才切换。
+- BattleExecutionPlan.isCompleted 未来应在所有 item 完成后才切换。
+- 第一版执行预览不切换这些状态。
+- 当前不新增 MarkCompleted()。
+
+当前仍不实现：
+
+- ExecuteExecutionPlan(...)。
+- 正式执行器代码。
+- item.isCompleted 切换。
+- plan.isCompleted 切换。
+- BattleResolver 接入。
+- ExecuteActionSlots(...) 接入。
+- slot.MarkUsed()。
+- 拼点。
+- 敌人攻击。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- 负罪感增加。
+- UseCount 增加。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+- FreeAction 混排。
+
+当前结论：
+
+- 下一阶段可以围绕 BattleExecutionPlanExecutor 继续设计。
+- 第一版应先从执行步骤预览开始。
+- 不应直接进入正式执行。
+- 后续如果进入代码原型，应先创建只打印、不结算、不改状态的方法。
+
+### 23. BattleExecutionItem / BattleExecutionPlan isCompleted 状态切换边界草案
+
+当前阶段：
+
+- BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(...) 第一版执行步骤预览已完成。
+- 当前仍未进入正式执行。
+- 当前下一步需要先设计 isCompleted 的切换边界。
+- 当前只做设计记录，不实现代码。
+
+当前字段现状：
+
+- BattleExecutionItem 当前已有 public bool isCompleted。
+- BattleExecutionPlan 当前已有 public bool isCompleted。
+- 当前构造函数中默认都是 false。
+- 当前没有任何代码会把它们改为 true。
+- 当前预览和打印阶段不应修改这些字段。
+
+BattleExecutionItem.isCompleted 未来语义：
+
+- 表示单个执行项是否已经完成正式处理。
+- 只有当该 item 对应的正式结算流程真正结束后，才应切换为 true。
+- 不是已经打印过。
+- 不是已经进入预览。
+- 不是已经生成计划。
+
+不同 item 类型的完成条件草案：
+
+- RespondedEnemyIntent 未来应在玩家响应处理完成后才标记完成。
+- RespondedEnemyIntent 例如拼点 / 响应效果 / 相关卡牌结算完成后。
+- RespondedEnemyIntent 当前不定义具体拼点细节。
+- UnrespondedEnemyIntent 未来应在无人响应敌人意图处理完成后才标记完成。
+- UnrespondedEnemyIntent 例如敌人攻击 / 无人响应效果处理完后。
+- UnrespondedEnemyIntent 当前不定义具体敌人攻击细节。
+- FreeAction 未来应在普通行动 / 偷刀处理完成后才标记完成。
+- FreeAction 当前尚未混入第一版 ExecutionPlan。
+
+BattleExecutionPlan.isCompleted 未来语义：
+
+- 表示整份执行计划是否全部完成。
+- 只有当 executionItems 中所有需要执行的 item 都完成后，才应切换为 true。
+- 如果 plan 为空，未来是否直接视为完成需要单独决定。
+- 当前暂不实现空 plan 自动完成。
+
+异常 / 跳过 item 的完成状态边界：
+
+- 如果 item 为 null，未来执行器应跳过还是报错，需要单独设计。
+- 当前不把 null item 视为完成逻辑。
+- 如果 RespondedEnemyIntent 缺少 actionSlot，未来可能应进入异常处理 / 跳过处理。
+- RespondedEnemyIntent 缺少 actionSlot 时，是否标记完成需要根据错误处理策略决定。
+- 当前不决定。
+- 如果 enemyIntent == null，未来应进入异常处理。
+- 当前不决定是否完成。
+- 如果某个 item 执行失败，可能需要 Failed / Skipped / Completed 等更细状态。
+- 当前只有 bool，不足以表达全部情况。
+- 当前先记录风险，不新增 enum。
+
+是否需要比 bool 更细的状态：
+
+- 当前 bool isCompleted 足够第一版记录未完成 / 已完成。
+- 未来正式执行器可能需要更细状态，例如 Pending。
+- 未来正式执行器可能需要更细状态，例如 Running。
+- 未来正式执行器可能需要更细状态，例如 Completed。
+- 未来正式执行器可能需要更细状态，例如 Skipped。
+- 未来正式执行器可能需要更细状态，例如 Failed。
+- 当前不新增 BattleExecutionItemState。
+- 等真正执行器遇到失败 / 跳过需求时再考虑升级。
+
+第一版代码实现时的建议边界：
+
+- 第一版执行步骤预览不能切换 isCompleted。
+- 第一版真正执行器如果只遍历打印，也不能切换 isCompleted。
+- 只有真正接入某类 item 的正式结算后，才允许考虑切换对应 item 的 isCompleted。
+- 只有所有 item 都完成后，才允许考虑切换 plan 的 isCompleted。
+
+当前不实现：
+
+- MarkCompleted()。
+- MarkPlanCompleted()。
+- BattleExecutionItemState。
+- BattleExecutionPlanState。
+- ExecuteExecutionPlan(...)。
+- 正式执行器。
+- item.isCompleted 切换。
+- plan.isCompleted 切换。
+- BattleResolver 接入。
+- slot.MarkUsed()。
+- 拼点。
+- 敌人攻击。
+- Resolved。
+- UseCount 增加。
+- 负罪感增加。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+
+当前结论：
+
+- isCompleted 当前只是未来正式执行阶段的预留字段。
+- 当前生成、打印、预览阶段都不能修改它。
+- 下一步如果进入代码原型，应继续保持不切换 isCompleted。
+- 等真正处理某类 item 的正式结算时，再设计完成标记逻辑。
+
+### 24. BattleExecutionPlanExecutor 未来分派结构草案
+
+当前阶段：
+
+- BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(...) 已完成。
+- isCompleted 状态切换边界已记录。
+- 当前仍不实现 ExecuteExecutionPlan(...)。
+- 当前只设计未来执行器的分派结构。
+
+未来执行器入口草案：
+
+- 未来可能存在 ExecuteExecutionPlan(BattleExecutionPlan executionPlan)。
+- 当前暂不实现。
+- 当前只记录它未来可能作为正式执行入口。
+- 未来实现时必须确认是否真的进入正式结算。
+
+未来分派结构草案：
+
+- 未来执行器可能遍历 executionPlan.executionItems。
+- 未来执行器可能根据 BattleExecutionItemType 分派 RespondedEnemyIntent。
+- 未来执行器可能根据 BattleExecutionItemType 分派 UnrespondedEnemyIntent。
+- 未来执行器可能根据 BattleExecutionItemType 分派 FreeAction。
+- 每种类型应进入不同处理分支。
+- 当前只记录分派方向，不写代码。
+
+RespondedEnemyIntent 未来处理方向：
+
+- RespondedEnemyIntent 表示玩家槽位已经成功响应某个敌人意图。
+- 未来应进入玩家响应敌人意图处理。
+- 可能涉及拼点。
+- 可能涉及响应卡牌效果。
+- 可能涉及敌人意图被处理后的结果。
+- 可能涉及卡牌 UseCount / CD / 消耗。
+- 可能涉及 slot.MarkUsed()。
+- 可能涉及 item.isCompleted。
+- 当前不实现这些逻辑。
+
+UnrespondedEnemyIntent 未来处理方向：
+
+- UnrespondedEnemyIntent 表示敌人意图无人响应。
+- 未来应进入无人响应敌人意图处理。
+- 可能涉及敌人攻击。
+- 可能涉及无人响应额外效果。
+- 可能涉及对 actualTarget 的处理。
+- 可能涉及敌人卡牌效果。
+- 可能涉及 item.isCompleted。
+- 当前不实现这些逻辑。
+
+FreeAction 未来处理方向：
+
+- FreeAction 表示普通行动 / 偷刀。
+- 当前第一版 CreateBasicExecutionPlan(...) 尚未生成 FreeAction。
+- 未来如果加入，需要处理普通攻击目标。
+- 未来如果加入，需要处理技能目标。
+- 未来如果加入，需要处理偷刀行动与敌人意图的时序关系。
+- 未来如果加入，需要处理与速度排序的关系。
+- 未来如果加入，可能涉及 slot.MarkUsed()。
+- 未来如果加入，可能涉及 item.isCompleted。
+- 当前不实现这些逻辑。
+
+异常 item 未来处理方向：
+
+- item == null 时，未来执行器应跳过、报错还是标记失败，需要再定。
+- enemyIntent == null 时，未来应进入异常处理。
+- RespondedEnemyIntent 但 actionSlot == null 时，未来应进入异常处理或跳过处理。
+- 当前只记录风险，不决定最终策略。
+- 当前不新增 Failed / Skipped 状态。
+
+与当前 PrintExecutionPlanStepPreview(...) 的关系：
+
+- 当前 PrintExecutionPlanStepPreview(...) 只是打印未来处理方向。
+- PrintExecutionPlanStepPreview(...) 不是真正分派执行器。
+- PrintExecutionPlanStepPreview(...) 可以作为未来分派结构的文字预览参考。
+- PrintExecutionPlanStepPreview(...) 不能直接等同于正式执行逻辑。
+
+当前不实现：
+
+- ExecuteExecutionPlan(...)。
+- ExecuteRespondedEnemyIntent(...)。
+- ExecuteUnrespondedEnemyIntent(...)。
+- ExecuteFreeAction(...)。
+- 正式执行器代码。
+- BattleResolver 接入。
+- ExecuteActionSlots(...) 接入。
+- slot.MarkUsed()。
+- 拼点。
+- 敌人攻击。
+- 无人响应效果。
+- 响应失败效果。
+- Resolved。
+- UseCount 增加。
+- 负罪感增加。
+- item.isCompleted 切换。
+- plan.isCompleted 切换。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+- FreeAction 混排。
+
+当前结论：
+
+- 未来 BattleExecutionPlanExecutor 应采用按 BattleExecutionItemType 分派的结构。
+- 当前只记录分派方向。
+- 下一步如果继续推进，应先决定第一版真正执行器是否只处理某一种 item 类型，而不是一次性实现全部类型。
+- 当前仍不进入正式执行代码。
+
+### 25. UnrespondedEnemyIntent 第一版执行边界草案
+
+当前阶段判断：
+
+- BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(...) 已完成。
+- 当前仍没有正式执行器。
+- 当前仍没有 ExecuteExecutionPlan(...)。
+- 当前仍未接入拼点、敌人攻击、Resolved、UseCount、负罪感、slot.MarkUsed()。
+- 下一步如果进入正式执行器设计，建议优先从 UnrespondedEnemyIntent 开始，而不是 RespondedEnemyIntent 或 FreeAction。
+
+三类 item 复杂度判断：
+
+- RespondedEnemyIntent 会牵扯玩家槽位、敌人意图、拼点、响应成功 / 失败、卡牌 UseCount / CD、Resolved、负罪感、slot.MarkUsed()、item.isCompleted 等正式结算问题。
+- RespondedEnemyIntent 当前不建议作为第一版执行入口。
+- FreeAction 会牵扯普通攻击 / 偷刀目标、Ability 罪卡、速度混排、技能目标、卡牌消耗、槽位使用标记等问题。
+- FreeAction 当前不建议作为第一版执行入口。
+- UnrespondedEnemyIntent 相对更适合作为第一版执行器设计入口。
+- UnrespondedEnemyIntent 没有玩家响应槽位，没有拼点，不涉及玩家卡牌消耗。
+- UnrespondedEnemyIntent 主要表达“敌人意图无人响应，未来按当前 actualTarget 处理”。
+
+UnrespondedEnemyIntent 第一版边界：
+
+- 第一版仍不应直接造成伤害。
+- 第一版应先识别 UnrespondedEnemyIntent item。
+- 第一版应验证 enemyIntent / enemy / enemyCardState / actualTarget。
+- 第一版应打印将进入无人响应敌人意图处理。
+- 第一版暂不执行敌人攻击。
+- 第一版暂不处理无人响应效果。
+- 第一版暂不调用 BattleResolver。
+- 第一版暂不切换 item.isCompleted。
+- 第一版暂不切换 plan.isCompleted。
+
+进入代码实现前需要先定的设计：
+
+- 敌人攻击第一版走哪个入口：新逻辑，还是复用 BattleResolver，当前暂不决定。
+- actualTargetCharacter / actualTargetSlotIndex 的正式含义：伤害打角色，是否也影响槽位，当前暂不决定。
+- 空槽位被未响应敌人意图命中时的默认处理。
+- 无人响应效果是否由敌人卡自身定义。
+- 敌人卡是否有 OnPlay / Resolved 类似事件。
+- item.isCompleted = true 的准确时机。
+- 空 / 异常 item 是跳过、报错，还是未来引入 Failed / Skipped 状态。
+- 无人响应时是否完全不调用 slot.MarkUsed()，当前倾向是不调用，因为没有玩家槽位被执行。
+
+与当前 PrintExecutionPlanStepPreview(...) 的关系：
+
+- 当前 PrintExecutionPlanStepPreview(...) 已能打印 UnrespondedEnemyIntent 未来将处理无人响应敌人意图。
+- PrintExecutionPlanStepPreview(...) 仍只是预览，不是正式分派执行。
+- 后续如果写代码，可以先做“不改状态的 Unresponded 分支预览”。
+- 暂不直接伤害。
+- 暂不完成标记。
+
+当前不建议做：
+
+- 不处理 RespondedEnemyIntent 拼点。
+- 不混入 FreeAction。
+- 不直接造成伤害。
+- 不执行敌人攻击。
+- 不切换 item.isCompleted。
+- 不切换 plan.isCompleted。
+- 不接入 BattleResolver。
+- 不新增 BattleEnemyIntent.isCompleted。
+- 不新增 respondingSlot。
+- 不调用 slot.MarkUsed()。
+- 不触发 Resolved。
+- 不增加 UseCount。
+- 不增加负罪感。
+
+当前结论：
+
+- 第一版正式执行器设计优先从 UnrespondedEnemyIntent 开始是合理的。
+- 但第一步仍应停留在设计和分支预览层。
+- 不应直接进入伤害和正式结算。
+- 下一步如果继续推进，应先设计无人响应敌人意图的最小处理流程，而不是一次性实现完整执行器。
+
+### 26. UnrespondedEnemyIntent actualTarget 第一版含义草案
+
+当前阶段：
+
+- 已记录第一版正式执行器设计优先从 UnrespondedEnemyIntent 开始。
+- 当前仍不进入代码实现。
+- 当前仍不造成伤害。
+- 当前仍不执行敌人攻击。
+- 当前仍不切换 item.isCompleted / plan.isCompleted。
+
+actualTarget 第一版含义：
+
+- 敌人意图不是单纯攻击角色。
+- 敌人意图应理解为攻击某个角色的某个槽位。
+- actualTargetCharacter 表示当前实际被敌人意图指向的角色。
+- actualTargetSlotIndex 表示当前实际被敌人意图指向的槽位编号。
+- 两者合起来表示：敌人意图最终命中的目标槽位。
+
+无人响应时的理解：
+
+- 如果 UnrespondedEnemyIntent 没有被玩家槽位响应。
+- 那么未来敌人意图应按当前 actualTargetCharacter / actualTargetSlotIndex 处理。
+- 例如：敌人意图1 当前实际目标是 我方角色B 槽位2。
+- 则未来无人响应处理应理解为：敌人意图将命中 我方角色B 槽位2。
+
+第一版执行边界：
+
+- 第一版不要直接扣血。
+- 第一版不要直接执行敌人攻击。
+- 第一版不要触发无人响应效果。
+- 第一版可以先打印敌人意图将命中哪个角色。
+- 第一版可以先打印敌人意图将命中哪个槽位。
+- 第一版可以先打印敌人卡牌是什么。
+- 这仍然是执行前的边界确认，不是正式结算。
+
+空槽位含义：
+
+- 如果 actualTargetSlotIndex 指向的槽位没有玩家响应。
+- 不代表槽位自带防御或闪避。
+- 空槽位只是表示玩家没有处理该敌人意图。
+- 未来是否触发额外效果，应由敌人卡自身定义。
+- 不应由空槽位本身自动产生惩罚规则。
+
+与响应改写的关系：
+
+- 如果玩家速度足够并成功响应，actualTargetCharacter / actualTargetSlotIndex 可被改写为响应者槽位。
+- 如果无人响应，则保持敌人原本目标。
+- 如果响应后又解除绑定，但 actualTarget 仍保留，未来需要异常策略单独处理。
+- 当前不在这里实现异常策略。
+
+当前不实现：
+
+- 敌人攻击结算。
+- 伤害扣除。
+- 无人响应效果。
+- 敌人卡牌效果。
+- 空槽位惩罚。
+- BattleResolver 接入。
+- slot.MarkUsed()。
+- item.isCompleted 切换。
+- plan.isCompleted 切换。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+
+当前结论：
+
+- UnrespondedEnemyIntent 第一版应先明确命中目标。
+- 命中目标由 actualTargetCharacter + actualTargetSlotIndex 表示。
+- 下一步如果继续推进，可以先做“无人响应命中目标预览”，仍然不造成伤害、不进入正式结算。
+
+### 27. 未来扩展：不可预测卡
 
 后续可以加入“不可预测卡”机制。
 
@@ -2242,7 +3835,7 @@ BattleHandlingPreviewItem 与未来 BattleExecutionItem 的职责区别：
 
 当前只记录，不实现。
 
-### 19. 未来扩展：槽位 Buff / 特殊槽位
+### 28. 未来扩展：槽位 Buff / 特殊槽位
 
 槽位本身未来也可以成为卡牌效果作用对象。
 
@@ -2260,7 +3853,7 @@ BattleHandlingPreviewItem 与未来 BattleExecutionItem 的职责区别：
 
 这些都属于后续扩展方向，当前阶段只记录，不实现。
 
-### 20. 当前阶段不实现内容
+### 29. 当前阶段不实现内容
 
 当前只做设计记录，不实现以下功能：
 
@@ -2275,7 +3868,7 @@ BattleHandlingPreviewItem 与未来 BattleExecutionItem 的职责区别：
 - 不修改当前 ActionSlotBasic 测试。
 - 不修改 BattleResolver、BattleCardManager、GuiltManager、CardEffectExecutor、CardsTest.json。
 
-## 三十、下一步候选方向
+## 三十八、下一步候选方向
 
 后续候选方向：
 
@@ -2286,7 +3879,7 @@ BattleHandlingPreviewItem 与未来 BattleExecutionItem 的职责区别：
 - 敌人防御逻辑暂缓。
 - 负罪感阈值暂缓。
 
-## 三十一、当前规则提醒
+## 三十九、当前规则提醒
 
 - 负罪感不是消耗资源，而是从 0 开始累计增加。
 - 使用罪卡会增加 guiltGain。

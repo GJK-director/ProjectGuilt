@@ -11,7 +11,13 @@ public enum BattleTestMode
     ActionSlotInterceptEqualFail,
     ActionSlotMultiIntentBasic,
     ActionSlotResponseOverwriteBasic,
-    ActionSlotResponseOverwriteFailKeepOld
+    ActionSlotResponseOverwriteFailKeepOld,
+    ActionSlotExecutionPlanBasic,
+    ActionSlotExecutionPlanEmpty,
+    ActionSlotExecutionPlanMissingSlot,
+    ActionSlotExecutionPlanMultiBasic,
+    ActionSlotExecutionPlanStepPreviewBasic,
+    ActionSlotExecutionPlanStepPreviewEmpty
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -109,6 +115,42 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.ActionSlotResponseOverwriteFailKeepOld)
         {
             RunActionSlotResponseOverwriteFailKeepOldTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanBasic)
+        {
+            RunActionSlotExecutionPlanBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanEmpty)
+        {
+            RunActionSlotExecutionPlanEmptyTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanMissingSlot)
+        {
+            RunActionSlotExecutionPlanMissingSlotTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanMultiBasic)
+        {
+            RunActionSlotExecutionPlanMultiBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanStepPreviewBasic)
+        {
+            RunActionSlotExecutionPlanStepPreviewBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanStepPreviewEmpty)
+        {
+            RunActionSlotExecutionPlanStepPreviewEmptyTestSequence();
             return;
         }
     }
@@ -467,6 +509,318 @@ public class CardLoadTest : MonoBehaviour
         BattleActionSlotManager.PrintSlotStates(actionSlots);
         PrintCharacterCardStates(allyA);
         PrintCharacterCardStates(slowAlly);
+    }
+
+    // RunActionSlotExecutionPlanBasicTestSequence = 执行 BattleExecutionPlan 第一版生成测试
+    void RunActionSlotExecutionPlanBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 第一版生成测试开始 =====");
+
+        // ExecutionPlan 生成测试依赖响应安排，响应安排依赖当前速度判断
+        StartTurn();
+
+        BattleCardState secondEnemyAttackCardState = BattleCardManager.CreateBattleCard(
+            enemy,
+            enemyAttackCardState.cardData,
+            "enemy_atk_001_execution_plan_copy_1"
+        );
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        BattleEnemyIntent intent2 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_002",
+            enemy,
+            secondEnemyAttackCardState,
+            allyB,
+            1,
+            2
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1, intent2);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            allyA,
+            allyAAttackCardState,
+            intent2
+        );
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        PrintCharacterCardStates(allyA);
+    }
+
+    // RunActionSlotExecutionPlanEmptyTestSequence = 执行 BattleExecutionPlan 空输入安全测试
+    void RunActionSlotExecutionPlanEmptyTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 空计划 / 空队列安全测试开始 =====");
+
+        BattleExecutionPlanManager.PrintExecutionPlan(null);
+
+        BattleExecutionPlan nullInputPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            null,
+            null
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(nullInputPlan);
+
+        List<BattleActionSlot> emptyActionSlots = new List<BattleActionSlot>();
+        List<BattleEnemyIntent> emptyIntentQueue = new List<BattleEnemyIntent>();
+
+        BattleExecutionPlan emptyInputPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            emptyActionSlots,
+            emptyIntentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(emptyInputPlan);
+
+        BattleExecutionPlan emptyPlan = new BattleExecutionPlan();
+        BattleExecutionPlanManager.PrintExecutionPlan(emptyPlan);
+    }
+
+    // RunActionSlotExecutionPlanMissingSlotTestSequence = 执行已响应但缺少绑定槽位的安全测试
+    void RunActionSlotExecutionPlanMissingSlotTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 已响应但缺少绑定槽位测试开始 =====");
+
+        StartTurn();
+
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_missing_slot_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(enemyIntent);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(1);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            allyA,
+            allyAAttackCardState,
+            enemyIntent
+        );
+
+        if (actionSlots.Count > 0 && actionSlots[0] != null)
+        {
+            actionSlots[0].UnbindEnemyIntent();
+        }
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        PrintCharacterCardStates(allyA);
+    }
+
+    // RunActionSlotExecutionPlanMultiBasicTestSequence = 执行 BattleExecutionPlan 多项顺序测试
+    void RunActionSlotExecutionPlanMultiBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 多项顺序测试开始 =====");
+
+        StartTurn();
+
+        BattleCardState secondEnemyAttackCardState = BattleCardManager.CreateBattleCard(
+            enemy,
+            enemyAttackCardState.cardData,
+            "enemy_atk_001_execution_plan_multi_copy_1"
+        );
+
+        BattleCardState thirdEnemyAttackCardState = BattleCardManager.CreateBattleCard(
+            enemy,
+            enemyAttackCardState.cardData,
+            "enemy_atk_001_execution_plan_multi_copy_2"
+        );
+
+        BattleCardState fourthEnemyAttackCardState = BattleCardManager.CreateBattleCard(
+            enemy,
+            enemyAttackCardState.cardData,
+            "enemy_atk_001_execution_plan_multi_copy_3"
+        );
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_multi_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        BattleEnemyIntent intent2 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_multi_002",
+            enemy,
+            secondEnemyAttackCardState,
+            allyB,
+            1,
+            2
+        );
+
+        BattleEnemyIntent intent3 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_multi_003",
+            enemy,
+            thirdEnemyAttackCardState,
+            allyB,
+            2,
+            3
+        );
+
+        BattleEnemyIntent intent4 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_multi_004",
+            enemy,
+            fourthEnemyAttackCardState,
+            allyB,
+            1,
+            4
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(
+            intent1,
+            intent2,
+            intent3,
+            intent4
+        );
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        BattleCardState secondAllyAAttackCardState = CreateTestAttackCardForCharacter(
+            allyA,
+            "allyA_execution_plan_multi_atk_001_copy_1"
+        );
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            allyA,
+            allyAAttackCardState,
+            intent2
+        );
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            2,
+            allyA,
+            secondAllyAAttackCardState,
+            intent4
+        );
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        PrintCharacterCardStates(allyA);
+    }
+
+    // RunActionSlotExecutionPlanStepPreviewBasicTestSequence = 执行 BattleExecutionPlan 执行步骤预览基础测试
+    void RunActionSlotExecutionPlanStepPreviewBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 执行步骤预览基础测试开始 =====");
+
+        StartTurn();
+
+        BattleCardState secondEnemyAttackCardState = BattleCardManager.CreateBattleCard(
+            enemy,
+            enemyAttackCardState.cardData,
+            "enemy_atk_001_execution_plan_step_preview_copy_1"
+        );
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_step_preview_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        BattleEnemyIntent intent2 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_step_preview_002",
+            enemy,
+            secondEnemyAttackCardState,
+            allyB,
+            1,
+            2
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1, intent2);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            allyA,
+            allyAAttackCardState,
+            intent2
+        );
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
+        PrintCharacterCardStates(allyA);
+    }
+
+    // RunActionSlotExecutionPlanStepPreviewEmptyTestSequence = 执行 BattleExecutionPlan 执行步骤预览空输入测试
+    void RunActionSlotExecutionPlanStepPreviewEmptyTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 执行步骤预览空输入测试开始 =====");
+
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(null);
+
+        BattleExecutionPlan emptyPlan = new BattleExecutionPlan();
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(emptyPlan);
+
+        BattleExecutionPlan nullInputPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            null,
+            null
+        );
+
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(nullInputPlan);
+
+        List<BattleActionSlot> emptyActionSlots = new List<BattleActionSlot>();
+        List<BattleEnemyIntent> emptyIntentQueue = new List<BattleEnemyIntent>();
+
+        BattleExecutionPlan emptyInputPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            emptyActionSlots,
+            emptyIntentQueue
+        );
+
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(emptyInputPlan);
     }
 
     // ================================
