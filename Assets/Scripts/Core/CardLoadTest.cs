@@ -1,6 +1,6 @@
-﻿using System.Collections.Generic;
+﻿// 脚本中文说明：卡牌读取和战斗测试入口。负责在 Unity 场景启动时创建测试角色、读取卡牌并运行指定测试流程。
+using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.TextCore.Text;
 
 public enum BattleTestMode
 {
@@ -17,7 +17,12 @@ public enum BattleTestMode
     ActionSlotExecutionPlanMissingSlot,
     ActionSlotExecutionPlanMultiBasic,
     ActionSlotExecutionPlanStepPreviewBasic,
-    ActionSlotExecutionPlanStepPreviewEmpty
+    ActionSlotExecutionPlanStepPreviewEmpty,
+    ActionSlotExecutionPlanExecuteUnrespondedBasic,
+    ActionSlotExecutionPlanExecuteRespondedBasic,
+    ActionSlotExecutionPlanExecuteRespondedEnemyWin,
+    ActionSlotExecutionPlanExecuteRespondedTieLimit,
+    ActionSlotExecutionPlanExecuteMixedBasic
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -151,6 +156,36 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.ActionSlotExecutionPlanStepPreviewEmpty)
         {
             RunActionSlotExecutionPlanStepPreviewEmptyTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteUnrespondedBasic)
+        {
+            RunActionSlotExecutionPlanExecuteUnrespondedBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteRespondedBasic)
+        {
+            RunActionSlotExecutionPlanExecuteRespondedBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteRespondedEnemyWin)
+        {
+            RunActionSlotExecutionPlanExecuteRespondedEnemyWinTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteRespondedTieLimit)
+        {
+            RunActionSlotExecutionPlanExecuteRespondedTieLimitTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteMixedBasic)
+        {
+            RunActionSlotExecutionPlanExecuteMixedBasicTestSequence();
             return;
         }
     }
@@ -821,6 +856,344 @@ public class CardLoadTest : MonoBehaviour
         );
 
         BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(emptyInputPlan);
+    }
+
+    // RunActionSlotExecutionPlanExecuteUnrespondedBasicTestSequence = 执行无人响应敌人意图正式执行基础测试
+    void RunActionSlotExecutionPlanExecuteUnrespondedBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 无人响应正式执行基础测试开始 =====");
+
+        StartTurn();
+
+        Debug.Log("执行前 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_execute_unresponded_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = new List<BattleActionSlot>();
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        Debug.Log("执行后 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+
+        int hpBeforeRepeatExecute = allyB.currentHP;
+
+        Debug.Log("===== 重复执行同一个 BattleExecutionPlan 测试 =====");
+
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        Debug.Log("重复执行后 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("重复执行前后 HP 是否保持不变：" + (hpBeforeRepeatExecute == allyB.currentHP));
+    }
+
+    // RunActionSlotExecutionPlanExecuteRespondedBasicTestSequence = 执行已响应敌人意图正式执行基础测试
+    void RunActionSlotExecutionPlanExecuteRespondedBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 已响应正式执行基础测试开始 =====");
+
+        StartTurn();
+
+        Debug.Log("执行前 我方角色A HP：" + allyA.currentHP + " / " + allyA.maxHP);
+        Debug.Log("执行前 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("执行前 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_execute_responded_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(1);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            allyA,
+            allyAAttackCardState,
+            intent1
+        );
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        Debug.Log("执行后 我方角色A HP：" + allyA.currentHP + " / " + allyA.maxHP);
+        Debug.Log("执行后 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+    }
+
+    // RunActionSlotExecutionPlanExecuteRespondedEnemyWinTestSequence = 执行已响应敌人意图敌人胜利分支测试
+    void RunActionSlotExecutionPlanExecuteRespondedEnemyWinTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 已响应敌人胜利分支测试开始 =====");
+
+        StartTurn();
+
+        Debug.Log("本测试预期：敌人胜利，actualTargetCharacter 扣血");
+        Debug.Log("执行前 我方角色A HP：" + allyA.currentHP + " / " + allyA.maxHP);
+        Debug.Log("执行前 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("执行前 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+
+        CardTestData lowPlayerAttackCard = new CardTestData
+        {
+            cardID = "test_player_low_attack_001",
+            cardName = "测试低点攻击",
+            cardType = "Attack",
+            isClashable = true,
+            minPoint = 1,
+            maxPoint = 1,
+            damageFormula = "PointAsDamage",
+            maxUseCount = 3
+        };
+
+        CardTestData highEnemyAttackCard = new CardTestData
+        {
+            cardID = "test_enemy_high_attack_001",
+            cardName = "测试高点敌人攻击",
+            cardType = "Attack",
+            isClashable = true,
+            minPoint = 8,
+            maxPoint = 8,
+            damageFormula = "PointAsDamage"
+        };
+
+        BattleCardState lowPlayerAttackCardState = BattleCardManager.CreateBattleCard(
+            allyA,
+            lowPlayerAttackCard,
+            "allyA_test_low_attack_001_copy_0"
+        );
+
+        BattleCardState highEnemyAttackCardState = BattleCardManager.CreateBattleCard(
+            enemy,
+            highEnemyAttackCard,
+            "enemy_test_high_attack_001_copy_0"
+        );
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_execute_responded_enemy_win_001",
+            enemy,
+            highEnemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(1);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            allyA,
+            lowPlayerAttackCardState,
+            intent1
+        );
+
+        Debug.Log("响应后 actualTargetCharacter：" + intent1.GetActualTargetName());
+        Debug.Log("响应后 actualTargetSlot：" + intent1.GetActualTargetSlotText());
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        Debug.Log("执行后 我方角色A HP：" + allyA.currentHP + " / " + allyA.maxHP);
+        Debug.Log("执行后 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+        Debug.Log("敌人胜利分支验证：我方角色A 应作为 actualTargetCharacter 扣血");
+    }
+
+    // RunActionSlotExecutionPlanExecuteRespondedTieLimitTestSequence = 执行已响应敌人意图连续平局上限测试
+    void RunActionSlotExecutionPlanExecuteRespondedTieLimitTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 已响应连续平局上限测试开始 =====");
+
+        StartTurn();
+
+        Debug.Log("本测试预期：连续 10 次平局后自动结束，双方不扣血");
+        Debug.Log("执行前 我方角色A HP：" + allyA.currentHP + " / " + allyA.maxHP);
+        Debug.Log("执行前 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("执行前 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+
+        CardTestData tiePlayerAttackCard = new CardTestData
+        {
+            cardID = "test_player_tie_attack_001",
+            cardName = "测试平局玩家攻击",
+            cardType = "Attack",
+            isClashable = true,
+            minPoint = 5,
+            maxPoint = 5,
+            damageFormula = "PointAsDamage",
+            maxUseCount = 3
+        };
+
+        CardTestData tieEnemyAttackCard = new CardTestData
+        {
+            cardID = "test_enemy_tie_attack_001",
+            cardName = "测试平局敌人攻击",
+            cardType = "Attack",
+            isClashable = true,
+            minPoint = 5,
+            maxPoint = 5,
+            damageFormula = "PointAsDamage"
+        };
+
+        BattleCardState tiePlayerAttackCardState = BattleCardManager.CreateBattleCard(
+            allyA,
+            tiePlayerAttackCard,
+            "allyA_test_tie_attack_001_copy_0"
+        );
+
+        BattleCardState tieEnemyAttackCardState = BattleCardManager.CreateBattleCard(
+            enemy,
+            tieEnemyAttackCard,
+            "enemy_test_tie_attack_001_copy_0"
+        );
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_execute_responded_tie_limit_001",
+            enemy,
+            tieEnemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(1);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            allyA,
+            tiePlayerAttackCardState,
+            intent1
+        );
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        Debug.Log("执行后 我方角色A HP：" + allyA.currentHP + " / " + allyA.maxHP);
+        Debug.Log("执行后 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+    }
+
+    // RunActionSlotExecutionPlanExecuteMixedBasicTestSequence = 执行已响应 + 未响应混合计划基础测试
+    void RunActionSlotExecutionPlanExecuteMixedBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 混合执行基础测试开始 =====");
+
+        StartTurn();
+
+        Debug.Log("执行前 我方角色A HP：" + allyA.currentHP + " / " + allyA.maxHP);
+        Debug.Log("执行前 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("执行前 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+
+        BattleCardState secondEnemyAttackCardState = BattleCardManager.CreateBattleCard(
+            enemy,
+            enemyAttackCardState.cardData,
+            "enemy_atk_001_execution_plan_execute_mixed_copy_1"
+        );
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_execute_mixed_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        BattleEnemyIntent intent2 = new BattleEnemyIntent(
+            "enemy_intent_execution_plan_execute_mixed_002",
+            enemy,
+            secondEnemyAttackCardState,
+            allyB,
+            1,
+            2
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1, intent2);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(1);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            allyA,
+            allyAAttackCardState,
+            intent2
+        );
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        int executionItemCount = executionPlan != null && executionPlan.executionItems != null
+            ? executionPlan.executionItems.Count
+            : 0;
+
+        Debug.Log("当前计划 item 数量：" + executionItemCount);
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        Debug.Log("执行后 我方角色A HP：" + allyA.currentHP + " / " + allyA.maxHP);
+        Debug.Log("执行后 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
     }
 
     // ================================

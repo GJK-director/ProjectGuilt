@@ -1979,7 +1979,302 @@ Unity 测试结果：
 - 当前仍只是执行步骤预览。
 - 不代表正式敌人攻击或伤害结算。
 
-## 三十七、Action Slot / Enemy Intent 后续设计记录
+## 三十七、UnrespondedEnemyIntent 敌人攻击点数范围预览完成
+
+修改内容：
+
+- 只修改 BattleExecutionPlanExecutor.cs。
+- 增强 BattleExecutionPlanExecutor.PrintUnrespondedEnemyIntentStepPreview(...)。
+- 现在会从 enemyIntent.enemyCardState.cardData.minPoint / maxPoint 只读显示敌人攻击点数范围。
+
+Unity 测试结果：
+
+- 复用测试模式 ActionSlotExecutionPlanStepPreviewBasic。
+- Console 已确认显示：敌人攻击点数范围：2-8。
+- Console 已确认显示：当前仅预览点数范围和命中目标，不 roll 点数，不造成伤害。
+
+当前仍然不做：
+
+- 不 roll 点数。
+- 不计算伤害。
+- 不扣血。
+- 不调用 BattleResolver。
+- 不调用 TakeDamage(...)。
+- 不调用 slot.MarkUsed。
+- 不切换 item.isCompleted。
+- 不切换 plan.isCompleted。
+
+当前结论：
+
+- 本步骤只属于小安全测试记录。
+- 当前仍然只是执行步骤预览。
+- 当前不代表正式敌人攻击或伤害结算。
+
+## 三十八、UnrespondedEnemyIntent 第一版正式执行通过
+
+当前已完成小目标：
+
+- BattleExecutionPlanExecutor.ExecuteExecutionPlan(...) 第一版已加入正式执行入口。
+- 当前只正式执行 UnrespondedEnemyIntent。
+
+UnrespondedEnemyIntent 第一版执行流程：
+
+- 从敌人卡牌 minPoint / maxPoint roll enemyAttackPoint。
+- 第一版 damage = enemyAttackPoint。
+- 对 actualTargetCharacter 调用 TakeDamage(damage)。
+- 成功后设置 item.isCompleted = true。
+- 如果所有 item 完成，则设置 plan.isCompleted = true。
+
+已通过测试模式 ActionSlotExecutionPlanExecuteUnrespondedBasic：
+
+- 敌人攻击点数在 2-8 范围内。
+- 目标角色 HP 正确下降。
+- Console 显示 ExecutionPlan 是否完成：True。
+
+已验证重复执行保护：
+
+- 第二次执行同一个 BattleExecutionPlan 时，已完成 item 会跳过。
+- HP 不会重复下降。
+- Console 显示重复执行前后 HP 是否保持不变：True。
+
+当前仍不做：
+
+- 不处理 RespondedEnemyIntent。
+- 不做玩家卡 vs 敌人卡拼点。
+- 不调用 BattleResolver。
+- 不触发 Resolved / Hit / AfterDamage / AfterKill。
+- 不处理敌人卡牌 CD / UseCount。
+- 不处理 Buff。
+
+## 三十九、RespondedEnemyIntent 第一版攻击卡 vs 攻击卡执行通过
+
+当前已完成小目标：
+
+- BattleExecutionPlanExecutor.ExecuteRespondedEnemyIntent(...) 已加入第一版正式执行逻辑。
+- 当前只支持 RespondedEnemyIntent 的攻击卡 vs 攻击卡。
+
+第一版流程：
+
+- 玩家卡 roll playerAttackPoint。
+- 敌人卡 roll enemyAttackPoint。
+- 点数高者获胜。
+- 胜者点数作为基础伤害。
+- 玩家胜时敌人 TakeDamage(playerAttackPoint)。
+- 敌人胜时 actualTargetCharacter.TakeDamage(enemyAttackPoint)。
+
+平局规则已实现：
+
+- 平局会继续重 roll。
+- 最多 10 次。
+- 10 次仍平局则自动结束。
+- 双方不造成伤害。
+- 但当前 item 标记完成，避免 ExecutionPlan 卡住。
+
+已通过 ActionSlotExecutionPlanExecuteRespondedBasic 测试中的玩家胜利分支：
+
+- 玩家点数：10。
+- 敌人点数：7。
+- 敌人 HP：999 → 989。
+- ExecutionPlan 是否完成：True。
+
+当前仍不做：
+
+- 不处理防御 / 闪避 / Ability / 特殊卡。
+- 不调用 BattleResolver。
+- 不触发 Resolved / Hit / AfterDamage / AfterKill。
+- 不处理 CD / UseCount。
+- 不处理 Buff。
+
+后续仍需验证：
+
+- 敌人胜利时我方目标扣血。
+- 平局重 roll。
+- 10 次平局自动结束。
+
+## 四十、RespondedEnemyIntent 敌人胜利分支验证通过
+
+当前已完成小目标：
+
+- 新增并通过测试模式 ActionSlotExecutionPlanExecuteRespondedEnemyWin。
+- 该测试使用内存测试卡牌数据稳定构造敌人胜利。
+
+测试卡牌数据：
+
+- 玩家攻击卡：minPoint = 1, maxPoint = 1。
+- 敌人攻击卡：minPoint = 8, maxPoint = 8。
+
+测试流程：
+
+- 敌人原目标为我方角色B 槽位2。
+- 我方角色A 槽位1响应该敌人意图。
+- 响应后 actualTargetCharacter 改为我方角色A。
+
+测试结果：
+
+- 玩家点数：1。
+- 敌人点数：8。
+- 胜负结果：敌人胜利。
+- 受伤角色：我方角色A。
+- 造成伤害：8。
+- 我方角色A HP：30 → 22。
+- 我方角色B HP：30 → 30。
+- 敌人 HP：999 → 999。
+- ExecutionPlan 是否完成：True。
+
+当前结论：
+
+- RespondedEnemyIntent 第一版敌人胜利分支通过。
+- 敌人胜利时会对 actualTargetCharacter 扣血，而不是回退到 originalTarget。
+
+当前仍不做：
+
+- 不处理防御 / 闪避 / Ability / 特殊卡。
+- 不调用 BattleResolver。
+- 不触发事件链。
+- 不处理 CD / UseCount。
+- 不处理 Buff。
+
+后续仍需验证：
+
+- 平局重 roll。
+- 10 次平局自动结束。
+
+## 四十一、RespondedEnemyIntent 平局重 roll 与 10 次上限验证通过
+
+当前已完成小目标：
+
+- 新增并通过测试模式 ActionSlotExecutionPlanExecuteRespondedTieLimit。
+- 该测试使用内存测试卡牌稳定构造连续平局。
+
+测试卡牌数据：
+
+- 玩家攻击卡：minPoint = 5, maxPoint = 5。
+- 敌人攻击卡：minPoint = 5, maxPoint = 5。
+
+测试结果：
+
+- 第 1 次到第 10 次拼点均为玩家点数 5、敌人点数 5。
+- 连续 10 次仍未分出胜负后，RespondedEnemyIntent 自动结束。
+- 双方都不造成伤害。
+- 当前执行项标记完成，避免 ExecutionPlan 卡住。
+- BattleExecutionPlan 已全部完成。
+
+HP 验证：
+
+- 我方角色A HP：30 → 30。
+- 我方角色B HP：30 → 30。
+- 敌人 HP：999 → 999。
+- ExecutionPlan 是否完成：True。
+
+当前结论：
+
+- RespondedEnemyIntent 第一版平局重 roll 与 10 次上限分支通过。
+- 当前规则按“连续拼点 10 次仍平局后自动结束”记录。
+
+当前仍不做：
+
+- 不处理防御 / 闪避 / Ability / 特殊卡。
+- 不调用 BattleResolver。
+- 不触发事件链。
+- 不处理 CD / UseCount。
+- 不处理 Buff。
+
+## 四十二、BattleExecutionPlan 第一版正式执行闭环阶段总结
+
+阶段背景：
+
+- 当前项目处于 Action Slot / Enemy Intent / BattleExecutionPlan / BattleExecutionPlanExecutor 设计与实现阶段。
+- 之前已经完成 BattleExecutionItem。
+- 之前已经完成 BattleExecutionPlan。
+- 之前已经完成 BattleExecutionPlanManager。
+- 之前已经完成 BattleExecutionPlanExecutor 执行步骤预览。
+- 本阶段从“只生成和预览执行计划”推进到“第一版正式执行”。
+
+当前已完成的正式执行能力：
+
+- BattleExecutionPlanExecutor.ExecuteExecutionPlan(...) 第一版已加入。
+- 当前可以遍历 BattleExecutionPlan.executionItems。
+- 当前可以根据执行项类型分派 RespondedEnemyIntent。
+- 当前可以根据执行项类型分派 UnrespondedEnemyIntent。
+- 当前会跳过已完成 item，避免重复执行重复扣血。
+- 当前所有 item 完成后会设置 plan.isCompleted = true。
+
+UnrespondedEnemyIntent 第一版正式执行已完成：
+
+- 从敌人卡牌 minPoint / maxPoint roll enemyAttackPoint。
+- 第一版 damage = enemyAttackPoint。
+- 对 enemyIntent.actualTargetCharacter 调用 TakeDamage(damage)。
+- 成功后设置 item.isCompleted = true。
+- 已验证重复执行同一个 plan 时，已完成 item 会跳过，HP 不会重复下降。
+- 已通过测试模式 ActionSlotExecutionPlanExecuteUnrespondedBasic。
+
+RespondedEnemyIntent 第一版攻击卡 vs 攻击卡正式执行已完成：
+
+- 当前只支持攻击卡 vs 攻击卡。
+- 玩家卡 roll playerAttackPoint。
+- 敌人卡 roll enemyAttackPoint。
+- 点数高者获胜。
+- 玩家胜利时，敌人受到 playerAttackPoint 伤害。
+- 敌人胜利时，enemyIntent.actualTargetCharacter 受到 enemyAttackPoint 伤害。
+- 平局时继续重新 roll。
+- 连续 10 次仍未分出胜负时自动结束。
+- 10 次平局自动结束时双方不造成伤害，但当前 item 标记完成，避免 ExecutionPlan 卡住。
+
+已通过的 RespondedEnemyIntent 测试：
+
+- ActionSlotExecutionPlanExecuteRespondedBasic：验证玩家胜利分支。
+- ActionSlotExecutionPlanExecuteRespondedEnemyWin：验证敌人胜利分支。
+- ActionSlotExecutionPlanExecuteRespondedEnemyWin 确认敌人胜利时扣 actualTargetCharacter，不回退 originalTarget。
+- ActionSlotExecutionPlanExecuteRespondedTieLimit：验证连续 10 次平局后自动结束。
+- ActionSlotExecutionPlanExecuteRespondedTieLimit 确认双方 HP 不下降，且 plan 能完成。
+
+混合执行测试已通过：
+
+- 已新增并通过 ActionSlotExecutionPlanExecuteMixedBasic。
+- 同一个 BattleExecutionPlan 中同时包含 1 个 RespondedEnemyIntent。
+- 同一个 BattleExecutionPlan 中同时包含 1 个 UnrespondedEnemyIntent。
+- ExecuteExecutionPlan(...) 可以连续执行多个 item。
+- 当前计划先执行 RespondedEnemyIntent。
+- 当前计划再执行 UnrespondedEnemyIntent。
+- 两个 item 都完成后，BattleExecutionPlan 完成。
+- 测试中表现为玩家胜利导致敌人 HP 下降。
+- 测试中表现为未响应敌人意图导致我方角色B HP 下降。
+- Console 显示 ExecutionPlan 是否完成：True。
+
+当前明确仍不做：
+
+- 不调用 BattleResolver。
+- 不触发 Resolved / Hit / AfterDamage / AfterKill。
+- 不处理 CD / UseCount。
+- 不处理 Buff。
+- 不处理防御 / 闪避 / Ability / 特殊卡。
+- 不处理正式伤害公式完整链路。
+- 不处理动画和 UI。
+- 不新增 BattleEnemyIntentResolver 或 DamageHandler。
+
+当前阶段意义：
+
+- 当前已经从“执行计划预览”进入“执行计划第一版正式执行”。
+- Console 层面已经能跑通敌人意图生成。
+- Console 层面已经能跑通玩家槽位响应。
+- Console 层面已经能跑通 actualTarget 改写。
+- Console 层面已经能跑通 BattleExecutionPlan 生成。
+- Console 层面已经能跑通 Responded / Unresponded item 执行。
+- Console 层面已经能跑通 roll 点。
+- Console 层面已经能跑通基础伤害。
+- Console 层面已经能跑通 HP 扣减。
+- Console 层面已经能跑通 item 完成。
+- Console 层面已经能跑通 plan 完成。
+- 这代表战斗最小可玩闭环的核心执行部分已经迈过一大步。
+
+下一步候选方向：
+
+- 继续补 ExecuteExecutionPlan(...) 的回合结束相关逻辑，例如槽位使用状态、卡牌 CD / UseCount。
+- 或先整理当前测试模式，减少测试代码膨胀。
+- 或进入“基础回合流程闭环”设计：回合开始 → 生成敌人意图 → 玩家安排槽位 → 生成计划 → 执行计划 → 回合结束。
+- 暂时不建议立刻接入复杂 Buff / 事件链 / 正式 UI。
+
+## 四十三、Action Slot / Enemy Intent 后续设计记录
 
 当前阶段只记录以下设计规则，不实现。
 
@@ -3812,7 +4107,862 @@ actualTarget 第一版含义：
 - 命中目标由 actualTargetCharacter + actualTargetSlotIndex 表示。
 - 下一步如果继续推进，可以先做“无人响应命中目标预览”，仍然不造成伤害、不进入正式结算。
 
-### 27. 未来扩展：不可预测卡
+### 27. UnrespondedEnemyIntent 最小处理流程草案
+
+当前阶段：
+
+- UnrespondedEnemyIntent 的命中目标含义已经明确。
+- actualTargetCharacter + actualTargetSlotIndex 表示敌人意图最终命中的目标槽位。
+- PrintExecutionPlanStepPreview(...) 已能打印无人响应意图的命中目标预览。
+- 当前仍不进入正式敌人攻击和伤害结算。
+
+未来最小处理流程草案：
+
+- 读取 BattleExecutionItem。
+- 确认 item.executionType == UnrespondedEnemyIntent。
+- 读取 item.enemyIntent。
+- 确认 enemyIntent 不为空。
+- 确认 enemyIntent.enemy 不为空。
+- 确认 enemyIntent.enemyCardState 不为空。
+- 确认 enemyIntent.actualTargetCharacter 不为空。
+- 读取 enemyIntent.actualTargetSlotIndex。
+- 打印敌人意图编号。
+- 打印敌人卡牌。
+- 打印将命中的角色。
+- 打印将命中的槽位。
+- 然后未来才进入敌人攻击 / 无人响应效果处理。
+
+第一版仍不做：
+
+- 不扣血。
+- 不执行敌人攻击。
+- 不触发无人响应效果。
+- 不执行敌人卡牌效果。
+- 不调用 BattleResolver。
+- 不调用 slot.MarkUsed()。
+- 不切换 item.isCompleted。
+- 不切换 plan.isCompleted。
+
+数据异常处理草案：
+
+- 如果 item == null，未来应安全跳过或进入异常日志。
+- item == null 时，当前不决定是否标记失败。
+- 如果 enemyIntent == null，未来应打印异常，不能继续处理。
+- 如果 enemy == null，未来应打印异常，不能继续处理。
+- 如果 enemyCardState == null，未来应打印异常，不能继续处理。
+- 如果 actualTargetCharacter == null，未来应打印异常，不能继续处理。
+- 如果 actualTargetSlotIndex <= 0，未来应打印槽位无效，不能直接进入正式命中处理。
+- 当前只记录异常方向，不新增 Failed / Skipped 状态。
+
+空槽位处理边界：
+
+- actualTargetSlotIndex 指向的槽位如果没有玩家响应，不代表槽位自带防御。
+- 空槽位不自动闪避。
+- 空槽位不自动减伤。
+- 是否触发额外效果，应由敌人卡牌定义。
+- 当前不实现空槽位惩罚。
+
+敌人攻击入口暂不决定：
+
+- 未来敌人攻击可能需要新逻辑。
+- 未来也可能复用或扩展 BattleResolver。
+- 当前不决定具体入口。
+- 在入口明确前，不应直接写伤害结算。
+
+item.isCompleted 边界：
+
+- 只有当无人响应敌人意图的正式处理完整结束后，才考虑标记 item.isCompleted = true。
+- 单纯打印命中目标不算完成。
+- 单纯进入预览不算完成。
+- 当前不切换完成状态。
+
+当前不实现：
+
+- HandleUnrespondedEnemyIntent(...)。
+- ExecuteUnrespondedEnemyIntent(...)。
+- 敌人攻击结算。
+- 伤害扣除。
+- 无人响应效果。
+- 敌人卡牌效果。
+- BattleResolver 接入。
+- slot.MarkUsed()。
+- item.isCompleted 切换。
+- plan.isCompleted 切换。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+- Failed / Skipped 状态。
+
+当前结论：
+
+- UnrespondedEnemyIntent 的第一版最小处理流程应先以“校验数据 + 明确命中目标 + 打印处理方向”为核心。
+- 在敌人攻击入口、无人响应效果、完成状态边界进一步明确前，不应直接进入伤害结算。
+- 下一步如果继续推进，可以先设计“无人响应敌人意图处理入口命名”，但仍不写正式执行代码。
+
+### 28. UnrespondedEnemyIntent 处理入口命名草案
+
+当前阶段：
+
+- UnrespondedEnemyIntent 的 actualTarget 含义已明确。
+- UnrespondedEnemyIntent 最小处理流程已记录。
+- 当前仍不进入正式敌人攻击和伤害结算。
+- 当前只设计未来处理入口命名。
+
+当前不建议使用的命名：
+
+- 暂不建议使用 ExecuteUnrespondedEnemyIntent(...)。
+- Execute 容易被理解为已经正式执行敌人攻击、造成伤害、修改状态。
+- 当前阶段还没有接入敌人攻击、无人响应效果、BattleResolver、item.isCompleted 等正式结算逻辑。
+
+第一版更安全的命名候选：
+
+- PreviewHandleUnrespondedEnemyIntent(...)：预览如何处理无人响应敌人意图，适合第一版只校验和打印、不结算。
+- PrintUnrespondedEnemyIntentHandlingPreview(...)：打印无人响应敌人意图处理预览，语义更保守，更明确不执行。
+- PreviewUnrespondedEnemyIntentHit(...)：预览无人响应敌人意图将命中的目标，更偏向命中目标预览，不一定覆盖完整处理流程。
+
+当前倾向：
+
+- 如果未来只是打印命中目标和处理方向，优先考虑 PrintUnrespondedEnemyIntentHandlingPreview(...)。
+- 如果未来要作为正式处理函数的前置预览版本，优先考虑 PreviewHandleUnrespondedEnemyIntent(...)。
+- 当前暂不决定最终函数名。
+- 当前不实现任何函数。
+
+未来第一版入口职责边界：
+
+- 接收或读取 BattleExecutionItem。
+- 确认 item 类型为 UnrespondedEnemyIntent。
+- 校验 enemyIntent / enemy / enemyCardState / actualTargetCharacter / actualTargetSlotIndex。
+- 打印敌人意图编号。
+- 打印敌人卡牌。
+- 打印将命中的角色。
+- 打印将命中的槽位。
+- 打印“当前仅预览，不造成伤害”。
+- 不造成伤害。
+- 不执行敌人攻击。
+- 不触发无人响应效果。
+- 不切换完成状态。
+
+与现有 PrintExecutionPlanStepPreview(...) 的关系：
+
+- 现有方法已经能打印 UnrespondedEnemyIntent 的命中目标预览。
+- 未来如果无人响应逻辑变复杂，可以从现有 PrintUnrespondedEnemyIntentStepPreview(...) 中拆出更专门的方法。
+- 当前不急着拆。
+- 等确实需要独立入口时再拆更自然。
+
+当前不实现：
+
+- ExecuteUnrespondedEnemyIntent(...)。
+- HandleUnrespondedEnemyIntent(...)。
+- PreviewHandleUnrespondedEnemyIntent(...)。
+- PrintUnrespondedEnemyIntentHandlingPreview(...)。
+- 敌人攻击结算。
+- 伤害扣除。
+- 无人响应效果。
+- 敌人卡牌效果。
+- BattleResolver 接入。
+- slot.MarkUsed()。
+- item.isCompleted 切换。
+- plan.isCompleted 切换。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+
+当前结论：
+
+- 第一版无人响应处理入口应避免使用 Execute。
+- 当前仍保持预览 / 打印 / 校验语义。
+- 等敌人攻击入口、无人响应效果和完成状态边界更明确后，再决定是否升级为正式 Handle 或 Execute 命名。
+
+### 29. UnrespondedEnemyIntent 敌人攻击入口设计草案
+
+当前阶段判断：
+
+- 当前结构适合继续做设计判断。
+- 当前还不适合直接写敌人攻击结算代码。
+- 当前仍不直接造成伤害。
+- 当前仍不执行敌人攻击。
+- 当前仍不接入 BattleResolver 正式结算。
+- 当前仍不切换 item.isCompleted / plan.isCompleted。
+
+当前职责边界评价：
+
+- BattleExecutionPlanManager 负责生成 / 打印计划，不执行。
+- BattleExecutionPlanExecutor 当前只做执行步骤预览。
+- BattleExecutionPlanExecutor 未来负责遍历 BattleExecutionPlan.executionItems。
+- BattleExecutionPlanExecutor 未来根据 BattleExecutionItemType 分派。
+- BattleExecutionPlanExecutor 不应直接处理伤害。
+- BattleEnemyIntent 保存敌人意图数据，不执行。
+- BattleActionSlotManager 负责槽位创建、安排响应、响应覆盖、预览，不负责正式结算。
+- BattleResolver 当前是正式战斗结算器。
+- BattleResolver 负责拼点、伤害、事件、卡牌效果等底层结算能力。
+
+关于是否复用 / 扩展 BattleResolver：
+
+- 未来可以复用 BattleResolver 的底层结算能力。
+- 当前不建议直接扩展 BattleResolver。
+- 不建议把 UnrespondedEnemyIntent 队列处理、敌人意图分派、ExecutionPlan item 分派都塞进 BattleResolver。
+- 否则 BattleResolver 容易从结算器膨胀成队列执行器 + 意图处理器 + 结算器。
+- 当前无人响应规则还没定清楚，不应过早固化。
+
+未来是否需要敌人意图专用处理器：
+
+- 长期可以考虑新增专门结构。
+- 命名倾向：BattleEnemyIntentResolver。
+- BattleEnemyIntentResolver 比 BattleEnemyIntentExecutor 更合适，因为 Executor 容易和 BattleExecutionPlanExecutor 混淆。
+- 不建议使用过窄的 BattleUnrespondedIntentResolver，避免为单一分支过早建类。
+- 当前仍只记录设计，不新增类。
+
+未来三层分工草案：
+
+- BattleExecutionPlanExecutor 负责遍历计划。
+- BattleExecutionPlanExecutor 根据 item 类型分派。
+- BattleExecutionPlanExecutor 协调整体执行流程。
+- BattleExecutionPlanExecutor 未来在正式结算完成后协调 item.isCompleted / plan.isCompleted。
+- BattleEnemyIntentResolver 未来负责处理敌人意图相关分支。
+- BattleEnemyIntentResolver 未来包括 RespondedEnemyIntent 和 UnrespondedEnemyIntent 的敌人意图层处理。
+- BattleEnemyIntentResolver 不负责遍历整个 ExecutionPlan。
+- BattleResolver 负责底层战斗结算能力。
+- BattleResolver 包括拼点、伤害、Hit / AfterDamage / Resolved、卡牌效果等。
+
+UnrespondedEnemyIntent 未来正式处理步骤草案：
+
+- 校验 BattleExecutionItem。
+- 确认 executionType == UnrespondedEnemyIntent。
+- 读取 enemyIntent。
+- 校验 enemyIntent.enemy。
+- 校验 enemyIntent.enemyCardState。
+- 校验 enemyIntent.actualTargetCharacter。
+- 校验 actualTargetSlotIndex 是否有效。
+- 打印 / 确认命中目标。
+- 未来进入敌人无人响应攻击处理。
+- 未来处理无人响应效果。
+- 未来处理敌人卡牌效果。
+- 正式处理结束后，才考虑 item.isCompleted = true。
+
+当前仍缺的关键规则：
+
+- 敌人攻击是否复用 BattleResolver。
+- 敌人无人响应攻击是否触发 Resolved。
+- 敌人卡牌是否处理 CD / UseCount。
+- 敌人卡牌 effects 的触发时机。
+- 命中槽位是否只用于目标定位，还是会影响槽位状态。
+- item.isCompleted 的切换时机。
+- 异常 item 是跳过、失败，还是停止计划。
+
+当前不建议做：
+
+- 不直接写 ExecuteUnrespondedEnemyIntent(...)。
+- 不直接造成伤害。
+- 不执行敌人攻击。
+- 不调用 BattleResolver 造成正式结算。
+- 不调用 slot.MarkUsed()。
+- 不切换 item.isCompleted。
+- 不切换 plan.isCompleted。
+- 不新增 BattleEnemyIntent.isCompleted。
+- 不处理 RespondedEnemyIntent 拼点。
+- 不混入 FreeAction。
+- 不新增过重的 Manager / Resolver，除非确实有必要。
+
+当前结论：
+
+- 未来敌人攻击入口不应直接塞进 BattleExecutionPlanExecutor。
+- BattleExecutionPlanExecutor 应负责遍历和分派。
+- 敌人意图层处理未来可考虑 BattleEnemyIntentResolver。
+- 底层伤害 / 事件 / 卡牌效果仍应由 BattleResolver 或其扩展能力承担。
+- 当前阶段只记录设计，不写代码。
+
+### 30. 敌人卡牌 UseCount / CD 第一版处理边界草案
+
+当前阶段：
+
+- UnrespondedEnemyIntent 敌人攻击入口仍在设计阶段。
+- 当前仍不执行敌人攻击。
+- 当前仍不造成伤害。
+- 当前仍不接入 BattleResolver 正式结算。
+- 当前只先明确敌人卡牌 UseCount / CD 边界。
+
+当前设计倾向：
+
+- 敌人卡牌第一版暂不走玩家式 UseCount / CD 轮转。
+- 敌人出牌更接近 AI / 关卡逻辑 / 敌人意图生成。
+- 敌人意图队列决定敌人本回合使用哪些卡。
+- 不把敌人卡牌当作玩家手牌那样进行冷却、使用次数、卡组轮转管理。
+
+与玩家卡牌的区别：
+
+- 玩家卡牌会进入行动槽位。
+- 玩家卡牌会受 UseCount / CD / 是否消耗等规则限制。
+- 玩家卡牌使用后未来可能调用 BattleCardManager.ApplyCooldownOnResolved(...) 或相关逻辑。
+- 玩家卡牌属于轮转资源。
+- 敌人卡牌第一版由敌人意图直接引用。
+- 敌人卡牌由 AI / 关卡设计决定是否出现。
+- 敌人卡牌暂不消耗 UseCount。
+- 敌人卡牌暂不进入 CD。
+- 敌人卡牌暂不参与玩家式卡组轮转。
+
+对 UnrespondedEnemyIntent 的影响：
+
+- 未来无人响应敌人意图正式处理时。
+- 即使敌人卡牌完成了攻击或效果。
+- 第一版也不增加敌人卡牌 UseCount。
+- 第一版也不让敌人卡牌进入 CD。
+- 第一版不调用玩家卡牌式的 ApplyCooldownOnResolved(...)。
+
+Resolved 边界：
+
+- 敌人卡牌是否触发 Resolved 事件，需要单独设计。
+- 即使未来敌人卡牌有类似 Resolved 的事件，也不等于一定要走玩家卡牌 UseCount / CD。
+- 当前不决定敌人卡牌事件系统。
+- 当前只记录：敌人卡牌 UseCount / CD 第一版不处理。
+
+未来可能扩展：
+
+- 后续如果需要精英怪 / Boss 卡牌轮转，可以另行设计敌人专用冷却或行动池。
+- 例如敌人技能 CD。
+- 例如敌人行为权重。
+- 例如敌人意图池。
+- 例如关卡脚本控制出牌。
+- 这些不应直接复用玩家卡牌 UseCount / CD 规则，除非后续明确需要。
+
+当前不实现：
+
+- 敌人卡牌 UseCount 增加。
+- 敌人卡牌 CD。
+- 敌人卡组轮转。
+- 敌人手牌。
+- 敌人抽牌。
+- BattleCardManager.ApplyCooldownOnResolved(...) 作用于敌人卡牌。
+- 敌人卡牌 Resolved 事件。
+- 敌人攻击正式结算。
+- 无人响应效果。
+- 伤害扣除。
+- item.isCompleted 切换。
+- plan.isCompleted 切换。
+
+当前结论：
+
+- 第一版敌人卡牌不处理玩家式 UseCount / CD。
+- 敌人卡牌是否出现由敌人意图 / AI / 关卡逻辑决定。
+- 这能避免把敌人行为过早塞进玩家卡牌轮转系统。
+- 后续真正设计敌人攻击结算时，应继续遵守这个边界。
+
+### 31. 敌人无人响应攻击事件触发边界草案
+
+当前阶段：
+
+- UnrespondedEnemyIntent 敌人攻击入口仍在设计阶段。
+- 当前仍不执行敌人攻击。
+- 当前仍不造成伤害。
+- 当前仍不接入 BattleResolver 正式结算。
+- 当前已经记录敌人卡牌第一版暂不处理玩家式 UseCount / CD。
+- 当前继续明确敌人无人响应攻击是否触发 Resolved / Hit / AfterDamage 等事件。
+
+当前设计倾向：
+
+- 第一版敌人无人响应攻击暂不直接套用玩家卡牌式事件链。
+- 第一版暂不默认触发 Resolved。
+- 第一版暂不默认触发 Hit。
+- 第一版暂不默认触发 AfterDamage。
+- 第一版暂不默认触发 AfterKill。
+- 原因是这些事件目前更接近玩家卡牌 / BattleResolver 正式结算流程。
+- 敌人卡牌事件系统尚未单独设计，不应过早复用玩家卡牌事件。
+
+与玩家卡牌事件的区别：
+
+- 玩家卡牌未来可能在拼点、命中、造成伤害、结算完成时触发事件。
+- 玩家卡牌可能与 UseCount / CD / 消耗 / 罪卡规则绑定。
+- 敌人卡牌第一版由敌人意图引用。
+- 敌人卡牌暂不走玩家式 UseCount / CD。
+- 因此敌人卡牌事件触发点不应直接照搬玩家卡牌事件链。
+
+对 UnrespondedEnemyIntent 第一版的影响：
+
+- 未来即使进入无人响应敌人攻击处理。
+- 第一版也可以先只处理命中目标确认。
+- 第一版也可以先只处理敌人攻击基础处理。
+- 第一版也可以先只处理是否造成伤害。
+- 第一版暂不触发敌人卡牌 Resolved / Hit / AfterDamage。
+- 第一版暂不执行敌人卡牌效果事件。
+- 第一版暂不调用玩家卡牌式 CardEffectExecutor 事件链。
+
+未来可能扩展：
+
+- 后续如果敌人卡牌也需要事件系统，可以单独设计敌人卡牌事件触发点。
+- 例如 EnemyIntentStart。
+- 例如 EnemyIntentHit。
+- 例如 EnemyIntentAfterDamage。
+- 例如 EnemyIntentResolved。
+- 是否复用现有 Resolved / Hit / AfterDamage 命名，需要后续判断。
+- 不应在当前阶段直接混用。
+
+与 BattleResolver 的关系：
+
+- BattleResolver 未来仍可能提供底层伤害 / 命中 / 事件能力。
+- 当前不直接调用 BattleResolver 来触发事件。
+- 等敌人攻击入口和敌人卡牌事件系统明确后，再决定是否复用或扩展 BattleResolver。
+
+当前不实现：
+
+- 敌人攻击正式结算。
+- 伤害扣除。
+- 敌人卡牌 Resolved。
+- 敌人卡牌 Hit。
+- 敌人卡牌 AfterDamage。
+- 敌人卡牌 AfterKill。
+- 敌人卡牌效果执行。
+- 敌人卡牌事件系统。
+- CardEffectExecutor 作用于敌人卡牌。
+- BattleResolver 接入。
+- item.isCompleted 切换。
+- plan.isCompleted 切换。
+- UseCount 增加。
+- CD 处理。
+- 负罪感增加。
+- slot.MarkUsed()。
+
+当前结论：
+
+- 第一版敌人无人响应攻击暂不触发玩家卡牌式事件链。
+- 敌人卡牌事件系统后续单独设计。
+- 当前先保持敌人意图处理与玩家卡牌结算事件解耦。
+- 后续真正进入敌人攻击实现前，需要再决定敌人攻击是否需要自己的事件触发点。
+
+### 32. UnrespondedEnemyIntent 伤害结算前置边界草案
+
+当前阶段判断：
+
+- 当前适合开始伤害结算设计。
+- 当前不适合开始伤害结算实现。
+- 当前仍不直接扣血。
+- 当前仍不执行敌人攻击。
+- 当前仍不切换 item.isCompleted / plan.isCompleted。
+- 当前继续停留在伤害前预览。
+
+当前已有伤害路径：
+
+- 当前正式伤害路径主要在 BattleResolver。
+- BattleResolver 负责或涉及卡牌点数伤害计算。
+- BattleResolver 负责或涉及 BattleCalculator.GetFinalDamageScaled(...)。
+- BattleResolver 负责或涉及转成 HP 伤害。
+- BattleResolver 负责或涉及 CharacterData.TakeDamage(...)。
+- BattleResolver 负责或涉及 Hit / AfterDamage / AfterKill / Resolved 等事件。
+- BattleResolver 负责或涉及卡牌效果执行。
+- CharacterData.TakeDamage(...) 本身更接近直接扣 HP 和打印日志。
+- 如果 UnrespondedEnemyIntent 现在直接调用 TakeDamage(...)，会绕过 BattleResolver 的伤害公式、Buff 影响、事件链和击杀判断。
+
+当前为什么不直接扣血：
+
+- 会绕过已有 BattleResolver 伤害 / 事件 / 效果流程。
+- 会和已有拼点胜负伤害逻辑形成重复路径。
+- 会让 BattleExecutionPlanExecutor 从分派器变成伤害结算器。
+- 会过早引入 item.isCompleted / plan.isCompleted 切换问题。
+- 会绕开未来敌人卡牌效果、无人响应效果、死亡处理的设计。
+- 后续如果要统一伤害规则，会很难回收。
+
+进入伤害结算前必须明确的规则：
+
+- 敌人卡牌伤害值从哪里来。
+- 当前 CardTestData / BattleCardState 的 minPoint / maxPoint / damageFormula 是否用于无人响应攻击。
+- 无人响应时是否仍然 roll 一个敌人攻击点数。
+- 伤害目标是直接作用于 actualTargetCharacter 的 HP，还是先作用于槽位。
+- actualTargetSlotIndex 是否只用于目标定位 / 槽位效果触发。
+- 是否考虑防御、减伤、护盾、槽位 Buff。
+- 死亡、AfterDamage、AfterKill 是否暂不处理。
+- 是否需要统一伤害方法。
+- 是否复用或扩展 BattleResolver 的伤害能力。
+
+当前实现层建议：
+
+- 继续停留在伤害前预览。
+- 只打印敌人意图将命中哪个角色。
+- 只打印敌人意图将命中哪个槽位。
+- 只打印敌人卡牌是什么。
+- 只打印未来这里会进入敌人伤害处理。
+- 只打印当前不扣血。
+- 不调用 TakeDamage(...)。
+- 不调用 BattleResolver 造成正式结算。
+
+职责分工建议：
+
+- BattleExecutionPlanExecutor 负责遍历执行计划。
+- BattleExecutionPlanExecutor 根据 item 类型分派。
+- BattleExecutionPlanExecutor 不直接算伤害。
+- BattleEnemyIntentResolver 未来处理敌人意图层逻辑。
+- BattleEnemyIntentResolver 未来校验 enemyIntent。
+- BattleEnemyIntentResolver 未来判断无人响应 / 已响应。
+- BattleEnemyIntentResolver 未来决定是否进入敌人攻击处理。
+- BattleResolver 或其扩展方法负责底层伤害、命中、事件、卡牌效果。
+- BattleResolver 未来可提供“敌人单方面攻击目标”的结算入口。
+- 当前不急着接入 BattleResolver。
+
+对 UnrespondedEnemyIntent 的当前边界：
+
+- 当前可以确认命中目标。
+- 当前可以打印伤害前预览。
+- 当前不扣 HP。
+- 当前不处理死亡。
+- 当前不触发 Resolved / Hit / AfterDamage / AfterKill。
+- 当前不处理敌人卡牌 UseCount / CD。
+- 当前不处理敌人卡牌效果。
+- 当前不切换完成状态。
+
+当前不实现：
+
+- 敌人基础伤害结算。
+- TakeDamage(...) 调用。
+- BattleResolver 接入。
+- 敌人单方面攻击结算入口。
+- 无人响应效果。
+- 敌人卡牌效果。
+- 死亡处理。
+- AfterDamage / AfterKill / Resolved / Hit。
+- 敌人 UseCount / CD。
+- slot.MarkUsed()。
+- item.isCompleted 切换。
+- plan.isCompleted 切换。
+- BattleEnemyIntent.isCompleted。
+- respondingSlot。
+- RespondedEnemyIntent 拼点。
+- FreeAction 混排。
+
+当前结论：
+
+- 现在可以开始伤害结算的设计。
+- 实现层继续停在伤害前预览。
+- 在敌人伤害值来源、是否 roll 点数、是否复用 BattleResolver、事件触发和完成状态边界明确前，不应直接扣血。
+- 下一步可以继续设计“无人响应攻击是否 roll 敌人卡点数”。
+
+### 33. UnrespondedEnemyIntent 无人响应攻击点数规则草案
+
+当前阶段判断：
+
+- 当前适合继续做无人响应攻击点数 / 伤害设计。
+- 当前仍不进入代码实现。
+- 当前不实际 roll 点数。
+- 当前不扣血。
+- 当前不接入 BattleResolver 正式结算。
+- 当前不切换 item.isCompleted / plan.isCompleted。
+
+当前设计倾向：
+
+- 未来无人响应攻击仍然应该 roll 敌人卡点数。
+- 敌人卡牌已有 minPoint / maxPoint。
+- 如果无人响应攻击完全不用点数，敌人卡牌的点数范围会失去核心意义。
+- 点数可以表示敌人单方面攻击强度。
+- 这个点数未来可以作为伤害公式输入。
+
+命名边界：
+
+- 无人响应没有双方拼点。
+- 所以设计上不建议继续称为 clashPoint。
+- 更建议称为 enemyAttackPoint。
+- 或称为 attackPoint。
+- 即使现有 BattleCalculator.GetFinalDamageScaled(...) 参数名可能仍叫 clashPoint，设计语义上也应区分“拼点点数”和“单方面攻击点数”。
+
+当前数据基础：
+
+- CardTestData / 卡牌数据中已有 minPoint。
+- CardTestData / 卡牌数据中已有 maxPoint。
+- CardTestData / 卡牌数据中已有 damageFormula。
+- BattleCardState 持有 cardData。
+- BattleEnemyIntent 持有 enemyCardState。
+- 这些数据足够支持未来无人响应攻击点数设计。
+- 但当前不实现 roll。
+
+未来点数流程草案：
+
+- BattleExecutionPlanExecutor 只负责分派。
+- 未来 BattleEnemyIntentResolver 或敌人意图处理器负责校验 enemyIntent / enemy / enemyCardState / actualTarget。
+- 正式处理时 roll 敌人攻击点数。
+- 该点数作为伤害公式输入。
+- 后续交给 BattleCalculator 或 BattleResolver 的扩展入口。
+- 由统一伤害路径处理倍率、Buff、HP 伤害转换、死亡、事件等。
+- 完整处理结束后，才考虑 item.isCompleted = true。
+
+当前预览层建议：
+
+- 当前可以先只做点数范围预览。
+- 例如打印敌人卡点数范围。
+- 例如打印未来无人响应时会 roll 敌人攻击点数。
+- 例如打印当前仅预览点数范围。
+- 例如打印当前不实际 roll。
+- 例如打印当前不扣血。
+- 当前不应直接生成随机点数。
+- 当前不应进行伤害计算。
+
+进入实现前仍需明确的规则：
+
+- 无人响应时 roll 的点数是否受 Buff / Debuff 影响。
+- Strength / Weakness / NextClashPointUp 等拼点相关 Buff 是否适用于单方面攻击。
+- 是否需要区分“拼点 Buff”和“攻击点数 Buff”。
+- BattleCalculator.GetFinalClashPoint(...) 是否能复用，还是需要新增更中性的攻击点数计算方法。
+- 实际 roll 是否只在正式执行时发生。
+- 预览阶段是否只显示范围。
+- 随机测试是否需要固定种子或可注入随机源。
+- damageFormula 是否继续使用当前 PointAsDamage / DoublePointDamage。
+- 伤害是否直接打 actualTargetCharacter HP。
+- actualTargetSlotIndex 是否只用于定位 / 槽位效果。
+- 敌人无人响应攻击未来是否触发独立事件链。
+
+当前不实现：
+
+- 实际 roll 敌人攻击点数。
+- 伤害计算。
+- 扣血。
+- TakeDamage(...)。
+- BattleResolver 正式结算接入。
+- 敌人单方面攻击伤害入口。
+- Buff / Debuff 对敌人攻击点数的处理。
+- 固定随机种子。
+- 敌人卡牌事件。
+- UseCount / CD。
+- item.isCompleted 切换。
+- plan.isCompleted 切换。
+- RespondedEnemyIntent 拼点。
+- FreeAction 混排。
+
+当前结论：
+
+- 未来无人响应攻击应保留敌人卡点数意义。
+- 当前先记录为“未来会 roll 敌人攻击点数”。
+- 当前实现层仍停留在点数范围 / 伤害前预览。
+- 下一步如果继续推进，可以考虑增强 UnrespondedEnemyIntent 预览日志，显示敌人卡点数范围，但仍不实际 roll。
+
+### 34. UnrespondedEnemyIntent 无人响应攻击第一版结算设计草案
+
+当前背景：
+
+- UnrespondedEnemyIntent 目前已经能在 BattleExecutionPlanExecutor.PrintUnrespondedEnemyIntentStepPreview(...) 中预览敌人意图。
+- UnrespondedEnemyIntent 目前已经能预览敌人卡牌。
+- UnrespondedEnemyIntent 目前已经能预览敌人攻击点数范围。
+- UnrespondedEnemyIntent 目前已经能预览将命中角色。
+- UnrespondedEnemyIntent 目前已经能预览将命中槽位。
+- 当前仍然只预览，不执行。
+- 当前不 roll。
+- 当前不结算。
+- 当前不改状态。
+
+未来处理流程建议：
+
+- BattleExecutionPlanExecutor 未来识别 UnrespondedEnemyIntent 执行项后，只负责分派。
+- 具体无人响应敌人攻击结算不建议全部塞进 Executor。
+- 未来可以交给专门的 Resolver / DamageHandler 处理。
+- 具体类名暂不决定。
+
+敌人攻击点数设计：
+
+- 未来正式结算时，无人响应敌人攻击需要从敌人卡牌点数范围 roll 点。
+- 字段来源为 enemyIntent.enemyCardState.cardData.minPoint。
+- 字段来源为 enemyIntent.enemyCardState.cardData.maxPoint。
+- 建议语义命名为 enemyAttackPoint。
+- 或命名为 attackPoint。
+- 不建议叫 clashPoint，因为无人响应攻击没有发生拼点。
+
+damageFormula: PointAsDamage 第一版解释：
+
+- 第一版可以理解为：最终伤害 = 敌人攻击点数。
+- 例如敌人攻击点数 roll 出 6，则造成 6 点伤害。
+- 当前只记录设计，不实现扣血。
+
+伤害目标来源：
+
+- 未来无人响应攻击命中目标应使用 enemyIntent.actualTargetCharacter。
+- 未来无人响应攻击命中槽位应使用 enemyIntent.actualTargetSlotIndex。
+- 不应重新回退使用 originalTarget。
+- 因为未来可能存在介入、目标改写、槽位效果等逻辑，正式结算应尊重 actualTarget。
+
+当前阶段明确不做：
+
+- 不实现正式结算。
+- 不 roll 点数。
+- 不计算伤害。
+- 不扣血。
+- 不调用 BattleResolver。
+- 不调用 TakeDamage(...)。
+- 不触发 Hit / AfterDamage / AfterKill。
+- 不处理敌人卡牌 UseCount / CD。
+- 不调用 slot.MarkUsed。
+- 不切换 item.isCompleted。
+- 不切换 plan.isCompleted。
+
+下一步候选方向：
+
+- 先设计 BattleExecutionPlanExecutor 正式执行入口空壳。
+- 或先设计无人响应攻击 Resolver / DamageHandler 的职责边界。
+- 或先设计 damageFormula 的数据解释规则。
+- 当前建议优先设计 Resolver / DamageHandler 职责边界，避免后续把所有逻辑塞进 Executor。
+
+### 35. UnrespondedEnemyIntent 结算职责边界结构审查
+
+现有结构审查结论：
+
+- 当前项目已有 BattleResolver.cs，它是主要战斗结算器。
+- BattleResolver 已包含拼点、卡牌生效、伤害计算、命中、扣血、击杀事件等相关流程。
+- BattleResolver 内已有 RollCardPoint(...)、ApplyDamageAndTriggerEvents(...)、TriggerBattleEvent(...) 等能力。
+- 但这些关键方法目前多为 private/static。
+- 当前公开入口主要偏测试性质，例如 TestClash(...)、TestUseAbilitySinCard(...)。
+- 因此当前还没有一个适合 UnrespondedEnemyIntent 直接调用的公开“单方面攻击结算入口”。
+
+BattleCalculator.cs 现有能力：
+
+- 有 Rollpoint(minPoint, maxPoint)。
+- 有 GetFinalClashPoint(...)，目前偏拼点相关 Buff 计算。
+- 有 GetFinalDamageScaled(...)。
+- 有 ConvertScaledDamageToHPDamage(...)。
+- 未来无人响应攻击若进入正式伤害结算，需要决定是否复用这些 scaled damage 逻辑。
+
+CharacterData.cs 现有能力：
+
+- 有 currentHP / maxHP。
+- 有 TakeDamage(int damage)。
+- TakeDamage(...) 当前只负责直接扣 HP 和打印日志。
+- TakeDamage(...) 不负责 Hit / AfterDamage / AfterKill / Resolved / 卡牌效果。
+
+BattleExecutionPlanExecutor.cs 当前边界：
+
+- 当前只做执行步骤预览。
+- 当前不执行 item。
+- 当前不修改状态。
+- 未来不建议把 roll 点、伤害计算、扣血、事件触发都塞进 Executor。
+
+推荐未来三层分工：
+
+- BattleExecutionPlanExecutor 遍历 BattleExecutionPlan.executionItems。
+- BattleExecutionPlanExecutor 根据 BattleExecutionItemType 分派。
+- BattleExecutionPlanExecutor 不直接 roll 点。
+- BattleExecutionPlanExecutor 不直接算伤害。
+- BattleExecutionPlanExecutor 不直接扣 HP。
+- BattleExecutionPlanExecutor 不直接触发事件。
+- 未来敌人意图处理层，例如暂称 BattleEnemyIntentResolver，处理 UnrespondedEnemyIntent 规则。
+- BattleEnemyIntentResolver 校验 enemyIntent / enemy / enemyCardState / actualTargetCharacter / actualTargetSlotIndex。
+- BattleEnemyIntentResolver 使用 actualTargetCharacter / actualTargetSlotIndex。
+- BattleEnemyIntentResolver 不回退 originalTarget。
+- BattleEnemyIntentResolver 决定是否进入敌人单方面攻击结算。
+- BattleEnemyIntentResolver 不遍历整个 ExecutionPlan。
+- BattleResolver 或未来拆出的 DamageHandler 负责真正 roll 点。
+- BattleResolver 或 DamageHandler 解释 damageFormula。
+- BattleResolver 或 DamageHandler 计算伤害。
+- BattleResolver 或 DamageHandler 扣血。
+- BattleResolver 或 DamageHandler 处理死亡判断。
+- BattleResolver 或 DamageHandler 处理事件链和卡牌效果。
+
+当前不建议实现正式结算的原因：
+
+- enemyAttackPoint 是否受 Strength / Weakness / NextClashPointUp 影响尚未决定。
+- PointAsDamage 是直接等于 HP 伤害，还是仍走 scaled damage 尚未决定。
+- 无人响应攻击是否触发 Resolved / Hit / AfterDamage / AfterKill 尚未决定。
+- 敌人卡牌是否触发 effects 尚未决定。
+- 敌人卡牌是否完全跳过 UseCount / CD 尚未决定。
+- item.isCompleted / plan.isCompleted 的切换时机尚未决定。
+- 异常 item 是跳过、失败还是中止 plan 尚未决定。
+- 现在直接实现容易形成第二套伤害路径。
+
+下一步最小安全设计动作：
+
+- 先设计 BattleEnemyIntentResolver 或“敌人意图处理层”的职责边界。
+- 再设计 BattleResolver 未来是否需要新增公开“单方面攻击结算”入口。
+- 暂时不写正式执行代码。
+
+当前不实现：
+
+- 不新增类。
+- 不写正式执行逻辑。
+- 不 roll 点数。
+- 不扣血。
+- 不调用 TakeDamage(...)。
+- 不切换 item.isCompleted / plan.isCompleted。
+
+### 36. UnrespondedEnemyIntent 第一版伤害结算关键规则决策
+
+- 本节只记录第一版无人响应伤害结算的关键规则决策；
+- 当前不实现代码；
+- 当前不新增类；
+- 当前不 roll 点数；
+- 当前不计算伤害；
+- 当前不扣血；
+- 当前不进入正式执行。
+
+#### 36.1 enemyAttackPoint 是否吃 Buff
+
+- 第一版暂定：`enemyAttackPoint` 不吃拼点类 Buff；
+- 无人响应攻击没有发生拼点；
+- 因此不直接走 `BattleCalculator.GetFinalClashPoint(...)`；
+- `enemyAttackPoint` 第一版只来自敌人卡牌点数范围 roll：
+
+  - `enemyIntent.enemyCardState.cardData.minPoint`
+  - `enemyIntent.enemyCardState.cardData.maxPoint`
+
+- 当前暂不处理：
+
+  - `Strength`
+  - `Weakness`
+  - `NextClashPointUp`
+  - 槽位拼点 Buff
+
+- 后续如果需要，可以单独设计攻击点数或受击修正类 Buff；
+- 例如：
+
+  - `AttackPointUp`
+  - `EnemyAttackPointUp`
+  - `SlotIncomingDamageUp`
+
+- 具体命名当前暂不决定。
+
+#### 36.2 PointAsDamage 第一版语义
+
+- 第一版可以理解为：以 `enemyAttackPoint` 作为基础伤害来源；
+- 例如敌人攻击点数 roll 出 `6`，则基础伤害来源为 `6`；
+- 但当前不在 `BattleEnemyIntentResolver` 中直接解释全部伤害公式；
+- 未来应由 `BattleResolver` 或 DamageHandler 统一解释 `damageFormula`；
+- 具体数值计算尽量复用 `BattleCalculator`；
+- `PointAsDamage` 未来到底是：
+
+  - 直接等于最终 HP 伤害；
+  - 还是仍然经过 scaled damage / damage multiplier；
+
+- 需要在正式伤害入口设计时再决定。
+
+#### 36.3 无人响应攻击第一版是否触发事件链
+
+- 第一版暂定：不触发玩家卡牌式事件链；
+- 当前暂不触发：
+
+  - `Resolved`
+  - `Hit`
+  - `AfterDamage`
+  - `AfterKill`
+
+- 继续维持之前记录的边界：
+
+  - 敌人无人响应攻击第一版暂不触发玩家卡牌式 `Resolved / Hit / AfterDamage / AfterKill`；
+
+- 后续如果敌人卡牌需要 effects，可以再设计敌人专用事件链或通用事件链；
+- 例如：
+
+  - `EnemyHit`
+  - `EnemyAfterDamage`
+  - `EnemyAfterKill`
+
+- 具体命名当前暂不决定。
+
+#### 36.4 当前仍然不实现
+
+- 不新增类；
+- 不写 `BattleEnemyIntentResolver`；
+- 不写正式执行入口；
+- 不 roll 点数；
+- 不计算伤害；
+- 不扣血；
+- 不调用 `BattleResolver`；
+- 不调用 `TakeDamage(...)`；
+- 不切换 `item.isCompleted`；
+- 不切换 `plan.isCompleted`。
+
+#### 36.5 下一步候选
+
+- 在这些规则决策基础上，继续设计 `BattleEnemyIntentResolver` 的第一版职责边界和方法输入输出；
+- 当前仍然先只做设计；
+- 当前不急着写代码。
+
+### 37. 未来扩展：不可预测卡
 
 后续可以加入“不可预测卡”机制。
 
@@ -3835,7 +4985,7 @@ actualTarget 第一版含义：
 
 当前只记录，不实现。
 
-### 28. 未来扩展：槽位 Buff / 特殊槽位
+### 38. 未来扩展：槽位 Buff / 特殊槽位
 
 槽位本身未来也可以成为卡牌效果作用对象。
 
@@ -3853,7 +5003,7 @@ actualTarget 第一版含义：
 
 这些都属于后续扩展方向，当前阶段只记录，不实现。
 
-### 29. 当前阶段不实现内容
+### 39. 当前阶段不实现内容
 
 当前只做设计记录，不实现以下功能：
 
@@ -3868,7 +5018,7 @@ actualTarget 第一版含义：
 - 不修改当前 ActionSlotBasic 测试。
 - 不修改 BattleResolver、BattleCardManager、GuiltManager、CardEffectExecutor、CardsTest.json。
 
-## 三十八、下一步候选方向
+## 四十四、下一步候选方向
 
 后续候选方向：
 
@@ -3879,7 +5029,7 @@ actualTarget 第一版含义：
 - 敌人防御逻辑暂缓。
 - 负罪感阈值暂缓。
 
-## 三十九、当前规则提醒
+## 四十五、当前规则提醒
 
 - 负罪感不是消耗资源，而是从 0 开始累计增加。
 - 使用罪卡会增加 guiltGain。

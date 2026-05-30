@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿// 脚本中文说明：战斗结算器。负责处理卡牌使用、拼点、生效、命中、伤害和击杀事件。
+using UnityEngine;
 
 // BattleResolver = 战斗结算器
 // 负责处理卡牌使用、拼点、生效、命中、伤害、击杀等流程

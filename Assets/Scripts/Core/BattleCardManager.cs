@@ -1,4 +1,5 @@
-﻿using UnityEngine;
+﻿// 脚本中文说明：战斗卡牌管理器。负责创建战斗卡牌状态、判断卡牌能否使用、处理 CD、使用次数和消耗。
+using UnityEngine;
 
 // BattleCardManager = 战斗卡牌管理器
 // 负责处理战斗中卡牌的 CD、消耗、可用性判断
@@ -6,6 +7,7 @@ public static class BattleCardManager
 {
     // HandleEvent = 处理战斗事件
     // 以后 BattleEventProcessor 会把事件传进来
+    // context = 战斗事件上下文，里面有事件时机、使用者、目标和卡牌状态。
     public static void HandleEvent(BattleEventContext context)
     {
         if (context == null)
@@ -15,7 +17,7 @@ public static class BattleCardManager
 
         // 生效阶段：
         // 普通卡进入 CD
-        // 罪卡如果 consumeOnUse，则标记为已消耗
+        // 罪卡按 UseCount / Permanent 规则处理使用次数或负罪感
         if (context.timing == BattleTiming.Resolved)
         {
             ApplyCooldownOnResolved(context.cardState);
@@ -24,6 +26,7 @@ public static class BattleCardManager
 
         // 回合结束：
         // 当前角色所有卡牌 CD -1
+        // context.user = 当前正在处理回合结束的角色。
         if (context.timing == BattleTiming.TurnEnd)
         {
             ReduceCooldownsAtTurnEnd(context.user);
@@ -56,22 +59,29 @@ public static class BattleCardManager
     }
 
     // CreateBattleCard = 创建一张战斗中的卡牌状态
-    // CreateBattleCard = 创建一张战斗中的卡牌状态
+    // Create = 创建，BattleCard = 战斗卡牌。
+    // owner = 持有这张卡的角色。
+    // cardData = 卡牌模板数据。
+    // instanceID = 本场战斗中这张卡牌实例的唯一编号。
     public static BattleCardState CreateBattleCard(
         CharacterData owner,
         CardTestData cardData,
         string instanceID
     )
     {
+        // BattleCardState = 战斗卡牌状态。
+        // 同一张卡牌模板可以创建多个不同实例。
         BattleCardState cardState = new BattleCardState(owner, cardData, instanceID);
 
         if (owner != null)
         {
             if (owner.battleCards == null)
             {
+                // 如果角色还没有战斗卡牌列表，就先创建一个。
                 owner.battleCards = new System.Collections.Generic.List<BattleCardState>();
             }
 
+            // 把新卡牌状态加入角色的战斗卡牌列表。
             owner.battleCards.Add(cardState);
         }
 
@@ -91,7 +101,8 @@ public static class BattleCardManager
     }
 
     // CanUseCard = 判断这张卡当前能不能使用
-    // CanUseCard = 判断这张卡当前能不能使用
+    // Can = 可以，Use = 使用，Card = 卡牌。
+    // 这个版本只检查卡牌状态本身：是否为空、是否已消耗、是否还在 CD。
     public static bool CanUseCard(BattleCardState cardState)
     {
         if (cardState == null)
@@ -108,6 +119,8 @@ public static class BattleCardManager
 
         if (cardState.isConsumed)
         {
+            // isConsumed = 已消耗。
+            // 达到最大使用次数后，本场战斗不能再用。
             Debug.Log(
                 cardState.GetCardName() +
                 " 已经被消耗，本场战斗不能再次使用"
@@ -118,6 +131,7 @@ public static class BattleCardManager
 
         if (cardState.currentCooldown > 0)
         {
+            // currentCooldown > 0 表示卡牌还在冷却中。
             Debug.Log(
                 cardState.GetCardName() +
                 " 还在冷却中，剩余 CD：" +
@@ -129,9 +143,10 @@ public static class BattleCardManager
 
         return true;
     }
-    // ApplyCooldownOnResolved = 卡牌生效后处理 CD / 消耗
+
     // CanUseCard = 判断这张卡当前能不能使用
     // 这个版本会额外检查罪卡使用条件
+    // user = 使用者，target = 目标，cardState = 要检查的卡牌状态。
     public static bool CanUseCard(
         CharacterData user,
         CharacterData target,
@@ -150,6 +165,7 @@ public static class BattleCardManager
         }
 
         // 如果是罪卡，再检查罪卡使用条件
+        // 例如是否拥有某个 Buff、负罪感是否满足、生命值是否满足等。
         if (cardState.cardData.isSinCard)
         {
             string failReason;
@@ -175,6 +191,10 @@ public static class BattleCardManager
 
         return true;
     }
+
+    // ApplyCooldownOnResolved = 卡牌生效后处理 CD / 消耗
+    // Apply = 应用，Cooldown = 冷却，Resolved = 卡牌已经生效。
+    // cardState = 已经成功生效的卡牌状态。
     public static void ApplyCooldownOnResolved(BattleCardState cardState)
     {
         if (cardState == null)
@@ -186,6 +206,7 @@ public static class BattleCardManager
         if (cardState.IsSinCard())
         {
             // 罪卡成功结算后，增加负罪感
+            // guiltGain = 使用这张罪卡后增加的负罪感。
             if (cardState.cardData != null && cardState.cardData.guiltGain > 0)
             {
                 GuiltManager.AddGuilt(
@@ -197,10 +218,13 @@ public static class BattleCardManager
 
             if (cardState.IsUseCountSinCard())
             {
+                // UseCount 型罪卡：成功生效后增加使用次数。
+                // 达到上限后会标记 isConsumed。
                 ConsumeCardUse(cardState);
             }
             else
             {
+                // Permanent 型罪卡：不进入普通 CD，也不按次数消耗。
                 if (BattleDebugSettings.ShowDetailBattleLog)
                 {
                     Debug.Log(cardState.GetCardName() + " 是罪卡，不进入普通 CD");
@@ -211,6 +235,7 @@ public static class BattleCardManager
             return;
         }
 
+        // 普通卡：根据卡牌数据或品质计算基础 CD。
         int cooldown = GetBaseCooldown(cardState.cardData);
 
         if (cooldown < 0)
@@ -231,6 +256,7 @@ public static class BattleCardManager
     }
 
     // ReduceCooldownsAtTurnEnd = 回合结束时减少某个角色所有卡牌的 CD
+    // owner = 要处理卡牌 CD 的角色。
     public static void ReduceCooldownsAtTurnEnd(CharacterData owner)
     {
         if (owner == null)
@@ -250,12 +276,13 @@ public static class BattleCardManager
                 continue;
             }
 
+            // 每回合结束默认让每张卡 CD -1。
             ReduceCardCooldown(cardState, 1);
         }
     }
 
-    // ReduceCardCooldown = 减少单张卡的 CD
     // ConsumeCardUse = 消耗一次卡牌使用次数
+    // cardState = 要增加使用次数的卡牌状态。
     public static void ConsumeCardUse(BattleCardState cardState)
     {
         if (cardState == null)
@@ -265,9 +292,11 @@ public static class BattleCardManager
 
         if (cardState.isConsumed)
         {
+            // 已经消耗的卡，不再重复增加使用次数。
             return;
         }
 
+        // currentUseCount = 当前已经成功使用 / 生效次数。
         cardState.currentUseCount++;
 
         int maxUseCount = cardState.maxUseCount;
@@ -297,6 +326,10 @@ public static class BattleCardManager
             Debug.Log(cardState.GetCardName() + " 已达到最大使用次数，本场战斗不能再次使用");
         }
     }
+
+    // ReduceCardCooldown = 减少单张卡的 CD
+    // cardState = 要减少 CD 的卡牌。
+    // amount = 要减少的数量。
     public static void ReduceCardCooldown(BattleCardState cardState, int amount)
     {
         if (cardState == null)
@@ -306,11 +339,13 @@ public static class BattleCardManager
 
         if (amount <= 0)
         {
+            // amount <= 0 没有减少意义。
             return;
         }
 
         if (cardState.currentCooldown <= 0)
         {
+            // 当前没有 CD 时，不需要处理。
             return;
         }
 
@@ -337,6 +372,8 @@ public static class BattleCardManager
 
     // ReduceAllCooldowns = 减少某个角色全部卡牌 CD
     // 后面“击杀后全部卡 CD -5”可以用这个
+    // owner = 要减少 CD 的角色。
+    // amount = 要减少的 CD 数量。
     public static void ReduceAllCooldowns(CharacterData owner, int amount)
     {
         if (owner == null)
@@ -354,8 +391,12 @@ public static class BattleCardManager
             ReduceCardCooldown(cardState, amount);
         }
     }
+
     // ReduceCooldownsByCardType = 按卡牌类型减少 CD
     // 例如：Attack / Defense / Dodge
+    // owner = 要处理的角色。
+    // cardType = 卡牌类型。
+    // amount = 要减少的 CD 数量。
     public static void ReduceCooldownsByCardType(CharacterData owner, string cardType, int amount)
     {
         if (owner == null)
@@ -382,6 +423,7 @@ public static class BattleCardManager
 
             if (cardState.cardData.cardType == cardType)
             {
+                // 只处理指定类型的卡牌。
                 ReduceCardCooldown(cardState, amount);
             }
         }
@@ -389,6 +431,8 @@ public static class BattleCardManager
 
     // ReduceCooldownsByRarity = 按品质减少 CD
     // 例如：White / Green / Blue / Purple / Gold
+    // rarity = 卡牌品质。
+    // amount = 要减少的 CD 数量。
     public static void ReduceCooldownsByRarity(CharacterData owner, string rarity, int amount)
     {
         if (owner == null)
@@ -415,6 +459,7 @@ public static class BattleCardManager
 
             if (cardState.cardData.rarity == rarity)
             {
+                // 只处理指定品质的卡牌。
                 ReduceCardCooldown(cardState, amount);
             }
         }
@@ -422,6 +467,8 @@ public static class BattleCardManager
 
     // ReduceCooldownsByCardID = 按卡牌 ID 减少 CD
     // 例如：只减少 cardID 为 atk_001 的所有复制品
+    // cardID = 卡牌模板 ID。
+    // amount = 要减少的 CD 数量。
     public static void ReduceCooldownsByCardID(CharacterData owner, string cardID, int amount)
     {
         if (owner == null)
@@ -448,6 +495,7 @@ public static class BattleCardManager
 
             if (cardState.cardData.cardID == cardID)
             {
+                // 同一个 cardID 可能有多个复制品，这里会全部减少。
                 ReduceCardCooldown(cardState, amount);
             }
         }
@@ -455,7 +503,6 @@ public static class BattleCardManager
     // GetBaseCooldown = 获取卡牌基础 CD
     // 优先使用 cardData.cooldown > 0 的手动 CD
     // 如果没有手动 CD，就按品质自动计算
-
     public static int GetBaseCooldown(CardTestData cardData)
     {
         if (cardData == null)
@@ -464,6 +511,7 @@ public static class BattleCardManager
         }
 
         // 罪卡默认无普通 CD
+        // 罪卡的使用限制由 UseCount / Permanent 等规则处理。
         if (cardData.isSinCard)
         {
             return 0;
@@ -480,6 +528,7 @@ public static class BattleCardManager
 
     // GetCooldownByRarity = 根据品质获取 CD
     // 暂定：白卡 0，每高一个品质 +2
+    // rarity = 卡牌品质字符串。
     public static int GetCooldownByRarity(string rarity)
     {
         if (string.IsNullOrEmpty(rarity))
@@ -515,6 +564,7 @@ public static class BattleCardManager
 
     // PrintCardStates = 打印某个角色所有卡牌状态
     // 后面调试 CD 时可以用
+    // owner = 要打印卡牌状态的角色。
     public static void PrintCardStates(CharacterData owner)
     {
         if (owner == null)
@@ -536,6 +586,9 @@ public static class BattleCardManager
             {
                 continue;
             }
+
+            // sinInfoText = 罪卡额外信息文本。
+            // 只有罪卡才打印罪卡规则和罪卡分类。
             string sinInfoText = "";
             if (cardState.IsSinCard())
             {
@@ -558,6 +611,7 @@ public static class BattleCardManager
 
     static string GetCharacterName(CharacterData character)
     {
+        // character 为空时返回“无角色”，避免打印日志时报错。
         if (character == null)
         {
             return "无角色";
