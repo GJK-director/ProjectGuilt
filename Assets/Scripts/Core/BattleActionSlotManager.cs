@@ -66,16 +66,21 @@ public static class BattleActionSlotManager
             return false;
         }
 
-        // CanInterceptAttack = 判断是否可以介入攻击。
-        // 当前规则：行动者速度必须大于敌人速度，才能改写敌人的攻击目标。
-        if (!BattleTargeting.CanInterceptAttack(actor, enemyIntent.enemy, enemyIntent.originalTargetCharacter))
+        int actorSpeed = actor.GetCurrentSpeed();
+        int enemySpeed = enemyIntent.enemy.GetCurrentSpeed();
+        bool canRewriteActualTarget = actorSpeed > enemySpeed;
+        bool isOriginalTargetSlot =
+            object.ReferenceEquals(actor, enemyIntent.originalTargetCharacter) &&
+            slotIndex == enemyIntent.originalTargetSlotIndex;
+
+        if (!canRewriteActualTarget && !isOriginalTargetSlot)
         {
-            Debug.Log("速度不足，无法改变该敌人卡牌目标");
+            Debug.Log("速度不足，且不是原目标槽位，无法响应该敌人意图");
             return false;
         }
 
         // 记录改写前的目标文本，方便打印“从谁改到谁”。
-        string originalTargetText = enemyIntent.GetOriginalTargetSlotText();
+        string actualTargetBeforeResponse = enemyIntent.GetActualTargetSlotText();
 
         // 同一个敌人意图只能有一个主要响应槽位。
         // 先找旧绑定槽位，后面解除旧绑定。
@@ -95,7 +100,7 @@ public static class BattleActionSlotManager
         }
 
         // 真正把角色、卡牌、敌人意图写入槽位。
-        slot.AssignResponse(actor, cardState, enemyIntent);
+        slot.AssignResponse(actor, cardState, enemyIntent, canRewriteActualTarget);
 
         // 敌人意图标记为已响应。
         enemyIntent.MarkResponded();
@@ -106,15 +111,25 @@ public static class BattleActionSlotManager
             slot.GetActorName() +
             " 使用 " +
             slot.GetCardName() +
-            " 介入敌人意图"
+            " 响应敌人意图"
         );
 
-        Debug.Log(
-            "敌人意图目标从 " +
-            originalTargetText +
-            " 改为 " +
-            enemyIntent.GetActualTargetSlotText()
-        );
+        if (canRewriteActualTarget)
+        {
+            Debug.Log(
+                "高速响应成功：敌人意图目标从 " +
+                actualTargetBeforeResponse +
+                " 改为 " +
+                enemyIntent.GetActualTargetSlotText()
+            );
+        }
+        else
+        {
+            Debug.Log(
+                "低速原目标槽位响应成功：不改写 actualTarget，敌人意图仍命中 " +
+                enemyIntent.GetActualTargetSlotText()
+            );
+        }
 
         return true;
     }

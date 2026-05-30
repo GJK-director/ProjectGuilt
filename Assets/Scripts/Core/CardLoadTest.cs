@@ -6,18 +6,15 @@ public enum BattleTestMode
 {
     ClashUseCount,
     AbilityUseCount,
-    ActionSlotBasic,
-    ActionSlotInterceptFail,
-    ActionSlotInterceptEqualFail,
-    ActionSlotMultiIntentBasic,
+    BattleResolverResolveRespondedAttackVsAttackBasic,
+    BattleResolverResolveUnrespondedEnemyIntentBasic,
+    ActionSlotLowSpeedOriginalSlotResponseBasic,
+    ActionSlotLowSpeedIllegalResponseFail,
     ActionSlotResponseOverwriteBasic,
-    ActionSlotResponseOverwriteFailKeepOld,
-    ActionSlotExecutionPlanBasic,
-    ActionSlotExecutionPlanEmpty,
-    ActionSlotExecutionPlanMissingSlot,
-    ActionSlotExecutionPlanMultiBasic,
-    ActionSlotExecutionPlanStepPreviewBasic,
-    ActionSlotExecutionPlanStepPreviewEmpty,
+    ActionSlotExecutionPlanSpeedHighResponseOrderBasic,
+    ActionSlotExecutionPlanSpeedLowResponseOrderBasic,
+    ActionSlotExecutionPlanSpeedHighFreeActionBasic,
+    ActionSlotExecutionPlanSpeedLowFreeActionBasic,
     ActionSlotExecutionPlanExecuteUnrespondedBasic,
     ActionSlotExecutionPlanExecuteRespondedBasic,
     ActionSlotExecutionPlanExecuteRespondedEnemyWin,
@@ -87,27 +84,27 @@ public class CardLoadTest : MonoBehaviour
             return;
         }
 
-        if (testMode == BattleTestMode.ActionSlotBasic)
+        if (testMode == BattleTestMode.BattleResolverResolveRespondedAttackVsAttackBasic)
         {
-            RunActionSlotBasicTestSequence();
+            RunBattleResolverResolveRespondedAttackVsAttackBasicTestSequence();
             return;
         }
 
-        if (testMode == BattleTestMode.ActionSlotInterceptFail)
+        if (testMode == BattleTestMode.BattleResolverResolveUnrespondedEnemyIntentBasic)
         {
-            RunActionSlotInterceptFailTestSequence();
+            RunBattleResolverResolveUnrespondedEnemyIntentBasicTestSequence();
             return;
         }
 
-        if (testMode == BattleTestMode.ActionSlotInterceptEqualFail)
+        if (testMode == BattleTestMode.ActionSlotLowSpeedOriginalSlotResponseBasic)
         {
-            RunActionSlotInterceptEqualFailTestSequence();
+            RunActionSlotLowSpeedOriginalSlotResponseBasicTestSequence();
             return;
         }
 
-        if (testMode == BattleTestMode.ActionSlotMultiIntentBasic)
+        if (testMode == BattleTestMode.ActionSlotLowSpeedIllegalResponseFail)
         {
-            RunActionSlotMultiIntentBasicTestSequence();
+            RunActionSlotLowSpeedIllegalResponseFailTestSequence();
             return;
         }
 
@@ -117,45 +114,27 @@ public class CardLoadTest : MonoBehaviour
             return;
         }
 
-        if (testMode == BattleTestMode.ActionSlotResponseOverwriteFailKeepOld)
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanSpeedHighResponseOrderBasic)
         {
-            RunActionSlotResponseOverwriteFailKeepOldTestSequence();
+            RunActionSlotExecutionPlanSpeedHighResponseOrderBasicTestSequence();
             return;
         }
 
-        if (testMode == BattleTestMode.ActionSlotExecutionPlanBasic)
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanSpeedLowResponseOrderBasic)
         {
-            RunActionSlotExecutionPlanBasicTestSequence();
+            RunActionSlotExecutionPlanSpeedLowResponseOrderBasicTestSequence();
             return;
         }
 
-        if (testMode == BattleTestMode.ActionSlotExecutionPlanEmpty)
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanSpeedHighFreeActionBasic)
         {
-            RunActionSlotExecutionPlanEmptyTestSequence();
+            RunActionSlotExecutionPlanSpeedHighFreeActionBasicTestSequence();
             return;
         }
 
-        if (testMode == BattleTestMode.ActionSlotExecutionPlanMissingSlot)
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanSpeedLowFreeActionBasic)
         {
-            RunActionSlotExecutionPlanMissingSlotTestSequence();
-            return;
-        }
-
-        if (testMode == BattleTestMode.ActionSlotExecutionPlanMultiBasic)
-        {
-            RunActionSlotExecutionPlanMultiBasicTestSequence();
-            return;
-        }
-
-        if (testMode == BattleTestMode.ActionSlotExecutionPlanStepPreviewBasic)
-        {
-            RunActionSlotExecutionPlanStepPreviewBasicTestSequence();
-            return;
-        }
-
-        if (testMode == BattleTestMode.ActionSlotExecutionPlanStepPreviewEmpty)
-        {
-            RunActionSlotExecutionPlanStepPreviewEmptyTestSequence();
+            RunActionSlotExecutionPlanSpeedLowFreeActionBasicTestSequence();
             return;
         }
 
@@ -232,6 +211,216 @@ public class CardLoadTest : MonoBehaviour
         StartTurn();
         RunAbilitySinCardTest();
         PrintAbilitySinCardTestState();
+    }
+
+    // RunBattleResolverResolveRespondedAttackVsAttackBasicTestSequence = 测试 BattleResolver 正式已响应敌人意图入口
+    void RunBattleResolverResolveRespondedAttackVsAttackBasicTestSequence()
+    {
+        Debug.Log("===== BattleResolver ResolveRespondedEnemyIntent 攻击卡 vs 攻击卡测试开始 =====");
+        Debug.Log("本测试直接调用 BattleResolver.ResolveRespondedEnemyIntent(...)，不生成 ExecutionPlan，不调用 Executor");
+
+        RunBattleResolverRespondedAttackVsAttackSubTest(
+            "玩家胜利分支",
+            10,
+            10,
+            1,
+            1,
+            "PlayerWin"
+        );
+
+        RunBattleResolverRespondedAttackVsAttackSubTest(
+            "敌人胜利分支",
+            1,
+            1,
+            8,
+            8,
+            "EnemyWin"
+        );
+
+        RunBattleResolverRespondedAttackVsAttackSubTest(
+            "10次平局上限分支",
+            5,
+            5,
+            5,
+            5,
+            "TieLimit"
+        );
+    }
+
+    // RunBattleResolverResolveUnrespondedEnemyIntentBasicTestSequence = 测试 BattleResolver 正式无人响应敌人意图入口
+    void RunBattleResolverResolveUnrespondedEnemyIntentBasicTestSequence()
+    {
+        Debug.Log("===== BattleResolver ResolveUnrespondedEnemyIntent 无人响应敌人意图测试开始 =====");
+        Debug.Log("本测试直接调用 BattleResolver.ResolveUnrespondedEnemyIntent(...)，不生成 ExecutionPlan，不调用 Executor");
+
+        StartTurn();
+
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            "enemy_intent_resolver_unresponded_basic_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        int allyAHPBefore = allyA.currentHP;
+        int allyBHPBefore = allyB.currentHP;
+        int enemyHPBefore = enemy.currentHP;
+
+        Debug.Log("执行前 我方角色A HP：" + allyAHPBefore + " / " + allyA.maxHP);
+        Debug.Log("执行前 我方角色B HP：" + allyBHPBefore + " / " + allyB.maxHP);
+        Debug.Log("执行前 敌人 HP：" + enemyHPBefore + " / " + enemy.maxHP);
+        Debug.Log("无人响应敌人意图实际目标：" + enemyIntent.GetActualTargetSlotText());
+
+        BattleResolveResult result = BattleResolver.ResolveUnrespondedEnemyIntent(enemyIntent);
+
+        PrintBattleResolveResult(result);
+
+        Debug.Log("执行后 我方角色A HP：" + allyA.currentHP + " / " + allyA.maxHP);
+        Debug.Log("执行后 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+        Debug.Log("预期 resultType：UnrespondedEnemyAttack，实际是否符合：" + (result != null && result.resultType == "UnrespondedEnemyAttack"));
+        Debug.Log("预期 isSuccess：True，实际是否符合：" + (result != null && result.isSuccess));
+        Debug.Log("预期 shouldCompleteItem：True，实际是否符合：" + (result != null && result.shouldCompleteItem));
+        Debug.Log("预期 playerCardUsed：False，实际是否符合：" + (result != null && !result.playerCardUsed));
+        Debug.Log("预期 enemyCardUsed：True，实际是否符合：" + (result != null && result.enemyCardUsed));
+        Debug.Log("预期 triggeredEventChain：False，实际是否符合：" + (result != null && !result.triggeredEventChain));
+        Debug.Log("预期 damagedCharacter 为 allyB，实际是否符合：" + (result != null && object.ReferenceEquals(result.damagedCharacter, allyB)));
+        Debug.Log("allyB HP 是否下降：" + (allyB.currentHP < allyBHPBefore));
+        Debug.Log("allyA HP 是否保持不变：" + (allyA.currentHP == allyAHPBefore));
+        Debug.Log("敌人 HP 是否保持不变：" + (enemy.currentHP == enemyHPBefore));
+    }
+
+    void RunBattleResolverRespondedAttackVsAttackSubTest(
+        string title,
+        int playerMinPoint,
+        int playerMaxPoint,
+        int enemyMinPoint,
+        int enemyMaxPoint,
+        string expectedResultType
+    )
+    {
+        Debug.Log("===== 子测试：" + title + " =====");
+
+        CharacterData testPlayer = new CharacterData(title + "玩家", 30, 10, 10);
+        CharacterData testOriginalTarget = new CharacterData(title + "原目标", 30, 3, 3);
+        CharacterData testEnemy = new CharacterData(title + "敌人", 30, 5, 5);
+
+        CardTestData playerAttackCard = new CardTestData
+        {
+            cardID = title + "_player_attack",
+            cardName = title + "玩家攻击",
+            cardType = CardType.Attack,
+            isClashable = true,
+            minPoint = playerMinPoint,
+            maxPoint = playerMaxPoint,
+            damageFormula = "PointAsDamage",
+            maxUseCount = 3
+        };
+
+        CardTestData enemyAttackCard = new CardTestData
+        {
+            cardID = title + "_enemy_attack",
+            cardName = title + "敌人攻击",
+            cardType = CardType.Attack,
+            isClashable = true,
+            minPoint = enemyMinPoint,
+            maxPoint = enemyMaxPoint,
+            damageFormula = "PointAsDamage"
+        };
+
+        BattleCardState playerCardState = BattleCardManager.CreateBattleCard(
+            testPlayer,
+            playerAttackCard,
+            title + "_player_attack_copy_0"
+        );
+
+        BattleCardState enemyCardState = BattleCardManager.CreateBattleCard(
+            testEnemy,
+            enemyAttackCard,
+            title + "_enemy_attack_copy_0"
+        );
+
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            title + "_enemy_intent_001",
+            testEnemy,
+            enemyCardState,
+            testOriginalTarget,
+            2,
+            1
+        );
+
+        BattleActionSlot actionSlot = new BattleActionSlot(1);
+        actionSlot.AssignResponse(testPlayer, playerCardState, enemyIntent, true);
+        enemyIntent.MarkResponded();
+
+        int playerHPBefore = testPlayer.currentHP;
+        int originalTargetHPBefore = testOriginalTarget.currentHP;
+        int enemyHPBefore = testEnemy.currentHP;
+
+        Debug.Log("执行前 玩家 HP：" + playerHPBefore + " / " + testPlayer.maxHP);
+        Debug.Log("执行前 原目标 HP：" + originalTargetHPBefore + " / " + testOriginalTarget.maxHP);
+        Debug.Log("执行前 敌人 HP：" + enemyHPBefore + " / " + testEnemy.maxHP);
+        Debug.Log("响应后 actualTarget：" + enemyIntent.GetActualTargetSlotText());
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(actionSlot, enemyIntent);
+
+        PrintBattleResolveResult(result);
+
+        Debug.Log("执行后 玩家 HP：" + testPlayer.currentHP + " / " + testPlayer.maxHP);
+        Debug.Log("执行后 原目标 HP：" + testOriginalTarget.currentHP + " / " + testOriginalTarget.maxHP);
+        Debug.Log("执行后 敌人 HP：" + testEnemy.currentHP + " / " + testEnemy.maxHP);
+        Debug.Log("预期 resultType：" + expectedResultType + "，实际是否符合：" + (result != null && result.resultType == expectedResultType));
+
+        if (expectedResultType == "PlayerWin")
+        {
+            Debug.Log("玩家胜利验证：敌人是否受伤：" + (testEnemy.currentHP < enemyHPBefore));
+        }
+
+        if (expectedResultType == "EnemyWin")
+        {
+            Debug.Log("敌人胜利验证：actualTargetCharacter 是否受伤：" + (testPlayer.currentHP < playerHPBefore));
+            Debug.Log("敌人胜利验证：originalTarget 是否未受伤：" + (testOriginalTarget.currentHP == originalTargetHPBefore));
+        }
+
+        if (expectedResultType == "TieLimit")
+        {
+            Debug.Log("平局上限验证：玩家 HP 是否不变：" + (testPlayer.currentHP == playerHPBefore));
+            Debug.Log("平局上限验证：原目标 HP 是否不变：" + (testOriginalTarget.currentHP == originalTargetHPBefore));
+            Debug.Log("平局上限验证：敌人 HP 是否不变：" + (testEnemy.currentHP == enemyHPBefore));
+        }
+    }
+
+    void PrintBattleResolveResult(BattleResolveResult result)
+    {
+        if (result == null)
+        {
+            Debug.LogWarning("BattleResolveResult 为空");
+            return;
+        }
+
+        string damagedCharacterName = result.damagedCharacter != null
+            ? result.damagedCharacter.characterName
+            : "无";
+
+        Debug.Log(
+            "===== BattleResolveResult =====\n" +
+            "isSuccess：" + result.isSuccess + "\n" +
+            "shouldCompleteItem：" + result.shouldCompleteItem + "\n" +
+            "playerCardUsed：" + result.playerCardUsed + "\n" +
+            "enemyCardUsed：" + result.enemyCardUsed + "\n" +
+            "hasDamage：" + result.hasDamage + "\n" +
+            "damage：" + result.damage + "\n" +
+            "damagedCharacter：" + damagedCharacterName + "\n" +
+            "resultType：" + result.resultType + "\n" +
+            "playerPoint：" + result.playerPoint + "\n" +
+            "enemyPoint：" + result.enemyPoint + "\n" +
+            "clashAttemptCount：" + result.clashAttemptCount + "\n" +
+            "isTieLimitReached：" + result.isTieLimitReached + "\n" +
+            "triggeredEventChain：" + result.triggeredEventChain + "\n" +
+            "message：" + result.message
+        );
     }
 
     // ================================
@@ -357,6 +546,98 @@ public class CardLoadTest : MonoBehaviour
         PrintEnemyIntentActualTarget(enemyIntent);
         BattleActionSlotManager.PrintSlotStates(actionSlots);
         PrintCharacterCardStates(sameSpeedAlly);
+    }
+
+    // RunActionSlotLowSpeedOriginalSlotResponseBasicTestSequence = 执行低速原目标槽位响应成功测试
+    void RunActionSlotLowSpeedOriginalSlotResponseBasicTestSequence()
+    {
+        Debug.Log("===== Action Slot 低速原目标槽位响应测试开始 =====");
+
+        // 固定速度，确保 allyB 低于敌人。
+        allyB.minSpeed = 3;
+        allyB.maxSpeed = 3;
+        enemy.minSpeed = 8;
+        enemy.maxSpeed = 8;
+
+        StartTurn();
+
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            "enemy_intent_low_speed_original_slot_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(enemyIntent);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+
+        Debug.Log("测试预期：allyB 速度低于敌人，但 allyB 槽位2是原目标槽位，所以响应应成功且不改写 actualTarget");
+
+        bool assignResult = BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            2,
+            allyB,
+            allyBDefenseCardState,
+            enemyIntent
+        );
+
+        Debug.Log("低速原目标槽位响应是否成功：" + assignResult);
+        Debug.Log("敌人意图是否已响应：" + enemyIntent.isResponded);
+        Debug.Log("敌人意图实际目标角色仍为 allyB：" + object.ReferenceEquals(enemyIntent.actualTargetCharacter, allyB));
+        Debug.Log("敌人意图实际目标槽位仍为 2：" + (enemyIntent.actualTargetSlotIndex == 2));
+        Debug.Log("敌人意图当前实际目标：" + enemyIntent.GetActualTargetSlotText());
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+        PrintCharacterCardStates(allyB);
+    }
+
+    // RunActionSlotLowSpeedIllegalResponseFailTestSequence = 执行低速非法响应失败测试
+    void RunActionSlotLowSpeedIllegalResponseFailTestSequence()
+    {
+        Debug.Log("===== Action Slot 低速非法响应失败测试开始 =====");
+
+        // 固定速度，确保 allyB 低于敌人。
+        allyB.minSpeed = 3;
+        allyB.maxSpeed = 3;
+        enemy.minSpeed = 8;
+        enemy.maxSpeed = 8;
+
+        StartTurn();
+
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            "enemy_intent_low_speed_illegal_response_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(enemyIntent);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+
+        Debug.Log("测试预期：allyB 速度低于敌人，但尝试用槽位1响应 allyB 槽位2 的敌人意图，应安排失败");
+
+        bool assignResult = BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            allyB,
+            allyBDefenseCardState,
+            enemyIntent
+        );
+
+        Debug.Log("低速非法响应是否成功：" + assignResult);
+        Debug.Log("敌人意图是否仍未响应：" + !enemyIntent.isResponded);
+        Debug.Log("敌人意图实际目标角色仍为 allyB：" + object.ReferenceEquals(enemyIntent.actualTargetCharacter, allyB));
+        Debug.Log("敌人意图实际目标槽位仍为 2：" + (enemyIntent.actualTargetSlotIndex == 2));
+        Debug.Log("敌人意图当前实际目标：" + enemyIntent.GetActualTargetSlotText());
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+        PrintCharacterCardStates(allyB);
     }
 
     // RunActionSlotMultiIntentBasicTestSequence = 执行多敌人意图基础数据测试
@@ -599,6 +880,221 @@ public class CardLoadTest : MonoBehaviour
 
         BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
         PrintCharacterCardStates(allyA);
+    }
+
+    // RunActionSlotExecutionPlanSpeedHighResponseOrderBasicTestSequence = 执行高速响应提前顺序测试
+    void RunActionSlotExecutionPlanSpeedHighResponseOrderBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 速度规则：高速响应提前测试开始 =====");
+
+        StartTurn();
+
+        BattleCardState secondEnemyAttackCardState = BattleCardManager.CreateBattleCard(
+            enemy,
+            enemyAttackCardState.cardData,
+            "enemy_atk_001_speed_high_response_copy_1"
+        );
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_speed_high_response_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        BattleEnemyIntent intent2 = new BattleEnemyIntent(
+            "enemy_intent_speed_high_response_002",
+            enemy,
+            secondEnemyAttackCardState,
+            allyB,
+            1,
+            2
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1, intent2);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            1,
+            allyA,
+            allyAAttackCardState,
+            intent2
+        );
+
+        Debug.Log("预期顺序：1. RespondedEnemyIntent 敌人意图2；2. UnrespondedEnemyIntent 敌人意图1");
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        PrintCharacterCardStates(allyA);
+    }
+
+    // RunActionSlotExecutionPlanSpeedLowResponseOrderBasicTestSequence = 执行低速响应不提前测试
+    void RunActionSlotExecutionPlanSpeedLowResponseOrderBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 速度规则：低速响应不提前测试开始 =====");
+
+        // 固定速度，确保 allyB 低于敌人。
+        allyB.minSpeed = 3;
+        allyB.maxSpeed = 3;
+        enemy.minSpeed = 8;
+        enemy.maxSpeed = 8;
+
+        StartTurn();
+
+        BattleCardState secondEnemyAttackCardState = BattleCardManager.CreateBattleCard(
+            enemy,
+            enemyAttackCardState.cardData,
+            "enemy_atk_001_speed_low_response_copy_1"
+        );
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_speed_low_response_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            1,
+            1
+        );
+
+        BattleEnemyIntent intent2 = new BattleEnemyIntent(
+            "enemy_intent_speed_low_response_002",
+            enemy,
+            secondEnemyAttackCardState,
+            allyB,
+            2,
+            2
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1, intent2);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            2,
+            allyB,
+            allyBDefenseCardState,
+            intent2
+        );
+
+        Debug.Log("预期顺序：1. UnrespondedEnemyIntent 敌人意图1；2. RespondedEnemyIntent 敌人意图2");
+        Debug.Log("敌人意图2 是否已响应：" + intent2.isResponded);
+        Debug.Log("敌人意图2 实际目标角色仍为 allyB：" + object.ReferenceEquals(intent2.actualTargetCharacter, allyB));
+        Debug.Log("敌人意图2 实际目标槽位仍为 2：" + (intent2.actualTargetSlotIndex == 2));
+        Debug.Log("敌人意图2 当前实际目标：" + intent2.GetActualTargetSlotText());
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        PrintCharacterCardStates(allyB);
+    }
+
+    // RunActionSlotExecutionPlanSpeedHighFreeActionBasicTestSequence = 执行高速自由行动提前测试
+    void RunActionSlotExecutionPlanSpeedHighFreeActionBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 速度规则：高速自由行动测试开始 =====");
+
+        StartTurn();
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_speed_high_free_action_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        BattleCardState allyAFreeActionCardState = CreateTestAttackCardForCharacter(
+            allyA,
+            "allyA_speed_high_free_action_atk_001_copy_0"
+        );
+
+        BattleActionSlotManager.AssignFreeAction(
+            actionSlots,
+            1,
+            allyA,
+            allyAFreeActionCardState,
+            enemy
+        );
+
+        Debug.Log("预期顺序：1. FreeAction；2. UnrespondedEnemyIntent 敌人意图1");
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        PrintCharacterCardStates(allyA);
+    }
+
+    // RunActionSlotExecutionPlanSpeedLowFreeActionBasicTestSequence = 执行低速自由行动后置测试
+    void RunActionSlotExecutionPlanSpeedLowFreeActionBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 速度规则：低速自由行动测试开始 =====");
+
+        // 固定速度，确保 allyB 低于敌人。
+        allyB.minSpeed = 3;
+        allyB.maxSpeed = 3;
+        enemy.minSpeed = 8;
+        enemy.maxSpeed = 8;
+
+        StartTurn();
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_speed_low_free_action_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        BattleCardState allyBFreeActionCardState = CreateTestAttackCardForCharacter(
+            allyB,
+            "allyB_speed_low_free_action_atk_001_copy_0"
+        );
+
+        BattleActionSlotManager.AssignFreeAction(
+            actionSlots,
+            1,
+            allyB,
+            allyBFreeActionCardState,
+            enemy
+        );
+
+        Debug.Log("预期顺序：1. UnrespondedEnemyIntent 敌人意图1；2. FreeAction");
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        PrintCharacterCardStates(allyB);
     }
 
     // RunActionSlotExecutionPlanEmptyTestSequence = 执行 BattleExecutionPlan 空输入安全测试

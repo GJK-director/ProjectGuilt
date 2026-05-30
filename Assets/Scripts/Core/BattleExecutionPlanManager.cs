@@ -71,6 +71,122 @@ public static class BattleExecutionPlanManager
         return executionPlan;
     }
 
+    // CreateSpeedBasedExecutionPlan = 创建速度规则版执行计划
+    // 第一版规则：
+    // 1. 高速玩家行动先处理；
+    // 2. 敌人意图按 intentOrder 处理；
+    // 3. 低速自由行动最后处理。
+    public static BattleExecutionPlan CreateSpeedBasedExecutionPlan(
+        List<BattleActionSlot> actionSlots,
+        List<BattleEnemyIntent> intentQueue
+    )
+    {
+        BattleExecutionPlan executionPlan = new BattleExecutionPlan();
+        HashSet<BattleEnemyIntent> handledHighSpeedIntents = new HashSet<BattleEnemyIntent>();
+
+        int order = 1;
+
+        // 第一阶段：高速玩家行动阶段。
+        // 按当前 actionSlots 顺序扫描，先加入能抢先的响应行动和自由行动。
+        if (actionSlots != null)
+        {
+            foreach (BattleActionSlot slot in actionSlots)
+            {
+                if (!IsActionSlotReady(slot))
+                {
+                    continue;
+                }
+
+                if (IsHighSpeedResponseSlot(slot) && IsIntentInQueue(intentQueue, slot.enemyIntent))
+                {
+                    executionPlan.AddItem(new BattleExecutionItem(
+                        order,
+                        BattleExecutionItemType.RespondedEnemyIntent,
+                        slot.enemyIntent,
+                        slot
+                    ));
+
+                    handledHighSpeedIntents.Add(slot.enemyIntent);
+                    order++;
+                    continue;
+                }
+
+                if (IsHighSpeedFreeActionSlot(slot))
+                {
+                    executionPlan.AddItem(new BattleExecutionItem(
+                        order,
+                        BattleExecutionItemType.FreeAction,
+                        null,
+                        slot
+                    ));
+
+                    order++;
+                }
+            }
+        }
+
+        // 第二阶段：敌人意图节奏阶段。
+        // 按 intentOrder 从小到大处理；已经被高速响应提前处理的意图跳过。
+        List<BattleEnemyIntent> orderedIntents = GetIntentQueueByIntentOrder(intentQueue);
+
+        foreach (BattleEnemyIntent intent in orderedIntents)
+        {
+            if (intent == null || handledHighSpeedIntents.Contains(intent))
+            {
+                continue;
+            }
+
+            if (intent.isResponded)
+            {
+                executionPlan.AddItem(new BattleExecutionItem(
+                    order,
+                    BattleExecutionItemType.RespondedEnemyIntent,
+                    intent,
+                    FindSlotByEnemyIntent(actionSlots, intent)
+                ));
+
+                order++;
+                continue;
+            }
+
+            executionPlan.AddItem(new BattleExecutionItem(
+                order,
+                BattleExecutionItemType.UnrespondedEnemyIntent,
+                intent,
+                null
+            ));
+
+            order++;
+        }
+
+        // 第三阶段：低速自由行动阶段。
+        // 低速 FreeAction 不能抢在敌人攻击前，所以最后加入。
+        if (actionSlots != null)
+        {
+            foreach (BattleActionSlot slot in actionSlots)
+            {
+                if (!IsActionSlotReady(slot))
+                {
+                    continue;
+                }
+
+                if (slot.slotType == BattleActionSlotType.FreeAction && !IsHighSpeedFreeActionSlot(slot))
+                {
+                    executionPlan.AddItem(new BattleExecutionItem(
+                        order,
+                        BattleExecutionItemType.FreeAction,
+                        null,
+                        slot
+                    ));
+
+                    order++;
+                }
+            }
+        }
+
+        return executionPlan;
+    }
+
     // PrintExecutionPlan = 打印执行计划
     // Print = 打印，方便在 Console 里确认顺序。
     public static void PrintExecutionPlan(BattleExecutionPlan executionPlan)
@@ -168,6 +284,127 @@ public static class BattleExecutionPlanManager
             " 未响应，未来按 actualTarget 执行，目标：" +
             item.enemyIntent.GetActualTargetSlotText()
         );
+    }
+
+    // IsActionSlotReady = 判断槽位是否有可加入计划的行动
+    static bool IsActionSlotReady(BattleActionSlot slot)
+    {
+        return slot != null && !slot.IsEmpty() && slot.actor != null;
+    }
+
+    // IsHighSpeedResponseSlot = 判断响应槽位是否能高速抢先
+    static bool IsHighSpeedResponseSlot(BattleActionSlot slot)
+    {
+        if (!IsActionSlotReady(slot))
+        {
+            return false;
+        }
+
+        if (slot.slotType != BattleActionSlotType.RespondToEnemyIntent)
+        {
+            return false;
+        }
+
+        if (slot.enemyIntent == null || slot.enemyIntent.enemy == null)
+        {
+            return false;
+        }
+
+        return IsActorFasterThan(slot.actor, slot.enemyIntent.enemy);
+    }
+
+    // IsHighSpeedFreeActionSlot = 判断自由行动是否能抢在目标前
+    static bool IsHighSpeedFreeActionSlot(BattleActionSlot slot)
+    {
+        if (!IsActionSlotReady(slot))
+        {
+            return false;
+        }
+
+        if (slot.slotType != BattleActionSlotType.FreeAction)
+        {
+            return false;
+        }
+
+        if (slot.target == null)
+        {
+            return false;
+        }
+
+        return IsActorFasterThan(slot.actor, slot.target);
+    }
+
+    // IsActorFasterThan = 判断 actor 当前速度是否严格大于 target
+    static bool IsActorFasterThan(CharacterData actor, CharacterData target)
+    {
+        if (actor == null || target == null)
+        {
+            return false;
+        }
+
+        return actor.GetCurrentSpeed() > target.GetCurrentSpeed();
+    }
+
+    // IsIntentInQueue = 判断敌人意图是否属于当前意图队列
+    static bool IsIntentInQueue(List<BattleEnemyIntent> intentQueue, BattleEnemyIntent targetIntent)
+    {
+        if (intentQueue == null || targetIntent == null)
+        {
+            return false;
+        }
+
+        foreach (BattleEnemyIntent intent in intentQueue)
+        {
+            if (object.ReferenceEquals(intent, targetIntent))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // GetIntentQueueByIntentOrder = 按 intentOrder 获取敌人意图顺序
+    static List<BattleEnemyIntent> GetIntentQueueByIntentOrder(List<BattleEnemyIntent> intentQueue)
+    {
+        List<BattleEnemyIntent> orderedIntents = new List<BattleEnemyIntent>();
+
+        if (intentQueue == null)
+        {
+            return orderedIntents;
+        }
+
+        foreach (BattleEnemyIntent intent in intentQueue)
+        {
+            if (intent != null)
+            {
+                orderedIntents.Add(intent);
+            }
+        }
+
+        orderedIntents.Sort(CompareIntentOrder);
+        return orderedIntents;
+    }
+
+    // CompareIntentOrder = 比较敌人意图顺序
+    static int CompareIntentOrder(BattleEnemyIntent left, BattleEnemyIntent right)
+    {
+        if (left == null && right == null)
+        {
+            return 0;
+        }
+
+        if (left == null)
+        {
+            return 1;
+        }
+
+        if (right == null)
+        {
+            return -1;
+        }
+
+        return left.intentOrder.CompareTo(right.intentOrder);
     }
 
     // FindSlotByEnemyIntent = 根据敌人意图查找绑定的行动槽位

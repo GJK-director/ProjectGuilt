@@ -5039,3 +5039,169 @@ BattleExecutionPlanExecutor.cs 当前边界：
 - Ability 罪卡不参与拼点，直接执行 effects。
 - UseCount 罪卡按次数消耗。
 - Permanent 罪卡不进入普通 CD，也不按次数消耗。
+
+## 四十六、BattleExecutionPlan 速度规则生成第一版完成
+
+当前完成内容：
+
+- 已新增 `BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(...)`。
+- 保留 `CreateBasicExecutionPlan(...)` 不变。
+- `CreateSpeedBasedExecutionPlan(...)` 按三阶段生成执行计划：
+  1. 高速玩家行动阶段。
+  2. 敌人意图节奏阶段。
+  3. 低速自由行动阶段。
+
+已确认的速度规则：
+
+- `actor.GetCurrentSpeed() > enemy.GetCurrentSpeed()` 视为高速，可以抢先。
+- `actor.GetCurrentSpeed() <= enemy.GetCurrentSpeed()` 视为低速，不能抢先。
+- 速度相等不能抢先。
+- 高速响应可以提前处理敌人意图。
+- 低速响应可以响应原目标槽位，但不提前。
+- 高速自由行动可以排在敌人攻击前。
+- 低速自由行动排在敌人攻击后。
+- 无人响应敌人意图按 `intentOrder` 处理。
+
+已通过测试：
+
+- `ActionSlotLowSpeedOriginalSlotResponseBasic`：低速原目标槽位响应成功，不改写 `actualTarget`。
+- `ActionSlotLowSpeedIllegalResponseFail`：低速非法响应失败，不绑定，不改写 `actualTarget`。
+- `ActionSlotExecutionPlanSpeedHighResponseOrderBasic`：高速响应可以让后编号敌人意图提前进入计划。
+- `ActionSlotExecutionPlanSpeedHighFreeActionBasic`：高速自由行动排在无人响应敌人意图前。
+- `ActionSlotExecutionPlanSpeedLowFreeActionBasic`：低速自由行动排在无人响应敌人意图后。
+- `ActionSlotExecutionPlanSpeedLowResponseOrderBasic`：低速响应不提前，按敌人意图原顺序进入计划。
+
+当前仍未处理：
+
+- 本阶段只生成和打印计划。
+- 不执行 plan。
+- 不 roll 点。
+- 不扣血。
+- 不调用 `BattleResolver`。
+- 不处理正式伤害公式、CD、UseCount、Buff、事件链。
+
+阶段意义：
+
+- 第 11 条“基于槽位、敌人意图和速度的执行顺序规则”第一版可以标记为完成。
+- 后续 `BattleExecutionPlanExecutor` 应只按生成好的 plan 顺序执行，不在执行时临时决定顺序。
+- 下一阶段可以进入第 10 条：研究如何把 `BattleExecutionPlanExecutor` 接回正式 `BattleResolver` 结算。
+
+## 四十七、BattleExecutionPlanExecutor 接回 BattleResolver 第一版通过
+
+当前完成内容：
+
+- `BattleResolver` 已新增正式入口：
+  - `ResolveRespondedEnemyIntent(BattleActionSlot actionSlot, BattleEnemyIntent enemyIntent)`
+- 已新增 `BattleResolveResult` 结果结构。
+- `BattleExecutionPlanExecutor.ExecuteRespondedEnemyIntent(...)` 已改为调用：
+  - `BattleResolver.ResolveRespondedEnemyIntent(item.actionSlot, item.enemyIntent)`
+- Executor 的 `RespondedEnemyIntent` 分支不再自己 roll 点。
+- Executor 的 `RespondedEnemyIntent` 分支不再自己比较点数。
+- Executor 的 `RespondedEnemyIntent` 分支不再自己计算伤害。
+- Executor 的 `RespondedEnemyIntent` 分支不再直接调用 `TakeDamage(...)`。
+- Executor 现在根据 `BattleResolveResult.isSuccess && BattleResolveResult.shouldCompleteItem` 决定是否标记 `item.isCompleted = true`。
+
+当前支持范围：
+
+- 第一版只支持 `RespondedEnemyIntent` 的攻击卡 vs 攻击卡。
+- 正常胜负会走 Resolver 事件链。
+- 10 次平局上限时不触发事件链。
+- `UnrespondedEnemyIntent` 仍保持第一版简化结算，暂未接回 Resolver。
+- 暂不处理防御、闪避、Ability、FreeAction、`slot.MarkUsed()`。
+
+已通过测试：
+
+- `BattleResolverResolveRespondedAttackVsAttackBasic`
+  - 直接测试 Resolver 新入口。
+  - 玩家胜利、敌人胜利、10 次平局上限均通过。
+- `ActionSlotExecutionPlanExecuteRespondedBasic`
+  - Executor 调用 Resolver 后，玩家胜利分支通过。
+  - 敌人受伤，`ExecutionPlan.isCompleted == true`。
+- `ActionSlotExecutionPlanExecuteRespondedEnemyWin`
+  - 敌人胜利分支通过。
+  - 伤害打到 `actualTargetCharacter`，不回退 `originalTarget`。
+  - `ExecutionPlan.isCompleted == true`。
+- `ActionSlotExecutionPlanExecuteRespondedTieLimit`
+  - 10 次平局上限通过。
+  - 双方 HP 不下降。
+  - `playerCardUsed = false`，`enemyCardUsed = false`，`triggeredEventChain = false`。
+  - `ExecutionPlan.isCompleted == true`。
+
+阶段意义：
+
+- `BattleExecutionPlanExecutor` 开始从“临时结算器”回到“执行计划调度员”定位。
+- `BattleResolver` 开始承担正式 Responded 结算入口。
+- 第 10 条“将执行计划执行器接回正式战斗结算”已完成第一版 Responded 攻击 vs 攻击接入。
+
+后续未处理：
+
+- `UnrespondedEnemyIntent` 接回 Resolver。
+- 防御 / 闪避接入 Resolver。
+- Ability / FreeAction 正式执行。
+- `slot.MarkUsed()`。
+- 更完整的 CD / UseCount / Buff / 事件链整理。
+- 旧 `TestClash(...)` 与正式入口关系整理。
+
+## 四十八、BattleExecutionPlanExecutor 接回 BattleResolver：敌人意图分支第一版通过
+
+当前完成内容：
+
+- `BattleExecutionPlanExecutor` 的 `RespondedEnemyIntent` 分支已调用：
+  - `BattleResolver.ResolveRespondedEnemyIntent(item.actionSlot, item.enemyIntent)`
+- `BattleExecutionPlanExecutor` 的 `UnrespondedEnemyIntent` 分支已调用：
+  - `BattleResolver.ResolveUnrespondedEnemyIntent(item.enemyIntent)`
+- Executor 不再在这两个分支里自行 roll 点。
+- Executor 不再在这两个分支里自行比较点数。
+- Executor 不再在这两个分支里自行计算伤害。
+- Executor 不再在这两个分支里直接调用 `TakeDamage(...)`。
+- Executor 当前负责：
+  - 遍历 `BattleExecutionPlan`。
+  - 根据 item 类型分派给 Resolver。
+  - 读取 `BattleResolveResult`。
+  - 根据 `result.isSuccess && result.shouldCompleteItem` 标记 `item.isCompleted`。
+  - 全部 item 完成后标记 `plan.isCompleted`。
+
+当前 Resolver 支持范围：
+
+- `ResolveRespondedEnemyIntent(...)`
+  - 第一版支持攻击卡 vs 攻击卡。
+  - 支持玩家胜利、敌人胜利、10 次平局上限。
+  - 正常胜负触发事件链。
+  - 10 次平局上限不触发事件链。
+- `ResolveUnrespondedEnemyIntent(...)`
+  - 第一版支持无人响应敌人攻击。
+  - 使用敌人卡牌点数 roll `enemyAttackPoint`。
+  - 使用 `BattleCalculator.GetFinalDamageScaled(...)` 和 `ConvertScaledDamageToHPDamage(...)`。
+  - 扣 `actualTargetCharacter` 的 HP。
+  - 不触发事件链。
+  - 不处理敌人卡牌 CD / UseCount。
+
+已通过测试：
+
+- `ActionSlotExecutionPlanExecuteRespondedBasic`
+- `ActionSlotExecutionPlanExecuteRespondedEnemyWin`
+- `ActionSlotExecutionPlanExecuteRespondedTieLimit`
+- `ActionSlotExecutionPlanExecuteUnrespondedBasic`
+  - `UnrespondedEnemyIntent` 通过 Resolver 执行。
+  - `allyB HP` 下降。
+  - `ExecutionPlan.isCompleted == true`。
+  - 重复执行同一个 plan 时已完成 item 被跳过，不重复扣血。
+- `ActionSlotExecutionPlanExecuteMixedBasic`
+  - 混合 plan 中 `RespondedEnemyIntent` 和 `UnrespondedEnemyIntent` 都通过 Resolver 执行。
+  - `ExecutionPlan.isCompleted == true`。
+
+阶段意义：
+
+- `BattleExecutionPlanExecutor` 已经从临时结算器进一步回到“执行计划调度员”定位。
+- `BattleResolver` 开始承担敌人意图相关正式结算入口。
+- 第 10 条“将执行计划执行器接回正式战斗结算”已完成敌人意图分支第一版接入。
+
+当前仍未处理：
+
+- 防御 / 闪避接入 Resolver。
+- Ability / FreeAction 正式执行。
+- `slot.MarkUsed()`。
+- 敌人事件链、敌人 CD / UseCount。
+- 更完整的 Buff / CD / UseCount / 负罪感整理。
+- 旧 `TestClash(...)` 与正式入口关系整理。
+- UI / 动画表现。

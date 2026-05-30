@@ -1,10 +1,35 @@
 ﻿// 脚本中文说明：战斗结算器。负责处理卡牌使用、拼点、生效、命中、伤害和击杀事件。
 using UnityEngine;
 
+public class BattleResolveResult
+{
+    public bool isSuccess;
+    public bool shouldCompleteItem;
+
+    public bool playerCardUsed;
+    public bool enemyCardUsed;
+
+    public bool hasDamage;
+    public int damage;
+    public CharacterData damagedCharacter;
+
+    public string resultType;
+    public int playerPoint;
+    public int enemyPoint;
+    public int clashAttemptCount;
+
+    public bool isTieLimitReached;
+    public bool triggeredEventChain;
+
+    public string message;
+}
+
 // BattleResolver = 战斗结算器
 // 负责处理卡牌使用、拼点、生效、命中、伤害、击杀等流程
 public static class BattleResolver
 {
+    const int MaxRespondedEnemyIntentClashAttempts = 10;
+
     // TestUseAbilitySinCard = 测试 / 使用能力型罪卡
     // 能力型罪卡不进入拼点，成功使用后直接触发 OnPlay，再进入 Resolved 处理负罪感和使用次数
     public static void TestUseAbilitySinCard(
@@ -105,6 +130,201 @@ public static class BattleResolver
         );
     }
 
+    // ResolveRespondedEnemyIntent = 正式结算已响应敌人意图
+    // 第一版只支持玩家攻击卡 vs 敌人攻击卡。
+    public static BattleResolveResult ResolveRespondedEnemyIntent(
+        BattleActionSlot actionSlot,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        if (actionSlot == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedEnemyIntent 失败：行动槽位为空");
+        }
+
+        if (enemyIntent == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedEnemyIntent 失败：敌人意图为空");
+        }
+
+        if (actionSlot.actor == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedEnemyIntent 失败：玩家行动者为空");
+        }
+
+        if (actionSlot.cardState == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedEnemyIntent 失败：玩家卡牌状态为空");
+        }
+
+        if (actionSlot.cardState.cardData == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedEnemyIntent 失败：玩家卡牌数据为空");
+        }
+
+        if (enemyIntent.enemy == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedEnemyIntent 失败：敌人为空");
+        }
+
+        if (enemyIntent.enemyCardState == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedEnemyIntent 失败：敌人卡牌状态为空");
+        }
+
+        if (enemyIntent.enemyCardState.cardData == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedEnemyIntent 失败：敌人卡牌数据为空");
+        }
+
+        if (enemyIntent.actualTargetCharacter == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedEnemyIntent 失败：实际目标角色为空");
+        }
+
+        CardTestData playerCard = actionSlot.cardState.cardData;
+        CardTestData enemyCard = enemyIntent.enemyCardState.cardData;
+
+        if (playerCard.cardType != CardType.Attack || enemyCard.cardType != CardType.Attack)
+        {
+            return CreateUnsupportedResolveResult(
+                "ResolveRespondedEnemyIntent 暂不支持该卡牌对抗类型：玩家 " +
+                playerCard.cardType +
+                " / 敌人 " +
+                enemyCard.cardType
+            );
+        }
+
+        if (IsInvalidPointRange(playerCard.minPoint, playerCard.maxPoint))
+        {
+            return CreateInvalidResolveResult(
+                "ResolveRespondedEnemyIntent 失败：玩家卡牌点数范围异常：" +
+                playerCard.minPoint +
+                "-" +
+                playerCard.maxPoint
+            );
+        }
+
+        if (IsInvalidPointRange(enemyCard.minPoint, enemyCard.maxPoint))
+        {
+            return CreateInvalidResolveResult(
+                "ResolveRespondedEnemyIntent 失败：敌人卡牌点数范围异常：" +
+                enemyCard.minPoint +
+                "-" +
+                enemyCard.maxPoint
+            );
+        }
+
+        return ResolveRespondedAttackVsAttack(actionSlot, enemyIntent);
+    }
+
+    // ResolveUnrespondedEnemyIntent = 正式结算无人响应敌人意图
+    // 第一版只处理敌人攻击命中 actualTarget，不触发玩家卡牌式事件链。
+    public static BattleResolveResult ResolveUnrespondedEnemyIntent(
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        if (enemyIntent == null)
+        {
+            return CreateInvalidResolveResult("ResolveUnrespondedEnemyIntent 失败：敌人意图为空");
+        }
+
+        if (enemyIntent.enemy == null)
+        {
+            return CreateInvalidResolveResult("ResolveUnrespondedEnemyIntent 失败：敌人为空");
+        }
+
+        if (enemyIntent.enemyCardState == null)
+        {
+            return CreateInvalidResolveResult("ResolveUnrespondedEnemyIntent 失败：敌人卡牌状态为空");
+        }
+
+        if (enemyIntent.enemyCardState.cardData == null)
+        {
+            return CreateInvalidResolveResult("ResolveUnrespondedEnemyIntent 失败：敌人卡牌数据为空");
+        }
+
+        if (enemyIntent.actualTargetCharacter == null)
+        {
+            return CreateInvalidResolveResult("ResolveUnrespondedEnemyIntent 失败：实际目标角色为空");
+        }
+
+        if (enemyIntent.actualTargetSlotIndex <= 0)
+        {
+            return CreateInvalidResolveResult(
+                "ResolveUnrespondedEnemyIntent 失败：实际目标槽位异常：" +
+                enemyIntent.actualTargetSlotIndex
+            );
+        }
+
+        CardTestData enemyCard = enemyIntent.enemyCardState.cardData;
+
+        if (enemyCard.cardType != CardType.Attack)
+        {
+            return CreateUnsupportedResolveResult(
+                "ResolveUnrespondedEnemyIntent 暂不支持非攻击敌人卡牌：" +
+                enemyCard.cardType
+            );
+        }
+
+        if (IsInvalidPointRange(enemyCard.minPoint, enemyCard.maxPoint))
+        {
+            return CreateInvalidResolveResult(
+                "ResolveUnrespondedEnemyIntent 失败：敌人卡牌点数范围异常：" +
+                enemyCard.minPoint +
+                "-" +
+                enemyCard.maxPoint
+            );
+        }
+
+        CharacterData enemyUnit = enemyIntent.enemy;
+        CharacterData target = enemyIntent.actualTargetCharacter;
+
+        int enemyAttackPoint = BattleCalculator.Rollpoint(enemyCard.minPoint, enemyCard.maxPoint);
+        int damageScaled = BattleCalculator.GetFinalDamageScaled(
+            enemyUnit,
+            target,
+            enemyCard,
+            enemyAttackPoint
+        );
+        int finalHpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+
+        target.TakeDamage(finalHpDamage);
+
+        BattleResolveResult result = new BattleResolveResult();
+        result.isSuccess = true;
+        result.shouldCompleteItem = true;
+        result.playerCardUsed = false;
+        result.enemyCardUsed = true;
+        result.hasDamage = finalHpDamage > 0;
+        result.damage = finalHpDamage;
+        result.damagedCharacter = target;
+        result.resultType = "UnrespondedEnemyAttack";
+        result.playerPoint = 0;
+        result.enemyPoint = enemyAttackPoint;
+        result.clashAttemptCount = 0;
+        result.isTieLimitReached = false;
+        result.triggeredEventChain = false;
+        result.message =
+            "ResolveUnrespondedEnemyIntent 完成：敌人意图" +
+            enemyIntent.intentOrder +
+            " 使用 " +
+            enemyCard.cardName +
+            " 命中 " +
+            target.characterName +
+            " 槽位" +
+            enemyIntent.actualTargetSlotIndex +
+            "，敌人攻击点数 " +
+            enemyAttackPoint +
+            "，造成伤害 " +
+            finalHpDamage +
+            "。第一版不触发事件链，不处理敌人卡牌 CD / UseCount";
+
+        Debug.Log(result.message);
+
+        return result;
+    }
+
 
     // ================================
     // 攻击 vs 攻击
@@ -170,6 +390,163 @@ public static class BattleResolver
         {
             Debug.Log("拼点平局，双方攻击抵消");
         }
+    }
+
+    static BattleResolveResult ResolveRespondedAttackVsAttack(
+        BattleActionSlot actionSlot,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        CharacterData playerUnit = actionSlot.actor;
+        BattleCardState playerCardState = actionSlot.cardState;
+        CharacterData enemyUnit = enemyIntent.enemy;
+        BattleCardState enemyCardState = enemyIntent.enemyCardState;
+        CharacterData actualTarget = enemyIntent.actualTargetCharacter;
+
+        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
+        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
+
+        int playerPoint = 0;
+        int enemyPoint = 0;
+
+        for (int attempt = 1; attempt <= MaxRespondedEnemyIntentClashAttempts; attempt++)
+        {
+            playerPoint = BattleCalculator.GetFinalClashPoint(playerUnit, playerCardState.cardData);
+            enemyPoint = BattleCalculator.GetFinalClashPoint(enemyUnit, enemyCardState.cardData);
+
+            if (playerPoint == enemyPoint)
+            {
+                Debug.Log(
+                    "ResolveRespondedEnemyIntent 第" +
+                    attempt +
+                    "次拼点平局：玩家点数 " +
+                    playerPoint +
+                    "，敌人点数 " +
+                    enemyPoint
+                );
+
+                continue;
+            }
+
+            bool isPlayerWin = playerPoint > enemyPoint;
+            CharacterData attacker = isPlayerWin ? playerUnit : enemyUnit;
+            CharacterData defender = isPlayerWin ? enemyUnit : actualTarget;
+            BattleCardState winnerCardState = isPlayerWin ? playerCardState : enemyCardState;
+            BattleCardState loserCardState = isPlayerWin ? enemyCardState : playerCardState;
+            CharacterData loser = isPlayerWin ? enemyUnit : playerUnit;
+            int winnerPoint = isPlayerWin ? playerPoint : enemyPoint;
+            int loserPoint = isPlayerWin ? enemyPoint : playerPoint;
+            string resultType = isPlayerWin ? "PlayerWin" : "EnemyWin";
+
+            TriggerBattleEvent(
+                BattleTiming.ClashWin,
+                attacker,
+                defender,
+                winnerCardState,
+                winnerPoint,
+                0,
+                false,
+                false,
+                ClashResult.Win
+            );
+
+            TriggerBattleEvent(
+                BattleTiming.ClashLose,
+                loser,
+                attacker,
+                loserCardState,
+                loserPoint,
+                0,
+                false,
+                false,
+                ClashResult.Lose
+            );
+
+            TriggerBattleEvent(
+                BattleTiming.Resolved,
+                attacker,
+                defender,
+                winnerCardState,
+                winnerPoint,
+                0,
+                false,
+                false,
+                ClashResult.Win
+            );
+
+            int damageScaled = BattleCalculator.GetFinalDamageScaled(
+                attacker,
+                defender,
+                winnerCardState.cardData,
+                winnerPoint
+            );
+            int hpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+
+            TriggerBattleEvent(
+                BattleTiming.Hit,
+                attacker,
+                defender,
+                winnerCardState,
+                winnerPoint,
+                hpDamage,
+                hpDamage > 0,
+                false,
+                ClashResult.Win
+            );
+
+            ApplyDamageAndTriggerEvents(attacker, defender, winnerCardState, hpDamage, winnerPoint);
+
+            BattleResolveResult result = new BattleResolveResult();
+            result.isSuccess = true;
+            result.shouldCompleteItem = true;
+            result.playerCardUsed = true;
+            result.enemyCardUsed = true;
+            result.hasDamage = hpDamage > 0;
+            result.damage = hpDamage;
+            result.damagedCharacter = hpDamage > 0 ? defender : null;
+            result.resultType = resultType;
+            result.playerPoint = playerPoint;
+            result.enemyPoint = enemyPoint;
+            result.clashAttemptCount = attempt;
+            result.isTieLimitReached = false;
+            result.triggeredEventChain = true;
+            result.message =
+                "ResolveRespondedEnemyIntent 完成：" +
+                resultType +
+                "，玩家点数 " +
+                playerPoint +
+                "，敌人点数 " +
+                enemyPoint +
+                "，造成伤害 " +
+                hpDamage;
+
+            Debug.Log(result.message);
+
+            return result;
+        }
+
+        BattleResolveResult tieLimitResult = new BattleResolveResult();
+        tieLimitResult.isSuccess = true;
+        tieLimitResult.shouldCompleteItem = true;
+        tieLimitResult.playerCardUsed = false;
+        tieLimitResult.enemyCardUsed = false;
+        tieLimitResult.hasDamage = false;
+        tieLimitResult.damage = 0;
+        tieLimitResult.damagedCharacter = null;
+        tieLimitResult.resultType = "TieLimit";
+        tieLimitResult.playerPoint = playerPoint;
+        tieLimitResult.enemyPoint = enemyPoint;
+        tieLimitResult.clashAttemptCount = MaxRespondedEnemyIntentClashAttempts;
+        tieLimitResult.isTieLimitReached = true;
+        tieLimitResult.triggeredEventChain = false;
+        tieLimitResult.message =
+            "ResolveRespondedEnemyIntent 连续拼点 " +
+            MaxRespondedEnemyIntentClashAttempts +
+            " 次仍未分出胜负，自动结束，双方不造成伤害，双方卡牌不算成功使用";
+
+        Debug.Log(tieLimitResult.message);
+
+        return tieLimitResult;
     }
 
 
@@ -411,5 +788,41 @@ public static class BattleResolver
         }
 
         return Random.Range(min, max + 1);
+    }
+
+    static bool IsInvalidPointRange(int minPoint, int maxPoint)
+    {
+        return minPoint < 0 || maxPoint < 0 || maxPoint < minPoint;
+    }
+
+    static BattleResolveResult CreateInvalidResolveResult(string message)
+    {
+        BattleResolveResult result = new BattleResolveResult();
+        result.isSuccess = false;
+        result.shouldCompleteItem = false;
+        result.playerCardUsed = false;
+        result.enemyCardUsed = false;
+        result.hasDamage = false;
+        result.damage = 0;
+        result.damagedCharacter = null;
+        result.resultType = "Invalid";
+        result.playerPoint = 0;
+        result.enemyPoint = 0;
+        result.clashAttemptCount = 0;
+        result.isTieLimitReached = false;
+        result.triggeredEventChain = false;
+        result.message = message;
+
+        Debug.LogWarning(message);
+
+        return result;
+    }
+
+    static BattleResolveResult CreateUnsupportedResolveResult(string message)
+    {
+        BattleResolveResult result = CreateInvalidResolveResult(message);
+        result.resultType = "Unsupported";
+
+        return result;
     }
 }

@@ -68,7 +68,8 @@ public class BattleActionSlot
     public void AssignResponse(
         CharacterData actor,
         BattleCardState cardState,
-        BattleEnemyIntent enemyIntent
+        BattleEnemyIntent enemyIntent,
+        bool rewriteActualTarget
     )
     {
         slotType = BattleActionSlotType.RespondToEnemyIntent;
@@ -80,9 +81,14 @@ public class BattleActionSlot
         if (enemyIntent != null)
         {
             // 响应敌人意图时，目标先记录为敌人。
-            // 同时把敌人意图的实际目标改成当前行动者和当前槽位。
             target = enemyIntent.enemy;
-            enemyIntent.SetActualTarget(actor, slotIndex);
+
+            // 高速介入时才改写敌人意图的实际目标。
+            // 低速原目标槽位响应只绑定敌人意图，不改写 actualTarget。
+            if (rewriteActualTarget)
+            {
+                enemyIntent.SetActualTarget(actor, slotIndex);
+            }
         }
         else
         {
