@@ -11,7 +11,7 @@ public static class BattleExecutionPlanExecutor
     public static void ExecuteExecutionPlan(BattleExecutionPlan plan)
     {
         Debug.Log("===== BattleExecutionPlan 正式执行开始 =====");
-        Debug.Log("提示：RespondedEnemyIntent / UnrespondedEnemyIntent 已交给 BattleResolver 正式入口处理");
+        Debug.Log("提示：RespondedEnemyIntent / UnrespondedEnemyIntent / FreeAction 已交给 BattleResolver 正式入口处理");
 
         if (plan == null || plan.executionItems == null || plan.executionItems.Count == 0)
         {
@@ -62,11 +62,15 @@ public static class BattleExecutionPlanExecutor
                 continue;
             }
 
-            // 自由行动：当前还没有在执行计划里正式结算。
+            // 自由行动：交给 BattleResolver 正式入口处理。
             if (item.executionType == BattleExecutionItemType.FreeAction)
             {
-                Debug.Log(item.order + ". FreeAction：暂未实现正式普通行动结算，本项保持未完成");
-                allItemsCompleted = false;
+                bool isCompleted = ExecuteFreeAction(item);
+
+                if (!isCompleted)
+                {
+                    allItemsCompleted = false;
+                }
             }
         }
 
@@ -217,6 +221,52 @@ public static class BattleExecutionPlanExecutor
         {
             item.actionSlot.MarkUsed();
             Debug.Log(item.order + ". RespondedEnemyIntent：玩家行动槽位已标记为已使用");
+        }
+
+        item.isCompleted = true;
+        return true;
+    }
+
+    // ExecuteFreeAction = 执行自由行动
+    // Executor 只负责分派和完成状态，正式结算交给 BattleResolver。
+    static bool ExecuteFreeAction(BattleExecutionItem item)
+    {
+        if (item == null)
+        {
+            Debug.LogWarning("执行 FreeAction 失败：item 为空");
+            return false;
+        }
+
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(item.actionSlot);
+
+        Debug.Log(
+            item.order +
+            ". FreeAction Resolver 结算结果\n" +
+            "   resultType：" + (result != null ? result.resultType : "无") + "\n" +
+            "   isSuccess：" + (result != null && result.isSuccess) + "\n" +
+            "   shouldCompleteItem：" + (result != null && result.shouldCompleteItem) + "\n" +
+            "   playerCardUsed：" + (result != null && result.playerCardUsed) + "\n" +
+            "   enemyCardUsed：" + (result != null && result.enemyCardUsed) + "\n" +
+            "   hasDamage：" + (result != null && result.hasDamage) + "\n" +
+            "   damage：" + (result != null ? result.damage : 0) + "\n" +
+            "   triggeredEventChain：" + (result != null && result.triggeredEventChain) + "\n" +
+            "   message：" + (result != null ? result.message : "BattleResolveResult 为空")
+        );
+
+        if (result == null || !result.isSuccess || !result.shouldCompleteItem)
+        {
+            Debug.LogWarning(
+                item.order +
+                ". FreeAction 未完成：Resolver 未返回可完成结果，Executor 不补做结算"
+            );
+
+            return false;
+        }
+
+        if (result.playerCardUsed && item.actionSlot != null)
+        {
+            item.actionSlot.MarkUsed();
+            Debug.Log(item.order + ". FreeAction：玩家行动槽位已标记为已使用");
         }
 
         item.isCompleted = true;

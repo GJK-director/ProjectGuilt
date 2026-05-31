@@ -5062,7 +5062,7 @@ BattleExecutionPlanExecutor.cs 当前边界：
 - 低速自由行动排在敌人攻击后。
 - 无人响应敌人意图按 `intentOrder` 处理。
 
-已通过测试：
+Unity 测试已通过：
 
 - `ActionSlotLowSpeedOriginalSlotResponseBasic`：低速原目标槽位响应成功，不改写 `actualTarget`。
 - `ActionSlotLowSpeedIllegalResponseFail`：低速非法响应失败，不绑定，不改写 `actualTarget`。
@@ -5324,3 +5324,595 @@ CD / UseCount / guiltGain 当前机制：
 - 回合结束统一清理槽位。
 - 敌人卡牌 Used / CD / UseCount。
 - UI 状态刷新。
+
+## 五十一、FreeAction 第一版接入设计审查记录
+
+当前 FreeAction 结构现状：
+
+- `BattleActionSlotType.FreeAction` 已存在。
+- `BattleExecutionItemType.FreeAction` 已存在。
+- `BattleActionSlot.AssignFreeAction(...)` 已能记录 `actor / cardState / target / slotType = FreeAction / enemyIntent = null / isUsed = false`。
+- `BattleActionSlotManager.AssignFreeAction(...)` 已能安排自由行动，并检查槽位、行动者、卡牌重复安排。
+- `CreateSpeedBasedExecutionPlan(...)` 已会把 FreeAction 加入执行计划。
+- `BattleExecutionPlanExecutor` 当前遇到 `FreeAction` 只打印暂未实现，并让该 item 保持未完成。
+
+FreeAction 当前排序规则：
+
+- `CreateSpeedBasedExecutionPlan(...)` 第一阶段会加入高速 FreeAction。
+- 第二阶段处理敌人意图。
+- 第三阶段加入低速 FreeAction。
+- `IsHighSpeedFreeActionSlot(...)` 当前判断为：`slotType == FreeAction`、`target != null`、`actor.GetCurrentSpeed() > target.GetCurrentSpeed()`。
+- 当前排序符合第一版规则：高速 FreeAction 在敌人意图前，低速 FreeAction 在敌人意图后。
+
+第一版支持范围建议：
+
+- 支持 Ability FreeAction。
+- 支持 Attack FreeAction，也就是偷刀攻击 `actionSlot.target`。
+- 暂不处理防御、闪避、复杂特殊卡、多目标、群体效果、槽位效果、目标重新选择。
+
+Resolver 正式入口建议：
+
+- 新增 public 入口：
+  - `BattleResolver.ResolveFreeAction(BattleActionSlot actionSlot)`
+- 不建议让 Executor 直接调用 `TestUseAbilitySinCard(...)`，因为这是测试命名方法，且返回 `void`，不利于 Executor 根据 `BattleResolveResult` 判断是否完成、是否 MarkUsed。
+- 建议 `ResolveFreeAction(...)` 内部根据卡牌类型分派到 private 方法，例如 Ability / Attack 分支。
+- Executor 未来只认识一个 FreeAction Resolver 入口。
+
+Ability FreeAction 规则建议：
+
+- 不 roll 点。
+- 不造成伤害。
+- 触发 `OnPlay`。
+- 触发 `Resolved`。
+- 由 `Resolved` 带动 UseCount / guiltGain / CD。
+- 成功后返回 `playerCardUsed = true`、`shouldCompleteItem = true`。
+- Executor 根据结果调用 `slot.MarkUsed()`。
+
+Attack FreeAction 规则建议：
+
+- 玩家使用攻击卡直接攻击 `actionSlot.target`。
+- 不与敌人拼点。
+- roll 玩家攻击点数。
+- 走 `BattleCalculator.GetFinalDamageScaled(...)` 和 `ConvertScaledDamageToHPDamage(...)`。
+- 正常触发事件链。
+- 成功后返回 `playerCardUsed = true`、`shouldCompleteItem = true`。
+- Executor 根据结果调用 `slot.MarkUsed()`。
+- `enemyPoint = 0`，`clashAttemptCount = 0`。
+
+`BattleResolveResult` 返回建议：
+
+- Ability FreeAction：
+  - `resultType = "FreeAbility"`
+  - `isSuccess = true`
+  - `shouldCompleteItem = true`
+  - `playerCardUsed = true`
+  - `enemyCardUsed = false`
+  - `hasDamage = false`
+  - `damage = 0`
+  - `damagedCharacter = null`
+  - `triggeredEventChain = true`
+- Attack FreeAction：
+  - `resultType = "FreeAttack"`
+  - `isSuccess = true`
+  - `shouldCompleteItem = true`
+  - `playerCardUsed = true`
+  - `enemyCardUsed = false`
+  - `hasDamage = damage > 0`
+  - `damage = finalHpDamage`
+  - `damagedCharacter = actionSlot.target`
+  - `triggeredEventChain = true`
+- Invalid / Unsupported：
+  - `isSuccess = false`
+  - `shouldCompleteItem = false`
+  - `playerCardUsed = false`
+  - `triggeredEventChain = false`
+
+职责边界：
+
+- Executor：
+  - 遍历 plan。
+  - 遇到 FreeAction 时调用 `BattleResolver.ResolveFreeAction(item.actionSlot)`。
+  - 根据 `result.isSuccess && result.shouldCompleteItem` 设置 `item.isCompleted = true`。
+  - 根据 `result.playerCardUsed && item.actionSlot != null` 调用 `item.actionSlot.MarkUsed()`。
+  - 不 roll 点、不算伤害、不触发事件。
+- Resolver：
+  - 校验 FreeAction 数据。
+  - 判断 Attack / Ability。
+  - 执行正式结算。
+  - 返回 `BattleResolveResult`。
+- BattleCardManager：
+  - 继续通过 `Resolved` 事件处理 CD / UseCount / guiltGain。
+
+最小安全接入步骤：
+
+- 第一步：新增 `BattleResolver.ResolveFreeAction(BattleActionSlot actionSlot)`，先只用 `CardLoadTest` 直接测试 Resolver。
+- 第二步：先测试 Ability FreeAction。
+- 第三步：再测试 Attack FreeAction。
+- 第四步：Resolver 入口稳定后，再改 Executor 的 FreeAction 分支。
+- 第五步：回归高速 FreeAction / 低速 FreeAction 的执行计划顺序和实际执行。
+
+暂时不建议处理：
+
+- 防御 / 闪避 FreeAction。
+- 群体目标 / 多目标选择。
+- 目标为空时自动选敌人。
+- 敌人 FreeAction。
+- FreeAction 与敌人意图的额外打断规则。
+- 槽位 Buff / 复杂 Buff。
+- UI 刷新。
+- 动画。
+- 新的 CD / UseCount 触发路径。
+- 直接在 Executor 里写伤害逻辑。
+
+## 五十二、ResolveFreeAction Ability 第一版直接测试通过
+
+当前完成内容：
+
+- `BattleResolver` 已新增正式入口：
+  - `ResolveFreeAction(BattleActionSlot actionSlot)`
+- 第一版 `ResolveFreeAction(...)` 只支持 `Ability FreeAction`。
+- 本次没有修改 `BattleExecutionPlanExecutor.cs`。
+- 本次没有将 FreeAction 接入 Executor。
+- 本次没有处理 Attack FreeAction。
+- 本次没有处理 MarkUsed。
+- 本次没有修改 JSON。
+
+Ability FreeAction 当前规则：
+
+- 不进入拼点。
+- 不 roll 点。
+- 不造成伤害。
+- 触发 `BattleTiming.OnPlay`。
+- 触发 `BattleTiming.Resolved`。
+- `Resolved` 继续交给现有事件链处理 UseCount / guiltGain / CD。
+- `ResolveFreeAction(...)` 不手动修改 UseCount / guiltGain。
+- 如果 `actionSlot.target == null`，当前最小安全方案是使用 actor 自己作为 target。
+
+`BattleResolveResult` 返回结果：
+
+- `resultType = FreeAbility`
+- `isSuccess = true`
+- `shouldCompleteItem = true`
+- `playerCardUsed = true`
+- `enemyCardUsed = false`
+- `hasDamage = false`
+- `damage = 0`
+- `triggeredEventChain = true`
+
+已通过测试：
+
+- 新增测试模式：
+  - `BattleResolverResolveFreeAbilityBasic`
+- 测试直接调用：
+  - `BattleResolver.ResolveFreeAction(actionSlot)`
+- 不生成 ExecutionPlan。
+- 不调用 Executor。
+- 测试结果：
+  - `Ability UseCount：0 / 2 → 1 / 2`
+  - `allyA 负罪感：0 → 2`
+  - `actionSlot.isUsed` 保持 `False`
+  - 所有预期判断均为 `True`
+
+阶段意义：
+
+- FreeAction 的 Resolver 正式入口已经开始建立。
+- Ability FreeAction 已能脱离旧测试命名入口，走正式 `ResolveFreeAction(...)`。
+- UseCount / guiltGain 继续保持事件链驱动。
+- `MarkUsed()` 仍然留给 Executor 未来根据 `playerCardUsed` 处理。
+
+当前仍未处理：
+
+- Executor 接入 FreeAction。
+- FreeAction 成功后由 Executor 调用 `slot.MarkUsed()`。
+- Attack FreeAction / 偷刀。
+- 防御 / 闪避 FreeAction。
+- 多目标 / 群体目标。
+- UI 状态刷新。
+
+## 五十三、FreeAction Ability 第一版 Executor 接入通过
+
+当前完成内容：
+
+- `BattleExecutionPlanExecutor` 的 `FreeAction` 分支已接入。
+- `FreeAction` 分支现在会调用私有方法：
+  - `ExecuteFreeAction(BattleExecutionItem item)`
+- `ExecuteFreeAction(...)` 内部调用：
+  - `BattleResolver.ResolveFreeAction(item.actionSlot)`
+- Executor 不判断 Ability / Attack。
+- Executor 不直接处理伤害、UseCount、guiltGain。
+- Executor 只负责：
+  - 调用 Resolver。
+  - 读取 `BattleResolveResult`。
+  - 根据 `result.isSuccess && result.shouldCompleteItem` 标记 `item.isCompleted`。
+  - 根据 `result.playerCardUsed && item.actionSlot != null` 调用 `item.actionSlot.MarkUsed()`。
+
+当前支持范围：
+
+- 第一版只验证 `Ability FreeAction`。
+- `Attack FreeAction / 偷刀` 暂未处理。
+- 防御 / 闪避 / 多目标 / UI / 动画暂未处理。
+- 没有修改 `BattleResolver.cs`。
+- 没有修改 JSON。
+- 没有新增 CD / UseCount / guiltGain 触发路径，仍走 `Resolved` 事件链。
+
+已通过测试：
+
+- 新增测试模式：
+  - `ActionSlotExecutionPlanExecuteFreeAbilityBasic`
+- 测试流程：
+  - 创建 Ability FreeAction 槽位。
+  - 生成只包含 FreeAction 的 `BattleExecutionPlan`。
+  - 调用 `BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan)`。
+  - Executor 调用 `BattleResolver.ResolveFreeAction(...)`。
+- 测试结果：
+  - `resultType = FreeAbility`
+  - `isSuccess = true`
+  - `shouldCompleteItem = true`
+  - `playerCardUsed = true`
+  - `enemyCardUsed = false`
+  - `hasDamage = false`
+  - `damage = 0`
+  - `triggeredEventChain = true`
+  - `Ability UseCount：0 / 2 → 1 / 2`
+  - `allyA 负罪感：0 → 2`
+  - `actionSlot.isUsed：False → True`
+  - `ExecutionPlan.isCompleted = true`
+
+阶段意义：
+
+- `FreeAction` 已经开始进入正式 ExecutionPlan 执行路径。
+- `Ability FreeAction` 已完成从 Resolver 直接测试到 Executor 接入测试的闭环。
+- Executor 的定位继续保持为“调度员”：
+  - 不写 Ability 具体逻辑。
+  - 不判断卡牌类型。
+  - 不手动处理 UseCount / guiltGain。
+- Resolver 负责正式结算，BattleCardManager 继续通过 `Resolved` 事件处理卡牌消耗与负罪感。
+
+当前仍未处理：
+
+- Attack FreeAction / 偷刀。
+- FreeAction 的速度混合回归测试。
+- 防御 / 闪避。
+- 回合结束清理槽位。
+- UI 状态刷新。
+- 多目标 / 群体目标。
+- 动画表现。
+
+## 五十四、FreeAction 速度排序边界记录
+
+当前 FreeAction 速度排序现状：
+
+- `CreateSpeedBasedExecutionPlan(...)` 当前通过 `IsHighSpeedFreeActionSlot(...)` 判断高速自由行动。
+- 当前核心判断是：
+  - `slot.actor.GetCurrentSpeed() > slot.target.GetCurrentSpeed()`
+- 也就是说，当前 `slot.target` 同时承担了两个语义：
+  - 卡牌效果目标。
+  - 速度比较目标。
+
+Attack FreeAction / 偷刀：
+
+- 当前结构对 Attack FreeAction 是可用的。
+- 例如：
+  - `actor = allyA`
+  - `target = enemy`
+  - 如果 `allyA speed > enemy speed`
+- 当前排序会把该 FreeAction 放到敌人意图前。
+- 这符合第一版规则：
+  - 想在敌人攻击前偷刀，必须速度大于敌人。
+
+Ability FreeAction：
+
+- Ability self target 当前存在已知边界。
+- 例如：
+  - `actor = allyA`
+  - `target = allyA`
+- 当前速度判断会变成：
+  - `allyA speed > allyA speed`
+- 结果永远为 false。
+- 因此自我 Buff 类 Ability FreeAction 当前会默认进入低速 FreeAction 阶段。
+- 如果当前计划里有敌人意图，它会排在敌人意图后面。
+
+当前判断：
+
+- 这不是代码 bug，而是规则边界尚未拆清楚。
+- Ability 的效果目标和速度参考目标不一定是同一个对象。
+- 自我 Buff 的效果目标是自己，但它是否能在敌人前生效，未来可能应该比较角色与敌人的速度，而不是自己与自己比较。
+
+第一版采用方案：
+
+- 当前先采用方案 D：
+  - 第一版暂时只让 Attack FreeAction 参与高速 / 低速排序。
+  - Ability FreeAction 暂时保持现状，默认按当前规则处理。
+  - 等 UI 原型和 Ability 时序需求更清楚后，再单独设计 Ability 的速度参考规则。
+- 当前不引入 `speedReferenceTarget / timingTarget`。
+- 当前不修改 `CreateSpeedBasedExecutionPlan(...)`。
+
+采用该方案的原因：
+
+- 不破坏已经通过的 Ability FreeAction 测试。
+- 不提前引入多敌人时“Ability 和谁比速度”的问题。
+- 不为 self Buff 过早增加新字段。
+- 可以先继续推进 Attack FreeAction / 偷刀。
+
+后续路线：
+
+- 下一步实现 `ResolveFreeAction(...)` 的 Attack 分支。
+- 先只直接测试 Resolver。
+- 再让 Executor 接入 Attack FreeAction。
+- 再补高速 / 低速 Attack FreeAction 混合执行测试。
+- Ability FreeAction 的速度参考规则等 UI 交互和战斗时序更清楚后再设计。
+
+## 五十五、ResolveFreeAction Attack 第一版直接测试通过
+
+当前完成内容：
+
+- `BattleResolver.ResolveFreeAction(...)` 已新增 `Attack FreeAction` 分支。
+- `ResolveFreeAction(...)` 当前会分派到：
+  - `ResolveFreeAbilityAction(...)`
+  - `ResolveFreeAttackAction(...)`
+- 本次没有修改 `BattleExecutionPlanExecutor.cs`。
+- 本次没有接入 Executor。
+- 本次没有修改速度排序。
+- 本次没有修改 JSON。
+
+Attack FreeAction 当前规则：
+
+- 玩家使用攻击卡直接攻击 `actionSlot.target`。
+- 不进入拼点。
+- 不读取敌人卡牌。
+- 不比较敌人点数。
+- 不触发 `ClashWin / ClashLose`。
+- roll 玩家攻击点数。
+- 使用 `BattleCalculator.GetFinalDamageScaled(...)`。
+- 使用 `BattleCalculator.ConvertScaledDamageToHPDamage(...)`。
+- 对 `actionSlot.target` 造成伤害。
+- 触发 `BeforeUse / Resolved / Hit`。
+- 通过 `ApplyDamageAndTriggerEvents(...)` 触发 `AfterDamage / AfterKill`。
+- 不手动修改 UseCount / guiltGain，仍由 `Resolved` 事件链处理。
+
+`BattleResolveResult` 返回结果：
+
+- `resultType = FreeAttack`
+- `isSuccess = true`
+- `shouldCompleteItem = true`
+- `playerCardUsed = true`
+- `enemyCardUsed = false`
+- `hasDamage = true`
+- `damage = 20`
+- `damagedCharacter = enemy`
+- `playerPoint = 10`
+- `enemyPoint = 0`
+- `clashAttemptCount = 0`
+- `triggeredEventChain = true`
+
+已通过测试：
+
+- 新增测试模式：
+  - `BattleResolverResolveFreeAttackBasic`
+- 测试直接调用：
+  - `BattleResolver.ResolveFreeAction(actionSlot)`
+- 不生成 ExecutionPlan。
+- 不调用 Executor。
+- 测试结果：
+  - 敌人 HP：`999 → 979`
+  - allyA HP：`30 → 30`
+  - Attack UseCount：`0 / 3 → 1 / 3`
+  - allyA 负罪感：`0 → 2`
+  - `actionSlot.isUsed` 保持 `False`
+  - 所有预期判断均为 `True`
+
+阶段意义：
+
+- `FreeAction` 的 Resolver 正式入口已经同时支持 Ability 与 Attack。
+- Attack FreeAction / 偷刀已经在 Resolver 层跑通。
+- 伤害、事件链、UseCount、负罪感仍保持由 Resolver / BattleEventProcessor / BattleCardManager 分工处理。
+- `MarkUsed()` 仍然留给 Executor 未来根据 `playerCardUsed` 处理。
+
+当前仍未处理：
+
+- Executor 接入 Attack FreeAction。
+- Attack FreeAction 成功后由 Executor 调用 `slot.MarkUsed()`。
+- 高速 / 低速 Attack FreeAction 混合执行测试。
+- 防御 / 闪避。
+- 回合结束清理槽位。
+- UI 状态刷新。
+
+## 五十六、FreeAction Attack 第一版 Executor 接入通过
+
+当前完成内容：
+
+- `Attack FreeAction / 偷刀` 已通过 `BattleExecutionPlanExecutor` 正式执行测试。
+- 测试模式：
+  - `ActionSlotExecutionPlanExecuteFreeAttackBasic`
+- 测试生成只包含 `Attack FreeAction` 的 `BattleExecutionPlan`。
+- Executor 调用：
+  - `BattleResolver.ResolveFreeAction(item.actionSlot)`
+- Resolver 进入：
+  - `ResolveFreeAttackAction(...)`
+- Executor 根据 `BattleResolveResult` 标记：
+  - `item.isCompleted = true`
+  - `item.actionSlot.MarkUsed()`
+
+测试结果：
+
+- `resultType = FreeAttack`
+- `isSuccess = true`
+- `shouldCompleteItem = true`
+- `playerCardUsed = true`
+- `enemyCardUsed = false`
+- `hasDamage = true`
+- `damage = 20`
+- `triggeredEventChain = true`
+- 敌人 HP：`999 → 979`
+- allyA HP：`30 → 30`
+- Attack UseCount：`0 / 3 → 1 / 3`
+- allyA 负罪感：`0 → 2`
+- `actionSlot.isUsed：False → True`
+- `ExecutionPlan.isCompleted = true`
+
+当前规则确认：
+
+- Attack FreeAction 不进入拼点。
+- 不读取敌人卡。
+- 不比较敌人点数。
+- 不触发 `ClashWin / ClashLose`。
+- 触发 `BeforeUse / Resolved / Hit / AfterDamage / AfterKill`。
+- UseCount / guiltGain 仍通过 `Resolved` 事件链处理。
+- `MarkUsed()` 仍由 Executor 根据 `playerCardUsed` 处理。
+
+阶段意义：
+
+- FreeAction 当前已经支持 Ability 与 Attack 两条第一版执行路径。
+- Ability FreeAction 已完成 Resolver 直接测试与 Executor 接入测试。
+- Attack FreeAction 已完成 Resolver 直接测试与 Executor 接入测试。
+- 这一步为后续“偷刀”和简易 UI 战斗操作打下基础。
+
+注意事项：
+
+- 当前 `PrintExecutionPlan(...)` 和 `PrintExecutionPlanStepPreview(...)` 中的 FreeAction 文案仍可能显示“暂未实现”或“未来将处理普通行动 / 偷刀”。
+- 这是旧提示文案，不影响当前正式执行逻辑。
+- 后续可单独小范围更新打印文案。
+
+当前仍未处理：
+
+- 高速 / 低速 Attack FreeAction 与敌人意图混合执行测试。
+- Ability FreeAction 的速度参考规则。
+- 防御 / 闪避。
+- 回合结束清理槽位。
+- UI 状态刷新。
+- 多目标 / 群体目标。
+- 动画表现。
+
+## 五十七、高速 Attack FreeAction 混合执行测试通过
+
+当前完成内容：
+
+- 新增测试模式：
+  - `ActionSlotExecutionPlanExecuteHighSpeedFreeAttackMixedBasic`
+- 该测试验证：
+  - 高速 `Attack FreeAction / 偷刀`
+  - 与无人响应敌人意图混合执行时
+  - 高速偷刀会排在敌人意图前执行
+
+测试条件：
+
+- allyA 当前速度：20
+- enemy 当前速度：8
+- allyA 速度大于 enemy
+- allyA 槽位 1 安排 `Attack FreeAction`
+- target = enemy
+- 敌人意图 1 攻击 allyB 槽位 1
+- 敌人意图无人响应
+
+执行计划顺序：
+
+- 第 1 项：`FreeAction`
+- 第 2 项：`UnrespondedEnemyIntent`
+- 该顺序符合第一版规则：
+  - 速度高于敌人时，可以在敌人攻击前偷刀。
+
+实际执行结果：
+
+- `FreeAction` 先执行：
+  - Resolver 返回 `FreeAttack`
+  - enemy HP：`999 → 979`
+  - allyA Attack UseCount：`0 / 3 → 1 / 3`
+  - allyA 负罪感：`0 → 2`
+  - allyA actionSlot.isUsed：`False → True`
+- `UnrespondedEnemyIntent` 后执行：
+  - allyB HP：`30 → 23`
+  - 敌人意图完成
+- 最终：
+  - `ExecutionPlan.isCompleted = true`
+  - 所有 item 均完成
+  - 所有预期判断均为 `True`
+
+阶段意义：
+
+- 验证了 `CreateSpeedBasedExecutionPlan(...)` 对高速 Attack FreeAction 的排序有效。
+- 验证了 FreeAction 与敌人意图可以混合执行。
+- 验证了“高速偷刀先于敌人攻击”这条核心战斗规则。
+- 这一步为后续简易 UI 中“玩家选择不响应敌人，改为高速偷刀”打下基础。
+
+注意事项：
+
+- 当前 `PrintExecutionPlan(...)` / `PrintExecutionPlanStepPreview(...)` 中 FreeAction 仍有旧文案，例如“暂未实现”或“未来将处理普通行动 / 偷刀”。
+- 这是打印提示未更新，不影响正式执行逻辑。
+- 后续可单独小范围修正文案。
+
+当前仍未处理：
+
+- 低速 Attack FreeAction 混合执行测试。
+- Ability FreeAction 的速度参考规则。
+- 防御 / 闪避。
+- 回合结束清理槽位。
+- UI 状态刷新。
+- 多目标 / 群体目标。
+- 动画表现。
+
+## 五十八、低速 Attack FreeAction 混合执行测试通过
+
+当前完成内容：
+
+- 新增测试模式：
+  - `ActionSlotExecutionPlanExecuteLowSpeedFreeAttackMixedBasic`
+- 该测试验证：
+  - 低速 `Attack FreeAction / 偷刀`
+  - 与无人响应敌人意图混合执行时
+  - 低速偷刀会排在敌人意图后执行
+
+测试条件：
+
+- allyA 当前速度：3
+- enemy 当前速度：8
+- allyA 速度低于 enemy
+- allyA 槽位 1 安排 `Attack FreeAction`
+- target = enemy
+- 敌人意图 1 攻击 allyB 槽位 1
+- 敌人意图无人响应
+
+执行计划顺序：
+
+- 第 1 项：`UnrespondedEnemyIntent`
+- 第 2 项：`FreeAction`
+- 该顺序符合第一版规则：
+  - 速度低于敌人时，偷刀不能抢在敌人攻击前。
+
+实际执行结果：
+
+- `UnrespondedEnemyIntent` 先执行：
+  - allyB HP：`30 → 24`
+  - 敌人意图完成
+- `FreeAction` 后执行：
+  - Resolver 返回 `FreeAttack`
+  - enemy HP：`999 → 979`
+  - allyA Attack UseCount：`0 / 3 → 1 / 3`
+  - allyA 负罪感：`0 → 2`
+  - allyA actionSlot.isUsed：`False → True`
+- 最终：
+  - `ExecutionPlan.isCompleted = true`
+  - 所有 item 均完成
+  - 所有预期判断均为 `True`
+
+阶段意义：
+
+- 验证了 `CreateSpeedBasedExecutionPlan(...)` 对低速 Attack FreeAction 的排序有效。
+- 与高速测试形成对照：
+  - 高速偷刀：`FreeAction → UnrespondedEnemyIntent`
+  - 低速偷刀：`UnrespondedEnemyIntent → FreeAction`
+- 这一步确认了“想在敌人攻击前偷刀，必须速度大于敌人”的第一版核心规则。
+
+注意事项：
+
+- 当前 `PrintExecutionPlan(...)` / `PrintExecutionPlanStepPreview(...)` 中 FreeAction 仍有旧文案，例如“暂未实现”或“未来将处理普通行动 / 偷刀”。
+- 这是打印提示未更新，不影响正式执行逻辑。
+- 后续可单独小范围修正文案。
+
+当前仍未处理：
+
+- Ability FreeAction 的速度参考规则。
+- 防御 / 闪避。
+- 回合结束清理槽位。
+- UI 状态刷新。
+- 多目标 / 群体目标。
+- 动画表现。

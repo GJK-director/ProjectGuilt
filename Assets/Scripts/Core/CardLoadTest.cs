@@ -8,6 +8,8 @@ public enum BattleTestMode
     AbilityUseCount,
     BattleResolverResolveRespondedAttackVsAttackBasic,
     BattleResolverResolveUnrespondedEnemyIntentBasic,
+    BattleResolverResolveFreeAbilityBasic,
+    BattleResolverResolveFreeAttackBasic,
     ActionSlotLowSpeedOriginalSlotResponseBasic,
     ActionSlotLowSpeedIllegalResponseFail,
     ActionSlotResponseOverwriteBasic,
@@ -15,6 +17,10 @@ public enum BattleTestMode
     ActionSlotExecutionPlanSpeedLowResponseOrderBasic,
     ActionSlotExecutionPlanSpeedHighFreeActionBasic,
     ActionSlotExecutionPlanSpeedLowFreeActionBasic,
+    ActionSlotExecutionPlanExecuteFreeAbilityBasic,
+    ActionSlotExecutionPlanExecuteFreeAttackBasic,
+    ActionSlotExecutionPlanExecuteHighSpeedFreeAttackMixedBasic,
+    ActionSlotExecutionPlanExecuteLowSpeedFreeAttackMixedBasic,
     ActionSlotExecutionPlanExecuteUnrespondedBasic,
     ActionSlotExecutionPlanExecuteRespondedBasic,
     ActionSlotExecutionPlanExecuteRespondedEnemyWin,
@@ -96,6 +102,18 @@ public class CardLoadTest : MonoBehaviour
             return;
         }
 
+        if (testMode == BattleTestMode.BattleResolverResolveFreeAbilityBasic)
+        {
+            RunBattleResolverResolveFreeAbilityBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleResolverResolveFreeAttackBasic)
+        {
+            RunBattleResolverResolveFreeAttackBasicTestSequence();
+            return;
+        }
+
         if (testMode == BattleTestMode.ActionSlotLowSpeedOriginalSlotResponseBasic)
         {
             RunActionSlotLowSpeedOriginalSlotResponseBasicTestSequence();
@@ -135,6 +153,30 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.ActionSlotExecutionPlanSpeedLowFreeActionBasic)
         {
             RunActionSlotExecutionPlanSpeedLowFreeActionBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteFreeAbilityBasic)
+        {
+            RunActionSlotExecutionPlanExecuteFreeAbilityBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteFreeAttackBasic)
+        {
+            RunActionSlotExecutionPlanExecuteFreeAttackBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteHighSpeedFreeAttackMixedBasic)
+        {
+            RunActionSlotExecutionPlanExecuteHighSpeedFreeAttackMixedBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteLowSpeedFreeAttackMixedBasic)
+        {
+            RunActionSlotExecutionPlanExecuteLowSpeedFreeAttackMixedBasicTestSequence();
             return;
         }
 
@@ -292,6 +334,407 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("敌人 HP 是否保持不变：" + (enemy.currentHP == enemyHPBefore));
     }
 
+    // RunBattleResolverResolveFreeAbilityBasicTestSequence = 测试 BattleResolver 正式 FreeAction Ability 入口
+    void RunBattleResolverResolveFreeAbilityBasicTestSequence()
+    {
+        Debug.Log("===== BattleResolver ResolveFreeAction Ability 测试开始 =====");
+        Debug.Log("本测试直接调用 BattleResolver.ResolveFreeAction(...)，不生成 ExecutionPlan，不调用 Executor");
+
+        StartTurn();
+
+        if (allyAAbilitySinCardState == null)
+        {
+            Debug.LogWarning("ResolveFreeAction Ability 测试失败：allyAAbilitySinCardState 为空");
+            return;
+        }
+
+        BattleActionSlot actionSlot = new BattleActionSlot(1);
+        actionSlot.AssignFreeAction(
+            allyA,
+            allyAAbilitySinCardState,
+            allyA
+        );
+
+        int useCountBefore = allyAAbilitySinCardState.currentUseCount;
+        int guiltBefore = allyA.currentGuilt;
+
+        Debug.Log("执行前 Ability UseCount：" + useCountBefore + " / " + allyAAbilitySinCardState.maxUseCount);
+        Debug.Log("执行前 allyA 负罪感：" + guiltBefore);
+        Debug.Log("执行前 actionSlot.isUsed：" + actionSlot.isUsed);
+        allyA.PrintBuffs();
+        allyA.PrintPendingBuffs();
+
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(actionSlot);
+
+        PrintBattleResolveResult(result);
+
+        Debug.Log("执行后 Ability UseCount：" + allyAAbilitySinCardState.currentUseCount + " / " + allyAAbilitySinCardState.maxUseCount);
+        Debug.Log("执行后 allyA 负罪感：" + allyA.currentGuilt);
+        Debug.Log("执行后 actionSlot.isUsed：" + actionSlot.isUsed);
+        allyA.PrintBuffs();
+        allyA.PrintPendingBuffs();
+
+        Debug.Log("预期 resultType：FreeAbility，实际是否符合：" + (result != null && result.resultType == "FreeAbility"));
+        Debug.Log("预期 isSuccess：True，实际是否符合：" + (result != null && result.isSuccess));
+        Debug.Log("预期 shouldCompleteItem：True，实际是否符合：" + (result != null && result.shouldCompleteItem));
+        Debug.Log("预期 playerCardUsed：True，实际是否符合：" + (result != null && result.playerCardUsed));
+        Debug.Log("预期 enemyCardUsed：False，实际是否符合：" + (result != null && !result.enemyCardUsed));
+        Debug.Log("预期 hasDamage：False，实际是否符合：" + (result != null && !result.hasDamage));
+        Debug.Log("预期 triggeredEventChain：True，实际是否符合：" + (result != null && result.triggeredEventChain));
+        Debug.Log("Ability UseCount 是否增加：" + (allyAAbilitySinCardState.currentUseCount > useCountBefore));
+        Debug.Log("allyA 负罪感是否增加：" + (allyA.currentGuilt > guiltBefore));
+        Debug.Log("actionSlot.isUsed 是否仍为 False：" + (!actionSlot.isUsed));
+    }
+
+    // RunBattleResolverResolveFreeAttackBasicTestSequence = 测试 BattleResolver 正式 FreeAction Attack 入口
+    void RunBattleResolverResolveFreeAttackBasicTestSequence()
+    {
+        Debug.Log("===== BattleResolver ResolveFreeAction Attack 测试开始 =====");
+        Debug.Log("本测试直接调用 BattleResolver.ResolveFreeAction(...)，不生成 ExecutionPlan，不调用 Executor");
+
+        StartTurn();
+
+        if (allyAAttackCardState == null)
+        {
+            Debug.LogWarning("ResolveFreeAction Attack 测试失败：allyAAttackCardState 为空");
+            return;
+        }
+
+        BattleActionSlot actionSlot = new BattleActionSlot(1);
+        actionSlot.AssignFreeAction(
+            allyA,
+            allyAAttackCardState,
+            enemy
+        );
+
+        int enemyHPBefore = enemy.currentHP;
+        int allyAHPBefore = allyA.currentHP;
+        int useCountBefore = allyAAttackCardState.currentUseCount;
+        int cooldownBefore = allyAAttackCardState.currentCooldown;
+        int guiltBefore = allyA.currentGuilt;
+
+        Debug.Log("执行前 敌人 HP：" + enemyHPBefore + " / " + enemy.maxHP);
+        Debug.Log("执行前 allyA HP：" + allyAHPBefore + " / " + allyA.maxHP);
+        Debug.Log("执行前 Attack UseCount：" + useCountBefore + " / " + allyAAttackCardState.maxUseCount);
+        Debug.Log("执行前 Attack CD：" + cooldownBefore);
+        Debug.Log("执行前 allyA 负罪感：" + guiltBefore);
+        Debug.Log("执行前 actionSlot.isUsed：" + actionSlot.isUsed);
+
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(actionSlot);
+
+        PrintBattleResolveResult(result);
+
+        Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+        Debug.Log("执行后 allyA HP：" + allyA.currentHP + " / " + allyA.maxHP);
+        Debug.Log("执行后 Attack UseCount：" + allyAAttackCardState.currentUseCount + " / " + allyAAttackCardState.maxUseCount);
+        Debug.Log("执行后 Attack CD：" + allyAAttackCardState.currentCooldown);
+        Debug.Log("执行后 allyA 负罪感：" + allyA.currentGuilt);
+        Debug.Log("执行后 actionSlot.isUsed：" + actionSlot.isUsed);
+
+        Debug.Log("预期 resultType：FreeAttack，实际是否符合：" + (result != null && result.resultType == "FreeAttack"));
+        Debug.Log("预期 isSuccess：True，实际是否符合：" + (result != null && result.isSuccess));
+        Debug.Log("预期 shouldCompleteItem：True，实际是否符合：" + (result != null && result.shouldCompleteItem));
+        Debug.Log("预期 playerCardUsed：True，实际是否符合：" + (result != null && result.playerCardUsed));
+        Debug.Log("预期 enemyCardUsed：False，实际是否符合：" + (result != null && !result.enemyCardUsed));
+        Debug.Log("预期 hasDamage：True，实际是否符合：" + (result != null && result.hasDamage));
+        Debug.Log("预期 damage > 0，实际是否符合：" + (result != null && result.damage > 0));
+        Debug.Log("预期 damagedCharacter 为 enemy，实际是否符合：" + (result != null && object.ReferenceEquals(result.damagedCharacter, enemy)));
+        Debug.Log("预期 playerPoint > 0，实际是否符合：" + (result != null && result.playerPoint > 0));
+        Debug.Log("预期 enemyPoint = 0，实际是否符合：" + (result != null && result.enemyPoint == 0));
+        Debug.Log("预期 clashAttemptCount = 0，实际是否符合：" + (result != null && result.clashAttemptCount == 0));
+        Debug.Log("预期 triggeredEventChain：True，实际是否符合：" + (result != null && result.triggeredEventChain));
+        Debug.Log("敌人 HP 是否下降：" + (enemy.currentHP < enemyHPBefore));
+        Debug.Log("allyA HP 是否保持不变：" + (allyA.currentHP == allyAHPBefore));
+        Debug.Log("actionSlot.isUsed 是否仍为 False：" + (!actionSlot.isUsed));
+    }
+
+    // RunActionSlotExecutionPlanExecuteFreeAbilityBasicTestSequence = 执行 FreeAction Ability 基础测试
+    void RunActionSlotExecutionPlanExecuteFreeAbilityBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan FreeAction Ability 执行测试开始 =====");
+        Debug.Log("本测试生成只包含 Ability FreeAction 的 ExecutionPlan，并通过 Executor 调用 BattleResolver.ResolveFreeAction(...)");
+
+        StartTurn();
+
+        if (allyAAbilitySinCardState == null)
+        {
+            Debug.LogWarning("FreeAction Ability 执行测试失败：allyAAbilitySinCardState 为空");
+            return;
+        }
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(1);
+        List<BattleEnemyIntent> emptyIntentQueue = new List<BattleEnemyIntent>();
+
+        BattleActionSlotManager.AssignFreeAction(
+            actionSlots,
+            1,
+            allyA,
+            allyAAbilitySinCardState,
+            allyA
+        );
+
+        BattleActionSlot actionSlot = actionSlots[0];
+
+        int useCountBefore = allyAAbilitySinCardState.currentUseCount;
+        int guiltBefore = allyA.currentGuilt;
+
+        Debug.Log("执行前 Ability UseCount：" + useCountBefore + " / " + allyAAbilitySinCardState.maxUseCount);
+        Debug.Log("执行前 allyA 负罪感：" + guiltBefore);
+        Debug.Log("执行前 actionSlot.isUsed：" + actionSlot.isUsed);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            actionSlots,
+            emptyIntentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+        Debug.Log("执行后 Ability UseCount：" + allyAAbilitySinCardState.currentUseCount + " / " + allyAAbilitySinCardState.maxUseCount);
+        Debug.Log("执行后 allyA 负罪感：" + allyA.currentGuilt);
+        Debug.Log("执行后 actionSlot.isUsed：" + actionSlot.isUsed);
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+        Debug.Log("预期 Ability UseCount 增加：" + (allyAAbilitySinCardState.currentUseCount > useCountBefore));
+        Debug.Log("预期 allyA 负罪感增加：" + (allyA.currentGuilt > guiltBefore));
+        Debug.Log("预期 actionSlot.isUsed 为 True：" + actionSlot.isUsed);
+        Debug.Log("预期 ExecutionPlan.isCompleted 为 True：" + executionPlan.isCompleted);
+    }
+
+    // RunActionSlotExecutionPlanExecuteFreeAttackBasicTestSequence = 执行 FreeAction Attack 基础测试
+    void RunActionSlotExecutionPlanExecuteFreeAttackBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan FreeAction Attack 执行测试开始 =====");
+        Debug.Log("本测试生成只包含 Attack FreeAction 的 ExecutionPlan，并通过 Executor 调用 BattleResolver.ResolveFreeAction(...)");
+
+        StartTurn();
+
+        if (allyAAttackCardState == null)
+        {
+            Debug.LogWarning("FreeAction Attack 执行测试失败：allyAAttackCardState 为空");
+            return;
+        }
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(1);
+        List<BattleEnemyIntent> emptyIntentQueue = new List<BattleEnemyIntent>();
+
+        BattleActionSlotManager.AssignFreeAction(
+            actionSlots,
+            1,
+            allyA,
+            allyAAttackCardState,
+            enemy
+        );
+
+        BattleActionSlot actionSlot = actionSlots[0];
+
+        int enemyHPBefore = enemy.currentHP;
+        int allyAHPBefore = allyA.currentHP;
+        int useCountBefore = allyAAttackCardState.currentUseCount;
+        int cooldownBefore = allyAAttackCardState.currentCooldown;
+        int guiltBefore = allyA.currentGuilt;
+
+        Debug.Log("执行前 敌人 HP：" + enemyHPBefore + " / " + enemy.maxHP);
+        Debug.Log("执行前 allyA HP：" + allyAHPBefore + " / " + allyA.maxHP);
+        Debug.Log("执行前 Attack UseCount：" + useCountBefore + " / " + allyAAttackCardState.maxUseCount);
+        Debug.Log("执行前 Attack CD：" + cooldownBefore);
+        Debug.Log("执行前 allyA 负罪感：" + guiltBefore);
+        Debug.Log("执行前 actionSlot.isUsed：" + actionSlot.isUsed);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            actionSlots,
+            emptyIntentQueue
+        );
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+        Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+        Debug.Log("执行后 allyA HP：" + allyA.currentHP + " / " + allyA.maxHP);
+        Debug.Log("执行后 Attack UseCount：" + allyAAttackCardState.currentUseCount + " / " + allyAAttackCardState.maxUseCount);
+        Debug.Log("执行后 Attack CD：" + allyAAttackCardState.currentCooldown);
+        Debug.Log("执行后 allyA 负罪感：" + allyA.currentGuilt);
+        Debug.Log("执行后 actionSlot.isUsed：" + actionSlot.isUsed);
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+        Debug.Log("预期 enemy HP 下降：" + (enemy.currentHP < enemyHPBefore));
+        Debug.Log("预期 allyA HP 不变：" + (allyA.currentHP == allyAHPBefore));
+        Debug.Log("预期 Attack UseCount 增加：" + (allyAAttackCardState.currentUseCount > useCountBefore));
+        Debug.Log("预期 allyA 负罪感增加：" + (allyA.currentGuilt > guiltBefore));
+        Debug.Log("预期 actionSlot.isUsed 为 True：" + actionSlot.isUsed);
+        Debug.Log("预期 ExecutionPlan.isCompleted 为 True：" + executionPlan.isCompleted);
+    }
+
+    // RunActionSlotExecutionPlanExecuteHighSpeedFreeAttackMixedBasicTestSequence = 执行高速偷刀 + 敌人意图混合测试
+    void RunActionSlotExecutionPlanExecuteHighSpeedFreeAttackMixedBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 高速 Attack FreeAction + 敌人意图混合执行测试开始 =====");
+        Debug.Log("本测试验证高速偷刀 FreeAction 会排在无人响应敌人意图前执行");
+
+        // 固定速度，确保 allyA 高于 enemy。
+        allyA.minSpeed = 20;
+        allyA.maxSpeed = 20;
+        enemy.minSpeed = 8;
+        enemy.maxSpeed = 8;
+
+        StartTurn();
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_execute_high_speed_free_attack_mixed_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(1);
+        BattleCardState allyAFreeAttackCardState = CreateTestAttackCardForCharacter(
+            allyA,
+            "allyA_execute_high_speed_free_attack_mixed_atk_001_copy_0"
+        );
+
+        BattleActionSlotManager.AssignFreeAction(
+            actionSlots,
+            1,
+            allyA,
+            allyAFreeAttackCardState,
+            enemy
+        );
+
+        BattleActionSlot actionSlot = actionSlots[0];
+
+        int enemyHPBefore = enemy.currentHP;
+        int allyBHPBefore = allyB.currentHP;
+        int useCountBefore = allyAFreeAttackCardState.currentUseCount;
+        int guiltBefore = allyA.currentGuilt;
+
+        Debug.Log("执行前 敌人 HP：" + enemyHPBefore + " / " + enemy.maxHP);
+        Debug.Log("执行前 allyB HP：" + allyBHPBefore + " / " + allyB.maxHP);
+        Debug.Log("执行前 allyA Attack UseCount：" + useCountBefore + " / " + allyAFreeAttackCardState.maxUseCount);
+        Debug.Log("执行前 allyA 负罪感：" + guiltBefore);
+        Debug.Log("执行前 allyA actionSlot.isUsed：" + actionSlot.isUsed);
+
+        Debug.Log("预期执行顺序：1. FreeAction；2. UnrespondedEnemyIntent 敌人意图1");
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        PrintExecutionPlanItemOrder(executionPlan);
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+        Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+        Debug.Log("执行后 allyB HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("执行后 allyA Attack UseCount：" + allyAFreeAttackCardState.currentUseCount + " / " + allyAFreeAttackCardState.maxUseCount);
+        Debug.Log("执行后 allyA 负罪感：" + allyA.currentGuilt);
+        Debug.Log("执行后 allyA actionSlot.isUsed：" + actionSlot.isUsed);
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+        Debug.Log("预期第1项为 FreeAction：" + IsExecutionItemTypeAt(executionPlan, 0, BattleExecutionItemType.FreeAction));
+        Debug.Log("预期第2项为 UnrespondedEnemyIntent：" + IsExecutionItemTypeAt(executionPlan, 1, BattleExecutionItemType.UnrespondedEnemyIntent));
+        Debug.Log("预期 enemy HP 下降：" + (enemy.currentHP < enemyHPBefore));
+        Debug.Log("预期 allyB HP 下降：" + (allyB.currentHP < allyBHPBefore));
+        Debug.Log("预期 allyA Attack UseCount 增加：" + (allyAFreeAttackCardState.currentUseCount > useCountBefore));
+        Debug.Log("预期 allyA 负罪感增加：" + (allyA.currentGuilt > guiltBefore));
+        Debug.Log("预期 allyA actionSlot.isUsed 为 True：" + actionSlot.isUsed);
+        Debug.Log("预期 ExecutionPlan.isCompleted 为 True：" + executionPlan.isCompleted);
+        Debug.Log("预期所有 item 均完成：" + AreAllExecutionItemsCompleted(executionPlan));
+    }
+
+    // RunActionSlotExecutionPlanExecuteLowSpeedFreeAttackMixedBasicTestSequence = 执行低速偷刀 + 敌人意图混合测试
+    void RunActionSlotExecutionPlanExecuteLowSpeedFreeAttackMixedBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionPlan 低速 Attack FreeAction + 敌人意图混合执行测试开始 =====");
+        Debug.Log("本测试验证低速偷刀 FreeAction 会排在无人响应敌人意图后执行");
+
+        // 固定速度，确保 allyA 低于 enemy。
+        allyA.minSpeed = 3;
+        allyA.maxSpeed = 3;
+        enemy.minSpeed = 8;
+        enemy.maxSpeed = 8;
+
+        StartTurn();
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "enemy_intent_execute_low_speed_free_attack_mixed_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(1);
+        BattleCardState allyAFreeAttackCardState = CreateTestAttackCardForCharacter(
+            allyA,
+            "allyA_execute_low_speed_free_attack_mixed_atk_001_copy_0"
+        );
+
+        BattleActionSlotManager.AssignFreeAction(
+            actionSlots,
+            1,
+            allyA,
+            allyAFreeAttackCardState,
+            enemy
+        );
+
+        BattleActionSlot actionSlot = actionSlots[0];
+
+        int enemyHPBefore = enemy.currentHP;
+        int allyBHPBefore = allyB.currentHP;
+        int useCountBefore = allyAFreeAttackCardState.currentUseCount;
+        int guiltBefore = allyA.currentGuilt;
+
+        Debug.Log("执行前 敌人 HP：" + enemyHPBefore + " / " + enemy.maxHP);
+        Debug.Log("执行前 allyB HP：" + allyBHPBefore + " / " + allyB.maxHP);
+        Debug.Log("执行前 allyA Attack UseCount：" + useCountBefore + " / " + allyAFreeAttackCardState.maxUseCount);
+        Debug.Log("执行前 allyA 负罪感：" + guiltBefore);
+        Debug.Log("执行前 allyA actionSlot.isUsed：" + actionSlot.isUsed);
+
+        Debug.Log("预期执行顺序：1. UnrespondedEnemyIntent 敌人意图1；2. FreeAction");
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        PrintExecutionPlanItemOrder(executionPlan);
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+        Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+        Debug.Log("执行后 allyB HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("执行后 allyA Attack UseCount：" + allyAFreeAttackCardState.currentUseCount + " / " + allyAFreeAttackCardState.maxUseCount);
+        Debug.Log("执行后 allyA 负罪感：" + allyA.currentGuilt);
+        Debug.Log("执行后 allyA actionSlot.isUsed：" + actionSlot.isUsed);
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+        Debug.Log("预期第1项为 UnrespondedEnemyIntent：" + IsExecutionItemTypeAt(executionPlan, 0, BattleExecutionItemType.UnrespondedEnemyIntent));
+        Debug.Log("预期第2项为 FreeAction：" + IsExecutionItemTypeAt(executionPlan, 1, BattleExecutionItemType.FreeAction));
+        Debug.Log("预期 allyB HP 下降：" + (allyB.currentHP < allyBHPBefore));
+        Debug.Log("预期 enemy HP 下降：" + (enemy.currentHP < enemyHPBefore));
+        Debug.Log("预期 allyA Attack UseCount 增加：" + (allyAFreeAttackCardState.currentUseCount > useCountBefore));
+        Debug.Log("预期 allyA 负罪感增加：" + (allyA.currentGuilt > guiltBefore));
+        Debug.Log("预期 allyA actionSlot.isUsed 为 True：" + actionSlot.isUsed);
+        Debug.Log("预期 ExecutionPlan.isCompleted 为 True：" + executionPlan.isCompleted);
+        Debug.Log("预期所有 item 均完成：" + AreAllExecutionItemsCompleted(executionPlan));
+    }
+
     void RunBattleResolverRespondedAttackVsAttackSubTest(
         string title,
         int playerMinPoint,
@@ -421,6 +864,69 @@ public class CardLoadTest : MonoBehaviour
             "triggeredEventChain：" + result.triggeredEventChain + "\n" +
             "message：" + result.message
         );
+    }
+
+    void PrintExecutionPlanItemOrder(BattleExecutionPlan executionPlan)
+    {
+        if (executionPlan == null || executionPlan.executionItems == null)
+        {
+            Debug.LogWarning("ExecutionPlan item 顺序打印失败：executionPlan 为空");
+            return;
+        }
+
+        Debug.Log("===== ExecutionPlan item 顺序检查 =====");
+
+        for (int i = 0; i < executionPlan.executionItems.Count; i++)
+        {
+            BattleExecutionItem item = executionPlan.executionItems[i];
+
+            if (item == null)
+            {
+                Debug.Log((i + 1) + ". item 为空");
+                continue;
+            }
+
+            Debug.Log((i + 1) + ". " + item.executionType);
+        }
+    }
+
+    bool IsExecutionItemTypeAt(
+        BattleExecutionPlan executionPlan,
+        int index,
+        BattleExecutionItemType expectedType
+    )
+    {
+        if (executionPlan == null || executionPlan.executionItems == null)
+        {
+            return false;
+        }
+
+        if (index < 0 || index >= executionPlan.executionItems.Count)
+        {
+            return false;
+        }
+
+        BattleExecutionItem item = executionPlan.executionItems[index];
+
+        return item != null && item.executionType == expectedType;
+    }
+
+    bool AreAllExecutionItemsCompleted(BattleExecutionPlan executionPlan)
+    {
+        if (executionPlan == null || executionPlan.executionItems == null)
+        {
+            return false;
+        }
+
+        foreach (BattleExecutionItem item in executionPlan.executionItems)
+        {
+            if (item == null || !item.isCompleted)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     // ================================

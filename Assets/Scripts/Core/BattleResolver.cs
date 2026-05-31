@@ -30,6 +30,186 @@ public static class BattleResolver
 {
     const int MaxRespondedEnemyIntentClashAttempts = 10;
 
+    // ResolveFreeAction = 正式结算自由行动
+    // 第一版支持 Ability FreeAction 和 Attack FreeAction，不处理防御、闪避等自由行动。
+    public static BattleResolveResult ResolveFreeAction(BattleActionSlot actionSlot)
+    {
+        if (actionSlot == null)
+        {
+            return CreateInvalidResolveResult("ResolveFreeAction 失败：行动槽位为空");
+        }
+
+        if (actionSlot.slotType != BattleActionSlotType.FreeAction)
+        {
+            return CreateInvalidResolveResult("ResolveFreeAction 失败：行动槽位不是 FreeAction");
+        }
+
+        if (actionSlot.actor == null)
+        {
+            return CreateInvalidResolveResult("ResolveFreeAction 失败：行动者为空");
+        }
+
+        if (actionSlot.cardState == null)
+        {
+            return CreateInvalidResolveResult("ResolveFreeAction 失败：卡牌状态为空");
+        }
+
+        if (actionSlot.cardState.cardData == null)
+        {
+            return CreateInvalidResolveResult("ResolveFreeAction 失败：卡牌数据为空");
+        }
+
+        bool isAbilityCard = actionSlot.cardState.cardData.cardType == "Ability" || actionSlot.cardState.IsAbilitySinCard();
+        bool isAttackCard = actionSlot.cardState.cardData.cardType == CardType.Attack;
+
+        if (isAbilityCard)
+        {
+            return ResolveFreeAbilityAction(actionSlot);
+        }
+
+        if (isAttackCard)
+        {
+            return ResolveFreeAttackAction(actionSlot);
+        }
+
+        return CreateUnsupportedResolveResult(
+            "ResolveFreeAction 暂不支持该 FreeAction 卡牌类型：" +
+            actionSlot.cardState.cardData.cardType
+        );
+    }
+
+    static BattleResolveResult ResolveFreeAbilityAction(BattleActionSlot actionSlot)
+    {
+        CharacterData user = actionSlot.actor;
+        CharacterData target = actionSlot.target != null ? actionSlot.target : user;
+
+        if (!BattleCardManager.CanUseCard(user, target, actionSlot.cardState))
+        {
+            return CreateInvalidResolveResult(
+                "ResolveFreeAction 失败：" +
+                user.characterName +
+                " 的卡牌不能使用：" +
+                actionSlot.cardState.GetCardName()
+            );
+        }
+
+        Debug.Log(
+            user.characterName +
+            " 使用 FreeAction Ability：" +
+            actionSlot.cardState.GetCardName() +
+            "，不进入拼点"
+        );
+
+        TriggerBattleEvent(BattleTiming.OnPlay, user, target, actionSlot.cardState, 0, 0, false, false);
+        TriggerBattleEvent(BattleTiming.Resolved, user, target, actionSlot.cardState, 0, 0, false, false);
+
+        BattleResolveResult result = new BattleResolveResult();
+        result.isSuccess = true;
+        result.shouldCompleteItem = true;
+        result.playerCardUsed = true;
+        result.enemyCardUsed = false;
+        result.hasDamage = false;
+        result.damage = 0;
+        result.damagedCharacter = null;
+        result.resultType = "FreeAbility";
+        result.playerPoint = 0;
+        result.enemyPoint = 0;
+        result.clashAttemptCount = 0;
+        result.isTieLimitReached = false;
+        result.triggeredEventChain = true;
+        result.message =
+            "ResolveFreeAction 完成：Ability FreeAction 已触发 OnPlay / Resolved，不造成伤害";
+
+        Debug.Log(result.message);
+
+        return result;
+    }
+
+    static BattleResolveResult ResolveFreeAttackAction(BattleActionSlot actionSlot)
+    {
+        CharacterData user = actionSlot.actor;
+        CharacterData target = actionSlot.target;
+        CardTestData attackCard = actionSlot.cardState.cardData;
+
+        if (target == null)
+        {
+            return CreateInvalidResolveResult("ResolveFreeAction 失败：Attack FreeAction 目标为空");
+        }
+
+        if (IsInvalidPointRange(attackCard.minPoint, attackCard.maxPoint))
+        {
+            return CreateInvalidResolveResult(
+                "ResolveFreeAction 失败：Attack FreeAction 点数范围异常：" +
+                attackCard.minPoint +
+                "-" +
+                attackCard.maxPoint
+            );
+        }
+
+        if (!BattleCardManager.CanUseCard(user, target, actionSlot.cardState))
+        {
+            return CreateInvalidResolveResult(
+                "ResolveFreeAction 失败：" +
+                user.characterName +
+                " 的卡牌不能使用：" +
+                actionSlot.cardState.GetCardName()
+            );
+        }
+
+        Debug.Log(
+            user.characterName +
+            " 使用 FreeAction Attack：" +
+            actionSlot.cardState.GetCardName() +
+            " 攻击 " +
+            target.characterName +
+            "，不进入拼点"
+        );
+
+        TriggerBattleEvent(BattleTiming.BeforeUse, user, target, actionSlot.cardState, 0, 0, false, false);
+
+        int playerAttackPoint = BattleCalculator.Rollpoint(attackCard.minPoint, attackCard.maxPoint);
+        int damageScaled = BattleCalculator.GetFinalDamageScaled(
+            user,
+            target,
+            attackCard,
+            playerAttackPoint
+        );
+        int finalHpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+
+        TriggerBattleEvent(BattleTiming.Resolved, user, target, actionSlot.cardState, playerAttackPoint, 0, false, false);
+        TriggerBattleEvent(BattleTiming.Hit, user, target, actionSlot.cardState, playerAttackPoint, finalHpDamage, finalHpDamage > 0, false);
+        ApplyDamageAndTriggerEvents(user, target, actionSlot.cardState, finalHpDamage, playerAttackPoint);
+
+        BattleResolveResult result = new BattleResolveResult();
+        result.isSuccess = true;
+        result.shouldCompleteItem = true;
+        result.playerCardUsed = true;
+        result.enemyCardUsed = false;
+        result.hasDamage = finalHpDamage > 0;
+        result.damage = finalHpDamage;
+        result.damagedCharacter = target;
+        result.resultType = "FreeAttack";
+        result.playerPoint = playerAttackPoint;
+        result.enemyPoint = 0;
+        result.clashAttemptCount = 0;
+        result.isTieLimitReached = false;
+        result.triggeredEventChain = true;
+        result.message =
+            "ResolveFreeAction 完成：Attack FreeAction 使用 " +
+            actionSlot.cardState.GetCardName() +
+            " 命中 " +
+            target.characterName +
+            "，玩家攻击点数 " +
+            playerAttackPoint +
+            "，造成伤害 " +
+            finalHpDamage +
+            "。不触发 ClashWin / ClashLose";
+
+        Debug.Log(result.message);
+
+        return result;
+    }
+
     // TestUseAbilitySinCard = 测试 / 使用能力型罪卡
     // 能力型罪卡不进入拼点，成功使用后直接触发 OnPlay，再进入 Resolved 处理负罪感和使用次数
     public static void TestUseAbilitySinCard(
