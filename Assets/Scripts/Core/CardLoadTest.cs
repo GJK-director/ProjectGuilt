@@ -1442,6 +1442,7 @@ public class CardLoadTest : MonoBehaviour
         BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
         BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
 
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
         Debug.Log("执行后 我方角色A HP：" + allyA.currentHP + " / " + allyA.maxHP);
         Debug.Log("执行后 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
         Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
@@ -1530,6 +1531,7 @@ public class CardLoadTest : MonoBehaviour
         BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
         BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
 
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
         Debug.Log("执行后 我方角色A HP：" + allyA.currentHP + " / " + allyA.maxHP);
         Debug.Log("执行后 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
         Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
@@ -1616,6 +1618,7 @@ public class CardLoadTest : MonoBehaviour
         BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
         BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
 
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
         Debug.Log("执行后 我方角色A HP：" + allyA.currentHP + " / " + allyA.maxHP);
         Debug.Log("执行后 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
         Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);

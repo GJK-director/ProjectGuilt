@@ -5205,3 +5205,122 @@ BattleExecutionPlanExecutor.cs 当前边界：
 - 更完整的 Buff / CD / UseCount / 负罪感整理。
 - 旧 `TestClash(...)` 与正式入口关系整理。
 - UI / 动画表现。
+
+## 四十九、ActionSlot MarkUsed 与卡牌使用状态边界记录
+
+当前现状：
+
+- `BattleActionSlot.MarkUsed()` 已存在，作用是将 `slot.isUsed = true`。
+- 当前主线 `BattleExecutionPlanExecutor` 还没有调用 `MarkUsed()`。
+- 当前 ExecutionPlan 主线主要靠 `item.isCompleted` 和 `plan.isCompleted` 表示执行进度。
+- 旧测试流程中可能仍有 `actionSlot.MarkUsed()` 调用，但不属于当前 ExecutionPlan 主线。
+
+CD / UseCount / guiltGain 当前机制：
+
+- 当前主要通过事件链触发。
+- 触发路径为：
+  - `BattleResolver.TriggerBattleEvent(...)`
+  - `BattleEventProcessor.ProcessEvent(...)`
+  - `BattleCardManager.HandleEvent(...)`
+  - `BattleTiming.Resolved`
+  - `BattleCardManager.ApplyCooldownOnResolved(...)`
+- `Resolved` 触发时，普通卡进入 CD。
+- 罪卡触发 `Resolved` 时，根据规则增加 UseCount / guiltGain。
+- 10 次平局上限不触发事件链，因此不会触发 CD / UseCount / guiltGain。
+- `ResolveUnrespondedEnemyIntent(...)` 不触发事件链，因此不会触发玩家卡牌式 CD / UseCount / guiltGain。
+
+几个状态的区别：
+
+- `item.isCompleted`：执行计划项是否已经处理完，属于执行队列进度状态。
+- `playerCardUsed`：Resolver 返回的玩家卡是否算本次被使用 / 参与处理。
+- `enemyCardUsed`：敌人卡是否算本次参与处理；第一版只作为结果记录，不接敌人 CD / UseCount。
+- `slot.isUsed`：玩家行动槽位是否已经实际执行过，偏 UI / 回合状态，不代替 `item.isCompleted`。
+
+第一版职责边界：
+
+- `Resolver` 负责结算，不直接调用 `slot.MarkUsed()`。
+- `Executor` 拥有 `BattleExecutionItem`，能同时看到 `item.actionSlot` 和 `BattleResolveResult`。
+- 因此第一版建议由 `BattleExecutionPlanExecutor` 根据 `result.playerCardUsed` 调用 `item.actionSlot.MarkUsed()`。
+
+第一版 MarkUsed 规则建议：
+
+- `RespondedEnemyIntent` 正常 `PlayerWin / EnemyWin`：
+  - 如果 `result.playerCardUsed == true` 且 `item.actionSlot != null`，调用 `MarkUsed()`。
+- `TieLimit`：
+  - 不调用 `MarkUsed()`，因为双方都视作没有成功使用卡牌。
+- `UnrespondedEnemyIntent`：
+  - 不调用 `MarkUsed()`，因为没有玩家 actionSlot。
+- 未来 `FreeAction`：
+  - 成功执行后调用 `MarkUsed()`。
+- 未来防御 / 闪避空挂但没有处理任何敌人攻击：
+  - 不调用 `MarkUsed()`。
+
+注意事项：
+
+- 暂时不要把 `playerCardUsed` 直接等同于 CD / UseCount / guiltGain。
+- CD / UseCount / guiltGain 当前仍继续通过 `Resolved` 事件链处理。
+- 敌人卡牌 CD / UseCount 暂不处理。
+- 暂不重命名 `BattleResolveResult` 字段。
+- 暂不处理 FreeAction / 防御 / 闪避的 MarkUsed。
+
+下一步候选：
+
+- 小范围修改 `BattleExecutionPlanExecutor.ExecuteRespondedEnemyIntent(...)`。
+- 在 Resolver 返回成功后，如果 `result.playerCardUsed == true && item.actionSlot != null`，调用 `item.actionSlot.MarkUsed()`。
+- 回归测试：
+  - 玩家胜利：槽位 `isUsed == true`。
+  - 敌人胜利：槽位 `isUsed == true`。
+  - 10 次平局：槽位 `isUsed == false`。
+
+## 五十、ActionSlot MarkUsed 第一版接入通过
+
+当前完成内容：
+
+- `BattleExecutionPlanExecutor.ExecuteRespondedEnemyIntent(...)` 已根据 `BattleResolveResult.playerCardUsed` 接入 `item.actionSlot.MarkUsed()`。
+- 当 Resolver 返回 `isSuccess == true`、`shouldCompleteItem == true`，并且 `playerCardUsed == true`、`item.actionSlot != null` 时，Executor 会将玩家行动槽位标记为已使用。
+- `item.isCompleted` 仍然由 Executor 根据 `BattleResolveResult` 标记。
+- `UnrespondedEnemyIntent` 未接入 MarkUsed，因为没有玩家 actionSlot。
+- 没有修改 CD / UseCount / guiltGain 逻辑，这些仍然通过 `Resolved` 事件链处理。
+
+已通过测试：
+
+- `ActionSlotExecutionPlanExecuteRespondedBasic`
+  - 玩家胜利。
+  - `playerCardUsed == true`。
+  - 槽位显示 `已使用：True`。
+  - `ExecutionPlan.isCompleted == true`。
+- `ActionSlotExecutionPlanExecuteRespondedEnemyWin`
+  - 敌人胜利。
+  - 当前规则下 `playerCardUsed == true`。
+  - 槽位显示 `已使用：True`。
+  - `ExecutionPlan.isCompleted == true`。
+- `ActionSlotExecutionPlanExecuteRespondedTieLimit`
+  - 10 次平局上限。
+  - `playerCardUsed == false`。
+  - 槽位保持 `已使用：False`。
+  - 双方 HP 不下降。
+  - `ExecutionPlan.isCompleted == true`。
+
+当前确认的规则：
+
+- `PlayerWin`：玩家卡算使用，槽位 MarkUsed。
+- `EnemyWin`：玩家卡参与正式处理，槽位 MarkUsed。
+- `TieLimit`：执行项完成，但双方卡牌都不算成功使用，槽位不 MarkUsed。
+- `UnrespondedEnemyIntent`：没有玩家槽位，不 MarkUsed。
+- 未来 `FreeAction` 成功执行后再考虑 MarkUsed。
+- 未来防御 / 闪避空挂但未触发时，不应 MarkUsed。
+
+阶段意义：
+
+- `item.isCompleted` 和 `slot.isUsed` 的职责开始分离。
+- `item.isCompleted` 用于防止执行项重复执行。
+- `slot.isUsed` 用于表示玩家槽位实际被消耗，未来可供 UI 和回合结束流程读取。
+- 这一步为后续接入简易 UI 的槽位状态显示打下基础。
+
+当前仍未处理：
+
+- FreeAction MarkUsed。
+- 防御 / 闪避 MarkUsed。
+- 回合结束统一清理槽位。
+- 敌人卡牌 Used / CD / UseCount。
+- UI 状态刷新。

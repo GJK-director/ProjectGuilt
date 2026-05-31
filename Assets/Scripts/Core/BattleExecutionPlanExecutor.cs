@@ -213,6 +213,12 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
+        if (result.playerCardUsed && item.actionSlot != null)
+        {
+            item.actionSlot.MarkUsed();
+            Debug.Log(item.order + ". RespondedEnemyIntent：玩家行动槽位已标记为已使用");
+        }
+
         item.isCompleted = true;
         return true;
     }
