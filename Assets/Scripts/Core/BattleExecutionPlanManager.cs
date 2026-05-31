@@ -222,14 +222,39 @@ public static class BattleExecutionPlanManager
                 continue;
             }
 
-            // 自由行动：当前还没有接入完整执行计划打印。
+            // 自由行动：打印玩家自由行动的基础信息。
             if (item.executionType == BattleExecutionItemType.FreeAction)
             {
-                Debug.Log(item.order + ". FreeAction：当前暂未实现打印细节");
+                PrintFreeActionItem(item);
             }
         }
 
         Debug.Log("ExecutionPlan 项数量：" + executionPlan.executionItems.Count);
+    }
+
+    // PrintFreeActionItem = 打印自由行动执行项
+    static void PrintFreeActionItem(BattleExecutionItem item)
+    {
+        if (item.actionSlot == null)
+        {
+            Debug.Log(
+                item.order +
+                ". FreeAction：玩家自由行动，执行时将交给 BattleResolver.ResolveFreeAction(...) 处理，但当前缺少行动槽位"
+            );
+            return;
+        }
+
+        Debug.Log(
+            item.order +
+            ". FreeAction：玩家自由行动，执行时将交给 BattleResolver.ResolveFreeAction(...) 处理，槽位：" +
+            item.actionSlot.GetActorName() +
+            " 槽位" +
+            item.actionSlot.slotIndex +
+            "，卡牌：" +
+            item.actionSlot.GetCardName() +
+            "，目标：" +
+            item.actionSlot.GetTargetName()
+        );
     }
 
     // PrintRespondedEnemyIntentItem = 打印已响应敌人意图执行项

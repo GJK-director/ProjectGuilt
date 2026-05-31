@@ -5916,3 +5916,46 @@ Attack FreeAction 当前规则：
 - UI 状态刷新。
 - 多目标 / 群体目标。
 - 动画表现。
+
+## 五十九、FreeAction 打印文案清理完成
+
+当前完成内容：
+
+- 修正了 FreeAction 相关打印文案。
+- 修改文件：
+  - `BattleExecutionPlanManager.cs`
+  - `BattleExecutionPlanExecutor.cs`
+- 当前 `PrintExecutionPlan(...)` 中 FreeAction 不再显示“当前暂未实现打印细节”。
+- 当前 `PrintExecutionPlanStepPreview(...)` 中 FreeAction 不再显示“未来将处理普通行动 / 偷刀，但当前暂未实现正式处理”。
+
+新文案大意：
+
+- `PrintExecutionPlan(...)`：
+  - `FreeAction：玩家自由行动，执行时将交给 BattleResolver.ResolveFreeAction(...) 处理`
+  - 会安全打印行动者、槽位、卡牌、目标。
+- `PrintExecutionPlanStepPreview(...)`：
+  - `FreeAction：执行时将调用 BattleResolver.ResolveFreeAction(...)，当前支持 Ability FreeAction 与 Attack FreeAction`
+  - 会安全打印行动者、槽位、卡牌、目标。
+  - 明确说明当前只是预览，不执行 item，不修改状态。
+
+未修改内容：
+
+- 没有修改 `CreateSpeedBasedExecutionPlan(...)` 排序逻辑。
+- 没有修改 `ExecuteFreeAction(...)`。
+- 没有修改 `ResolveFreeAction(...)`。
+- 没有修改伤害、拼点、事件链、MarkUsed、UseCount、guiltGain。
+- 没有修改 JSON。
+- 没有修改测试入口。
+
+阶段意义：
+
+- 当前 FreeAction 已经不是未实现状态。
+- Ability FreeAction 与 Attack FreeAction 都已经进入正式 Resolver / Executor 执行路径。
+- 修正文案后，后续查看 ExecutionPlan 打印和步骤预览时不会被旧提示误导。
+- 这一步属于调试体验清理，不改变战斗规则。
+
+基础编译检查：
+
+- 普通 sandbox 因 Windows SDK 目录权限失败。
+- 提升权限后 `dotnet build ProjectGuilt.sln` 通过。
+- 结果：`0 warnings / 0 errors`。

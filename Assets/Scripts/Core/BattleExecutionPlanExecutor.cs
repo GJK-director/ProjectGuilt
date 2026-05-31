@@ -122,7 +122,7 @@ public static class BattleExecutionPlanExecutor
 
             if (item.executionType == BattleExecutionItemType.FreeAction)
             {
-                Debug.Log(item.order + ". FreeAction：未来将处理普通行动 / 偷刀，但当前暂未实现正式处理");
+                PrintFreeActionStepPreview(item);
             }
         }
 
@@ -170,6 +170,35 @@ public static class BattleExecutionPlanExecutor
 
         item.isCompleted = true;
         return true;
+    }
+
+    // PrintFreeActionStepPreview = 打印自由行动执行步骤预览
+    static void PrintFreeActionStepPreview(BattleExecutionItem item)
+    {
+        if (item == null)
+        {
+            Debug.Log("FreeAction：执行步骤预览失败，item 为空");
+            return;
+        }
+
+        if (item.actionSlot == null)
+        {
+            Debug.Log(
+                item.order +
+                ". FreeAction：执行时将调用 BattleResolver.ResolveFreeAction(...)，但当前缺少行动槽位"
+            );
+            return;
+        }
+
+        Debug.Log(
+            item.order +
+            ". FreeAction：执行时将调用 BattleResolver.ResolveFreeAction(...)，当前支持 Ability FreeAction 与 Attack FreeAction\n" +
+            "   行动者：" + item.actionSlot.GetActorName() + "\n" +
+            "   槽位：槽位" + item.actionSlot.slotIndex + "\n" +
+            "   卡牌：" + item.actionSlot.GetCardName() + "\n" +
+            "   目标：" + item.actionSlot.GetTargetName() + "\n" +
+            "   当前只预览执行方式，不执行 item，不修改状态"
+        );
     }
 
     // ExecuteRespondedEnemyIntent = 执行已响应的敌人意图
