@@ -6,6 +6,9 @@ public enum BattleTestMode
 {
     ClashUseCount,
     AbilityUseCount,
+    BattleRuntimeStateBasic,
+    BattleRuntimeStateClearCurrentTurnBasic,
+    BattleRuntimeStateEndCurrentTurnBasic,
     BattleResolverResolveRespondedAttackVsAttackBasic,
     BattleResolverResolveUnrespondedEnemyIntentBasic,
     BattleResolverResolveFreeAbilityBasic,
@@ -87,6 +90,24 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.AbilityUseCount)
         {
             RunAbilityUseCountTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleRuntimeStateBasic)
+        {
+            RunBattleRuntimeStateBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleRuntimeStateClearCurrentTurnBasic)
+        {
+            RunBattleRuntimeStateClearCurrentTurnBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleRuntimeStateEndCurrentTurnBasic)
+        {
+            RunBattleRuntimeStateEndCurrentTurnBasicTestSequence();
             return;
         }
 
@@ -253,6 +274,147 @@ public class CardLoadTest : MonoBehaviour
         StartTurn();
         RunAbilitySinCardTest();
         PrintAbilitySinCardTestState();
+    }
+
+    // RunBattleRuntimeStateBasicTestSequence = 验证 BattleRuntimeState 能集中保存并打印当前战斗状态
+    void RunBattleRuntimeStateBasicTestSequence()
+    {
+        Debug.Log("===== BattleRuntimeState 基础状态容器测试开始 =====");
+
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(allyA, allyB, enemy);
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        runtimeState.SetActionSlots(actionSlots);
+
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            "runtime_state_basic_intent_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(enemyIntent);
+        runtimeState.SetIntentQueue(intentQueue);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        runtimeState.SetExecutionPlan(executionPlan);
+        runtimeState.SetPhase("PlanReady");
+        runtimeState.PrintRuntimeState();
+
+        Debug.Log("预期 battleUnits 数量为 3：" + (runtimeState.battleUnits.Count == 3));
+        Debug.Log("预期 actionSlots 数量为 2：" + (runtimeState.actionSlots.Count == 2));
+        Debug.Log("预期 intentQueue 数量为 1：" + (runtimeState.intentQueue.Count == 1));
+        Debug.Log("预期 currentExecutionPlan 不为空：" + (runtimeState.currentExecutionPlan != null));
+        Debug.Log("本测试只验证状态容器保存和打印，不执行 plan，不调用 Resolver，不扣血，不处理回合结束");
+    }
+
+    // RunBattleRuntimeStateClearCurrentTurnBasicTestSequence = 验证 RuntimeState 能清理当前回合临时对象
+    void RunBattleRuntimeStateClearCurrentTurnBasicTestSequence()
+    {
+        Debug.Log("===== BattleRuntimeState 当前回合临时对象清理测试开始 =====");
+
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(allyA, allyB, enemy);
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        runtimeState.SetActionSlots(actionSlots);
+
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            "runtime_state_clear_current_turn_intent_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(enemyIntent);
+        runtimeState.SetIntentQueue(intentQueue);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        runtimeState.SetExecutionPlan(executionPlan);
+        runtimeState.SetPhase("PlanReady");
+
+        Debug.Log("===== 清理前 BattleRuntimeState =====");
+        runtimeState.PrintRuntimeState();
+
+        runtimeState.ClearCurrentTurnRuntimeObjects();
+
+        Debug.Log("===== 清理后 BattleRuntimeState =====");
+        runtimeState.PrintRuntimeState();
+
+        Debug.Log("预期清理后 battleUnits 数量仍为 3：" + (runtimeState.battleUnits.Count == 3));
+        Debug.Log("预期清理后 allyA 仍然存在：" + (runtimeState.allyA != null));
+        Debug.Log("预期清理后 allyB 仍然存在：" + (runtimeState.allyB != null));
+        Debug.Log("预期清理后 enemy 仍然存在：" + (runtimeState.enemy != null));
+        Debug.Log("预期清理后 actionSlots 数量为 0：" + (runtimeState.actionSlots.Count == 0));
+        Debug.Log("预期清理后 intentQueue 数量为 0：" + (runtimeState.intentQueue.Count == 0));
+        Debug.Log("预期清理后 currentExecutionPlan 为空：" + (runtimeState.currentExecutionPlan == null));
+        Debug.Log("预期清理后 currentTurn 仍为 1：" + (runtimeState.currentTurn == 1));
+        Debug.Log("预期清理后 currentPhase 为 TurnCleared：" + (runtimeState.currentPhase == "TurnCleared"));
+        Debug.Log("本测试只验证 RuntimeState 清理，不执行 plan，不调用 Resolver，不扣血，不处理 Buff / CD / UseCount / guiltGain，不推进下一回合");
+    }
+
+    // RunBattleRuntimeStateEndCurrentTurnBasicTestSequence = 验证 EndTurn 与 RuntimeState 清理的组合入口
+    void RunBattleRuntimeStateEndCurrentTurnBasicTestSequence()
+    {
+        Debug.Log("===== BattleRuntimeState 结束当前回合并清理测试开始 =====");
+
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(allyA, allyB, enemy);
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        runtimeState.SetActionSlots(actionSlots);
+
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            "runtime_state_end_current_turn_intent_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(enemyIntent);
+        runtimeState.SetIntentQueue(intentQueue);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        runtimeState.SetExecutionPlan(executionPlan);
+        runtimeState.SetPhase("Completed");
+
+        Debug.Log("===== 结束回合前 BattleRuntimeState =====");
+        runtimeState.PrintRuntimeState();
+
+        runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+
+        Debug.Log("===== 结束回合后 BattleRuntimeState =====");
+        runtimeState.PrintRuntimeState();
+
+        Debug.Log("预期结束后 battleUnits 数量仍为 3：" + (runtimeState.battleUnits.Count == 3));
+        Debug.Log("预期结束后 allyA 仍然存在：" + (runtimeState.allyA != null));
+        Debug.Log("预期结束后 allyB 仍然存在：" + (runtimeState.allyB != null));
+        Debug.Log("预期结束后 enemy 仍然存在：" + (runtimeState.enemy != null));
+        Debug.Log("预期结束后 actionSlots 数量为 0：" + (runtimeState.actionSlots.Count == 0));
+        Debug.Log("预期结束后 intentQueue 数量为 0：" + (runtimeState.intentQueue.Count == 0));
+        Debug.Log("预期结束后 currentExecutionPlan 为空：" + (runtimeState.currentExecutionPlan == null));
+        Debug.Log("预期结束后 currentTurn 仍为 1：" + (runtimeState.currentTurn == 1));
+        Debug.Log("预期结束后 currentPhase 为 TurnEnded：" + (runtimeState.currentPhase == "TurnEnded"));
+        Debug.Log("本测试只验证 EndTurn + RuntimeState 清理组合入口，不执行 plan，不调用 Resolver，不扣血，不推进下一回合，不生成新敌人意图");
     }
 
     // RunBattleResolverResolveRespondedAttackVsAttackBasicTestSequence = 测试 BattleResolver 正式已响应敌人意图入口

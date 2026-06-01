@@ -5959,3 +5959,447 @@ Attack FreeAction 当前规则：
 - 普通 sandbox 因 Windows SDK 目录权限失败。
 - 提升权限后 `dotnet build ProjectGuilt.sln` 通过。
 - 结果：`0 warnings / 0 errors`。
+
+## 六十、接入简易 UI 前战斗闭环审查记录
+
+当前阶段结论：
+
+- 当前战斗逻辑已经很接近“可接入简易 UI”的状态。
+- 核心执行链已经通了。
+- 当前主要缺口不是战斗结算，而是：
+  - 运行时状态集中管理；
+  - 回合结束 / 下一回合清理；
+  - UI 可读取状态接口。
+
+当前已具备的能力：
+
+- 角色：`CharacterData` 已有 HP、速度、负罪感、Buff、PendingBuff、战斗卡牌列表。
+- 卡牌：`CardDataLoader` 可读取 `CardsTest.json`，`BattleCardState` 可保存 CD、UseCount、消耗状态。
+- 槽位：`BattleActionSlot` 支持响应敌人意图、FreeAction、`isUsed`、`Clear()`。
+- 敌人意图：`BattleEnemyIntent` 支持 originalTarget / actualTarget、槽位编号、是否响应。
+- 响应规则：`BattleActionSlotManager.AssignResponseToEnemyIntent(...)` 已支持高速介入、低速原目标槽位响应、非法低速响应失败。
+- FreeAction：`AssignFreeAction(...)` 已能安排 Ability / Attack 自由行动。
+- 执行计划：`BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(...)` 已支持速度规则排序。
+- 执行器：`BattleExecutionPlanExecutor.ExecuteExecutionPlan(...)` 已能按 plan 顺序执行 item。
+- Resolver：`BattleResolver` 已支持：
+  - `RespondedEnemyIntent` 攻击卡 vs 攻击卡；
+  - `UnrespondedEnemyIntent`；
+  - `FreeAction Ability`；
+  - `FreeAction Attack / 偷刀`。
+- 状态推进：Executor 会标记 `item.isCompleted / plan.isCompleted`，并根据 `playerCardUsed` 调用 `slot.MarkUsed()`。
+- 卡牌消耗：UseCount / guiltGain / CD 继续通过 `Resolved` 事件链处理。
+
+接 UI 前必须补的最小内容：
+
+- 一个运行时状态容器，例如 `BattleRuntimeState` 或 `BattleTestState`，集中保存：
+  - allyA / allyB / enemy
+  - battleUnits
+  - actionSlots
+  - intentQueue
+  - currentExecutionPlan
+  - 当前回合 / 阶段
+- 回合结束整理：
+  - 调用已有 `BattleTurnProcessor.EndTurn(...)`
+  - 清空 / 重建 actionSlots
+  - 清空 intentQueue
+  - 清空或归档 currentExecutionPlan
+  - 下一回合重新 `StartTurn()` 并生成固定敌人意图
+- UI 可读取状态接口：
+  - 第一版可以直接读对象
+  - 更稳的路线是后续增加薄 ViewData / DTO
+
+可以暂缓的内容：
+
+- 防御 / 闪避接 Resolver
+- Ability FreeAction 的速度参考规则
+- 多敌人 / 敌人 AI
+- 多目标 / 群体目标
+- 动画
+- 完整 UI 拖拽
+- 完整回合阶段状态机
+- 敌人卡牌 CD / UseCount
+- 旧测试代码整理
+- Buff 全量规则重构
+
+UI 状态接口第一版需要读取的信息：
+
+- 角色：
+  - 名字
+  - HP / MaxHP
+  - 速度
+  - 负罪感
+  - Buff
+  - PendingBuff
+- 卡牌：
+  - 名字
+  - 类型
+  - UseCount
+  - MaxUseCount
+  - CD
+  - 是否消耗
+  - 是否可用
+- 槽位：
+  - slotIndex
+  - slotType
+  - actor
+  - card
+  - target
+  - enemyIntent
+  - isUsed
+  - 是否为空
+- 敌人意图：
+  - intentOrder
+  - enemy
+  - enemyCard
+  - originalTarget
+  - actualTarget
+  - isResponded
+- 执行计划：
+  - item 顺序
+  - item 类型
+  - item 是否完成
+  - plan 是否完成
+
+简易 UI 第一版建议：
+
+- 第一版不做拖拽，可以先用硬编码按钮。
+- UI 最小区域：
+  - 敌人意图区
+  - 我方角色区
+  - 行动槽位区
+  - 卡牌区
+  - 操作按钮区
+  - 日志区
+- 第一版按钮可以包括：
+  - A 槽位1响应敌人意图1
+  - A 槽位1响应敌人意图2
+  - A 槽位1 Attack FreeAction 攻击敌人
+  - A 槽位1 Ability FreeAction
+  - 生成执行计划
+  - 执行计划
+  - 回合结束 / 重置下一回合
+
+推荐路线：
+
+- 当前推荐顺序为：
+  1. `BattleRuntimeState / BattleTestState`
+  2. 最小回合结束整理
+  3. 固定敌人意图生成方法
+  4. UI 读取快照
+  5. 简易按钮 UI 原型
+  6. 回归一个完整 UI 回合
+- 当前暂时不走防御 / 闪避路线。
+- 防御 / 闪避放到后续“完整战斗逻辑”阶段。
+
+最安全的下一步：
+
+- 先做 `BattleRuntimeState / BattleTestState`。
+- 理由：
+  - 当前逻辑能跑，但“战斗当前状态”还没有集中管理对象。
+  - UI 不应该到处从 `CardLoadTest` 的局部变量里拿数据。
+  - 先把状态集中起来，后面的回合结束、ViewData、UI 按钮都会更顺。
+
+## 六十一、BattleRuntimeState 第一版状态容器测试通过
+
+当前完成内容：
+
+- 新增 `BattleRuntimeState.cs`。
+- `BattleRuntimeState` 第一版用于集中保存当前战斗运行时状态。
+- 本次只做状态容器，不改变战斗结算逻辑。
+- `CardLoadTest.cs` 新增测试模式：
+  - `BattleRuntimeStateBasic`
+
+`BattleRuntimeState` 当前字段：
+
+- `allyA`
+- `allyB`
+- `enemy`
+- `battleUnits`
+- `actionSlots`
+- `intentQueue`
+- `currentExecutionPlan`
+- `currentTurn`
+- `currentPhase`
+
+当前提供的方法：
+
+- `SetCharacters(...)`
+- `SetActionSlots(...)`
+- `SetIntentQueue(...)`
+- `SetExecutionPlan(...)`
+- `ClearActionSlots()`
+- `ClearIntentQueue()`
+- `ClearExecutionPlan()`
+- `SetPhase(...)`
+- `AdvanceTurn()`
+- `PrintRuntimeState()`
+
+测试模式内容：
+
+- 创建 `BattleRuntimeState`
+- 保存 `allyA / allyB / enemy`
+- 创建 2 个行动槽位并保存
+- 创建 1 个敌人意图并保存
+- 生成一个 `CreateSpeedBasedExecutionPlan(...)` 计划并保存
+- 调用 `PrintRuntimeState()`
+- 不执行 plan
+- 不调用 Resolver
+- 不扣血
+- 不处理回合结束
+
+测试结果：
+
+- 当前回合：`1`
+- 当前阶段：`PlanReady`
+- allyA：`我方角色A HP：30 / 30`
+- allyB：`我方角色B HP：30 / 30`
+- enemy：`敌人 HP：999 / 999`
+- `battleUnits 数量：3`
+- `actionSlots 数量：2`
+- `intentQueue 数量：1`
+- `currentExecutionPlan 是否为空：False`
+- `currentExecutionPlan item 数量：1`
+- `currentExecutionPlan 是否完成：False`
+- 预期 `battleUnits` 数量为 3：`True`
+- 预期 `actionSlots` 数量为 2：`True`
+- 预期 `intentQueue` 数量为 1：`True`
+- 预期 `currentExecutionPlan` 不为空：`True`
+
+阶段意义：
+
+- 当前战斗运行时状态开始有集中保存位置。
+- 后续 UI 不必直接从 `CardLoadTest` 的局部变量中到处取数据。
+- 这一步为后续：
+  - 最小回合结束整理
+  - 固定敌人意图生成
+  - UI 可读取状态接口
+  - 简易 UI 原型
+  打下基础。
+
+当前仍未处理：
+
+- 回合结束整理
+- 下一回合清理
+- 固定敌人意图生成入口
+- UI ViewData / DTO
+- 简易 UI
+- 防御 / 闪避
+
+注意事项：
+
+- `BattleRuntimeState` 当前只是状态容器。
+- 当前不负责执行 plan。
+- 当前不负责调用 Resolver。
+- 当前不负责清理回合。
+- 当前不负责创建 UI 状态快照。
+- 当前不改变任何战斗规则。
+
+## 六十二、BattleRuntimeState 当前回合临时对象清理测试通过
+
+当前完成内容：
+
+- `BattleRuntimeState` 新增：
+  - `ClearCurrentTurnRuntimeObjects()`
+- 该方法用于清理当前回合临时战斗对象。
+- 内部只调用：
+  - `ClearActionSlots()`
+  - `ClearIntentQueue()`
+  - `ClearExecutionPlan()`
+  - `SetPhase("TurnCleared")`
+
+当前清理范围：
+
+- 清空当前行动槽位列表
+- 清空当前敌人意图队列
+- 清空当前执行计划
+- 设置阶段为 `TurnCleared`
+
+当前不处理：
+
+- 不调用 `BattleTurnProcessor.EndTurn(...)`
+- 不调用 `BattleTurnProcessor.StartTurn(...)`
+- 不调用 `BattleExecutionPlanExecutor.ExecuteExecutionPlan(...)`
+- 不调用 `BattleResolver`
+- 不处理 Buff
+- 不处理 CD
+- 不处理 UseCount
+- 不处理 guiltGain
+- 不生成下一回合敌人意图
+- 不推进 `currentTurn`
+- 不清空角色引用
+- 不清空 `battleUnits`
+
+新增测试模式：
+
+- `BattleRuntimeStateClearCurrentTurnBasic`
+
+测试流程：
+
+- 创建 `BattleRuntimeState`
+- 保存 allyA / allyB / enemy
+- 创建 2 个 actionSlots 并保存
+- 创建 1 个 enemy intentQueue 并保存
+- 生成一个 `BattleExecutionPlan` 并保存
+- 设置阶段为 `PlanReady`
+- 打印清理前 RuntimeState
+- 调用 `ClearCurrentTurnRuntimeObjects()`
+- 打印清理后 RuntimeState
+
+清理前测试结果：
+
+- `currentPhase = PlanReady`
+- `battleUnits 数量 = 3`
+- `actionSlots 数量 = 2`
+- `intentQueue 数量 = 1`
+- `currentExecutionPlan 是否为空 = False`
+- `currentExecutionPlan item 数量 = 1`
+- `currentExecutionPlan 是否完成 = False`
+
+清理后测试结果：
+
+- `currentPhase = TurnCleared`
+- `battleUnits 数量 = 3`
+- allyA 仍然存在：`True`
+- allyB 仍然存在：`True`
+- enemy 仍然存在：`True`
+- `actionSlots 数量 = 0`
+- `intentQueue 数量 = 0`
+- `currentExecutionPlan 是否为空 = True`
+- `currentTurn 仍为 1`
+- 所有预期判断均为 `True`
+
+阶段意义：
+
+- 当前 RuntimeState 已经能清理本回合临时对象。
+- 这一步为后续正式回合结束流程打基础。
+- 后续可以在更高层流程中把：
+  - `BattleTurnProcessor.EndTurn(...)`
+  - `ClearCurrentTurnRuntimeObjects()`
+  - `AdvanceTurn()`
+  - 下一回合 `StartTurn()`
+  - 固定敌人意图生成
+  串起来。
+- 当前仍保持小步安全，不改变战斗结算和回合规则。
+
+当前仍未处理：
+
+- 正式回合结束流程
+- `BattleTurnProcessor.EndTurn(...)` 与 RuntimeState 清理的组合入口
+- 下一回合生成
+- 固定敌人意图生成入口
+- UI ViewData / DTO
+- 简易 UI
+- 防御 / 闪避
+
+## 六十三、BattleRuntimeState EndTurn + RuntimeState 清理组合入口测试通过
+
+当前完成内容：
+
+- `BattleRuntimeState` 新增：
+  - `EndCurrentTurnAndClearRuntimeObjects()`
+- 该方法用于组合“回合结束处理”和“RuntimeState 临时对象清理”。
+- 内部流程为：
+  - `BattleTurnProcessor.EndTurn(battleUnits)`
+  - `ClearCurrentTurnRuntimeObjects()`
+  - `SetPhase("TurnEnded")`
+
+`BattleTurnProcessor.EndTurn(...)` 当前行为：
+
+- 当前签名：
+  - `public static void EndTurn(List<CharacterData> units)`
+- 当前行为：
+  - 遍历 `units`
+  - 对每个角色调用 `unit.CheckBuffsByTiming("TurnEnd")`
+  - 触发 `BattleTiming.TurnEnd` 事件
+  - 通过事件链让 `BattleCardManager` 处理卡牌 CD -1
+- 当前不会清空槽位、敌人意图或执行计划。
+
+当前组合入口处理范围：
+
+- 调用已有回合结束处理
+- 清空当前行动槽位列表
+- 清空当前敌人意图队列
+- 清空当前执行计划
+- 最终设置阶段为 `TurnEnded`
+
+当前不处理：
+
+- 不调用 `BattleTurnProcessor.StartTurn(...)`
+- 不执行 plan
+- 不调用 Resolver
+- 不扣血
+- 不推进下一回合
+- 不生成新敌人意图
+- 不创建新槽位
+- 不清空角色引用
+- 不清空 `battleUnits`
+
+新增测试模式：
+
+- `BattleRuntimeStateEndCurrentTurnBasic`
+
+测试流程：
+
+- 创建 `BattleRuntimeState`
+- 保存 allyA / allyB / enemy
+- 创建 2 个 actionSlots 并保存
+- 创建 1 个 enemy intentQueue 并保存
+- 生成一个 `BattleExecutionPlan` 并保存
+- 设置阶段为 `Completed`
+- 打印结束前 RuntimeState
+- 调用 `EndCurrentTurnAndClearRuntimeObjects()`
+- 打印结束后 RuntimeState
+
+结束前测试结果：
+
+- `currentTurn = 1`
+- `currentPhase = Completed`
+- `battleUnits 数量 = 3`
+- `actionSlots 数量 = 2`
+- `intentQueue 数量 = 1`
+- `currentExecutionPlan 是否为空 = False`
+- `currentExecutionPlan item 数量 = 1`
+- `currentExecutionPlan 是否完成 = False`
+
+执行过程中确认：
+
+- 日志出现：
+  - `===== 回合结束，处理 Buff 持续时间 =====`
+  - `开始检测 我方角色A 的状态，阶段：TurnEnd`
+  - `开始检测 我方角色B 的状态，阶段：TurnEnd`
+  - `开始检测 敌人 的状态，阶段：TurnEnd`
+- 说明 `BattleTurnProcessor.EndTurn(battleUnits)` 已被调用。
+
+结束后测试结果：
+
+- `currentTurn = 1`
+- `currentPhase = TurnEnded`
+- `battleUnits 数量 = 3`
+- allyA 仍然存在：`True`
+- allyB 仍然存在：`True`
+- enemy 仍然存在：`True`
+- `actionSlots 数量 = 0`
+- `intentQueue 数量 = 0`
+- `currentExecutionPlan 是否为空 = True`
+- 所有预期判断均为 `True`
+
+阶段意义：
+
+- RuntimeState 已经具备最小“结束当前回合并清理临时对象”的入口。
+- 这一步开始把旧的 `BattleTurnProcessor.EndTurn(...)` 接到新的 RuntimeState 流程中。
+- 后续可以继续做：
+  - `AdvanceTurn()`
+  - 下一回合 `StartTurn`
+  - 固定敌人意图生成
+  - 新 actionSlots 创建
+- 当前仍保持小步安全，不改变战斗结算和下一回合生成规则。
+
+当前仍未处理：
+
+- 推进下一回合
+- 下一回合 StartTurn
+- 固定敌人意图生成入口
+- 下一回合 actionSlots 创建
+- UI ViewData / DTO
+- 简易 UI
+- 防御 / 闪避
