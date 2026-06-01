@@ -108,6 +108,21 @@ public class BattleRuntimeState
         SetPhase("TurnEnded");
     }
 
+    // PrepareNextTurnWithRuntimeObjects = 准备下一回合运行时对象
+    // 外部负责创建新槽位和新敌人意图，这里只接收并保存，不写死敌人意图生成规则。
+    public void PrepareNextTurnWithRuntimeObjects(
+        List<BattleActionSlot> newActionSlots,
+        List<BattleEnemyIntent> newIntentQueue
+    )
+    {
+        AdvanceTurn();
+        BattleTurnProcessor.StartTurn(battleUnits);
+        SetActionSlots(newActionSlots);
+        SetIntentQueue(newIntentQueue);
+        ClearExecutionPlan();
+        SetPhase("Prepare");
+    }
+
     // SetPhase = 设置当前阶段文本。
     public void SetPhase(string phase)
     {

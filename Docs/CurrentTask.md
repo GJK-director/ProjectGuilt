@@ -6403,3 +6403,433 @@ UI 状态接口第一版需要读取的信息：
 - UI ViewData / DTO
 - 简易 UI
 - 防御 / 闪避
+
+## 六十四、BattleRuntimeState 下一回合准备入口测试通过
+
+当前完成内容：
+
+- `BattleRuntimeState` 新增：
+  - `PrepareNextTurnWithRuntimeObjects(List<BattleActionSlot> newActionSlots, List<BattleEnemyIntent> newIntentQueue)`
+- 该方法用于把 RuntimeState 从 `TurnEnded` 推进到下一回合 `Prepare` 阶段。
+- RuntimeState 只接收外部传入的新槽位和新敌人意图，不在内部写死敌人意图生成规则。
+
+`BattleTurnProcessor.StartTurn(...)` 当前行为：
+
+- 当前签名：
+  - `public static void StartTurn(List<CharacterData> units)`
+- 当前行为：
+  - 遍历 `units`
+  - 处理 `ApplyPendingBuffsAtTurnStart()`
+  - 投掷本回合速度 `RollTurnSpeed()`
+  - 打印当前速度
+- 当前不会创建槽位、敌人意图或执行计划。
+
+`PrepareNextTurnWithRuntimeObjects(...)` 当前流程：
+
+- `AdvanceTurn()`
+- `BattleTurnProcessor.StartTurn(battleUnits)`
+- `SetActionSlots(newActionSlots)`
+- `SetIntentQueue(newIntentQueue)`
+- `ClearExecutionPlan()`
+- `SetPhase("Prepare")`
+
+当前处理范围：
+
+- 推进 `currentTurn`
+- 调用已有回合开始处理
+- 接收外部新建的 actionSlots
+- 接收外部新建的 intentQueue
+- 清空 currentExecutionPlan
+- 设置阶段为 `Prepare`
+
+当前不处理：
+
+- 不生成 enemy intentQueue
+- 不创建 actionSlots
+- 不创建卡牌状态
+- 不生成 ExecutionPlan
+- 不执行 plan
+- 不调用 Resolver
+- 不扣血
+- 不手动处理 UseCount / guiltGain
+- 不手动处理 CD
+- 不清空角色引用
+- 不清空 battleUnits
+- 不处理 UI
+- 不处理防御 / 闪避
+
+新增测试模式：
+
+- `BattleRuntimeStatePrepareNextTurnBasic`
+
+测试流程：
+
+- 创建 `BattleRuntimeState`
+- 保存 allyA / allyB / enemy
+- 模拟当前回合已结束，阶段为 `TurnEnded`
+- 旧 actionSlots / intentQueue / currentExecutionPlan 仍存在
+- 外部新建 2 个 actionSlots
+- 外部新建 1 个 enemy intentQueue
+- 调用 `PrepareNextTurnWithRuntimeObjects(newActionSlots, newIntentQueue)`
+- 打印准备后 RuntimeState
+
+准备前测试结果：
+
+- `currentTurn = 1`
+- `currentPhase = TurnEnded`
+- `battleUnits 数量 = 3`
+- `actionSlots 数量 = 2`
+- `intentQueue 数量 = 1`
+- `currentExecutionPlan 是否为空 = False`
+- `currentExecutionPlan item 数量 = 1`
+- `currentExecutionPlan 是否完成 = False`
+
+执行过程中确认：
+
+- 日志出现：
+  - `===== 回合开始 =====`
+  - `处理 我方角色A 的待生效状态`
+  - `处理 我方角色B 的待生效状态`
+  - `处理 敌人 的待生效状态`
+  - 各角色本回合速度投掷与当前速度打印
+- 说明 `BattleTurnProcessor.StartTurn(battleUnits)` 已被调用。
+
+准备后测试结果：
+
+- `currentTurn = 2`
+- `currentPhase = Prepare`
+- `battleUnits 数量 = 3`
+- allyA 仍然存在：`True`
+- allyB 仍然存在：`True`
+- enemy 仍然存在：`True`
+- `actionSlots 数量 = 2`
+- `intentQueue 数量 = 1`
+- `currentExecutionPlan 是否为空 = True`
+- 所有预期判断均为 `True`
+
+阶段意义：
+
+- RuntimeState 已经具备从回合结束到下一回合准备阶段的最小流程。
+- 当前第 4 步“回合结束整理”完成第一版闭环：
+  - `EndCurrentTurnAndClearRuntimeObjects()`
+  - `PrepareNextTurnWithRuntimeObjects(...)`
+- 后续 UI 可以通过外部控制器创建新槽位和新敌人意图，再交给 RuntimeState 保存。
+- RuntimeState 不负责敌人 AI，不负责生成执行计划，保持职责清晰。
+
+当前仍未处理：
+
+- 固定敌人意图生成入口
+- UI ViewData / DTO
+- 简易 UI
+- 防御 / 闪避
+- 完整回合阶段状态机
+- 敌人 AI
+
+## 六十五、固定敌人意图生成入口测试通过
+
+当前完成内容：
+
+- `CardLoadTest.cs` 新增固定敌人意图生成辅助方法：
+  - `CreateFixedTestEnemyIntentQueueForRuntimeState()`
+- 该方法用于为 RuntimeState / 后续简易 UI 测试生成固定敌人意图队列。
+- 第一版只生成 1 个固定敌人意图。
+- 没有把敌人意图生成规则写进 `BattleRuntimeState`。
+
+固定敌人意图内容：
+
+- enemy = `敌人`
+- enemyCardState = `enemyAttackCardState`
+- enemyCard = `敌人爪击`
+- originalTarget = `allyB`
+- actualTarget = `allyB`
+- actualTargetSlotIndex = `1`
+- intentOrder = `1`
+- isResponded = `false`
+
+新增测试模式：
+
+- `BattleRuntimeStateFixedIntentFactoryBasic`
+
+测试流程：
+
+- 创建 `BattleRuntimeState`
+- 保存 allyA / allyB / enemy
+- 创建 2 个 actionSlots
+- 调用 `CreateFixedTestEnemyIntentQueueForRuntimeState()` 得到 intentQueue
+- 调用：
+  - `runtimeState.SetActionSlots(actionSlots)`
+  - `runtimeState.SetIntentQueue(intentQueue)`
+  - `runtimeState.SetPhase("Prepare")`
+- 打印 RuntimeState
+- 打印敌人意图队列
+- 校验敌人意图 1 的关键字段
+
+测试结果：
+
+- `battleUnits 数量 = 3`
+- `actionSlots 数量 = 2`
+- `intentQueue 数量 = 1`
+- `currentPhase = Prepare`
+- `currentExecutionPlan 是否为空 = True`
+- 敌人意图 1 存在：`True`
+- 敌人意图 1 enemy 为敌人：`True`
+- 敌人意图 1 enemyCardState 为 enemyAttackCardState：`True`
+- 敌人意图 1 originalTarget 为 allyB：`True`
+- 敌人意图 1 actualTarget 为 allyB：`True`
+- 敌人意图 1 actualTargetSlotIndex 为 1：`True`
+- 敌人意图 1 intentOrder 为 1：`True`
+- 敌人意图 1 isResponded 为 false：`True`
+
+当前不处理：
+
+- 不修改 `BattleRuntimeState`
+- 不生成 ExecutionPlan
+- 不执行 plan
+- 不调用 Resolver
+- 不扣血
+- 不推进回合
+- 不调用 StartTurn / EndTurn
+- 不处理 UI
+- 不处理敌人 AI
+- 不处理随机敌人意图
+- 不处理多敌人
+
+阶段意义：
+
+- 固定敌人意图生成入口第一版可用。
+- 后续简易 UI / 测试控制器可以通过外部方法生成敌人意图，再交给 RuntimeState 保存。
+- RuntimeState 继续保持职责清晰：只保存当前运行时状态，不负责敌人 AI 或意图生成。
+- 这一步为后续 UI 可读取状态接口和简易 UI 原型打基础。
+
+当前仍未处理：
+
+- UI ViewData / DTO
+- 简易 UI
+- 更正式的 BattleController / TestScenarioFactory
+- 多敌人意图生成
+- 敌人 AI
+- 防御 / 闪避
+
+## 六十六、BattleStateViewData 第一版只读状态快照测试通过
+
+当前完成内容：
+
+- 新增 `BattleStateViewData.cs`
+- 新增 `public class BattleStateViewData`
+- 用于从 `BattleRuntimeState` 生成 UI 可读取的只读状态快照。
+- 当前第一版只做最小字段，不做完整 UI DTO。
+
+`BattleStateViewData` 第一版字段：
+
+- `currentTurn`
+- `currentPhase`
+- allyA：
+  - name
+  - HP
+  - MaxHP
+  - speed
+  - guilt
+- allyB：
+  - name
+  - HP
+  - MaxHP
+  - speed
+  - guilt
+- enemy：
+  - name
+  - HP
+  - MaxHP
+  - speed
+- `actionSlotCount`
+- `intentCount`
+- `hasExecutionPlan`
+- `executionPlanCompleted`
+- `executionItemCount`
+
+当前方法：
+
+- `BattleStateViewData.FromRuntimeState(BattleRuntimeState runtimeState)`
+  - 从 RuntimeState 只读生成新的 ViewData
+  - 安全处理 runtimeState 为空
+  - 安全处理角色、槽位、敌人意图、执行计划为空
+  - 不修改 RuntimeState
+  - 不执行任何战斗逻辑
+- `PrintViewData()`
+  - 打印当前回合 / 阶段
+  - 打印 allyA / allyB / enemy 的名字、HP、速度、负罪感
+  - 打印 actionSlot 数量、intent 数量
+  - 打印是否有 ExecutionPlan、ExecutionPlan 是否完成、ExecutionItem 数量
+
+新增测试模式：
+
+- `BattleStateViewDataBasic`
+
+测试流程：
+
+- 创建 `BattleRuntimeState`
+- 保存 allyA / allyB / enemy
+- 创建 2 个 actionSlots 并保存
+- 使用固定敌人意图生成入口创建 1 个 intentQueue 并保存
+- 设置阶段为 `Prepare`
+- 不生成 ExecutionPlan
+- 调用：
+  - `BattleStateViewData.FromRuntimeState(runtimeState)`
+  - `viewData.PrintViewData()`
+
+测试结果：
+
+- `currentTurn = 1`
+- `currentPhase = Prepare`
+- allyA：`我方角色A HP：30 / 30，速度：20，负罪感：0`
+- allyB：`我方角色B HP：30 / 30，速度：3，负罪感：0`
+- enemy：`敌人 HP：999 / 999，速度：5`
+- `actionSlotCount = 2`
+- `intentCount = 1`
+- `hasExecutionPlan = False`
+- `executionPlanCompleted = False`
+- `executionItemCount = 0`
+- 所有预期判断均为 `True`
+
+当前不处理：
+
+- 不做 CharacterViewData
+- 不做 CardViewData
+- 不做 ActionSlotViewData
+- 不做 EnemyIntentViewData
+- 不做 ExecutionPlanViewData
+- 不做 UI
+- 不做按钮
+- 不做日志列表
+- 不修改 RuntimeState
+- 不修改战斗逻辑
+- 不执行 plan
+- 不调用 Resolver
+
+阶段意义：
+
+- UI 可读取战斗状态接口完成最小第一版。
+- 后续简易 UI 可以先通过 `BattleStateViewData` 读取当前回合、阶段、角色 HP/速度/负罪感、槽位数量、敌人意图数量和执行计划状态。
+- UI 暂时不需要直接到处读取 RuntimeState 内部对象。
+- 这一步为简易 UI 原型打基础。
+
+当前仍未处理：
+
+- 更细的 CharacterViewData
+- CardViewData
+- ActionSlotViewData
+- EnemyIntentViewData
+- ExecutionPlanViewData
+- UI 按钮控制器
+- UI 日志显示
+- 简易 UI 场景
+- 防御 / 闪避
+
+## 六十七、EnemyIntentViewData 第一版敌人意图快照测试通过
+
+当前完成内容：
+
+- 在 `BattleStateViewData.cs` 中新增：
+  - `public class EnemyIntentViewData`
+- `BattleStateViewData` 新增：
+  - `public List<EnemyIntentViewData> enemyIntentViews`
+- `BattleStateViewData.FromRuntimeState(...)` 现在会从 `runtimeState.intentQueue` 生成敌人意图 ViewData 列表。
+- 这一步只做只读 ViewData，不做 UI，不修改战斗逻辑。
+
+`EnemyIntentViewData` 第一版字段：
+
+- `intentOrder`
+- `enemyName`
+- `enemyCardName`
+- `originalTargetName`
+- `originalTargetSlotIndex`
+- `actualTargetName`
+- `actualTargetSlotIndex`
+- `isResponded`
+
+`FromRuntimeState(...)` 当前行为：
+
+- 从 `runtimeState.intentQueue` 生成 `enemyIntentViews`
+- `runtimeState == null` 时返回空列表
+- `intentQueue == null` 时返回空列表
+- 每个 `BattleEnemyIntent` 转换为一个 `EnemyIntentViewData`
+- 只读，不修改 RuntimeState
+- 只读，不修改 enemyIntent
+
+`PrintViewData()` 新增打印：
+
+- `===== EnemyIntentViewData 敌人意图快照 =====`
+- 意图编号
+- 敌人名
+- 敌人卡牌名
+- 原目标角色 / 槽位
+- 实际目标角色 / 槽位
+- 是否已响应
+
+新增测试模式：
+
+- `BattleStateViewDataEnemyIntentBasic`
+
+测试流程：
+
+- 创建 `BattleRuntimeState`
+- 保存 allyA / allyB / enemy
+- 创建 2 个 actionSlots 并保存
+- 使用固定敌人意图生成入口创建 1 个 intentQueue 并保存
+- 设置阶段为 `Prepare`
+- 调用：
+  - `BattleStateViewData.FromRuntimeState(runtimeState)`
+  - `viewData.PrintViewData()`
+- 校验第 1 个 `EnemyIntentViewData` 的关键字段
+
+测试结果：
+
+- `intentCount = 1`
+- `enemyIntentViews != null`
+- `enemyIntentViews.Count = 1`
+- 第 1 个 `EnemyIntentViewData`：
+  - `intentOrder = 1`
+  - `enemyName = 敌人`
+  - `enemyCardName = 敌人爪击`
+  - `originalTargetName = 我方角色B`
+  - `originalTargetSlotIndex = 1`
+  - `actualTargetName = 我方角色B`
+  - `actualTargetSlotIndex = 1`
+  - `isResponded = false`
+- 所有预期判断均为 `True`
+
+当前不处理：
+
+- 不做 ActionSlotViewData
+- 不做 CardViewData
+- 不做 CharacterViewData
+- 不做 ExecutionPlanViewData
+- 不做 UI
+- 不做按钮
+- 不执行 plan
+- 不调用 Resolver
+- 不修改 RuntimeState
+- 不修改 BattleEnemyIntent
+- 不修改战斗逻辑
+
+阶段意义：
+
+- UI 现在可以通过 `BattleStateViewData.enemyIntentViews` 读取敌人意图列表。
+- 简易 UI 后续可以显示“敌人准备做什么”：
+  - 敌人
+  - 卡牌
+  - 原目标
+  - 实际目标
+  - 槽位
+  - 是否已响应
+- 这一步为敌人意图区 UI 打基础。
+
+当前仍未处理：
+
+- ActionSlotViewData
+- CardViewData
+- CharacterViewData
+- ExecutionPlanViewData
+- UI 按钮控制器
+- UI 日志显示
+- 简易 UI 场景
+- 防御 / 闪避

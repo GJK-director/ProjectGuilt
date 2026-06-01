@@ -9,6 +9,10 @@ public enum BattleTestMode
     BattleRuntimeStateBasic,
     BattleRuntimeStateClearCurrentTurnBasic,
     BattleRuntimeStateEndCurrentTurnBasic,
+    BattleRuntimeStatePrepareNextTurnBasic,
+    BattleRuntimeStateFixedIntentFactoryBasic,
+    BattleStateViewDataBasic,
+    BattleStateViewDataEnemyIntentBasic,
     BattleResolverResolveRespondedAttackVsAttackBasic,
     BattleResolverResolveUnrespondedEnemyIntentBasic,
     BattleResolverResolveFreeAbilityBasic,
@@ -108,6 +112,30 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleRuntimeStateEndCurrentTurnBasic)
         {
             RunBattleRuntimeStateEndCurrentTurnBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleRuntimeStatePrepareNextTurnBasic)
+        {
+            RunBattleRuntimeStatePrepareNextTurnBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleRuntimeStateFixedIntentFactoryBasic)
+        {
+            RunBattleRuntimeStateFixedIntentFactoryBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleStateViewDataBasic)
+        {
+            RunBattleStateViewDataBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleStateViewDataEnemyIntentBasic)
+        {
+            RunBattleStateViewDataEnemyIntentBasicTestSequence();
             return;
         }
 
@@ -415,6 +443,207 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期结束后 currentTurn 仍为 1：" + (runtimeState.currentTurn == 1));
         Debug.Log("预期结束后 currentPhase 为 TurnEnded：" + (runtimeState.currentPhase == "TurnEnded"));
         Debug.Log("本测试只验证 EndTurn + RuntimeState 清理组合入口，不执行 plan，不调用 Resolver，不扣血，不推进下一回合，不生成新敌人意图");
+    }
+
+    // RunBattleRuntimeStatePrepareNextTurnBasicTestSequence = 验证 RuntimeState 能推进到下一回合准备阶段
+    void RunBattleRuntimeStatePrepareNextTurnBasicTestSequence()
+    {
+        Debug.Log("===== BattleRuntimeState 准备下一回合运行时对象测试开始 =====");
+
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(allyA, allyB, enemy);
+
+        List<BattleActionSlot> oldActionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        runtimeState.SetActionSlots(oldActionSlots);
+
+        BattleEnemyIntent oldEnemyIntent = new BattleEnemyIntent(
+            "runtime_state_prepare_next_turn_old_intent_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> oldIntentQueue = BattleEnemyIntentManager.CreateIntentQueue(oldEnemyIntent);
+        runtimeState.SetIntentQueue(oldIntentQueue);
+
+        BattleExecutionPlan oldExecutionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            oldActionSlots,
+            oldIntentQueue
+        );
+
+        runtimeState.SetExecutionPlan(oldExecutionPlan);
+        runtimeState.SetPhase("TurnEnded");
+
+        Debug.Log("===== 准备下一回合前 BattleRuntimeState =====");
+        runtimeState.PrintRuntimeState();
+
+        List<BattleActionSlot> newActionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        BattleEnemyIntent newEnemyIntent = new BattleEnemyIntent(
+            "runtime_state_prepare_next_turn_new_intent_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            2,
+            1
+        );
+
+        List<BattleEnemyIntent> newIntentQueue = BattleEnemyIntentManager.CreateIntentQueue(newEnemyIntent);
+
+        runtimeState.PrepareNextTurnWithRuntimeObjects(newActionSlots, newIntentQueue);
+
+        Debug.Log("===== 准备下一回合后 BattleRuntimeState =====");
+        runtimeState.PrintRuntimeState();
+
+        Debug.Log("预期准备后 currentTurn 为 2：" + (runtimeState.currentTurn == 2));
+        Debug.Log("预期准备后 currentPhase 为 Prepare：" + (runtimeState.currentPhase == "Prepare"));
+        Debug.Log("预期准备后 battleUnits 数量仍为 3：" + (runtimeState.battleUnits.Count == 3));
+        Debug.Log("预期准备后 allyA 仍然存在：" + (runtimeState.allyA != null));
+        Debug.Log("预期准备后 allyB 仍然存在：" + (runtimeState.allyB != null));
+        Debug.Log("预期准备后 enemy 仍然存在：" + (runtimeState.enemy != null));
+        Debug.Log("预期准备后 actionSlots 数量为 2：" + (runtimeState.actionSlots.Count == 2));
+        Debug.Log("预期准备后 intentQueue 数量为 1：" + (runtimeState.intentQueue.Count == 1));
+        Debug.Log("预期准备后 currentExecutionPlan 为空：" + (runtimeState.currentExecutionPlan == null));
+        Debug.Log("本测试只验证下一回合 RuntimeState 准备，不执行 plan，不调用 Resolver，不扣血，不生成 ExecutionPlan，不写死敌人 AI");
+    }
+
+    // RunBattleRuntimeStateFixedIntentFactoryBasicTestSequence = 验证固定测试敌人意图生成入口
+    void RunBattleRuntimeStateFixedIntentFactoryBasicTestSequence()
+    {
+        Debug.Log("===== BattleRuntimeState 固定敌人意图生成入口测试开始 =====");
+
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(allyA, allyB, enemy);
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        List<BattleEnemyIntent> intentQueue = CreateFixedTestEnemyIntentQueueForRuntimeState();
+
+        runtimeState.SetActionSlots(actionSlots);
+        runtimeState.SetIntentQueue(intentQueue);
+        runtimeState.SetPhase("Prepare");
+
+        runtimeState.PrintRuntimeState();
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+
+        BattleEnemyIntent intent = BattleEnemyIntentManager.FindIntentByOrder(intentQueue, 1);
+
+        Debug.Log("固定敌人意图队列数量：" + intentQueue.Count);
+
+        if (intent != null)
+        {
+            Debug.Log("敌人意图1 enemy：" + intent.GetEnemyName());
+            Debug.Log("敌人意图1 enemyCard：" + intent.GetCardName());
+            Debug.Log("敌人意图1 originalTarget：" + intent.GetOriginalTargetName());
+            Debug.Log("敌人意图1 actualTarget：" + intent.GetActualTargetName());
+            Debug.Log("敌人意图1 actualTargetSlotIndex：" + intent.actualTargetSlotIndex);
+            Debug.Log("敌人意图1 intentOrder：" + intent.intentOrder);
+            Debug.Log("敌人意图1 isResponded：" + intent.isResponded);
+        }
+
+        Debug.Log("预期 battleUnits 数量为 3：" + (runtimeState.battleUnits.Count == 3));
+        Debug.Log("预期 actionSlots 数量为 2：" + (runtimeState.actionSlots.Count == 2));
+        Debug.Log("预期 intentQueue 数量为 1：" + (runtimeState.intentQueue.Count == 1));
+        Debug.Log("预期 currentPhase 为 Prepare：" + (runtimeState.currentPhase == "Prepare"));
+        Debug.Log("预期 currentExecutionPlan 为空：" + (runtimeState.currentExecutionPlan == null));
+        Debug.Log("预期敌人意图1存在：" + (intent != null));
+
+        if (intent != null)
+        {
+            Debug.Log("预期敌人意图1 enemy 为 敌人：" + (intent.enemy == enemy));
+            Debug.Log("预期敌人意图1 enemyCardState 为 enemyAttackCardState：" + (intent.enemyCardState == enemyAttackCardState));
+            Debug.Log("预期敌人意图1 originalTarget 为 allyB：" + (intent.originalTargetCharacter == allyB));
+            Debug.Log("预期敌人意图1 actualTarget 为 allyB：" + (intent.actualTargetCharacter == allyB));
+            Debug.Log("预期敌人意图1 actualTargetSlotIndex 为 1：" + (intent.actualTargetSlotIndex == 1));
+        Debug.Log("预期敌人意图1 intentOrder 为 1：" + (intent.intentOrder == 1));
+        Debug.Log("预期敌人意图1 isResponded 为 false：" + (intent.isResponded == false));
+        }
+
+        Debug.Log("本测试只验证固定测试敌人意图生成入口，不生成 ExecutionPlan，不执行 plan，不调用 Resolver，不扣血，不推进回合，不调用 StartTurn / EndTurn");
+    }
+
+    // RunBattleStateViewDataBasicTestSequence = 验证 UI 可读取状态快照能从 RuntimeState 生成
+    void RunBattleStateViewDataBasicTestSequence()
+    {
+        Debug.Log("===== BattleStateViewData 基础只读快照测试开始 =====");
+
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(allyA, allyB, enemy);
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        List<BattleEnemyIntent> intentQueue = CreateFixedTestEnemyIntentQueueForRuntimeState();
+
+        runtimeState.SetActionSlots(actionSlots);
+        runtimeState.SetIntentQueue(intentQueue);
+        runtimeState.SetPhase("Prepare");
+
+        BattleStateViewData viewData = BattleStateViewData.FromRuntimeState(runtimeState);
+        viewData.PrintViewData();
+
+        Debug.Log("预期 currentTurn 为 1：" + (viewData.currentTurn == 1));
+        Debug.Log("预期 currentPhase 为 Prepare：" + (viewData.currentPhase == "Prepare"));
+        Debug.Log("预期 allyA 名字正确：" + (viewData.allyAName == allyA.characterName));
+        Debug.Log("预期 allyA HP 正确：" + (viewData.allyAHP == allyA.currentHP && viewData.allyAMaxHP == allyA.maxHP));
+        Debug.Log("预期 allyA 速度正确：" + (viewData.allyASpeed == allyA.GetCurrentSpeed()));
+        Debug.Log("预期 allyA 负罪感正确：" + (viewData.allyAGuilt == allyA.currentGuilt));
+        Debug.Log("预期 allyB 名字正确：" + (viewData.allyBName == allyB.characterName));
+        Debug.Log("预期 allyB HP 正确：" + (viewData.allyBHP == allyB.currentHP && viewData.allyBMaxHP == allyB.maxHP));
+        Debug.Log("预期 allyB 速度正确：" + (viewData.allyBSpeed == allyB.GetCurrentSpeed()));
+        Debug.Log("预期 allyB 负罪感正确：" + (viewData.allyBGuilt == allyB.currentGuilt));
+        Debug.Log("预期 enemy 名字正确：" + (viewData.enemyName == enemy.characterName));
+        Debug.Log("预期 enemy HP 正确：" + (viewData.enemyHP == enemy.currentHP && viewData.enemyMaxHP == enemy.maxHP));
+        Debug.Log("预期 enemy 速度正确：" + (viewData.enemySpeed == enemy.GetCurrentSpeed()));
+        Debug.Log("预期 actionSlotCount 为 2：" + (viewData.actionSlotCount == 2));
+        Debug.Log("预期 intentCount 为 1：" + (viewData.intentCount == 1));
+        Debug.Log("预期 hasExecutionPlan 为 false：" + (viewData.hasExecutionPlan == false));
+        Debug.Log("预期 executionPlanCompleted 为 false：" + (viewData.executionPlanCompleted == false));
+        Debug.Log("预期 executionItemCount 为 0：" + (viewData.executionItemCount == 0));
+        Debug.Log("本测试只验证 ViewData 从 RuntimeState 只读生成，不生成 ExecutionPlan，不执行 plan，不调用 Resolver，不修改 RuntimeState，不改战斗逻辑");
+    }
+
+    // RunBattleStateViewDataEnemyIntentBasicTestSequence = 验证 ViewData 能包含敌人意图列表
+    void RunBattleStateViewDataEnemyIntentBasicTestSequence()
+    {
+        Debug.Log("===== BattleStateViewData 敌人意图快照测试开始 =====");
+
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(allyA, allyB, enemy);
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        List<BattleEnemyIntent> intentQueue = CreateFixedTestEnemyIntentQueueForRuntimeState();
+
+        runtimeState.SetActionSlots(actionSlots);
+        runtimeState.SetIntentQueue(intentQueue);
+        runtimeState.SetPhase("Prepare");
+
+        BattleStateViewData viewData = BattleStateViewData.FromRuntimeState(runtimeState);
+        viewData.PrintViewData();
+
+        EnemyIntentViewData intentView = null;
+
+        if (viewData.enemyIntentViews != null && viewData.enemyIntentViews.Count > 0)
+        {
+            intentView = viewData.enemyIntentViews[0];
+        }
+
+        Debug.Log("预期 intentCount 为 1：" + (viewData.intentCount == 1));
+        Debug.Log("预期 enemyIntentViews 不为空：" + (viewData.enemyIntentViews != null));
+        Debug.Log("预期 enemyIntentViews 数量为 1：" + (viewData.enemyIntentViews != null && viewData.enemyIntentViews.Count == 1));
+        Debug.Log("预期第 1 个 EnemyIntentViewData 存在：" + (intentView != null));
+
+        if (intentView != null)
+        {
+            Debug.Log("预期 intentOrder 为 1：" + (intentView.intentOrder == 1));
+            Debug.Log("预期 enemyName 正确：" + (intentView.enemyName == enemy.characterName));
+            Debug.Log("预期 enemyCardName 正确：" + (intentView.enemyCardName == enemyAttackCardState.cardData.cardName));
+            Debug.Log("预期 originalTargetName 正确：" + (intentView.originalTargetName == allyB.characterName));
+            Debug.Log("预期 originalTargetSlotIndex 为 1：" + (intentView.originalTargetSlotIndex == 1));
+            Debug.Log("预期 actualTargetName 正确：" + (intentView.actualTargetName == allyB.characterName));
+            Debug.Log("预期 actualTargetSlotIndex 为 1：" + (intentView.actualTargetSlotIndex == 1));
+            Debug.Log("预期 isResponded 为 false：" + (intentView.isResponded == false));
+        }
+
+        Debug.Log("本测试只验证 EnemyIntentViewData 从 RuntimeState 只读生成，不做 UI，不执行 plan，不调用 Resolver，不修改 RuntimeState，不改敌人意图");
     }
 
     // RunBattleResolverResolveRespondedAttackVsAttackBasicTestSequence = 测试 BattleResolver 正式已响应敌人意图入口
@@ -2418,6 +2647,34 @@ public class CardLoadTest : MonoBehaviour
         );
 
         return enemyIntent;
+    }
+
+    // CreateFixedTestEnemyIntentQueueForRuntimeState = 为 RuntimeState / 简易 UI 原型创建固定测试敌人意图队列
+    List<BattleEnemyIntent> CreateFixedTestEnemyIntentQueueForRuntimeState()
+    {
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            "runtime_state_fixed_intent_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            1,
+            1
+        );
+
+        Debug.Log(
+            "创建 RuntimeState 固定敌人意图：敌人意图" +
+            enemyIntent.intentOrder +
+            "，" +
+            enemyIntent.GetEnemyName() +
+            " 使用 " +
+            enemyIntent.GetCardName() +
+            " 攻击 " +
+            enemyIntent.GetOriginalTargetName() +
+            " 的槽位" +
+            enemyIntent.originalTargetSlotIndex
+        );
+
+        return BattleEnemyIntentManager.CreateIntentQueue(enemyIntent);
     }
 
     // ================================
