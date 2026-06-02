@@ -6833,3 +6833,269 @@ UI 状态接口第一版需要读取的信息：
 - UI 日志显示
 - 简易 UI 场景
 - 防御 / 闪避
+
+## 六十八、ActionSlotViewData 第一版行动槽位快照测试通过
+
+当前完成内容：
+
+- 在 `BattleStateViewData.cs` 中新增：
+  - `public class ActionSlotViewData`
+- `BattleStateViewData` 新增：
+  - `public List<ActionSlotViewData> actionSlotViews`
+- `BattleStateViewData.FromRuntimeState(...)` 现在会从 `runtimeState.actionSlots` 生成行动槽位 ViewData 列表。
+- 这一步只做只读 ViewData，不做 UI，不修改战斗逻辑。
+
+`ActionSlotViewData` 第一版字段：
+
+- `slotIndex`
+- `slotType`
+- `actorName`
+- `cardName`
+- `cardType`
+- `targetName`
+- `enemyIntentOrder`
+- `hasEnemyIntent`
+- `isUsed`
+- `isEmpty`
+
+`FromRuntimeState(...)` 当前行为：
+
+- 从 `runtimeState.actionSlots` 生成 `actionSlotViews`
+- `runtimeState == null` 时返回空列表
+- `actionSlots == null` 时返回空列表
+- 每个 `BattleActionSlot` 转换为一个 `ActionSlotViewData`
+- 只读，不修改 RuntimeState
+- 只读，不修改 actionSlot
+
+`PrintViewData()` 新增打印：
+
+- `===== ActionSlotViewData 行动槽位快照 =====`
+- 槽位编号
+- 槽位类型
+- 行动者
+- 卡牌名
+- 卡牌类型
+- 目标
+- 绑定敌人意图
+- `isUsed`
+- `isEmpty`
+- 空槽位会打印为“空槽位”
+
+新增测试模式：
+
+- `BattleStateViewDataActionSlotBasic`
+
+测试流程：
+
+- 创建 `BattleRuntimeState`
+- 保存 allyA / allyB / enemy
+- 创建 2 个 actionSlots
+- 给第 1 个槽位安排 `Attack FreeAction`
+  - actor = allyA
+  - cardState = allyAAttackCardState
+  - target = enemy
+- 第 2 个槽位保持空槽位
+- 使用固定敌人意图生成入口创建 1 个 intentQueue 并保存
+- 设置阶段为 `Prepare`
+- 调用：
+  - `BattleStateViewData.FromRuntimeState(runtimeState)`
+  - `viewData.PrintViewData()`
+- 校验第 1 个和第 2 个 `ActionSlotViewData` 的关键字段
+
+测试结果：
+
+- `actionSlotCount = 2`
+- `actionSlotViews != null`
+- `actionSlotViews.Count = 2`
+- 第 1 个 `ActionSlotViewData`：
+  - `slotIndex = 1`
+  - `actorName = 我方角色A`
+  - `cardName = 基础攻击`
+  - `cardType = Attack`
+  - `targetName = 敌人`
+  - `hasEnemyIntent = false`
+  - `isUsed = false`
+  - `isEmpty = false`
+- 第 2 个 `ActionSlotViewData`：
+  - `slotIndex = 2`
+  - `isEmpty = true`
+  - `cardName` 为空或空
+  - `isUsed = false`
+- 所有预期判断均为 `True`
+
+当前不处理：
+
+- 不做 CardViewData
+- 不做 CharacterViewData
+- 不做 ExecutionPlanViewData
+- 不做 UI
+- 不做按钮
+- 不执行 plan
+- 不调用 Resolver
+- 不修改 RuntimeState
+- 不修改 BattleActionSlot
+- 不修改战斗逻辑
+
+阶段意义：
+
+- UI 现在可以通过 `BattleStateViewData.actionSlotViews` 读取我方行动槽位列表。
+- 简易 UI 后续可以显示“我方槽位里放了什么”：
+  - 槽位编号
+  - 行动者
+  - 卡牌
+  - 卡牌类型
+  - 目标
+  - 是否绑定敌人意图
+  - 是否已使用
+  - 是否为空
+- 当前敌人意图区和我方槽位区都已有 ViewData 数据来源。
+- 这一步为简易 UI 原型打基础。
+
+当前仍未处理：
+
+- CardViewData
+- CharacterViewData
+- ExecutionPlanViewData
+- UI 按钮控制器
+- UI 日志显示
+- 简易 UI 场景
+- 防御 / 闪避
+
+## 六十九、BattleSimpleUIController 第一版简易 UI 主流程接入通过
+
+当前完成内容：
+
+- 新增 `BattleSimpleUIController.cs`
+- 该脚本用于连接手动搭建好的 `BattleSimpleUITest` 简易 UI 场景。
+- Unity UI 界面由用户和助手手动搭建，Codex 只负责编写按钮点击逻辑和 UI 文本刷新逻辑。
+- 本次没有让 Codex 修改场景文件、Prefab、Canvas、Panel 或 Button。
+
+当前 UI 场景基础：
+
+- 场景：`BattleSimpleUITest`
+- Canvas：`Canvas_BattleSimpleUI`
+- UI 基准分辨率：`1920 x 1080`
+- Canvas Scaler：
+  - `Scale With Screen Size`
+  - Reference Resolution：`1920 x 1080`
+  - Match Width Or Height：`0.5`
+- 当前 UI 使用 TextMeshPro 中文字体资产：
+  - `TMP_Font_CN`
+- 当前目标兼容：1080p / 2K / 4K
+
+当前 UI 区域：
+
+- 顶部回合 / 阶段显示
+- 敌人状态区
+- 敌人意图区
+- 我方角色状态区
+- 行动槽位区
+- 操作按钮区
+- 战斗日志区
+
+`BattleSimpleUIController` 当前绑定的文本：
+
+- `topInfoText`
+- `enemyStateText`
+- `allyAStateText`
+- `allyBStateText`
+- `intentListText`
+- `actionSlot1Text`
+- `actionSlot2Text`
+- `logText`
+
+`BattleSimpleUIController` 当前绑定的按钮：
+
+- `assignA1FreeAttackButton`
+- `assignA1AbilityButton`
+- `createExecutionPlanButton`
+- `executePlanButton`
+- `endTurnButton`
+- `prepareNextTurnButton`
+- `refreshViewButton`
+
+当前按钮功能：
+
+- `A槽位1偷刀`
+  - 调用 `BattleActionSlotManager.AssignFreeAction(...)`
+  - 给槽位1安排 allyA 使用基础攻击攻击 enemy
+- `A槽位1能力`
+  - 给槽位1安排 allyA 使用 Ability FreeAction
+- `生成计划`
+  - 调用 `BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(...)`
+  - 保存到 `runtimeState.currentExecutionPlan`
+  - 阶段变为 `PlanReady`
+- `执行计划`
+  - 调用 `BattleExecutionPlanExecutor.ExecuteExecutionPlan(...)`
+  - 阶段变为 `Completed`
+- `结束回合`
+  - 调用 `runtimeState.EndCurrentTurnAndClearRuntimeObjects()`
+- `准备下一回合`
+  - 外部创建新的 actionSlots
+  - 外部创建新的固定 enemy intentQueue
+  - 调用 `runtimeState.PrepareNextTurnWithRuntimeObjects(...)`
+- `刷新状态`
+  - 调用 `RefreshView()`
+
+当前 UI 主流程测试结果：
+
+- 成功读取卡牌数据，共 5 张卡牌。
+- 成功创建 2 个行动槽位。
+- 成功创建 1 个敌人意图。
+- 点击 `A槽位1偷刀` 后：
+  - 槽位1成功安排 FreeAction
+  - allyA 使用基础攻击攻击 enemy
+- 点击 `生成计划` 后：
+  - 生成 ExecutionPlan
+  - 执行计划包含 2 项：
+    - 第 1 项：`FreeAction`
+    - 第 2 项：`UnrespondedEnemyIntent`
+- 点击 `执行计划` 后：
+  - allyA 使用基础攻击命中 enemy
+  - enemy HP：`999 -> 979`
+  - allyA 负罪感：`0 -> 2`
+  - allyA 槽位1标记为已使用
+  - 敌人无人响应意图命中 allyB
+  - allyB HP：`30 -> 28`
+  - `BattleExecutionPlan` 全部完成
+- 点击 `结束回合` 后：
+  - `BattleTurnProcessor.EndTurn(...)` 被调用
+  - RuntimeState 清理当前回合临时对象
+- 点击 `准备下一回合` 后：
+  - 创建新的 2 个 actionSlots
+  - 创建新的固定 enemy intentQueue
+  - `BattleTurnProcessor.StartTurn(...)` 被调用
+  - 当前回合进入第 2 回合
+  - 阶段为 `Prepare`
+
+当前结论：
+
+- 简易 UI 第一版主流程已经跑通。
+- 当前已经验证：
+  - UI 按钮可以驱动战斗逻辑
+  - RuntimeState 可以被 UI 控制器初始化和推进
+  - BattleStateViewData 可以刷新 UI 文本
+  - FreeAction / ExecutionPlan / ExecutePlan / EndTurn / PrepareNextTurn 可以通过按钮串起来
+- 这说明第 6 步“简易 UI 原型”已经从静态界面进入可操作状态。
+
+当前存在的小问题：
+
+- TextMeshPro 中文字体资产仍可能遇到缺字，需要继续保持 `TMP_Font_CN` 动态字体图集，必要时扩展 Atlas 或制作常用中文字符集。
+- 行动槽位文本和按钮区域有些拥挤，后续需要做 UI 布局微调。
+- 当前日志区只显示最后一次操作，不是完整滚动日志。
+- 当前 UI 按钮都是硬编码测试按钮，不是正式交互。
+- 当前还没有拖拽卡牌。
+- 当前还没有防御 / 闪避按钮。
+- 当前还没有正式美术 UI。
+
+当前未处理内容：
+
+- UI 布局优化
+- 更完整的日志显示
+- 按钮可用 / 不可用状态
+- 防御 / 闪避 UI
+- 卡牌列表 UI
+- 拖拽卡牌
+- 正式战斗 UI 美术
+- 多敌人 / 多意图 UI
+- 完整 BattleController / UIController 拆分

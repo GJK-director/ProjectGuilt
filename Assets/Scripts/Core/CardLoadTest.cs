@@ -13,6 +13,7 @@ public enum BattleTestMode
     BattleRuntimeStateFixedIntentFactoryBasic,
     BattleStateViewDataBasic,
     BattleStateViewDataEnemyIntentBasic,
+    BattleStateViewDataActionSlotBasic,
     BattleResolverResolveRespondedAttackVsAttackBasic,
     BattleResolverResolveUnrespondedEnemyIntentBasic,
     BattleResolverResolveFreeAbilityBasic,
@@ -136,6 +137,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleStateViewDataEnemyIntentBasic)
         {
             RunBattleStateViewDataEnemyIntentBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleStateViewDataActionSlotBasic)
+        {
+            RunBattleStateViewDataActionSlotBasicTestSequence();
             return;
         }
 
@@ -644,6 +651,76 @@ public class CardLoadTest : MonoBehaviour
         }
 
         Debug.Log("本测试只验证 EnemyIntentViewData 从 RuntimeState 只读生成，不做 UI，不执行 plan，不调用 Resolver，不修改 RuntimeState，不改敌人意图");
+    }
+
+    // RunBattleStateViewDataActionSlotBasicTestSequence = 验证 ViewData 能包含行动槽位列表
+    void RunBattleStateViewDataActionSlotBasicTestSequence()
+    {
+        Debug.Log("===== BattleStateViewData 行动槽位快照测试开始 =====");
+
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(allyA, allyB, enemy);
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        bool assignSuccess = BattleActionSlotManager.AssignFreeAction(
+            actionSlots,
+            1,
+            allyA,
+            allyAAttackCardState,
+            enemy
+        );
+        Debug.Log("预期槽位1 Attack FreeAction 安排成功：" + assignSuccess);
+
+        List<BattleEnemyIntent> intentQueue = CreateFixedTestEnemyIntentQueueForRuntimeState();
+
+        runtimeState.SetActionSlots(actionSlots);
+        runtimeState.SetIntentQueue(intentQueue);
+        runtimeState.SetPhase("Prepare");
+
+        BattleStateViewData viewData = BattleStateViewData.FromRuntimeState(runtimeState);
+        viewData.PrintViewData();
+
+        ActionSlotViewData slotView1 = null;
+        ActionSlotViewData slotView2 = null;
+
+        if (viewData.actionSlotViews != null && viewData.actionSlotViews.Count > 0)
+        {
+            slotView1 = viewData.actionSlotViews[0];
+        }
+
+        if (viewData.actionSlotViews != null && viewData.actionSlotViews.Count > 1)
+        {
+            slotView2 = viewData.actionSlotViews[1];
+        }
+
+        Debug.Log("预期 actionSlotCount 为 2：" + (viewData.actionSlotCount == 2));
+        Debug.Log("预期 actionSlotViews 不为空：" + (viewData.actionSlotViews != null));
+        Debug.Log("预期 actionSlotViews 数量为 2：" + (viewData.actionSlotViews != null && viewData.actionSlotViews.Count == 2));
+        Debug.Log("预期第 1 个 ActionSlotViewData 存在：" + (slotView1 != null));
+
+        if (slotView1 != null)
+        {
+            Debug.Log("预期槽位1 slotIndex 为 1：" + (slotView1.slotIndex == 1));
+            Debug.Log("预期槽位1 actorName 正确：" + (slotView1.actorName == allyA.characterName));
+            Debug.Log("预期槽位1 cardName 正确：" + (slotView1.cardName == allyAAttackCardState.cardData.cardName));
+            Debug.Log("预期槽位1 cardType 为 Attack：" + (slotView1.cardType == "Attack"));
+            Debug.Log("预期槽位1 targetName 正确：" + (slotView1.targetName == enemy.characterName));
+            Debug.Log("预期槽位1 hasEnemyIntent 为 false：" + (slotView1.hasEnemyIntent == false));
+            Debug.Log("预期槽位1 isUsed 为 false：" + (slotView1.isUsed == false));
+            Debug.Log("预期槽位1 isEmpty 为 false：" + (slotView1.isEmpty == false));
+        }
+
+        Debug.Log("预期第 2 个 ActionSlotViewData 存在：" + (slotView2 != null));
+
+        if (slotView2 != null)
+        {
+            Debug.Log("预期槽位2 slotIndex 为 2：" + (slotView2.slotIndex == 2));
+            Debug.Log("预期槽位2 isEmpty 为 true：" + (slotView2.isEmpty == true));
+            Debug.Log("预期槽位2 cardName 为空或空：" + (string.IsNullOrEmpty(slotView2.cardName) || slotView2.cardName == "空"));
+            Debug.Log("预期槽位2 isUsed 为 false：" + (slotView2.isUsed == false));
+        }
+
+        Debug.Log("本测试只验证 ActionSlotViewData 从 RuntimeState 只读生成，不做 UI，不执行 plan，不调用 Resolver，不修改 RuntimeState，不改槽位和战斗逻辑");
     }
 
     // RunBattleResolverResolveRespondedAttackVsAttackBasicTestSequence = 测试 BattleResolver 正式已响应敌人意图入口

@@ -31,12 +31,14 @@ public class BattleStateViewData
     public bool executionPlanCompleted;
     public int executionItemCount;
 
+    public List<ActionSlotViewData> actionSlotViews;
     public List<EnemyIntentViewData> enemyIntentViews;
 
     // FromRuntimeState = 从 BattleRuntimeState 生成 UI 可读取的只读快照。
     public static BattleStateViewData FromRuntimeState(BattleRuntimeState runtimeState)
     {
         BattleStateViewData viewData = new BattleStateViewData();
+        viewData.actionSlotViews = new List<ActionSlotViewData>();
         viewData.enemyIntentViews = new List<EnemyIntentViewData>();
 
         if (runtimeState == null)
@@ -55,6 +57,8 @@ public class BattleStateViewData
         viewData.actionSlotCount = runtimeState.actionSlots != null
             ? runtimeState.actionSlots.Count
             : 0;
+
+        viewData.actionSlotViews = CreateActionSlotViews(runtimeState.actionSlots);
 
         viewData.intentCount = runtimeState.intentQueue != null
             ? runtimeState.intentQueue.Count
@@ -89,7 +93,48 @@ public class BattleStateViewData
         Debug.Log("executionPlanCompleted：" + executionPlanCompleted);
         Debug.Log("executionItemCount：" + executionItemCount);
 
+        PrintActionSlotViews();
         PrintEnemyIntentViews();
+    }
+
+    void PrintActionSlotViews()
+    {
+        Debug.Log("===== ActionSlotViewData 行动槽位快照 =====");
+
+        if (actionSlotViews == null || actionSlotViews.Count == 0)
+        {
+            Debug.Log("当前没有行动槽位快照");
+            return;
+        }
+
+        foreach (ActionSlotViewData slotView in actionSlotViews)
+        {
+            if (slotView == null)
+            {
+                continue;
+            }
+
+            if (slotView.isEmpty)
+            {
+                Debug.Log("槽位" + slotView.slotIndex + "：空槽位");
+                continue;
+            }
+
+            string enemyIntentText = slotView.hasEnemyIntent
+                ? slotView.enemyIntentOrder.ToString()
+                : "无";
+
+            Debug.Log(
+                "槽位" + slotView.slotIndex +
+                "：actor=" + slotView.actorName +
+                " / card=" + slotView.cardName +
+                " / type=" + slotView.cardType +
+                " / target=" + slotView.targetName +
+                " / enemyIntent=" + enemyIntentText +
+                " / isUsed=" + slotView.isUsed +
+                " / isEmpty=" + slotView.isEmpty
+            );
+        }
     }
 
     void PrintEnemyIntentViews()
@@ -127,6 +172,23 @@ public class BattleStateViewData
 
             Debug.Log("已响应：" + intentView.isResponded);
         }
+    }
+
+    static List<ActionSlotViewData> CreateActionSlotViews(List<BattleActionSlot> actionSlots)
+    {
+        List<ActionSlotViewData> views = new List<ActionSlotViewData>();
+
+        if (actionSlots == null)
+        {
+            return views;
+        }
+
+        foreach (BattleActionSlot actionSlot in actionSlots)
+        {
+            views.Add(ActionSlotViewData.FromActionSlot(actionSlot));
+        }
+
+        return views;
     }
 
     static List<EnemyIntentViewData> CreateEnemyIntentViews(List<BattleEnemyIntent> intentQueue)
@@ -195,6 +257,60 @@ public class BattleStateViewData
     static int GetCurrentGuilt(CharacterData character)
     {
         return character != null ? character.currentGuilt : 0;
+    }
+}
+
+public class ActionSlotViewData
+{
+    public int slotIndex;
+    public string slotType;
+
+    public string actorName;
+    public string cardName;
+    public string cardType;
+
+    public string targetName;
+
+    public int enemyIntentOrder;
+    public bool hasEnemyIntent;
+
+    public bool isUsed;
+    public bool isEmpty;
+
+    public static ActionSlotViewData FromActionSlot(BattleActionSlot actionSlot)
+    {
+        ActionSlotViewData viewData = new ActionSlotViewData();
+
+        if (actionSlot == null)
+        {
+            viewData.isEmpty = true;
+            return viewData;
+        }
+
+        viewData.slotIndex = actionSlot.slotIndex;
+        viewData.slotType = actionSlot.slotType.ToString();
+        viewData.actorName = actionSlot.GetActorName();
+        viewData.cardName = actionSlot.GetCardName();
+        viewData.cardType = GetCardType(actionSlot.cardState);
+        viewData.targetName = actionSlot.GetTargetName();
+        viewData.hasEnemyIntent = actionSlot.enemyIntent != null;
+        viewData.enemyIntentOrder = actionSlot.enemyIntent != null
+            ? actionSlot.enemyIntent.intentOrder
+            : 0;
+        viewData.isUsed = actionSlot.isUsed;
+        viewData.isEmpty = actionSlot.IsEmpty();
+
+        return viewData;
+    }
+
+    static string GetCardType(BattleCardState cardState)
+    {
+        if (cardState == null || cardState.cardData == null)
+        {
+            return "";
+        }
+
+        return cardState.cardData.cardType;
     }
 }
 

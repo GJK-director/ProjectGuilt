@@ -1,0 +1,455 @@
+// 脚本中文说明：简易战斗 UI 控制器。连接手动搭建的 TMP 文本和按钮，用 RuntimeState / ViewData 刷新界面。
+using System.Collections.Generic;
+using System.Text;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+
+public class BattleSimpleUIController : MonoBehaviour
+{
+    [SerializeField] private TMP_Text topInfoText;
+    [SerializeField] private TMP_Text enemyStateText;
+    [SerializeField] private TMP_Text allyAStateText;
+    [SerializeField] private TMP_Text allyBStateText;
+    [SerializeField] private TMP_Text intentListText;
+    [SerializeField] private TMP_Text actionSlot1Text;
+    [SerializeField] private TMP_Text actionSlot2Text;
+    [SerializeField] private TMP_Text logText;
+
+    [SerializeField] private Button assignA1FreeAttackButton;
+    [SerializeField] private Button assignA1AbilityButton;
+    [SerializeField] private Button createExecutionPlanButton;
+    [SerializeField] private Button executePlanButton;
+    [SerializeField] private Button endTurnButton;
+    [SerializeField] private Button prepareNextTurnButton;
+    [SerializeField] private Button refreshViewButton;
+
+    private BattleRuntimeState runtimeState;
+
+    private CharacterData allyA;
+    private CharacterData allyB;
+    private CharacterData enemy;
+
+    private BattleCardState allyAAttackCardState;
+    private BattleCardState allyAAbilityCardState;
+    private BattleCardState enemyAttackCardState;
+
+    private string lastLog = "等待初始化";
+
+    void Start()
+    {
+        InitializeTestBattleData();
+        BindButtonEvents();
+        RefreshView();
+    }
+
+    void OnDestroy()
+    {
+        UnbindButtonEvents();
+    }
+
+    void InitializeTestBattleData()
+    {
+        CreateTestCharacters();
+        AddTestBuffs();
+
+        List<CardTestData> cards = CardDataLoader.LoadCardData();
+        if (cards == null)
+        {
+            lastLog = "初始化失败：没有读取到卡牌数据";
+            Debug.LogWarning(lastLog);
+            return;
+        }
+
+        CreateTestBattleCards(cards);
+
+        runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(allyA, allyB, enemy);
+        runtimeState.SetActionSlots(BattleActionSlotManager.CreateActionSlots(2));
+        runtimeState.SetIntentQueue(CreateFixedEnemyIntentQueue());
+        runtimeState.SetPhase("Prepare");
+
+        lastLog = "初始化完成：已进入 Prepare 阶段";
+    }
+
+    void CreateTestCharacters()
+    {
+        allyA = new CharacterData("我方角色A", 30, 20, 20);
+        allyB = new CharacterData("我方角色B", 30, 3, 5);
+        enemy = new CharacterData("敌人", 999, 5, 8);
+    }
+
+    void AddTestBuffs()
+    {
+        if (allyA == null)
+        {
+            return;
+        }
+
+        allyA.AddBuff("Bullet", "子弹", "AbilityBuff", 6, -1, "None", "Permanent");
+    }
+
+    void CreateTestBattleCards(List<CardTestData> cards)
+    {
+        CardTestData enemyCard = CardDataLoader.FindCardByID(cards, "enemy_atk_001");
+        CardTestData allyAAttackCard = CardDataLoader.FindCardByID(cards, "atk_001");
+        CardTestData allyAAbilityCard = CardDataLoader.FindCardByID(cards, "sin_ability_001");
+
+        enemyAttackCardState = BattleCardManager.CreateBattleCard(
+            enemy,
+            enemyCard,
+            "ui_enemy_atk_001_copy_0"
+        );
+
+        allyAAttackCardState = BattleCardManager.CreateBattleCard(
+            allyA,
+            allyAAttackCard,
+            "ui_allyA_atk_001_copy_0"
+        );
+
+        allyAAbilityCardState = BattleCardManager.CreateBattleCard(
+            allyA,
+            allyAAbilityCard,
+            "ui_allyA_sin_ability_001_copy_0"
+        );
+    }
+
+    List<BattleEnemyIntent> CreateFixedEnemyIntentQueue()
+    {
+        if (enemy == null || enemyAttackCardState == null || allyB == null)
+        {
+            Debug.LogWarning("创建固定敌人意图失败：敌人 / 敌人卡牌 / 目标角色数据不完整");
+            return new List<BattleEnemyIntent>();
+        }
+
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            "ui_fixed_enemy_intent_001",
+            enemy,
+            enemyAttackCardState,
+            allyB,
+            1,
+            1
+        );
+
+        return BattleEnemyIntentManager.CreateIntentQueue(enemyIntent);
+    }
+
+    void BindButtonEvents()
+    {
+        if (assignA1FreeAttackButton != null)
+        {
+            assignA1FreeAttackButton.onClick.AddListener(OnClickAssignA1FreeAttack);
+        }
+
+        if (assignA1AbilityButton != null)
+        {
+            assignA1AbilityButton.onClick.AddListener(OnClickAssignA1Ability);
+        }
+
+        if (createExecutionPlanButton != null)
+        {
+            createExecutionPlanButton.onClick.AddListener(OnClickCreateExecutionPlan);
+        }
+
+        if (executePlanButton != null)
+        {
+            executePlanButton.onClick.AddListener(OnClickExecutePlan);
+        }
+
+        if (endTurnButton != null)
+        {
+            endTurnButton.onClick.AddListener(OnClickEndTurn);
+        }
+
+        if (prepareNextTurnButton != null)
+        {
+            prepareNextTurnButton.onClick.AddListener(OnClickPrepareNextTurn);
+        }
+
+        if (refreshViewButton != null)
+        {
+            refreshViewButton.onClick.AddListener(RefreshView);
+        }
+    }
+
+    void UnbindButtonEvents()
+    {
+        if (assignA1FreeAttackButton != null)
+        {
+            assignA1FreeAttackButton.onClick.RemoveListener(OnClickAssignA1FreeAttack);
+        }
+
+        if (assignA1AbilityButton != null)
+        {
+            assignA1AbilityButton.onClick.RemoveListener(OnClickAssignA1Ability);
+        }
+
+        if (createExecutionPlanButton != null)
+        {
+            createExecutionPlanButton.onClick.RemoveListener(OnClickCreateExecutionPlan);
+        }
+
+        if (executePlanButton != null)
+        {
+            executePlanButton.onClick.RemoveListener(OnClickExecutePlan);
+        }
+
+        if (endTurnButton != null)
+        {
+            endTurnButton.onClick.RemoveListener(OnClickEndTurn);
+        }
+
+        if (prepareNextTurnButton != null)
+        {
+            prepareNextTurnButton.onClick.RemoveListener(OnClickPrepareNextTurn);
+        }
+
+        if (refreshViewButton != null)
+        {
+            refreshViewButton.onClick.RemoveListener(RefreshView);
+        }
+    }
+
+    private void OnClickAssignA1FreeAttack()
+    {
+        if (!HasRuntimeState())
+        {
+            return;
+        }
+
+        bool result = BattleActionSlotManager.AssignFreeAction(
+            runtimeState.actionSlots,
+            1,
+            allyA,
+            allyAAttackCardState,
+            enemy
+        );
+
+        lastLog = result
+            ? "槽位1已安排：我方角色A 使用基础攻击偷刀敌人"
+            : "安排失败：槽位1无法安排基础攻击 FreeAction";
+
+        RefreshView();
+    }
+
+    private void OnClickAssignA1Ability()
+    {
+        if (!HasRuntimeState())
+        {
+            return;
+        }
+
+        bool result = BattleActionSlotManager.AssignFreeAction(
+            runtimeState.actionSlots,
+            1,
+            allyA,
+            allyAAbilityCardState,
+            allyA
+        );
+
+        lastLog = result
+            ? "槽位1已安排：我方角色A 使用 Ability FreeAction"
+            : "安排失败：槽位1无法安排 Ability FreeAction";
+
+        RefreshView();
+    }
+
+    private void OnClickCreateExecutionPlan()
+    {
+        if (!HasRuntimeState())
+        {
+            return;
+        }
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            runtimeState.actionSlots,
+            runtimeState.intentQueue
+        );
+
+        runtimeState.SetExecutionPlan(executionPlan);
+        runtimeState.SetPhase("PlanReady");
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+
+        int itemCount = executionPlan != null && executionPlan.executionItems != null
+            ? executionPlan.executionItems.Count
+            : 0;
+
+        lastLog = "执行计划已生成，item 数量：" + itemCount;
+        RefreshView();
+    }
+
+    private void OnClickExecutePlan()
+    {
+        if (!HasRuntimeState())
+        {
+            return;
+        }
+
+        if (runtimeState.currentExecutionPlan == null)
+        {
+            lastLog = "执行失败：当前没有 BattleExecutionPlan";
+            RefreshView();
+            return;
+        }
+
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(runtimeState.currentExecutionPlan);
+        runtimeState.SetPhase("Completed");
+
+        lastLog = "执行计划已执行，plan.isCompleted = " + runtimeState.currentExecutionPlan.isCompleted;
+        RefreshView();
+    }
+
+    private void OnClickEndTurn()
+    {
+        if (!HasRuntimeState())
+        {
+            return;
+        }
+
+        runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+        lastLog = "当前回合已结束，临时对象已清理";
+        RefreshView();
+    }
+
+    private void OnClickPrepareNextTurn()
+    {
+        if (!HasRuntimeState())
+        {
+            return;
+        }
+
+        List<BattleActionSlot> newActionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        List<BattleEnemyIntent> newIntentQueue = CreateFixedEnemyIntentQueue();
+
+        runtimeState.PrepareNextTurnWithRuntimeObjects(newActionSlots, newIntentQueue);
+        lastLog = "下一回合已准备，阶段：Prepare";
+        RefreshView();
+    }
+
+    private void RefreshView()
+    {
+        BattleStateViewData viewData = BattleStateViewData.FromRuntimeState(runtimeState);
+
+        SetText(topInfoText, "回合：" + viewData.currentTurn + "\n阶段：" + viewData.currentPhase);
+        SetText(enemyStateText, FormatEnemyState(viewData));
+        SetText(allyAStateText, FormatAllyState("A", viewData.allyAName, viewData.allyAHP, viewData.allyAMaxHP, viewData.allyASpeed, viewData.allyAGuilt));
+        SetText(allyBStateText, FormatAllyState("B", viewData.allyBName, viewData.allyBHP, viewData.allyBMaxHP, viewData.allyBSpeed, viewData.allyBGuilt));
+        SetText(intentListText, FormatIntentList(viewData));
+        SetText(actionSlot1Text, FormatActionSlot(viewData, 1));
+        SetText(actionSlot2Text, FormatActionSlot(viewData, 2));
+        SetText(logText, lastLog);
+    }
+
+    bool HasRuntimeState()
+    {
+        if (runtimeState != null)
+        {
+            return true;
+        }
+
+        lastLog = "操作失败：BattleRuntimeState 尚未初始化";
+        RefreshView();
+        return false;
+    }
+
+    string FormatEnemyState(BattleStateViewData viewData)
+    {
+        return
+            "敌人：" + viewData.enemyName +
+            "\nHP：" + viewData.enemyHP + " / " + viewData.enemyMaxHP +
+            "\n速度：" + viewData.enemySpeed;
+    }
+
+    string FormatAllyState(string label, string characterName, int hp, int maxHp, int speed, int guilt)
+    {
+        return
+            "我方角色" + label + "：" + characterName +
+            "\nHP：" + hp + " / " + maxHp +
+            "\n速度：" + speed +
+            "\n负罪感：" + guilt;
+    }
+
+    string FormatIntentList(BattleStateViewData viewData)
+    {
+        if (viewData.enemyIntentViews == null || viewData.enemyIntentViews.Count == 0)
+        {
+            return "暂无敌人意图";
+        }
+
+        StringBuilder builder = new StringBuilder();
+
+        foreach (EnemyIntentViewData intentView in viewData.enemyIntentViews)
+        {
+            if (intentView == null)
+            {
+                continue;
+            }
+
+            builder.Append("意图").Append(intentView.intentOrder)
+                .Append("：").Append(intentView.enemyName)
+                .Append(" 使用 ").Append(intentView.enemyCardName)
+                .AppendLine();
+            builder.Append("原目标：").Append(intentView.originalTargetName)
+                .Append(" 槽位").Append(intentView.originalTargetSlotIndex)
+                .AppendLine();
+            builder.Append("实际目标：").Append(intentView.actualTargetName)
+                .Append(" 槽位").Append(intentView.actualTargetSlotIndex)
+                .AppendLine();
+            builder.Append("已响应：").Append(intentView.isResponded)
+                .AppendLine();
+        }
+
+        return builder.ToString();
+    }
+
+    string FormatActionSlot(BattleStateViewData viewData, int slotIndex)
+    {
+        ActionSlotViewData slotView = FindActionSlotView(viewData, slotIndex);
+
+        if (slotView == null || slotView.isEmpty)
+        {
+            return "槽位" + slotIndex + "：空";
+        }
+
+        string enemyIntentText = slotView.hasEnemyIntent
+            ? slotView.enemyIntentOrder.ToString()
+            : "无";
+
+        return
+            "槽位" + slotView.slotIndex +
+            "\n类型：" + slotView.slotType +
+            "\n行动者：" + slotView.actorName +
+            "\n卡牌：" + slotView.cardName +
+            "\n卡牌类型：" + slotView.cardType +
+            "\n目标：" + slotView.targetName +
+            "\n敌人意图：" + enemyIntentText +
+            "\n已使用：" + slotView.isUsed;
+    }
+
+    ActionSlotViewData FindActionSlotView(BattleStateViewData viewData, int slotIndex)
+    {
+        if (viewData == null || viewData.actionSlotViews == null)
+        {
+            return null;
+        }
+
+        foreach (ActionSlotViewData slotView in viewData.actionSlotViews)
+        {
+            if (slotView != null && slotView.slotIndex == slotIndex)
+            {
+                return slotView;
+            }
+        }
+
+        return null;
+    }
+
+    void SetText(TMP_Text text, string value)
+    {
+        if (text != null)
+        {
+            text.text = value;
+        }
+    }
+}
