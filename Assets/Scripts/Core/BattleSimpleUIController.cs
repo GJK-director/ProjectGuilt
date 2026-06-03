@@ -18,6 +18,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
     [SerializeField] private Button assignA1FreeAttackButton;
     [SerializeField] private Button assignA1AbilityButton;
+    [SerializeField] private Button battleStartButton;
     [SerializeField] private Button createExecutionPlanButton;
     [SerializeField] private Button executePlanButton;
     [SerializeField] private Button endTurnButton;
@@ -146,6 +147,11 @@ public class BattleSimpleUIController : MonoBehaviour
             assignA1AbilityButton.onClick.AddListener(OnClickAssignA1Ability);
         }
 
+        if (battleStartButton != null)
+        {
+            battleStartButton.onClick.AddListener(OnClickBattleStart);
+        }
+
         if (createExecutionPlanButton != null)
         {
             createExecutionPlanButton.onClick.AddListener(OnClickCreateExecutionPlan);
@@ -184,6 +190,11 @@ public class BattleSimpleUIController : MonoBehaviour
             assignA1AbilityButton.onClick.RemoveListener(OnClickAssignA1Ability);
         }
 
+        if (battleStartButton != null)
+        {
+            battleStartButton.onClick.RemoveListener(OnClickBattleStart);
+        }
+
         if (createExecutionPlanButton != null)
         {
             createExecutionPlanButton.onClick.RemoveListener(OnClickCreateExecutionPlan);
@@ -217,6 +228,13 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        if (!CanEditActionSlots())
+        {
+            lastLog = "当前不能修改行动槽位，请在准备阶段选择行动";
+            RefreshView();
+            return;
+        }
+
         bool result = BattleActionSlotManager.AssignFreeAction(
             runtimeState.actionSlots,
             1,
@@ -239,6 +257,13 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        if (!CanEditActionSlots())
+        {
+            lastLog = "当前不能修改行动槽位，请在准备阶段选择行动";
+            RefreshView();
+            return;
+        }
+
         bool result = BattleActionSlotManager.AssignFreeAction(
             runtimeState.actionSlots,
             1,
@@ -254,10 +279,77 @@ public class BattleSimpleUIController : MonoBehaviour
         RefreshView();
     }
 
+    private void OnClickBattleStart()
+    {
+        if (runtimeState == null)
+        {
+            lastLog = "战斗状态未初始化，无法开始战斗";
+            RefreshView();
+            return;
+        }
+
+        if (IsCurrentPlanCompleted())
+        {
+            lastLog = "当前计划已经执行完成，请结束回合或准备下一回合";
+            RefreshView();
+            return;
+        }
+
+        if (IsPhase("TurnEnded"))
+        {
+            lastLog = "当前回合已经结束，请准备下一回合";
+            RefreshView();
+            return;
+        }
+
+        if (HasCurrentPlan())
+        {
+            runtimeState.SetPhase("BattleStart");
+            BattleExecutionPlanManager.PrintExecutionPlan(runtimeState.currentExecutionPlan);
+
+            BattleExecutionPlanExecutor.ExecuteExecutionPlan(runtimeState.currentExecutionPlan);
+            runtimeState.SetPhase("Completed");
+
+            lastLog = "战斗开始：已执行当前已有计划";
+            RefreshView();
+            return;
+        }
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            runtimeState.actionSlots,
+            runtimeState.intentQueue
+        );
+
+        runtimeState.SetExecutionPlan(executionPlan);
+
+        if (executionPlan == null || executionPlan.executionItems == null || executionPlan.executionItems.Count == 0)
+        {
+            lastLog = "生成执行计划失败，无法开始战斗";
+            RefreshView();
+            return;
+        }
+
+        runtimeState.SetPhase("BattleStart");
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(runtimeState.currentExecutionPlan);
+        runtimeState.SetPhase("Completed");
+
+        lastLog = "战斗开始：已生成并执行本回合计划";
+        RefreshView();
+    }
+
     private void OnClickCreateExecutionPlan()
     {
         if (!HasRuntimeState())
         {
+            return;
+        }
+
+        if (!CanCreatePlan())
+        {
+            lastLog = "当前不能生成计划，可能已经有计划或不在准备阶段";
+            RefreshView();
             return;
         }
 
@@ -286,9 +378,16 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        if (runtimeState.currentExecutionPlan == null)
+        if (!HasCurrentPlan())
         {
-            lastLog = "执行失败：当前没有 BattleExecutionPlan";
+            lastLog = "当前没有执行计划，请先生成计划或点击战斗开始";
+            RefreshView();
+            return;
+        }
+
+        if (IsCurrentPlanCompleted())
+        {
+            lastLog = "当前计划已经执行完成，请结束回合或准备下一回合";
             RefreshView();
             return;
         }
@@ -307,6 +406,13 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        if (!CanEndTurn())
+        {
+            lastLog = "当前不能结束回合，请先完成战斗结算";
+            RefreshView();
+            return;
+        }
+
         runtimeState.EndCurrentTurnAndClearRuntimeObjects();
         lastLog = "当前回合已结束，临时对象已清理";
         RefreshView();
@@ -316,6 +422,13 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         if (!HasRuntimeState())
         {
+            return;
+        }
+
+        if (!CanPrepareNextTurn())
+        {
+            lastLog = "当前不能准备下一回合，请先结束当前回合";
+            RefreshView();
             return;
         }
 
@@ -339,6 +452,46 @@ public class BattleSimpleUIController : MonoBehaviour
         SetText(actionSlot1Text, FormatActionSlot(viewData, 1));
         SetText(actionSlot2Text, FormatActionSlot(viewData, 2));
         SetText(logText, lastLog);
+    }
+
+    private bool IsPhase(string phaseName)
+    {
+        return runtimeState != null && runtimeState.currentPhase == phaseName;
+    }
+
+    private bool HasCurrentPlan()
+    {
+        return runtimeState != null && runtimeState.currentExecutionPlan != null;
+    }
+
+    private bool IsCurrentPlanCompleted()
+    {
+        return HasCurrentPlan() && runtimeState.currentExecutionPlan.isCompleted;
+    }
+
+    private bool CanEditActionSlots()
+    {
+        return IsPhase("Prepare") && !HasCurrentPlan();
+    }
+
+    private bool CanCreatePlan()
+    {
+        return IsPhase("Prepare") && !HasCurrentPlan();
+    }
+
+    private bool CanExecutePlan()
+    {
+        return HasCurrentPlan() && !runtimeState.currentExecutionPlan.isCompleted;
+    }
+
+    private bool CanEndTurn()
+    {
+        return IsPhase("Completed");
+    }
+
+    private bool CanPrepareNextTurn()
+    {
+        return IsPhase("TurnEnded");
     }
 
     bool HasRuntimeState()

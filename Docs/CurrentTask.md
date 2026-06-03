@@ -7099,3 +7099,207 @@ UI 状态接口第一版需要读取的信息：
 - 正式战斗 UI 美术
 - 多敌人 / 多意图 UI
 - 完整 BattleController / UIController 拆分
+
+## 七十、战斗开始按钮第一版接入通过
+
+当前完成内容：
+
+- `BattleSimpleUIController.cs` 新增正式流程按钮字段：
+  - `battleStartButton`
+- 新增按钮方法：
+  - `OnClickBattleStart()`
+- Unity 场景中手动新增并绑定按钮：
+  - `Btn_BattleStart`
+- 按钮文字：
+  - `战斗开始`
+- 原有调试按钮 `生成计划 / 执行计划` 保留。
+
+设计意义：
+
+- 正式玩家流程中不应该感知 `生成计划 / 执行计划` 两个程序概念。
+- 正式流程应为：
+  - 准备阶段选择行动
+  - 点击 `战斗开始`
+  - 程序内部自动生成 ExecutionPlan
+  - 程序内部自动执行 ExecutionPlan
+  - 刷新 UI
+  - 阶段进入 `Completed`
+- 当前 `战斗开始` 按钮正是为了靠近正式战斗流程。
+
+`OnClickBattleStart()` 当前流程：
+
+- 检查 `runtimeState` 是否为空
+- 检查当前 `currentExecutionPlan` 是否已经执行完成，避免重复执行
+- 调用 `BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(...)`
+- 保存到 `runtimeState.currentExecutionPlan`
+- 如果计划为空或 item 数量为 0，则提示无法开始战斗
+- 设置阶段为 `BattleStart`
+- 打印执行计划
+- 调用 `BattleExecutionPlanExecutor.ExecuteExecutionPlan(...)`
+- 执行完成后设置阶段为 `Completed`
+- 日志显示：
+  - `战斗开始：已生成并执行本回合计划`
+- 调用 `RefreshView()`
+
+当前测试流程：
+
+- 点击 `A槽位1偷刀`
+- 点击 `战斗开始`
+- 点击 `结束回合`
+- 点击 `准备下一回合`
+
+测试结果：
+
+- 成功读取卡牌数据，共 5 张卡牌
+- 成功创建 2 个行动槽位
+- 成功创建敌人意图队列，数量：1
+- 点击 `A槽位1偷刀` 后：
+  - 槽位1安排 FreeAction 成功
+  - allyA 使用 `基础攻击`
+- 点击 `战斗开始` 后：
+  - 自动生成 ExecutionPlan
+  - ExecutionPlan 项数量：2
+    - 第 1 项：`FreeAction`
+    - 第 2 项：`UnrespondedEnemyIntent`
+  - 自动执行 ExecutionPlan
+  - allyA 使用 `基础攻击` 攻击 enemy
+  - enemy HP：`999 -> 979`
+  - allyA 负罪感：`0 -> 2`
+  - allyA 槽位1标记为已使用
+  - 敌人无人响应意图命中 allyB
+  - allyB HP：`30 -> 28`
+  - `BattleExecutionPlan` 全部完成
+- 点击 `结束回合` 后：
+  - `BattleTurnProcessor.EndTurn(...)` 被调用
+- 点击 `准备下一回合` 后：
+  - 创建新的 2 个行动槽位
+  - 创建新的固定敌人意图队列
+  - `BattleTurnProcessor.StartTurn(...)` 被调用
+
+当前结论：
+
+- `战斗开始` 按钮第一版接入通过。
+- 当前已经验证：
+  - 准备阶段安排 FreeAction
+  - 战斗开始自动生成计划
+  - 战斗开始自动执行计划
+  - FreeAction Attack 结算
+  - UnrespondedEnemyIntent 结算
+  - UI 状态刷新
+  - 回合结束
+  - 下一回合准备
+- 这比 `生成计划 / 执行计划` 调试按钮更接近正式战斗流程。
+
+当前保留内容：
+
+- `生成计划` 按钮仍保留为调试按钮
+- `执行计划` 按钮仍保留为调试按钮
+
+当前未处理内容：
+
+- 按钮启用 / 禁用状态
+- 重复点击按钮的完整保护
+- UI 完整日志列表
+- 防御 / 闪避接入
+- 正式卡牌列表 UI
+- 拖拽卡牌
+- 正式战斗 UI 美术
+- 多敌人 / 多意图 UI
+- 更正式的 BattleController / UIController 拆分
+
+## 七十一、BattleSimpleUIController 按钮安全边界第一版测试通过
+
+当前完成内容：
+
+- `BattleSimpleUIController.cs` 已新增第一版按钮安全边界。
+- 本次只修改 UI 控制器逻辑，不修改战斗核心逻辑。
+- 已保护按钮包括：
+  - `A槽位1偷刀`
+  - `A槽位1能力`
+  - `生成计划`
+  - `执行计划`
+  - `战斗开始`
+  - `结束回合`
+  - `准备下一回合`
+  - `刷新状态`
+
+新增安全判断方法：
+
+- `IsPhase(...)`
+- `HasCurrentPlan()`
+- `IsCurrentPlanCompleted()`
+- `CanEditActionSlots()`
+- `CanCreatePlan()`
+- `CanExecutePlan()`
+- `CanEndTurn()`
+- `CanPrepareNextTurn()`
+
+当前按钮保护规则：
+
+- `A槽位1偷刀 / A槽位1能力`
+  - 只允许在 `Prepare` 且没有生成计划时修改槽位。
+- `生成计划`
+  - 只允许在 `Prepare` 且当前没有计划时生成。
+- `执行计划`
+  - 必须已有未完成计划。
+  - 没有计划或计划已完成时只提示，不执行。
+- `战斗开始`
+  - 如果没有计划，则自动生成并执行计划。
+  - 如果已有未完成计划，则直接执行已有计划，不重新生成。
+  - 如果计划已完成，则提示结束回合或准备下一回合。
+  - 如果处于 `TurnEnded`，则提示准备下一回合。
+- `结束回合`
+  - 只允许在 `Completed` 阶段执行。
+- `准备下一回合`
+  - 只允许在 `TurnEnded` 阶段执行。
+- `刷新状态`
+  - 随时可用。
+
+当前测试结果：
+
+- 正常流程：
+  - `A槽位1偷刀 -> 战斗开始 -> 结束回合 -> 准备下一回合`
+  - 结果正常，主流程没有被安全边界改坏。
+- 开局不安排槽位，直接点击 `战斗开始`
+  - 允许执行。
+  - 敌人意图按 `UnrespondedEnemyIntent` 结算。
+- `A槽位1偷刀 -> 战斗开始 -> 再次点击 战斗开始`
+  - 不会重复扣血。
+  - 会提示当前计划已完成，需要结束回合或准备下一回合。
+- `A槽位1偷刀 -> 生成计划 -> A槽位1能力`
+  - 不允许修改槽位。
+  - 会提示当前不能修改行动槽位。
+- 开局直接点击 `执行计划`
+  - 不会执行。
+  - 会提示当前没有执行计划。
+- 开局直接点击 `结束回合`
+  - 不会结束回合。
+  - 会提示需要先完成战斗结算。
+- 开局直接点击 `准备下一回合`
+  - 不会进入下一回合。
+  - 会提示需要先结束当前回合。
+
+当前结论：
+
+- `BattleSimpleUIController` 按钮安全边界第一版通过。
+- 当前简易 UI 已经具备：
+  - 准备阶段安排 FreeAction
+  - 战斗开始自动生成并执行计划
+  - 调试用生成计划 / 执行计划
+  - 回合结束
+  - 准备下一回合
+  - 基础误操作保护
+- 当前 UI 流程已经比较接近正式战斗流程。
+
+当前未处理内容：
+
+- 按钮禁用 / 变灰显示
+- 更完整 UI 日志列表
+- 防御 / 闪避接入 Resolver
+- 防御 / 闪避 UI 按钮
+- 正式卡牌列表 UI
+- 拖拽卡牌
+- 多敌人 / 多意图 UI
+- 正式 BattleController / UIController 拆分
+- 正式角色 JSON / 卡牌 JSON / Buff JSON 数据制作
+- 正式美术 UI
