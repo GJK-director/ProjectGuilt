@@ -29,6 +29,50 @@ public static class BattleActionSlotManager
         return slots;
     }
 
+    // CreateCharacterActionSlots = 为单个角色创建角色内行动槽位
+    // owner = 槽位归属角色，slotCount = 该角色拥有几个槽位。
+    public static List<BattleActionSlot> CreateCharacterActionSlots(CharacterData owner, int slotCount)
+    {
+        List<BattleActionSlot> slots = new List<BattleActionSlot>();
+
+        if (owner == null)
+        {
+            Debug.LogWarning("创建角色行动槽位失败：owner 为空");
+            return slots;
+        }
+
+        if (slotCount <= 0)
+        {
+            Debug.LogWarning("创建角色行动槽位失败：槽位数量必须大于 0");
+            return slots;
+        }
+
+        for (int i = 0; i < slotCount; i++)
+        {
+            slots.Add(new BattleActionSlot(owner, i + 1));
+        }
+
+        Debug.Log("成功为 " + owner.characterName + " 创建 " + slotCount + " 个行动槽位");
+        return slots;
+    }
+
+    // CreatePartyActionSlots = 为我方 A / B 创建角色独立行动槽位
+    // 第一版用于创建 allyA 槽位1/2、allyB 槽位1/2。
+    public static List<BattleActionSlot> CreatePartyActionSlots(
+        CharacterData allyA,
+        CharacterData allyB,
+        int slotCountPerCharacter
+    )
+    {
+        List<BattleActionSlot> slots = new List<BattleActionSlot>();
+
+        slots.AddRange(CreateCharacterActionSlots(allyA, slotCountPerCharacter));
+        slots.AddRange(CreateCharacterActionSlots(allyB, slotCountPerCharacter));
+
+        Debug.Log("成功创建队伍行动槽位，数量：" + slots.Count);
+        return slots;
+    }
+
     // AssignResponseToEnemyIntent = 安排一个槽位响应敌人意图
     // slots = 所有行动槽位。
     // slotIndex = 要放入的槽位编号。
@@ -52,6 +96,40 @@ public static class BattleActionSlotManager
             return false;
         }
 
+        return AssignResponseToEnemyIntentToSlot(slots, slot, actor, cardState, enemyIntent);
+    }
+
+    // AssignResponseToEnemyIntent = owner 版本安排响应敌人意图
+    // owner + slotIndex 用于区分“我方角色A 槽位1”和“我方角色B 槽位1”。
+    public static bool AssignResponseToEnemyIntent(
+        List<BattleActionSlot> slots,
+        CharacterData owner,
+        int slotIndex,
+        CharacterData actor,
+        BattleCardState cardState,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        BattleActionSlot slot = GetSlot(slots, owner, slotIndex);
+
+        if (slot == null)
+        {
+            return false;
+        }
+
+        return AssignResponseToEnemyIntentToSlot(slots, slot, actor, cardState, enemyIntent);
+    }
+
+    // AssignResponseToEnemyIntentToSlot = 对指定槽位安排响应敌人意图
+    // 旧 slotIndex 入口和新 owner + slotIndex 入口共用这套逻辑。
+    static bool AssignResponseToEnemyIntentToSlot(
+        List<BattleActionSlot> slots,
+        BattleActionSlot slot,
+        CharacterData actor,
+        BattleCardState cardState,
+        BattleEnemyIntent enemyIntent
+    )
+    {
         // 检查槽位能不能放这张卡。
         // 例如槽位不能为空、同一张卡不能重复安排。
         if (!CanAssignCardToSlot(slots, slot, cardState))
@@ -71,7 +149,7 @@ public static class BattleActionSlotManager
         bool canRewriteActualTarget = actorSpeed > enemySpeed;
         bool isOriginalTargetSlot =
             object.ReferenceEquals(actor, enemyIntent.originalTargetCharacter) &&
-            slotIndex == enemyIntent.originalTargetSlotIndex;
+            slot.slotIndex == enemyIntent.originalTargetSlotIndex;
 
         if (!canRewriteActualTarget && !isOriginalTargetSlot)
         {
@@ -96,7 +174,7 @@ public static class BattleActionSlotManager
 
             // 解除其他槽位对同一个敌人意图的绑定。
             oldSlot.UnbindEnemyIntent();
-            Debug.Log("槽位 " + oldSlot.slotIndex + " 已解除对敌人意图" + enemyIntent.intentOrder + "的响应绑定");
+            Debug.Log(oldSlot.GetDisplaySlotName() + " 已解除对敌人意图" + enemyIntent.intentOrder + "的响应绑定");
         }
 
         // 真正把角色、卡牌、敌人意图写入槽位。
@@ -106,7 +184,7 @@ public static class BattleActionSlotManager
         enemyIntent.MarkResponded();
 
         Debug.Log(
-            "槽位 " + slot.slotIndex +
+            slot.GetDisplaySlotName() +
             " 安排响应成功：" +
             slot.GetActorName() +
             " 使用 " +
@@ -153,6 +231,40 @@ public static class BattleActionSlotManager
             return false;
         }
 
+        return AssignFreeActionToSlot(slots, slot, actor, cardState, target);
+    }
+
+    // AssignFreeAction = owner 版本安排自由行动
+    // owner + slotIndex 用于区分“我方角色A 槽位1”和“我方角色B 槽位1”。
+    public static bool AssignFreeAction(
+        List<BattleActionSlot> slots,
+        CharacterData owner,
+        int slotIndex,
+        CharacterData actor,
+        BattleCardState cardState,
+        CharacterData target
+    )
+    {
+        BattleActionSlot slot = GetSlot(slots, owner, slotIndex);
+
+        if (slot == null)
+        {
+            return false;
+        }
+
+        return AssignFreeActionToSlot(slots, slot, actor, cardState, target);
+    }
+
+    // AssignFreeActionToSlot = 对指定槽位安排自由行动
+    // 旧 slotIndex 入口和新 owner + slotIndex 入口共用这套逻辑。
+    static bool AssignFreeActionToSlot(
+        List<BattleActionSlot> slots,
+        BattleActionSlot slot,
+        CharacterData actor,
+        BattleCardState cardState,
+        CharacterData target
+    )
+    {
         // 检查槽位是否为空、卡牌是否为空、卡牌是否已经被安排过。
         if (!CanAssignCardToSlot(slots, slot, cardState))
         {
@@ -170,7 +282,7 @@ public static class BattleActionSlotManager
         slot.AssignFreeAction(actor, cardState, target);
 
         Debug.Log(
-            "槽位 " + slot.slotIndex +
+            slot.GetDisplaySlotName() +
             " 安排自由行动成功：" +
             slot.GetActorName() +
             " 使用 " +
@@ -202,7 +314,12 @@ public static class BattleActionSlotManager
             if (slot.IsEmpty())
             {
                 // 空槽位只打印“空”。
-                Debug.Log("槽位 " + slot.slotIndex + "：空");
+                Debug.Log(
+                    slot.GetDisplaySlotName() +
+                    "：空 / owner：" + slot.GetOwnerName() +
+                    " / slotIndex：" + slot.slotIndex +
+                    " / 已使用：" + slot.isUsed
+                );
                 continue;
             }
 
@@ -226,7 +343,9 @@ public static class BattleActionSlotManager
             }
 
             Debug.Log(
-                "槽位 " + slot.slotIndex +
+                slot.GetDisplaySlotName() +
+                " / owner：" + slot.GetOwnerName() +
+                " / slotIndex：" + slot.slotIndex +
                 " / 类型：" + slot.slotType +
                 " / 行动者：" + slot.GetActorName() +
                 " / 卡牌：" + slot.GetCardName() +
@@ -235,6 +354,13 @@ public static class BattleActionSlotManager
                 intentText
             );
         }
+    }
+
+    // PrintActionSlots = 打印行动槽位
+    // 当前复用 PrintSlotStates，保留一个更直观的入口名称给 Runtime/UI 测试使用。
+    public static void PrintActionSlots(List<BattleActionSlot> slots)
+    {
+        PrintSlotStates(slots);
     }
 
     // PrintActionSlotIntentHandlingPreview = 打印行动槽位处理敌人意图预览
@@ -436,6 +562,43 @@ public static class BattleActionSlotManager
         return previewIntentOrder;
     }
 
+    // GetSlot = 根据 owner + 槽位编号查找行动槽位
+    // 用于角色独立槽位，例如“我方角色A 槽位1”和“我方角色B 槽位1”。
+    public static BattleActionSlot GetSlot(
+        List<BattleActionSlot> slots,
+        CharacterData owner,
+        int slotIndex
+    )
+    {
+        if (slots == null)
+        {
+            Debug.LogWarning("按 owner 查找槽位失败：槽位列表为空");
+            return null;
+        }
+
+        if (owner == null)
+        {
+            Debug.LogWarning("按 owner 查找槽位失败：owner 为空");
+            return null;
+        }
+
+        foreach (BattleActionSlot slot in slots)
+        {
+            if (slot == null)
+            {
+                continue;
+            }
+
+            if (object.ReferenceEquals(slot.owner, owner) && slot.slotIndex == slotIndex)
+            {
+                return slot;
+            }
+        }
+
+        Debug.LogWarning("找不到 " + owner.characterName + " 槽位" + slotIndex);
+        return null;
+    }
+
     // GetSlot = 根据槽位编号查找行动槽位
     // slots = 所有行动槽位，slotIndex = 要找的槽位编号。
     static BattleActionSlot GetSlot(List<BattleActionSlot> slots, int slotIndex)
@@ -474,7 +637,7 @@ public static class BattleActionSlotManager
         // 目标槽位必须为空。
         if (!targetSlot.IsEmpty())
         {
-            Debug.Log("槽位 " + targetSlot.slotIndex + " 已经安排了行动");
+            Debug.Log(targetSlot.GetDisplaySlotName() + " 已经安排了行动");
             return false;
         }
 

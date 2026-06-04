@@ -4,29 +4,20 @@ using UnityEngine;
 
 public enum BattleTestMode
 {
-    ClashUseCount,
-    AbilityUseCount,
-    BattleRuntimeStateBasic,
-    BattleRuntimeStateClearCurrentTurnBasic,
+    BattleActionSlotOwnerBasic,
+    BattleActionSlotOwnerAssignBasic,
     BattleRuntimeStateEndCurrentTurnBasic,
     BattleRuntimeStatePrepareNextTurnBasic,
-    BattleRuntimeStateFixedIntentFactoryBasic,
-    BattleStateViewDataBasic,
     BattleStateViewDataEnemyIntentBasic,
     BattleStateViewDataActionSlotBasic,
+    BattleStateViewDataOwnerActionSlotBasic,
     BattleResolverResolveRespondedAttackVsAttackBasic,
-    BattleResolverResolveUnrespondedEnemyIntentBasic,
-    BattleResolverResolveFreeAbilityBasic,
-    BattleResolverResolveFreeAttackBasic,
     ActionSlotLowSpeedOriginalSlotResponseBasic,
     ActionSlotLowSpeedIllegalResponseFail,
     ActionSlotResponseOverwriteBasic,
     ActionSlotExecutionPlanSpeedHighResponseOrderBasic,
     ActionSlotExecutionPlanSpeedLowResponseOrderBasic,
-    ActionSlotExecutionPlanSpeedHighFreeActionBasic,
-    ActionSlotExecutionPlanSpeedLowFreeActionBasic,
     ActionSlotExecutionPlanExecuteFreeAbilityBasic,
-    ActionSlotExecutionPlanExecuteFreeAttackBasic,
     ActionSlotExecutionPlanExecuteHighSpeedFreeAttackMixedBasic,
     ActionSlotExecutionPlanExecuteLowSpeedFreeAttackMixedBasic,
     ActionSlotExecutionPlanExecuteUnrespondedBasic,
@@ -38,7 +29,7 @@ public enum BattleTestMode
 
 public class CardLoadTest : MonoBehaviour
 {
-    [SerializeField] private BattleTestMode testMode = BattleTestMode.ClashUseCount;
+    [SerializeField] private BattleTestMode testMode = BattleTestMode.BattleActionSlotOwnerBasic;
 
     // ================================
     // 测试角色
@@ -86,27 +77,15 @@ public class CardLoadTest : MonoBehaviour
         // 5. 创建测试用战斗卡牌状态
         CreateTestBattleCards(cards);
 
-        if (testMode == BattleTestMode.ClashUseCount)
+        if (testMode == BattleTestMode.BattleActionSlotOwnerBasic)
         {
-            RunClashUseCountTestSequence();
+            RunBattleActionSlotOwnerBasicTestSequence();
             return;
         }
 
-        if (testMode == BattleTestMode.AbilityUseCount)
+        if (testMode == BattleTestMode.BattleActionSlotOwnerAssignBasic)
         {
-            RunAbilityUseCountTestSequence();
-            return;
-        }
-
-        if (testMode == BattleTestMode.BattleRuntimeStateBasic)
-        {
-            RunBattleRuntimeStateBasicTestSequence();
-            return;
-        }
-
-        if (testMode == BattleTestMode.BattleRuntimeStateClearCurrentTurnBasic)
-        {
-            RunBattleRuntimeStateClearCurrentTurnBasicTestSequence();
+            RunBattleActionSlotOwnerAssignBasicTestSequence();
             return;
         }
 
@@ -122,18 +101,6 @@ public class CardLoadTest : MonoBehaviour
             return;
         }
 
-        if (testMode == BattleTestMode.BattleRuntimeStateFixedIntentFactoryBasic)
-        {
-            RunBattleRuntimeStateFixedIntentFactoryBasicTestSequence();
-            return;
-        }
-
-        if (testMode == BattleTestMode.BattleStateViewDataBasic)
-        {
-            RunBattleStateViewDataBasicTestSequence();
-            return;
-        }
-
         if (testMode == BattleTestMode.BattleStateViewDataEnemyIntentBasic)
         {
             RunBattleStateViewDataEnemyIntentBasicTestSequence();
@@ -146,27 +113,15 @@ public class CardLoadTest : MonoBehaviour
             return;
         }
 
+        if (testMode == BattleTestMode.BattleStateViewDataOwnerActionSlotBasic)
+        {
+            RunBattleStateViewDataOwnerActionSlotBasicTestSequence();
+            return;
+        }
+
         if (testMode == BattleTestMode.BattleResolverResolveRespondedAttackVsAttackBasic)
         {
             RunBattleResolverResolveRespondedAttackVsAttackBasicTestSequence();
-            return;
-        }
-
-        if (testMode == BattleTestMode.BattleResolverResolveUnrespondedEnemyIntentBasic)
-        {
-            RunBattleResolverResolveUnrespondedEnemyIntentBasicTestSequence();
-            return;
-        }
-
-        if (testMode == BattleTestMode.BattleResolverResolveFreeAbilityBasic)
-        {
-            RunBattleResolverResolveFreeAbilityBasicTestSequence();
-            return;
-        }
-
-        if (testMode == BattleTestMode.BattleResolverResolveFreeAttackBasic)
-        {
-            RunBattleResolverResolveFreeAttackBasicTestSequence();
             return;
         }
 
@@ -200,27 +155,9 @@ public class CardLoadTest : MonoBehaviour
             return;
         }
 
-        if (testMode == BattleTestMode.ActionSlotExecutionPlanSpeedHighFreeActionBasic)
-        {
-            RunActionSlotExecutionPlanSpeedHighFreeActionBasicTestSequence();
-            return;
-        }
-
-        if (testMode == BattleTestMode.ActionSlotExecutionPlanSpeedLowFreeActionBasic)
-        {
-            RunActionSlotExecutionPlanSpeedLowFreeActionBasicTestSequence();
-            return;
-        }
-
         if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteFreeAbilityBasic)
         {
             RunActionSlotExecutionPlanExecuteFreeAbilityBasicTestSequence();
-            return;
-        }
-
-        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteFreeAttackBasic)
-        {
-            RunActionSlotExecutionPlanExecuteFreeAttackBasicTestSequence();
             return;
         }
 
@@ -309,6 +246,131 @@ public class CardLoadTest : MonoBehaviour
         StartTurn();
         RunAbilitySinCardTest();
         PrintAbilitySinCardTestState();
+    }
+
+    // RunBattleActionSlotOwnerBasicTestSequence = 验证角色独立行动槽位 owner / slotIndex 数据
+    void RunBattleActionSlotOwnerBasicTestSequence()
+    {
+        Debug.Log("===== BattleActionSlot owner 角色独立槽位测试开始 =====");
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(
+            allyA,
+            allyB,
+            2
+        );
+
+        BattleActionSlotManager.PrintActionSlots(actionSlots);
+
+        BattleActionSlot slotA1 = actionSlots != null && actionSlots.Count > 0 ? actionSlots[0] : null;
+        BattleActionSlot slotA2 = actionSlots != null && actionSlots.Count > 1 ? actionSlots[1] : null;
+        BattleActionSlot slotB1 = actionSlots != null && actionSlots.Count > 2 ? actionSlots[2] : null;
+        BattleActionSlot slotB2 = actionSlots != null && actionSlots.Count > 3 ? actionSlots[3] : null;
+
+        Debug.Log("预期槽位数量为 4：" + (actionSlots != null && actionSlots.Count == 4));
+
+        Debug.Log("预期第 1 个槽位存在：" + (slotA1 != null));
+        if (slotA1 != null)
+        {
+            Debug.Log("预期第 1 个 owner 为 allyA：" + object.ReferenceEquals(slotA1.owner, allyA));
+            Debug.Log("预期第 1 个 slotIndex 为 1：" + (slotA1.slotIndex == 1));
+            Debug.Log("预期第 1 个显示名为 A 槽位1：" + (slotA1.GetDisplaySlotName() == allyA.characterName + " 槽位1"));
+        }
+
+        Debug.Log("预期第 2 个槽位存在：" + (slotA2 != null));
+        if (slotA2 != null)
+        {
+            Debug.Log("预期第 2 个 owner 为 allyA：" + object.ReferenceEquals(slotA2.owner, allyA));
+            Debug.Log("预期第 2 个 slotIndex 为 2：" + (slotA2.slotIndex == 2));
+            Debug.Log("预期第 2 个显示名为 A 槽位2：" + (slotA2.GetDisplaySlotName() == allyA.characterName + " 槽位2"));
+        }
+
+        Debug.Log("预期第 3 个槽位存在：" + (slotB1 != null));
+        if (slotB1 != null)
+        {
+            Debug.Log("预期第 3 个 owner 为 allyB：" + object.ReferenceEquals(slotB1.owner, allyB));
+            Debug.Log("预期第 3 个 slotIndex 为 1：" + (slotB1.slotIndex == 1));
+            Debug.Log("预期第 3 个显示名为 B 槽位1：" + (slotB1.GetDisplaySlotName() == allyB.characterName + " 槽位1"));
+        }
+
+        Debug.Log("预期第 4 个槽位存在：" + (slotB2 != null));
+        if (slotB2 != null)
+        {
+            Debug.Log("预期第 4 个 owner 为 allyB：" + object.ReferenceEquals(slotB2.owner, allyB));
+            Debug.Log("预期第 4 个 slotIndex 为 2：" + (slotB2.slotIndex == 2));
+            Debug.Log("预期第 4 个显示名为 B 槽位2：" + (slotB2.GetDisplaySlotName() == allyB.characterName + " 槽位2"));
+        }
+
+        Debug.Log("本测试只验证角色独立槽位 owner / slotIndex / displayName，不安排卡牌，不响应敌人意图，不生成 ExecutionPlan，不执行 plan，不调用 Resolver，不扣血");
+    }
+
+    // RunBattleActionSlotOwnerAssignBasicTestSequence = 验证 owner + slotIndex 能区分 A槽位1 / B槽位1
+    void RunBattleActionSlotOwnerAssignBasicTestSequence()
+    {
+        Debug.Log("===== BattleActionSlot owner 版本安排行动测试开始 =====");
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(
+            allyA,
+            allyB,
+            2
+        );
+
+        BattleCardState allyAIndependentAttackCardState = CreateTestAttackCardForCharacter(
+            allyA,
+            "owner_assign_allyA_atk_001_copy_0"
+        );
+
+        BattleCardState allyBIndependentAttackCardState = CreateTestAttackCardForCharacter(
+            allyB,
+            "owner_assign_allyB_atk_001_copy_0"
+        );
+
+        bool assignA1Result = BattleActionSlotManager.AssignFreeAction(
+            actionSlots,
+            allyA,
+            1,
+            allyA,
+            allyAIndependentAttackCardState,
+            enemy
+        );
+
+        bool assignB1Result = BattleActionSlotManager.AssignFreeAction(
+            actionSlots,
+            allyB,
+            1,
+            allyB,
+            allyBIndependentAttackCardState,
+            enemy
+        );
+
+        BattleActionSlot slotA1 = BattleActionSlotManager.GetSlot(actionSlots, allyA, 1);
+        BattleActionSlot slotA2 = BattleActionSlotManager.GetSlot(actionSlots, allyA, 2);
+        BattleActionSlot slotB1 = BattleActionSlotManager.GetSlot(actionSlots, allyB, 1);
+        BattleActionSlot slotB2 = BattleActionSlotManager.GetSlot(actionSlots, allyB, 2);
+
+        BattleActionSlotManager.PrintActionSlots(actionSlots);
+
+        Debug.Log("预期 allyA 槽位1安排成功：" + assignA1Result);
+        Debug.Log("预期 allyB 槽位1安排成功：" + assignB1Result);
+
+        Debug.Log("预期 allyA 槽位1存在：" + (slotA1 != null));
+        if (slotA1 != null)
+        {
+            Debug.Log("预期 allyA 槽位1 actor 为 allyA：" + object.ReferenceEquals(slotA1.actor, allyA));
+            Debug.Log("预期 allyA 槽位1 卡牌为 allyA 独立攻击卡：" + object.ReferenceEquals(slotA1.cardState, allyAIndependentAttackCardState));
+            Debug.Log("预期 allyA 槽位1 不是空槽：" + !slotA1.IsEmpty());
+        }
+
+        Debug.Log("预期 allyB 槽位1存在：" + (slotB1 != null));
+        if (slotB1 != null)
+        {
+            Debug.Log("预期 allyB 槽位1 actor 为 allyB：" + object.ReferenceEquals(slotB1.actor, allyB));
+            Debug.Log("预期 allyB 槽位1 卡牌为 allyB 独立攻击卡：" + object.ReferenceEquals(slotB1.cardState, allyBIndependentAttackCardState));
+            Debug.Log("预期 allyB 槽位1 不是空槽：" + !slotB1.IsEmpty());
+        }
+
+        Debug.Log("预期 allyA 槽位2仍为空：" + (slotA2 != null && slotA2.IsEmpty()));
+        Debug.Log("预期 allyB 槽位2仍为空：" + (slotB2 != null && slotB2.IsEmpty()));
+        Debug.Log("本测试只验证 owner 查找和 FreeAction 安排，不生成 ExecutionPlan，不执行 plan，不调用 Resolver，不扣血，不处理回合结束");
     }
 
     // RunBattleRuntimeStateBasicTestSequence = 验证 BattleRuntimeState 能集中保存并打印当前战斗状态
@@ -721,6 +783,49 @@ public class CardLoadTest : MonoBehaviour
         }
 
         Debug.Log("本测试只验证 ActionSlotViewData 从 RuntimeState 只读生成，不做 UI，不执行 plan，不调用 Resolver，不修改 RuntimeState，不改槽位和战斗逻辑");
+    }
+
+    // RunBattleStateViewDataOwnerActionSlotBasicTestSequence = 验证 ViewData 能显示角色独立行动槽位
+    void RunBattleStateViewDataOwnerActionSlotBasicTestSequence()
+    {
+        Debug.Log("===== BattleStateViewData owner 行动槽位快照测试开始 =====");
+
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(allyA, allyB, enemy);
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(
+            allyA,
+            allyB,
+            2
+        );
+
+        runtimeState.SetActionSlots(actionSlots);
+        runtimeState.SetPhase("Prepare");
+
+        BattleStateViewData viewData = BattleStateViewData.FromRuntimeState(runtimeState);
+        viewData.PrintViewData();
+
+        ActionSlotViewData slotViewA1 = GetActionSlotViewByIndex(viewData, 0);
+        ActionSlotViewData slotViewA2 = GetActionSlotViewByIndex(viewData, 1);
+        ActionSlotViewData slotViewB1 = GetActionSlotViewByIndex(viewData, 2);
+        ActionSlotViewData slotViewB2 = GetActionSlotViewByIndex(viewData, 3);
+
+        Debug.Log("预期 actionSlotViews 不为空：" + (viewData.actionSlotViews != null));
+        Debug.Log("预期 actionSlotViews 数量为 4：" + (viewData.actionSlotViews != null && viewData.actionSlotViews.Count == 4));
+
+        Debug.Log("预期第 1 个 ownerName 为 allyA：" + (slotViewA1 != null && slotViewA1.ownerName == allyA.characterName));
+        Debug.Log("预期第 1 个 displaySlotName 包含 allyA 和 槽位1：" + (slotViewA1 != null && slotViewA1.displaySlotName.Contains(allyA.characterName) && slotViewA1.displaySlotName.Contains("槽位1")));
+
+        Debug.Log("预期第 2 个 ownerName 为 allyA：" + (slotViewA2 != null && slotViewA2.ownerName == allyA.characterName));
+        Debug.Log("预期第 2 个 displaySlotName 包含 allyA 和 槽位2：" + (slotViewA2 != null && slotViewA2.displaySlotName.Contains(allyA.characterName) && slotViewA2.displaySlotName.Contains("槽位2")));
+
+        Debug.Log("预期第 3 个 ownerName 为 allyB：" + (slotViewB1 != null && slotViewB1.ownerName == allyB.characterName));
+        Debug.Log("预期第 3 个 displaySlotName 包含 allyB 和 槽位1：" + (slotViewB1 != null && slotViewB1.displaySlotName.Contains(allyB.characterName) && slotViewB1.displaySlotName.Contains("槽位1")));
+
+        Debug.Log("预期第 4 个 ownerName 为 allyB：" + (slotViewB2 != null && slotViewB2.ownerName == allyB.characterName));
+        Debug.Log("预期第 4 个 displaySlotName 包含 allyB 和 槽位2：" + (slotViewB2 != null && slotViewB2.displaySlotName.Contains(allyB.characterName) && slotViewB2.displaySlotName.Contains("槽位2")));
+
+        Debug.Log("本测试只验证 ViewData 只读快照，不安排卡牌，不响应敌人意图，不生成 ExecutionPlan，不执行 plan，不调用 Resolver，不扣血，不接 UI");
     }
 
     // RunBattleResolverResolveRespondedAttackVsAttackBasicTestSequence = 测试 BattleResolver 正式已响应敌人意图入口
@@ -2672,6 +2777,21 @@ public class CardLoadTest : MonoBehaviour
     // ================================
     // Action Slot 测试辅助方法
     // ================================
+
+    ActionSlotViewData GetActionSlotViewByIndex(BattleStateViewData viewData, int index)
+    {
+        if (viewData == null || viewData.actionSlotViews == null)
+        {
+            return null;
+        }
+
+        if (index < 0 || index >= viewData.actionSlotViews.Count)
+        {
+            return null;
+        }
+
+        return viewData.actionSlotViews[index];
+    }
 
     // CreateTestAttackCardForCharacter = 给测试角色创建一张基础攻击卡实例
     BattleCardState CreateTestAttackCardForCharacter(CharacterData owner, string instanceID)

@@ -17,8 +17,12 @@ public enum BattleActionSlotType
 // 槽位只记录准备阶段安排，不负责真正战斗结算
 public class BattleActionSlot
 {
+    // owner = 槽位归属角色
+    // 例如我方角色A的槽位1、我方角色B的槽位1。旧全局槽位可以保持为空。
+    public CharacterData owner;
+
     // slotIndex = 槽位编号
-    // 第一版约定从 1 开始，例如槽位 1、槽位 2。
+    // 第一版约定从 1 开始。owner 不为空时表示角色内槽位编号。
     public int slotIndex;
 
     // slotType = 槽位类型
@@ -50,6 +54,16 @@ public class BattleActionSlot
     // slotIndex = 槽位编号。
     public BattleActionSlot(int slotIndex)
     {
+        owner = null;
+        this.slotIndex = slotIndex;
+        Clear();
+    }
+
+    // BattleActionSlot = 角色独立行动槽位构造函数
+    // owner = 这个槽位属于哪个角色，slotIndex = 角色内槽位编号。
+    public BattleActionSlot(CharacterData owner, int slotIndex)
+    {
+        this.owner = owner;
         this.slotIndex = slotIndex;
         Clear();
     }
@@ -150,6 +164,30 @@ public class BattleActionSlot
         }
 
         return actor.characterName;
+    }
+
+    // GetOwnerName = 获取槽位归属角色名字
+    // 旧全局槽位没有 owner 时返回“无归属”。
+    public string GetOwnerName()
+    {
+        if (owner == null)
+        {
+            return "无归属";
+        }
+
+        return owner.characterName;
+    }
+
+    // GetDisplaySlotName = 获取适合 UI / 日志显示的槽位名
+    // owner 不为空时显示“角色名 槽位X”，否则保持旧的“槽位X”。
+    public string GetDisplaySlotName()
+    {
+        if (owner == null)
+        {
+            return "槽位" + slotIndex;
+        }
+
+        return owner.characterName + " 槽位" + slotIndex;
     }
 
     // GetCardName = 获取卡牌名字

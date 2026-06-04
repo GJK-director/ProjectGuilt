@@ -7303,3 +7303,573 @@ UI 状态接口第一版需要读取的信息：
 - 正式 BattleController / UIController 拆分
 - 正式角色 JSON / 卡牌 JSON / Buff JSON 数据制作
 - 正式美术 UI
+
+## 七十二、正常攻击卡响应敌人意图第一版接入通过
+
+当前完成内容：
+
+- `BattleSimpleUIController.cs` 新增 `allyBAttackCardState`。
+- `allyB` 现在拥有独立的基础攻击 `BattleCardState`。
+- 新增按钮字段：
+  - `assignB1RespondIntent1Button`
+- 新增按钮方法：
+  - `OnClickAssignB1RespondIntent1()`
+- Unity 场景中手动新增并绑定按钮：
+  - `Btn_AssignB1RespondIntent1`
+- 按钮文字：
+  - `B槽位1响应意图1`
+
+本次没有新增新的战斗逻辑脚本：
+
+- 没有修改 `BattleResolver`
+- 没有修改 `BattleExecutionPlanExecutor`
+- 没有修改 `BattleExecutionPlanManager`
+- 没有修改 `BattleActionSlotManager`
+- 没有修改 `BattleRuntimeState`
+- 没有修改 `BattleStateViewData`
+- 没有新增另一套战斗逻辑
+- 只是通过 UI Controller 调用已有：
+  - `BattleActionSlotManager.AssignResponseToEnemyIntent(...)`
+  - `BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(...)`
+  - `BattleExecutionPlanExecutor.ExecuteExecutionPlan(...)`
+  - `BattleResolver.ResolveRespondedEnemyIntent(...)`
+
+`OnClickAssignB1RespondIntent1()` 当前流程：
+
+- 检查 `runtimeState`
+- 检查 `CanEditActionSlots()`
+- 通过 `BattleEnemyIntentManager.FindIntentByOrder(runtimeState.intentQueue, 1)` 查找敌人意图1
+- 调用 `BattleActionSlotManager.AssignResponseToEnemyIntent(...)`
+- 让 `allyB` 使用 `allyBAttackCardState` 在槽位1响应敌人意图1
+- 成功 / 失败后写日志
+- 调用 `RefreshView()`
+
+当前测试流程：
+
+- 点击 `B槽位1响应意图1`
+- 点击 `A槽位1偷刀` 验证槽位互斥
+- 点击 `战斗开始`
+
+测试结果：
+
+- 成功找到敌人意图1：
+  - 敌人 使用 敌人爪击
+- 槽位1安排响应成功：
+  - 我方角色B 使用 基础攻击 响应敌人意图
+- 因为 allyB 速度低于敌人，但敌人意图原目标就是 allyB 槽位1，所以触发：
+  - 低速原目标槽位响应成功
+  - 不改写 actualTarget
+  - 敌人意图仍命中 我方角色B 槽位1
+- B 已占用槽位1 后，再点 `A槽位1偷刀` 会提示：
+  - 槽位1已经安排了行动
+- 点击 `战斗开始` 后生成 ExecutionPlan：
+  - ExecutionPlan 项数量：1
+  - 第 1 项：`RespondedEnemyIntent`
+  - 我方角色B 槽位1处理敌人意图1
+- 执行计划后进入：
+  - `BattleResolver.ResolveRespondedEnemyIntent(...)`
+  - `BattleResolver.ResolveRespondedAttackVsAttack(...)`
+- 本次拼点结果：
+  - `PlayerWin`
+  - 玩家点数：10
+  - 敌人点数：5
+  - 造成伤害：20
+- 敌人 HP：
+  - `999 -> 979`
+- allyB 负罪感：
+  - `0 -> 2`
+- 结算结果：
+  - `playerCardUsed = True`
+  - `enemyCardUsed = True`
+  - `triggeredEventChain = True`
+  - `BattleExecutionPlan` 全部完成
+- 玩家行动槽位已标记为已使用。
+
+当前结论：
+
+- 正常攻击卡响应敌人意图第一版接入通过。
+- 当前已经验证：
+  - UI 可以安排角色响应敌人意图
+  - 低速原目标槽位响应规则生效
+  - 已响应敌人意图可以生成 `RespondedEnemyIntent`
+  - `RespondedEnemyIntent` 可以进入正式 Resolver
+  - 攻击卡 vs 敌人攻击卡拼点主线可以跑通
+  - 拼点胜负、伤害、事件链、负罪感、槽位 MarkUsed 都能走已有系统
+- 这一步比之前的 `FreeAction + UnrespondedEnemyIntent` 更接近正常战斗主流程。
+
+当前临时限制：
+
+- 当前仍是全局槽位1，不是正式 A/B 各自独立槽位。
+- `B槽位1` 在当前测试中实际表示“全局槽位1由 allyB 使用”。
+- 如果槽位1已被 A 偷刀占用，则 B 响应会失败。
+- 如果槽位1已被 B 响应占用，则 A 偷刀会失败。
+- 当前没有卡牌列表 UI。
+- 当前没有卡牌 CD 可用性限制。
+- 当前没有防御 / 闪避接入。
+- 当前没有拖拽卡牌。
+
+后续未处理内容：
+
+- A/B 各自独立行动槽位结构
+- A/B 角色分别选择行动槽
+- 卡牌选择 UI
+- 卡牌 CD 显示与可用性限制
+- 防御 / 守备接入 Resolver
+- 闪避接入 Resolver
+- 多敌人 / 多意图 UI
+- 正式 BattleController / UIController 拆分
+- 正式角色 JSON / 卡牌 JSON / Buff JSON 数据制作
+- 正式美术 UI
+
+## 七十三、BattleActionSlot owner 第一版角色独立槽位地基测试通过
+
+修改文件：
+
+- `BattleActionSlot.cs`
+- `BattleActionSlotManager.cs`
+- `CardLoadTest.cs`
+
+`BattleActionSlot` 新增：
+
+- `public CharacterData owner;`
+- 保留旧构造函数：
+  - `BattleActionSlot(int slotIndex)`
+- 新增 owner 构造函数：
+  - `BattleActionSlot(CharacterData owner, int slotIndex)`
+- 新增只读辅助：
+  - `GetOwnerName()`
+  - `GetDisplaySlotName()`
+
+重要边界：
+
+- `Clear()` 不会清掉 owner。
+- 槽位归属会保留。
+- 旧构造函数保留，旧测试不被破坏。
+
+`BattleActionSlotManager` 新增：
+
+- `CreateCharacterActionSlots(CharacterData owner, int slotCount)`
+- `CreatePartyActionSlots(CharacterData allyA, CharacterData allyB, int slotCountPerCharacter)`
+- `PrintActionSlots(List<BattleActionSlot> slots)`
+
+`PrintSlotStates(...)` 小范围增强：
+
+- `displaySlotName`
+- `ownerName`
+- `slotIndex`
+- `isUsed`
+- `actor`
+- `card`
+- `target`
+- `enemyIntent`
+
+新增测试模式：
+
+- `BattleActionSlotOwnerBasic`
+
+测试结果：
+
+- 成功创建 4 个角色独立槽位：
+  - 我方角色A 槽位1
+  - 我方角色A 槽位2
+  - 我方角色B 槽位1
+  - 我方角色B 槽位2
+- 验证结果全部为 True：
+  - 槽位数量为 4
+  - 第 1 个 owner = allyA，slotIndex = 1
+  - 第 2 个 owner = allyA，slotIndex = 2
+  - 第 3 个 owner = allyB，slotIndex = 1
+  - 第 4 个 owner = allyB，slotIndex = 2
+  - displayName 能区分 A/B 槽位
+
+本测试没有做：
+
+- 不安排卡牌
+- 不响应敌人意图
+- 不生成 ExecutionPlan
+- 不执行 plan
+- 不调用 Resolver
+- 不扣血
+
+阶段意义：
+
+- 当前槽位系统开始从“全局槽位1 / 全局槽位2”转向“角色拥有自己的槽位”。
+- 后续 A/B 独立行动、卡牌选择、CD、守备、防御、闪避、槽位 Buff 都应建立在这个地基上。
+
+## 七十四、CardLoadTest 下拉测试入口第一轮整理完成
+
+修改文件：
+
+- `CardLoadTest.cs`
+
+本次整理目标：
+
+- Unity Inspector 下拉测试项太多。
+- 第一轮只整理 `BattleTestMode enum` 和 `Start()` 分支。
+- 不删除测试方法本体。
+- 不修改任何战斗逻辑。
+
+从 Unity 下拉入口移出的测试模式：
+
+- `ClashUseCount`
+- `AbilityUseCount`
+- `BattleRuntimeStateBasic`
+- `BattleRuntimeStateClearCurrentTurnBasic`
+- `BattleRuntimeStateFixedIntentFactoryBasic`
+- `BattleStateViewDataBasic`
+- `BattleResolverResolveUnrespondedEnemyIntentBasic`
+- `BattleResolverResolveFreeAbilityBasic`
+- `BattleResolverResolveFreeAttackBasic`
+- `ActionSlotExecutionPlanSpeedHighFreeActionBasic`
+- `ActionSlotExecutionPlanSpeedLowFreeActionBasic`
+- `ActionSlotExecutionPlanExecuteFreeAttackBasic`
+
+保留在下拉入口的关键测试模式：
+
+- `BattleActionSlotOwnerBasic`
+- `BattleRuntimeStateEndCurrentTurnBasic`
+- `BattleRuntimeStatePrepareNextTurnBasic`
+- `BattleStateViewDataEnemyIntentBasic`
+- `BattleStateViewDataActionSlotBasic`
+- `BattleResolverResolveRespondedAttackVsAttackBasic`
+- `ActionSlotLowSpeedOriginalSlotResponseBasic`
+- `ActionSlotLowSpeedIllegalResponseFail`
+- `ActionSlotResponseOverwriteBasic`
+- `ActionSlotExecutionPlanSpeedHighResponseOrderBasic`
+- `ActionSlotExecutionPlanSpeedLowResponseOrderBasic`
+- `ActionSlotExecutionPlanExecuteFreeAbilityBasic`
+- `ActionSlotExecutionPlanExecuteHighSpeedFreeAttackMixedBasic`
+- `ActionSlotExecutionPlanExecuteLowSpeedFreeAttackMixedBasic`
+- `ActionSlotExecutionPlanExecuteUnrespondedBasic`
+- `ActionSlotExecutionPlanExecuteRespondedBasic`
+- `ActionSlotExecutionPlanExecuteRespondedEnemyWin`
+- `ActionSlotExecutionPlanExecuteRespondedTieLimit`
+- `ActionSlotExecutionPlanExecuteMixedBasic`
+
+重要边界：
+
+- 没有删除任何 `Run...TestSequence()` 方法。
+- 被移出入口的测试方法本体仍然存在。
+- 只是暂时不再出现在 Unity 下拉列表里。
+- 默认 `testMode` 已从移出的 `ClashUseCount` 改为保留项 `BattleActionSlotOwnerBasic`。
+
+没有修改：
+
+- 战斗逻辑
+- UI
+- RuntimeState
+- ViewData
+- Resolver
+- Executor
+- Manager
+- JSON
+- 场景 / Prefab
+
+编译检查：
+
+- 普通 sandbox 因 Windows SDK 目录权限失败。
+- 提升权限后 `dotnet build ProjectGuilt.sln` 通过。
+- `0 warnings / 0 errors`。
+
+## 七十五、BattleActionSlot owner 版本安排行动测试通过
+
+当前完成内容：
+
+- `BattleActionSlotManager.cs` 新增 owner + slotIndex 查找槽位的方法：
+  - `GetSlot(List<BattleActionSlot> slots, CharacterData owner, int slotIndex)`
+- 新增 owner 版本：
+  - `AssignFreeAction(...)`
+  - `AssignResponseToEnemyIntent(...)`
+- 旧版按全局 slotIndex 的：
+  - `AssignFreeAction(slots, slotIndex, ...)`
+  - `AssignResponseToEnemyIntent(slots, slotIndex, ...)`
+  仍然保留。
+- 旧入口和新 owner 入口现在共用私有 helper，避免两套安排行动逻辑分叉。
+
+新增测试模式：
+
+- `BattleActionSlotOwnerAssignBasic`
+
+测试流程：
+
+- 使用 `CreatePartyActionSlots(allyA, allyB, 2)` 创建 A/B 各 2 个角色独立槽位。
+- 使用 owner 版本 `AssignFreeAction(...)`：
+  - allyA 槽位1安排基础攻击偷刀 enemy。
+  - allyB 槽位1也安排基础攻击偷刀 enemy。
+- 打印当前行动槽位状态。
+
+测试结果：
+
+- 成功创建队伍行动槽位，数量：4。
+- 我方角色A 槽位1安排自由行动成功。
+- 我方角色B 槽位1安排自由行动成功。
+- allyA 槽位1安排成功：True。
+- allyB 槽位1安排成功：True。
+- allyA 槽位1 actor 为 allyA：True。
+- allyB 槽位1 actor 为 allyB：True。
+- allyA 槽位1卡牌为 allyA 独立攻击卡：True。
+- allyB 槽位1卡牌为 allyB 独立攻击卡：True。
+- allyA 槽位1不是空槽：True。
+- allyB 槽位1不是空槽：True。
+- allyA 槽位2仍为空：True。
+- allyB 槽位2仍为空：True。
+
+本测试没有做：
+
+- 不生成 ExecutionPlan。
+- 不执行 plan。
+- 不调用 Resolver。
+- 不扣血。
+- 不处理回合结束。
+- 不接 UI。
+
+当前结论：
+
+- owner + slotIndex 查找槽位第一版通过。
+- owner 版本 FreeAction 安排第一版通过。
+- A槽位1 和 B槽位1 已经可以在数据层同时存在，不再互相抢全局 slotIndex = 1。
+- 这一步为后续 UI 中真正区分 A/B 独立槽位打好基础。
+
+后续下一步：
+
+- 将 `BattleSimpleUIController` 中的：
+  - `A槽位1偷刀`
+  - `B槽位1响应意图1`
+  改为调用 owner 版本接口。
+- 后续再扩展 ViewData 和 UI 显示 A1 / A2 / B1 / B2。
+- 暂时仍不处理防御、闪避、卡牌选择 UI、CD 限制。
+
+## 七十六、BattleSimpleUIController 接入 owner 槽位第一版测试通过
+
+当前完成内容：
+
+- `BattleSimpleUIController.cs` 已改为使用角色独立槽位。
+- 初始化时改为：
+  - `BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2)`
+- 准备下一回合时也改为创建 A/B 各 2 个角色独立槽位。
+- `A槽位1偷刀` 已改为 owner 版本 `AssignFreeAction(...)`。
+- `A槽位1能力` 已改为 owner 版本 `AssignFreeAction(...)`。
+- `B槽位1响应意图1` 已改为 owner 版本 `AssignResponseToEnemyIntent(...)`。
+- 当前 UI 文本优先显示：
+  - `allyA 槽位1`
+  - `allyB 槽位1`
+- A2 / B2 暂时不显示，后续再扩展正式 UI。
+
+本次没有修改：
+
+- `BattleRuntimeState`
+- `BattleStateViewData`
+- `BattleResolver`
+- `BattleExecutionPlanExecutor`
+- `BattleExecutionPlanManager`
+- `BattleActionSlotManager`
+- `CardsTest.json`
+- 场景文件 / Prefab
+
+测试流程：
+
+- 点击 `A槽位1偷刀`
+- 点击 `B槽位1响应意图1`
+- 点击 `战斗开始`
+- 点击 `结束回合`
+
+测试结果：
+
+- 初始化时成功创建队伍行动槽位，数量：4。
+- 我方角色A 槽位1安排自由行动成功。
+- 找到敌人意图1：敌人 使用 敌人爪击。
+- 我方角色B 槽位1安排响应成功。
+- 因为 B 速度低于敌人，但敌人意图原目标就是 B 槽位1，所以触发低速原目标槽位响应成功。
+- A槽位1和B槽位1不再互相冲突。
+- ExecutionPlan 项数量为 2：
+  - 第 1 项：`FreeAction`
+  - 第 2 项：`RespondedEnemyIntent`
+- `FreeAction` 由我方角色A 槽位1执行：
+  - A 使用基础攻击偷刀敌人
+  - 敌人 HP：999 -> 979
+  - A 负罪感：0 -> 2
+  - A槽位1标记为已使用
+- `RespondedEnemyIntent` 由我方角色B 槽位1执行：
+  - B 使用基础攻击响应敌人意图1
+  - 拼点结果：`PlayerWin`
+  - 玩家点数：10
+  - 敌人点数：5
+  - 敌人 HP：979 -> 959
+  - B 负罪感：0 -> 2
+  - B槽位1标记为已使用
+- `BattleExecutionPlan` 已全部完成。
+- 点击结束回合后，进入 `BattleTurnProcessor.EndTurn(...)`，开始处理 Buff 持续时间。
+
+当前结论：
+
+- `BattleSimpleUIController` 接入 owner 槽位第一版通过。
+- 简易 UI 中 A槽位1 和 B槽位1 已经不再抢同一个全局 slotIndex。
+- 当前 UI 已经可以在同一回合内同时安排：
+  - A 的 FreeAction 偷刀
+  - B 的 RespondedEnemyIntent 响应敌人意图
+- ExecutionPlan 可以同时生成并执行 `FreeAction + RespondedEnemyIntent`。
+- 这说明 A/B 独立槽位已经初步接入 UI 主流程。
+
+当前临时限制：
+
+- UI 目前只显示 A槽位1 / B槽位1。
+- A槽位2 / B槽位2 暂时只存在于数据层，还未显示到 UI。
+- 当前仍没有正式卡牌选择 UI。
+- 当前没有卡牌 CD 显示和可用性限制。
+- 当前没有防御 / 守备。
+- 当前没有闪避。
+- 当前没有拖拽卡牌。
+- 当前没有正式 BattleController / UIController 拆分。
+
+后续未处理内容：
+
+- 扩展 `BattleStateViewData.ActionSlotViewData`，正式显示 owner / displaySlotName。
+- UI 显示 A1 / A2 / B1 / B2 四个槽位。
+- A/B 角色分别选择行动槽。
+- 卡牌选择 UI。
+- 卡牌 CD 显示与可用性限制。
+- 防御 / 守备接入。
+- 闪避接入。
+- 正式卡牌、角色、Buff 数据制作。
+
+## 七十七、BattleStateViewData owner 行动槽位快照测试通过
+
+当前完成内容：
+
+- `BattleStateViewData.cs` 中的 `ActionSlotViewData` 已新增：
+  - `ownerName`
+  - `displaySlotName`
+- `FromRuntimeState(...)` 生成行动槽位快照时，现在会填充 owner 槽位显示信息。
+- owner 槽位会使用：
+  - `slot.GetOwnerName()`
+  - `slot.GetDisplaySlotName()`
+- 旧无 owner 槽位兼容为：
+  - `ownerName = "无"`
+  - `displaySlotName = "槽位" + slotIndex`
+- `PrintViewData()` 已增强行动槽位打印，能显示：
+  - `displaySlotName`
+  - `owner`
+  - `slotIndex`
+  - `actor`
+  - `card`
+  - `target`
+  - `enemyIntent`
+  - `isUsed`
+  - `isEmpty`
+
+新增测试模式：
+
+- `BattleStateViewDataOwnerActionSlotBasic`
+
+测试流程：
+
+- 创建 allyA / allyB / enemy。
+- 使用 `BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2)` 创建 4 个 owner 槽位：
+  - 我方角色A 槽位1
+  - 我方角色A 槽位2
+  - 我方角色B 槽位1
+  - 我方角色B 槽位2
+- 构造 `BattleRuntimeState`。
+- 从 RuntimeState 生成 `BattleStateViewData`。
+- 调用 `PrintViewData()` 打印只读快照。
+
+测试结果：
+
+- `actionSlotCount = 4`
+- `actionSlotViews` 不为空：True
+- `actionSlotViews.Count == 4`：True
+- 第 1 个 ownerName 为 allyA：True
+- 第 1 个 displaySlotName 包含 allyA 和 槽位1：True
+- 第 2 个 ownerName 为 allyA：True
+- 第 2 个 displaySlotName 包含 allyA 和 槽位2：True
+- 第 3 个 ownerName 为 allyB：True
+- 第 3 个 displaySlotName 包含 allyB 和 槽位1：True
+- 第 4 个 ownerName 为 allyB：True
+- 第 4 个 displaySlotName 包含 allyB 和 槽位2：True
+
+本测试没有做：
+
+- 不安排卡牌。
+- 不响应敌人意图。
+- 不生成 ExecutionPlan。
+- 不执行 plan。
+- 不调用 Resolver。
+- 不扣血。
+- 不接 UI。
+
+当前结论：
+
+- `BattleStateViewData` 已能正式表达 A/B 角色独立行动槽位。
+- ViewData 层已经能区分：
+  - A槽位1
+  - A槽位2
+  - B槽位1
+  - B槽位2
+- 后续 UI 显示 A1 / A2 / B1 / B2 时，可以从 `BattleStateViewData.actionSlotViews` 读取 `ownerName` 和 `displaySlotName`，不需要继续让 UI Controller 临时查 RuntimeState。
+- 这一步为正式四槽位 UI 显示打好基础。
+
+后续未处理内容：
+
+- `BattleSimpleUIController` 暂时仍只显示 A槽位1 / B槽位1。
+- 后续需要扩展 UI 显示 A1 / A2 / B1 / B2 四个槽位。
+- 后续需要接入卡牌选择 UI。
+- 后续需要接入卡牌 CD 显示和可用性限制。
+- 后续需要接入防御 / 守备。
+- 后续需要接入闪避。
+- 后续需要正式拆分 BattleController / UIController。
+
+## 七十八、BattleSimpleUIController 四槽位显示第一版测试通过
+
+当前完成内容：
+
+- `BattleSimpleUIController.cs` 新增四个可绑定 TMP 文本字段：
+  - `actionSlotA1Text`
+  - `actionSlotA2Text`
+  - `actionSlotB1Text`
+  - `actionSlotB2Text`
+- 旧字段 `actionSlot1Text / actionSlot2Text` 保留，用于兼容旧场景。
+- 新四槽位字段未绑定时不会报错。
+- 四槽位显示从 `BattleStateViewData.actionSlotViews` 读取，不再临时查 RuntimeState。
+
+Unity 画面确认：
+
+- A槽位1 能正常显示。
+- A槽位2 能正常显示。
+- B槽位1 能正常显示。
+- B槽位2 能正常显示。
+
+Console 日志确认：
+
+- 初始化成功创建 A/B 各 2 个行动槽位，总数 4。
+- A 槽位1 FreeAction 安排成功。
+- B 槽位1响应敌人意图1安排成功。
+- A1 和 B1 没有再互相抢全局槽位。
+- ExecutionPlan 顺序为：
+  1. `FreeAction`
+  2. `RespondedEnemyIntent`
+- `FreeAction` 和 `RespondedEnemyIntent` 都正常执行。
+- 两个玩家行动槽位都被标记为已使用。
+- 回合结束和准备下一回合流程正常触发。
+- 准备下一回合后再次创建 A/B 各 2 个行动槽位，总数 4。
+
+当前结论：
+
+- `BattleSimpleUIController` 四槽位显示第一版通过。
+- 当前 UI 已经可以显示：
+  - A槽位1
+  - A槽位2
+  - B槽位1
+  - B槽位2
+- 四槽位显示开始正式基于 `BattleStateViewData.actionSlotViews`。
+- UI Controller 不再为了显示槽位临时查 RuntimeState。
+
+当前仍未处理：
+
+- A2 / B2 操作按钮。
+- 卡牌选择 UI。
+- 卡牌 CD 显示与可用性限制。
+- 防御 / 守备。
+- 闪避。
+- 拖拽卡牌。
+- 正式 BattleController / UIController 拆分。
+- 正式美术 UI。

@@ -116,7 +116,13 @@ public class BattleStateViewData
 
             if (slotView.isEmpty)
             {
-                Debug.Log("槽位" + slotView.slotIndex + "：空槽位");
+                Debug.Log(
+                    slotView.displaySlotName +
+                    "：空槽位 / owner=" + slotView.ownerName +
+                    " / slotIndex=" + slotView.slotIndex +
+                    " / isUsed=" + slotView.isUsed +
+                    " / isEmpty=" + slotView.isEmpty
+                );
                 continue;
             }
 
@@ -125,8 +131,10 @@ public class BattleStateViewData
                 : "无";
 
             Debug.Log(
-                "槽位" + slotView.slotIndex +
-                "：actor=" + slotView.actorName +
+                slotView.displaySlotName +
+                " / owner=" + slotView.ownerName +
+                " / slotIndex=" + slotView.slotIndex +
+                " / actor=" + slotView.actorName +
                 " / card=" + slotView.cardName +
                 " / type=" + slotView.cardType +
                 " / target=" + slotView.targetName +
@@ -264,6 +272,8 @@ public class ActionSlotViewData
 {
     public int slotIndex;
     public string slotType;
+    public string ownerName;
+    public string displaySlotName;
 
     public string actorName;
     public string cardName;
@@ -283,12 +293,16 @@ public class ActionSlotViewData
 
         if (actionSlot == null)
         {
+            viewData.ownerName = "无";
+            viewData.displaySlotName = "槽位0";
             viewData.isEmpty = true;
             return viewData;
         }
 
         viewData.slotIndex = actionSlot.slotIndex;
         viewData.slotType = actionSlot.slotType.ToString();
+        viewData.ownerName = actionSlot.owner != null ? actionSlot.GetOwnerName() : "无";
+        viewData.displaySlotName = actionSlot.GetDisplaySlotName();
         viewData.actorName = actionSlot.GetActorName();
         viewData.cardName = actionSlot.GetCardName();
         viewData.cardType = GetCardType(actionSlot.cardState);

@@ -14,10 +14,15 @@ public class BattleSimpleUIController : MonoBehaviour
     [SerializeField] private TMP_Text intentListText;
     [SerializeField] private TMP_Text actionSlot1Text;
     [SerializeField] private TMP_Text actionSlot2Text;
+    [SerializeField] private TMP_Text actionSlotA1Text;
+    [SerializeField] private TMP_Text actionSlotA2Text;
+    [SerializeField] private TMP_Text actionSlotB1Text;
+    [SerializeField] private TMP_Text actionSlotB2Text;
     [SerializeField] private TMP_Text logText;
 
     [SerializeField] private Button assignA1FreeAttackButton;
     [SerializeField] private Button assignA1AbilityButton;
+    [SerializeField] private Button assignB1RespondIntent1Button;
     [SerializeField] private Button battleStartButton;
     [SerializeField] private Button createExecutionPlanButton;
     [SerializeField] private Button executePlanButton;
@@ -32,6 +37,7 @@ public class BattleSimpleUIController : MonoBehaviour
     private CharacterData enemy;
 
     private BattleCardState allyAAttackCardState;
+    private BattleCardState allyBAttackCardState;
     private BattleCardState allyAAbilityCardState;
     private BattleCardState enemyAttackCardState;
 
@@ -66,7 +72,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
         runtimeState = new BattleRuntimeState();
         runtimeState.SetCharacters(allyA, allyB, enemy);
-        runtimeState.SetActionSlots(BattleActionSlotManager.CreateActionSlots(2));
+        runtimeState.SetActionSlots(BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2));
         runtimeState.SetIntentQueue(CreateFixedEnemyIntentQueue());
         runtimeState.SetPhase("Prepare");
 
@@ -108,6 +114,12 @@ public class BattleSimpleUIController : MonoBehaviour
             "ui_allyA_atk_001_copy_0"
         );
 
+        allyBAttackCardState = BattleCardManager.CreateBattleCard(
+            allyB,
+            allyAAttackCard,
+            "ui_allyB_atk_001_copy_0"
+        );
+
         allyAAbilityCardState = BattleCardManager.CreateBattleCard(
             allyA,
             allyAAbilityCard,
@@ -145,6 +157,11 @@ public class BattleSimpleUIController : MonoBehaviour
         if (assignA1AbilityButton != null)
         {
             assignA1AbilityButton.onClick.AddListener(OnClickAssignA1Ability);
+        }
+
+        if (assignB1RespondIntent1Button != null)
+        {
+            assignB1RespondIntent1Button.onClick.AddListener(OnClickAssignB1RespondIntent1);
         }
 
         if (battleStartButton != null)
@@ -188,6 +205,11 @@ public class BattleSimpleUIController : MonoBehaviour
         if (assignA1AbilityButton != null)
         {
             assignA1AbilityButton.onClick.RemoveListener(OnClickAssignA1Ability);
+        }
+
+        if (assignB1RespondIntent1Button != null)
+        {
+            assignB1RespondIntent1Button.onClick.RemoveListener(OnClickAssignB1RespondIntent1);
         }
 
         if (battleStartButton != null)
@@ -237,6 +259,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
         bool result = BattleActionSlotManager.AssignFreeAction(
             runtimeState.actionSlots,
+            allyA,
             1,
             allyA,
             allyAAttackCardState,
@@ -244,8 +267,8 @@ public class BattleSimpleUIController : MonoBehaviour
         );
 
         lastLog = result
-            ? "槽位1已安排：我方角色A 使用基础攻击偷刀敌人"
-            : "安排失败：槽位1无法安排基础攻击 FreeAction";
+            ? "A槽位1已安排：我方角色A 使用基础攻击偷刀敌人"
+            : "安排失败：A槽位1无法安排基础攻击 FreeAction";
 
         RefreshView();
     }
@@ -266,6 +289,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
         bool result = BattleActionSlotManager.AssignFreeAction(
             runtimeState.actionSlots,
+            allyA,
             1,
             allyA,
             allyAAbilityCardState,
@@ -273,8 +297,49 @@ public class BattleSimpleUIController : MonoBehaviour
         );
 
         lastLog = result
-            ? "槽位1已安排：我方角色A 使用 Ability FreeAction"
-            : "安排失败：槽位1无法安排 Ability FreeAction";
+            ? "A槽位1已安排：我方角色A 使用 Ability FreeAction"
+            : "安排失败：A槽位1无法安排 Ability FreeAction";
+
+        RefreshView();
+    }
+
+    private void OnClickAssignB1RespondIntent1()
+    {
+        if (runtimeState == null)
+        {
+            lastLog = "战斗状态未初始化，无法响应敌人意图";
+            RefreshView();
+            return;
+        }
+
+        if (!CanEditActionSlots())
+        {
+            lastLog = "当前不能修改行动槽位，请在准备阶段选择行动";
+            RefreshView();
+            return;
+        }
+
+        BattleEnemyIntent intent = BattleEnemyIntentManager.FindIntentByOrder(runtimeState.intentQueue, 1);
+
+        if (intent == null)
+        {
+            lastLog = "没有找到敌人意图1，无法响应";
+            RefreshView();
+            return;
+        }
+
+        bool result = BattleActionSlotManager.AssignResponseToEnemyIntent(
+            runtimeState.actionSlots,
+            allyB,
+            1,
+            allyB,
+            allyBAttackCardState,
+            intent
+        );
+
+        lastLog = result
+            ? "B槽位1已安排：我方角色B 使用基础攻击响应敌人意图1"
+            : "安排失败：我方角色B 槽位1无法响应敌人意图1";
 
         RefreshView();
     }
@@ -432,7 +497,7 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        List<BattleActionSlot> newActionSlots = BattleActionSlotManager.CreateActionSlots(2);
+        List<BattleActionSlot> newActionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2);
         List<BattleEnemyIntent> newIntentQueue = CreateFixedEnemyIntentQueue();
 
         runtimeState.PrepareNextTurnWithRuntimeObjects(newActionSlots, newIntentQueue);
@@ -449,8 +514,7 @@ public class BattleSimpleUIController : MonoBehaviour
         SetText(allyAStateText, FormatAllyState("A", viewData.allyAName, viewData.allyAHP, viewData.allyAMaxHP, viewData.allyASpeed, viewData.allyAGuilt));
         SetText(allyBStateText, FormatAllyState("B", viewData.allyBName, viewData.allyBHP, viewData.allyBMaxHP, viewData.allyBSpeed, viewData.allyBGuilt));
         SetText(intentListText, FormatIntentList(viewData));
-        SetText(actionSlot1Text, FormatActionSlot(viewData, 1));
-        SetText(actionSlot2Text, FormatActionSlot(viewData, 2));
+        RefreshActionSlotTexts(viewData);
         SetText(logText, lastLog);
     }
 
@@ -556,13 +620,79 @@ public class BattleSimpleUIController : MonoBehaviour
         return builder.ToString();
     }
 
+    void RefreshActionSlotTexts(BattleStateViewData viewData)
+    {
+        if (HasNewActionSlotTextBindings())
+        {
+            SetText(actionSlotA1Text, FormatOwnerActionSlot(viewData, allyA, 1, "A槽位1"));
+            SetText(actionSlotA2Text, FormatOwnerActionSlot(viewData, allyA, 2, "A槽位2"));
+            SetText(actionSlotB1Text, FormatOwnerActionSlot(viewData, allyB, 1, "B槽位1"));
+            SetText(actionSlotB2Text, FormatOwnerActionSlot(viewData, allyB, 2, "B槽位2"));
+            return;
+        }
+
+        SetText(actionSlot1Text, FormatOwnerActionSlotWithFallback(viewData, allyA, 1, "A槽位1", 1));
+        SetText(actionSlot2Text, FormatOwnerActionSlotWithFallback(viewData, allyB, 1, "B槽位1", 2));
+    }
+
+    bool HasNewActionSlotTextBindings()
+    {
+        return actionSlotA1Text != null ||
+            actionSlotA2Text != null ||
+            actionSlotB1Text != null ||
+            actionSlotB2Text != null;
+    }
+
     string FormatActionSlot(BattleStateViewData viewData, int slotIndex)
     {
         ActionSlotViewData slotView = FindActionSlotView(viewData, slotIndex);
 
-        if (slotView == null || slotView.isEmpty)
+        return FormatActionSlotView(slotView, "槽位" + slotIndex);
+    }
+
+    string FormatOwnerActionSlotWithFallback(
+        BattleStateViewData viewData,
+        CharacterData owner,
+        int slotIndex,
+        string fallbackDisplayName,
+        int fallbackViewSlotIndex
+    )
+    {
+        ActionSlotViewData slotView = FindOwnerActionSlotView(viewData, owner, slotIndex);
+
+        if (slotView == null)
         {
-            return "槽位" + slotIndex + "：空";
+            return FormatActionSlot(viewData, fallbackViewSlotIndex);
+        }
+
+        return FormatActionSlotView(slotView, fallbackDisplayName);
+    }
+
+    string FormatOwnerActionSlot(
+        BattleStateViewData viewData,
+        CharacterData owner,
+        int slotIndex,
+        string fallbackDisplayName
+    )
+    {
+        ActionSlotViewData slotView = FindOwnerActionSlotView(viewData, owner, slotIndex);
+        return FormatActionSlotView(slotView, fallbackDisplayName);
+    }
+
+    string FormatActionSlotView(ActionSlotViewData slotView, string fallbackDisplayName)
+    {
+        if (slotView == null)
+        {
+            return fallbackDisplayName + "\n空";
+        }
+
+        string displayName = string.IsNullOrEmpty(slotView.displaySlotName)
+            ? fallbackDisplayName
+            : slotView.displaySlotName;
+
+        if (slotView.isEmpty)
+        {
+            return displayName + "\n空";
         }
 
         string enemyIntentText = slotView.hasEnemyIntent
@@ -570,7 +700,7 @@ public class BattleSimpleUIController : MonoBehaviour
             : "无";
 
         return
-            "槽位" + slotView.slotIndex +
+            displayName +
             "\n类型：" + slotView.slotType +
             "\n行动者：" + slotView.actorName +
             "\n卡牌：" + slotView.cardName +
@@ -578,6 +708,29 @@ public class BattleSimpleUIController : MonoBehaviour
             "\n目标：" + slotView.targetName +
             "\n敌人意图：" + enemyIntentText +
             "\n已使用：" + slotView.isUsed;
+    }
+
+    ActionSlotViewData FindOwnerActionSlotView(BattleStateViewData viewData, CharacterData owner, int slotIndex)
+    {
+        if (viewData == null || viewData.actionSlotViews == null || owner == null)
+        {
+            return null;
+        }
+
+        foreach (ActionSlotViewData slotView in viewData.actionSlotViews)
+        {
+            if (slotView == null)
+            {
+                continue;
+            }
+
+            if (slotView.ownerName == owner.characterName && slotView.slotIndex == slotIndex)
+            {
+                return slotView;
+            }
+        }
+
+        return null;
     }
 
     ActionSlotViewData FindActionSlotView(BattleStateViewData viewData, int slotIndex)
