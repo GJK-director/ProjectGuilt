@@ -7873,3 +7873,80 @@ Console 日志确认：
 - 拖拽卡牌。
 - 正式 BattleController / UIController 拆分。
 - 正式美术 UI。
+
+## 七十九、小按钮卡牌选择第一版可用性检查测试通过
+
+当前完成内容：
+
+- `BattleSimpleUIController.cs` 的小按钮卡牌选择流程已经补充确认安排前的卡牌可用性检查。
+- `ConfirmAssignSelectedFreeAction()` 会在调用 `BattleActionSlotManager.AssignFreeAction(...)` 前检查卡牌是否可用。
+- `ConfirmAssignSelectedRespondIntent1()` 会在找到敌人意图1后、调用 `AssignResponseToEnemyIntent(...)` 前检查卡牌是否可用。
+- 新增 / 使用 helper：
+  - `CanAssignSelectedCard(CharacterData target)`
+
+FreeAction 检查目标：
+
+- Attack：目标为 `enemy`。
+- Ability：目标为 `selectedActor` 自己。
+
+RespondIntent1 检查目标：
+
+- Ability 第一版不允许响应敌人意图，会直接提示。
+- Attack 响应敌人意图1时，使用敌人作为检查目标。
+- 当前不修改 Resolver / Executor / PlanManager。
+
+本次测试结果：
+
+- B 选择 Ability + FreeAction 时，由于 B 没有 Bullet，确认安排阶段被拦住。
+- 日志提示：
+  - `罪卡测试：能力强化 不能使用，原因：我方角色B 的状态 Bullet 层数不足，需要：3，当前：0`
+- B Ability 失败后：
+  - 不调用 `AssignFreeAction(...)`。
+  - 不占用 B 的行动槽位。
+  - 不生成后续未完成 FreeAction item。
+  - 不再导致 ExecutionPlan 出现“当前仍有未完成执行项”。
+
+A Ability 测试结果：
+
+- A Ability 可以正常安排到 A 槽位。
+- 执行时进入 `ResolveFreeAbilityAction(...)`。
+- 不造成伤害。
+- A 负罪感增加。
+- 对应槽位标记为已使用。
+- `BattleExecutionPlan` 可以全部完成。
+
+B 基础攻击响应意图1测试结果：
+
+- B 基础攻击响应敌人意图1仍然正常。
+- B 槽位1响应成功。
+- 进入 `RespondedEnemyIntent`。
+- 正常拼点。
+- 本次结果为 PlayerWin。
+- 敌人受到 20 点伤害。
+- B 槽位1标记为已使用。
+- `BattleExecutionPlan` 已全部完成。
+
+当前临时处理：
+
+- 为避免破坏当前基础攻击主线，Attack 第一版只检查 CD / 消耗等基础状态。
+- Ability 使用完整 `BattleCardManager.CanUseCard(user, target, cardState)` 检查条件。
+- 这是临时安全处理，不代表正式卡牌数据设计。
+
+后续需要注意：
+
+- 当前 `atk_001` 作为“基础攻击”使用，但 JSON 里可能带有 Bullet 条件。
+- 后续正式卡牌数据制作时，需要区分：
+  - 普通基础攻击：不应依赖 Bullet 条件。
+  - 带条件的罪卡 / 拼点罪卡 / 特殊攻击卡：可以依赖 Bullet 或其他状态条件。
+- 后续需要补卡牌 CD 显示、按钮变灰、正式卡牌选择 UI、防御、闪避等内容。
+
+本次没有修改：
+
+- `BattleResolver`
+- `BattleExecutionPlanExecutor`
+- `BattleExecutionPlanManager`
+- `BattleRuntimeState`
+- `BattleStateViewData`
+- `BattleActionSlotManager`
+- `CardsTest.json`
+- 场景文件 / Prefab

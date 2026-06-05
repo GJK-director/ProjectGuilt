@@ -18,11 +18,25 @@ public class BattleSimpleUIController : MonoBehaviour
     [SerializeField] private TMP_Text actionSlotA2Text;
     [SerializeField] private TMP_Text actionSlotB1Text;
     [SerializeField] private TMP_Text actionSlotB2Text;
+    [SerializeField] private TMP_Text selectionInfoText;
     [SerializeField] private TMP_Text logText;
 
     [SerializeField] private Button assignA1FreeAttackButton;
     [SerializeField] private Button assignA1AbilityButton;
     [SerializeField] private Button assignB1RespondIntent1Button;
+    [SerializeField] private Button selectActorAButton;
+    [SerializeField] private Button selectActorBButton;
+    [SerializeField] private Button selectSlot1Button;
+    [SerializeField] private Button selectSlot2Button;
+    [SerializeField] private Button selectAttackCardButton;
+    [SerializeField] private Button selectDefenseCardButton;
+    [SerializeField] private Button selectDodgeCardButton;
+    [SerializeField] private Button selectAbilityCardButton;
+    [SerializeField] private Button selectClashSinCardButton;
+    [SerializeField] private Button selectFreeAttackModeButton;
+    [SerializeField] private Button selectRespondIntent1ModeButton;
+    [SerializeField] private Button confirmAssignSelectedActionButton;
+    [SerializeField] private Button clearSelectionButton;
     [SerializeField] private Button battleStartButton;
     [SerializeField] private Button createExecutionPlanButton;
     [SerializeField] private Button executePlanButton;
@@ -37,9 +51,26 @@ public class BattleSimpleUIController : MonoBehaviour
     private CharacterData enemy;
 
     private BattleCardState allyAAttackCardState;
-    private BattleCardState allyBAttackCardState;
+    private BattleCardState allyADefenseCardState;
+    private BattleCardState allyADodgeCardState;
     private BattleCardState allyAAbilityCardState;
+    private BattleCardState allyAClashSinCardState;
+
+    private BattleCardState allyBAttackCardState;
+    private BattleCardState allyBDefenseCardState;
+    private BattleCardState allyBDodgeCardState;
+    private BattleCardState allyBAbilityCardState;
+    private BattleCardState allyBClashSinCardState;
+
     private BattleCardState enemyAttackCardState;
+
+    private const string ActionModeFreeAttack = "FreeAttack";
+    private const string ActionModeRespondIntent1 = "RespondIntent1";
+
+    private CharacterData selectedActor;
+    private int selectedSlotIndex = 1;
+    private BattleCardState selectedCardState;
+    private string selectedActionMode;
 
     private string lastLog = "等待初始化";
 
@@ -100,6 +131,8 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         CardTestData enemyCard = CardDataLoader.FindCardByID(cards, "enemy_atk_001");
         CardTestData allyAAttackCard = CardDataLoader.FindCardByID(cards, "atk_001");
+        CardTestData defenseCard = CardDataLoader.FindCardByID(cards, "def_001");
+        CardTestData dodgeCard = CardDataLoader.FindCardByID(cards, "dodge_001");
         CardTestData allyAAbilityCard = CardDataLoader.FindCardByID(cards, "sin_ability_001");
 
         enemyAttackCardState = BattleCardManager.CreateBattleCard(
@@ -114,16 +147,59 @@ public class BattleSimpleUIController : MonoBehaviour
             "ui_allyA_atk_001_copy_0"
         );
 
-        allyBAttackCardState = BattleCardManager.CreateBattleCard(
-            allyB,
-            allyAAttackCard,
-            "ui_allyB_atk_001_copy_0"
+        allyADefenseCardState = BattleCardManager.CreateBattleCard(
+            allyA,
+            defenseCard,
+            "ui_allyA_def_001_copy_0"
+        );
+
+        allyADodgeCardState = BattleCardManager.CreateBattleCard(
+            allyA,
+            dodgeCard,
+            "ui_allyA_dodge_001_copy_0"
         );
 
         allyAAbilityCardState = BattleCardManager.CreateBattleCard(
             allyA,
             allyAAbilityCard,
             "ui_allyA_sin_ability_001_copy_0"
+        );
+
+        // Temporary: atk_001 is reused as clash sin card data until JSON splits normal attack and clash sin cards.
+        allyAClashSinCardState = BattleCardManager.CreateBattleCard(
+            allyA,
+            allyAAttackCard,
+            "ui_allyA_clash_sin_atk_001_copy_0"
+        );
+
+        allyBAttackCardState = BattleCardManager.CreateBattleCard(
+            allyB,
+            allyAAttackCard,
+            "ui_allyB_atk_001_copy_0"
+        );
+
+        allyBDefenseCardState = BattleCardManager.CreateBattleCard(
+            allyB,
+            defenseCard,
+            "ui_allyB_def_001_copy_0"
+        );
+
+        allyBDodgeCardState = BattleCardManager.CreateBattleCard(
+            allyB,
+            dodgeCard,
+            "ui_allyB_dodge_001_copy_0"
+        );
+
+        allyBAbilityCardState = BattleCardManager.CreateBattleCard(
+            allyB,
+            allyAAbilityCard,
+            "ui_allyB_sin_ability_001_copy_0"
+        );
+
+        allyBClashSinCardState = BattleCardManager.CreateBattleCard(
+            allyB,
+            allyAAttackCard,
+            "ui_allyB_clash_sin_atk_001_copy_0"
         );
     }
 
@@ -162,6 +238,71 @@ public class BattleSimpleUIController : MonoBehaviour
         if (assignB1RespondIntent1Button != null)
         {
             assignB1RespondIntent1Button.onClick.AddListener(OnClickAssignB1RespondIntent1);
+        }
+
+        if (selectActorAButton != null)
+        {
+            selectActorAButton.onClick.AddListener(OnClickSelectActorA);
+        }
+
+        if (selectActorBButton != null)
+        {
+            selectActorBButton.onClick.AddListener(OnClickSelectActorB);
+        }
+
+        if (selectSlot1Button != null)
+        {
+            selectSlot1Button.onClick.AddListener(OnClickSelectSlot1);
+        }
+
+        if (selectSlot2Button != null)
+        {
+            selectSlot2Button.onClick.AddListener(OnClickSelectSlot2);
+        }
+
+        if (selectAttackCardButton != null)
+        {
+            selectAttackCardButton.onClick.AddListener(OnClickSelectAttackCard);
+        }
+
+        if (selectDefenseCardButton != null)
+        {
+            selectDefenseCardButton.onClick.AddListener(OnClickSelectDefenseCard);
+        }
+
+        if (selectDodgeCardButton != null)
+        {
+            selectDodgeCardButton.onClick.AddListener(OnClickSelectDodgeCard);
+        }
+
+        if (selectAbilityCardButton != null)
+        {
+            selectAbilityCardButton.onClick.AddListener(OnClickSelectAbilityCard);
+        }
+
+        if (selectClashSinCardButton != null)
+        {
+            selectClashSinCardButton.onClick.AddListener(OnClickSelectClashSinCard);
+        }
+
+        if (selectFreeAttackModeButton != null)
+        {
+            selectFreeAttackModeButton.onClick.AddListener(OnClickSelectFreeAttackMode);
+        }
+
+        if (selectRespondIntent1ModeButton != null)
+        {
+            selectRespondIntent1ModeButton.onClick.AddListener(OnClickSelectRespondIntent1Mode);
+        }
+
+        if (confirmAssignSelectedActionButton != null)
+        {
+            confirmAssignSelectedActionButton.onClick.AddListener(OnClickConfirmAssignSelectedAction);
+        }
+
+        if (clearSelectionButton != null)
+        {
+            clearSelectionButton.onClick.AddListener(OnClickClearSelection);
         }
 
         if (battleStartButton != null)
@@ -210,6 +351,71 @@ public class BattleSimpleUIController : MonoBehaviour
         if (assignB1RespondIntent1Button != null)
         {
             assignB1RespondIntent1Button.onClick.RemoveListener(OnClickAssignB1RespondIntent1);
+        }
+
+        if (selectActorAButton != null)
+        {
+            selectActorAButton.onClick.RemoveListener(OnClickSelectActorA);
+        }
+
+        if (selectActorBButton != null)
+        {
+            selectActorBButton.onClick.RemoveListener(OnClickSelectActorB);
+        }
+
+        if (selectSlot1Button != null)
+        {
+            selectSlot1Button.onClick.RemoveListener(OnClickSelectSlot1);
+        }
+
+        if (selectSlot2Button != null)
+        {
+            selectSlot2Button.onClick.RemoveListener(OnClickSelectSlot2);
+        }
+
+        if (selectAttackCardButton != null)
+        {
+            selectAttackCardButton.onClick.RemoveListener(OnClickSelectAttackCard);
+        }
+
+        if (selectDefenseCardButton != null)
+        {
+            selectDefenseCardButton.onClick.RemoveListener(OnClickSelectDefenseCard);
+        }
+
+        if (selectDodgeCardButton != null)
+        {
+            selectDodgeCardButton.onClick.RemoveListener(OnClickSelectDodgeCard);
+        }
+
+        if (selectAbilityCardButton != null)
+        {
+            selectAbilityCardButton.onClick.RemoveListener(OnClickSelectAbilityCard);
+        }
+
+        if (selectClashSinCardButton != null)
+        {
+            selectClashSinCardButton.onClick.RemoveListener(OnClickSelectClashSinCard);
+        }
+
+        if (selectFreeAttackModeButton != null)
+        {
+            selectFreeAttackModeButton.onClick.RemoveListener(OnClickSelectFreeAttackMode);
+        }
+
+        if (selectRespondIntent1ModeButton != null)
+        {
+            selectRespondIntent1ModeButton.onClick.RemoveListener(OnClickSelectRespondIntent1Mode);
+        }
+
+        if (confirmAssignSelectedActionButton != null)
+        {
+            confirmAssignSelectedActionButton.onClick.RemoveListener(OnClickConfirmAssignSelectedAction);
+        }
+
+        if (clearSelectionButton != null)
+        {
+            clearSelectionButton.onClick.RemoveListener(OnClickClearSelection);
         }
 
         if (battleStartButton != null)
@@ -341,6 +547,261 @@ public class BattleSimpleUIController : MonoBehaviour
             ? "B槽位1已安排：我方角色B 使用基础攻击响应敌人意图1"
             : "安排失败：我方角色B 槽位1无法响应敌人意图1";
 
+        RefreshView();
+    }
+
+    private void OnClickSelectActorA()
+    {
+        selectedActor = allyA;
+        selectedCardState = null;
+        lastLog = "Selected actor: A";
+        RefreshView();
+    }
+
+    private void OnClickSelectActorB()
+    {
+        selectedActor = allyB;
+        selectedCardState = null;
+        lastLog = "Selected actor: B";
+        RefreshView();
+    }
+
+    private void OnClickSelectSlot1()
+    {
+        selectedSlotIndex = 1;
+        lastLog = "Selected slot: 1";
+        RefreshView();
+    }
+
+    private void OnClickSelectSlot2()
+    {
+        selectedSlotIndex = 2;
+        lastLog = "Selected slot: 2";
+        RefreshView();
+    }
+
+    private void OnClickSelectAttackCard()
+    {
+        SelectCardForCurrentActor(allyAAttackCardState, allyBAttackCardState, "Attack");
+    }
+
+    private void OnClickSelectDefenseCard()
+    {
+        SelectCardForCurrentActor(allyADefenseCardState, allyBDefenseCardState, "Defense");
+    }
+
+    private void OnClickSelectDodgeCard()
+    {
+        SelectCardForCurrentActor(allyADodgeCardState, allyBDodgeCardState, "Dodge");
+    }
+
+    private void OnClickSelectAbilityCard()
+    {
+        SelectCardForCurrentActor(allyAAbilityCardState, allyBAbilityCardState, "Ability");
+    }
+
+    private void OnClickSelectClashSinCard()
+    {
+        SelectCardForCurrentActor(allyAClashSinCardState, allyBClashSinCardState, "ClashSin(atk_001 temp)");
+    }
+
+    private void SelectCardForCurrentActor(BattleCardState allyACardState, BattleCardState allyBCardState, string cardLabel)
+    {
+        if (selectedActor == null)
+        {
+            lastLog = "Please select actor first";
+            RefreshView();
+            return;
+        }
+
+        if (object.ReferenceEquals(selectedActor, allyA))
+        {
+            selectedCardState = allyACardState;
+        }
+        else if (object.ReferenceEquals(selectedActor, allyB))
+        {
+            selectedCardState = allyBCardState;
+        }
+
+        lastLog = "Selected card: " + cardLabel;
+        RefreshView();
+    }
+
+    private void OnClickSelectFreeAttackMode()
+    {
+        selectedActionMode = ActionModeFreeAttack;
+        lastLog = "Selected mode: FreeAttack";
+        RefreshView();
+    }
+
+    private void OnClickSelectRespondIntent1Mode()
+    {
+        selectedActionMode = ActionModeRespondIntent1;
+        lastLog = "Selected mode: RespondIntent1";
+        RefreshView();
+    }
+
+    private void OnClickConfirmAssignSelectedAction()
+    {
+        if (!HasRuntimeState())
+        {
+            return;
+        }
+
+        if (!CanEditActionSlots())
+        {
+            lastLog = "Cannot edit slots outside Prepare phase or after plan creation";
+            RefreshView();
+            return;
+        }
+
+        if (selectedActor == null)
+        {
+            lastLog = "Confirm failed: select actor first";
+            RefreshView();
+            return;
+        }
+
+        if (selectedSlotIndex != 1 && selectedSlotIndex != 2)
+        {
+            lastLog = "Confirm failed: slot index must be 1 or 2";
+            RefreshView();
+            return;
+        }
+
+        if (selectedCardState == null)
+        {
+            lastLog = "Confirm failed: select card first";
+            RefreshView();
+            return;
+        }
+
+        if (!object.ReferenceEquals(selectedCardState.owner, selectedActor))
+        {
+            lastLog = "Confirm failed: selected card does not belong to selected actor";
+            RefreshView();
+            return;
+        }
+
+        if (string.IsNullOrEmpty(selectedActionMode))
+        {
+            lastLog = "Confirm failed: select action mode first";
+            RefreshView();
+            return;
+        }
+
+        if (IsSelectedDefenseCard())
+        {
+            lastLog = "Defense v1 is not connected to Resolver yet";
+            RefreshView();
+            return;
+        }
+
+        if (IsSelectedDodgeCard())
+        {
+            lastLog = "Dodge v1 is not connected to Resolver yet";
+            RefreshView();
+            return;
+        }
+
+        if (selectedActionMode == ActionModeFreeAttack)
+        {
+            ConfirmAssignSelectedFreeAction();
+            return;
+        }
+
+        if (selectedActionMode == ActionModeRespondIntent1)
+        {
+            ConfirmAssignSelectedRespondIntent1();
+            return;
+        }
+
+        lastLog = "Confirm failed: unknown action mode";
+        RefreshView();
+    }
+
+    private void ConfirmAssignSelectedFreeAction()
+    {
+        CharacterData target = IsSelectedAbilityCard()
+            ? selectedActor
+            : enemy;
+
+        if (!CanAssignSelectedCard(target))
+        {
+            RefreshView();
+            return;
+        }
+
+        bool result = BattleActionSlotManager.AssignFreeAction(
+            runtimeState.actionSlots,
+            selectedActor,
+            selectedSlotIndex,
+            selectedActor,
+            selectedCardState,
+            target
+        );
+
+        lastLog = result
+            ? GetSelectedActorLabel() + " slot " + selectedSlotIndex + " assigned FreeAction: " + selectedCardState.GetCardName()
+            : "Assign failed: " + GetSelectedActorLabel() + " slot " + selectedSlotIndex + " cannot assign FreeAction";
+
+        RefreshView();
+    }
+
+    private void ConfirmAssignSelectedRespondIntent1()
+    {
+        if (IsSelectedAbilityCard())
+        {
+            lastLog = "Ability v1 cannot respond to enemy intent";
+            RefreshView();
+            return;
+        }
+
+        if (!IsSelectedAttackCard())
+        {
+            lastLog = "RespondIntent1 v1 only supports Attack or ClashSin";
+            RefreshView();
+            return;
+        }
+
+        BattleEnemyIntent intent = BattleEnemyIntentManager.FindIntentByOrder(runtimeState.intentQueue, 1);
+
+        if (intent == null)
+        {
+            lastLog = "Enemy intent 1 not found";
+            RefreshView();
+            return;
+        }
+
+        if (!CanAssignSelectedCard(intent.enemy))
+        {
+            RefreshView();
+            return;
+        }
+
+        bool result = BattleActionSlotManager.AssignResponseToEnemyIntent(
+            runtimeState.actionSlots,
+            selectedActor,
+            selectedSlotIndex,
+            selectedActor,
+            selectedCardState,
+            intent
+        );
+
+        lastLog = result
+            ? GetSelectedActorLabel() + " slot " + selectedSlotIndex + " assigned RespondIntent1: " + selectedCardState.GetCardName()
+            : "Assign failed: " + GetSelectedActorLabel() + " slot " + selectedSlotIndex + " cannot respond intent 1";
+
+        RefreshView();
+    }
+
+    private void OnClickClearSelection()
+    {
+        selectedActor = null;
+        selectedSlotIndex = 1;
+        selectedCardState = null;
+        selectedActionMode = null;
+        lastLog = "Selection cleared";
         RefreshView();
     }
 
@@ -515,6 +976,7 @@ public class BattleSimpleUIController : MonoBehaviour
         SetText(allyBStateText, FormatAllyState("B", viewData.allyBName, viewData.allyBHP, viewData.allyBMaxHP, viewData.allyBSpeed, viewData.allyBGuilt));
         SetText(intentListText, FormatIntentList(viewData));
         RefreshActionSlotTexts(viewData);
+        RefreshSelectionInfo();
         SetText(logText, lastLog);
     }
 
@@ -618,6 +1080,143 @@ public class BattleSimpleUIController : MonoBehaviour
         }
 
         return builder.ToString();
+    }
+
+    void RefreshSelectionInfo()
+    {
+        string actorText = selectedActor != null
+            ? GetSelectedActorLabel()
+            : "NoActor";
+
+        string slotText = "Slot" + selectedSlotIndex;
+        string cardText = GetSelectedCardText();
+        string modeText = GetSelectedActionModeText();
+
+        SetText(
+            selectionInfoText,
+            "Current selection:\n" +
+            actorText +
+            " / " +
+            slotText +
+            " / " +
+            cardText +
+            " / " +
+            modeText
+        );
+    }
+
+    string GetSelectedActorLabel()
+    {
+        if (object.ReferenceEquals(selectedActor, allyA))
+        {
+            return "A";
+        }
+
+        if (object.ReferenceEquals(selectedActor, allyB))
+        {
+            return "B";
+        }
+
+        return selectedActor != null ? selectedActor.characterName : "NoActor";
+    }
+
+    string GetSelectedCardText()
+    {
+        if (selectedCardState == null)
+        {
+            return "NoCard";
+        }
+
+        if (IsSelectedDefenseCard())
+        {
+            return "Defense / " + selectedCardState.GetCardName();
+        }
+
+        if (IsSelectedDodgeCard())
+        {
+            return "Dodge / " + selectedCardState.GetCardName();
+        }
+
+        if (IsSelectedAbilityCard())
+        {
+            return "Ability / " + selectedCardState.GetCardName();
+        }
+
+        if (IsSelectedClashSinCard())
+        {
+            return "ClashSin / " + selectedCardState.GetCardName();
+        }
+
+        if (IsSelectedAttackCard())
+        {
+            return "Attack / " + selectedCardState.GetCardName();
+        }
+
+        return selectedCardState.GetCardName();
+    }
+
+    string GetSelectedActionModeText()
+    {
+        if (selectedActionMode == ActionModeFreeAttack)
+        {
+            return "FreeAttack";
+        }
+
+        if (selectedActionMode == ActionModeRespondIntent1)
+        {
+            return "RespondIntent1";
+        }
+
+        return "NoMode";
+    }
+
+    bool IsSelectedAbilityCard()
+    {
+        return selectedCardState != null &&
+            selectedCardState.cardData != null &&
+            selectedCardState.cardData.cardType == "Ability";
+    }
+
+    bool IsSelectedDefenseCard()
+    {
+        return selectedCardState != null &&
+            selectedCardState.cardData != null &&
+            selectedCardState.cardData.cardType == "Defense";
+    }
+
+    bool IsSelectedDodgeCard()
+    {
+        return selectedCardState != null &&
+            selectedCardState.cardData != null &&
+            selectedCardState.cardData.cardType == "Dodge";
+    }
+
+    bool IsSelectedClashSinCard()
+    {
+        return object.ReferenceEquals(selectedCardState, allyAClashSinCardState) ||
+            object.ReferenceEquals(selectedCardState, allyBClashSinCardState);
+    }
+
+    bool IsSelectedAttackCard()
+    {
+        return selectedCardState != null &&
+            selectedCardState.cardData != null &&
+            selectedCardState.cardData.cardType == "Attack";
+    }
+
+    bool CanAssignSelectedCard(CharacterData target)
+    {
+        bool canUseCard = IsSelectedAbilityCard()
+            ? BattleCardManager.CanUseCard(selectedActor, target, selectedCardState)
+            : BattleCardManager.CanUseCard(selectedCardState);
+
+        if (!canUseCard)
+        {
+            lastLog = "Assign failed: current card cannot be used";
+            return false;
+        }
+
+        return true;
     }
 
     void RefreshActionSlotTexts(BattleStateViewData viewData)
