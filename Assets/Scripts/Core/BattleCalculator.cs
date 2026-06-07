@@ -95,6 +95,35 @@ public static class BattleCalculator
         return (scaledDamage + VALUE_SCALE - 1) / VALUE_SCALE;
     }
 
+    // CalculateRemainingAttackPointAfterDefense = 计算防御后的剩余攻击点数
+    // enemyFinalAttackPoint 使用普通点数；playerFinalDefensePointScaled 使用现有内部放大值。
+    // 返回值保持为普通点数，可直接传给 GetFinalDamageScaled(...) 作为攻击点数输入。
+    public static int CalculateRemainingAttackPointAfterDefense(
+        int enemyFinalAttackPoint,
+        int playerFinalDefensePointScaled
+    )
+    {
+        if (enemyFinalAttackPoint < 0)
+        {
+            enemyFinalAttackPoint = 0;
+        }
+
+        if (playerFinalDefensePointScaled < 0)
+        {
+            playerFinalDefensePointScaled = 0;
+        }
+
+        int enemyAttackPointScaled = ToScaledValue(enemyFinalAttackPoint);
+        int remainingAttackPointScaled = enemyAttackPointScaled - playerFinalDefensePointScaled;
+
+        if (remainingAttackPointScaled <= 0)
+        {
+            return 0;
+        }
+
+        return ConvertScaledDamageToHPDamage(remainingAttackPointScaled);
+    }
+
     // GetBaseDamageScaledByFormula = 根据伤害公式计算基础伤害内部值
     static int GetBaseDamageScaledByFormula(
         CharacterData attacker,

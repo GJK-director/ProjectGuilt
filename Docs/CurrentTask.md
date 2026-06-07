@@ -7950,3 +7950,242 @@ B 基础攻击响应意图1测试结果：
 - `BattleActionSlotManager`
 - `CardsTest.json`
 - 场景文件 / Prefab
+
+## 八十、小按钮版 A/B 五卡选择地基测试通过
+
+## 一、当前完成内容
+
+`BattleSimpleUIController.cs` 已补齐 A/B 各自的五张测试卡状态：
+
+- Attack（攻击卡）
+- Defense（防御卡）
+- Dodge（闪避卡）
+- Ability（能力罪卡）
+- ClashSin（拼点罪卡）
+
+A/B 使用独立的 `BattleCardState` 实例，不共享：
+
+- CD
+- UseCount
+- 是否已使用
+- 其他战斗状态
+
+新增卡牌选择按钮字段：
+
+- `selectDefenseCardButton`
+- `selectDodgeCardButton`
+- `selectClashSinCardButton`
+
+旧的小按钮选择流程和调试按钮继续保留。
+
+## 二、当前临时卡牌映射
+
+当前测试数据映射：
+
+- Attack → `atk_001`
+- Defense → `def_001`
+- Dodge → `dodge_001`
+- Ability → `sin_ability_001`
+- ClashSin → 临时复用 `atk_001` 的 CardData，但使用独立 `BattleCardState`
+
+说明：
+
+- `atk_001` 当前名为“基础攻击”，但实际带有 Bullet 条件、负罪感和 `sinCardCategory = Clash`。
+- 它更接近拼点罪卡，不适合作为长期普通基础攻击。
+- 当前复用只是原型阶段临时方案。
+- 正式数据阶段需要拆分普通攻击和拼点罪卡。
+
+## 三、防御卡测试结果
+
+测试流程：
+
+- 选择 A
+- 选择槽位1
+- 选择 Defense
+- 选择敌人意图1
+- 点击确认安排
+
+测试结果：
+
+- 选择信息正确显示 Defense。
+- 日志提示：
+  - `Defense v1 is not connected to Resolver yet`
+- 没有调用：
+  - `AssignFreeAction(...)`
+  - `AssignResponseToEnemyIntent(...)`
+- A 槽位1保持为空。
+- Defense 没有进入 ExecutionPlan。
+- 说明 Defense 第一版的安全拦截正常。
+
+## 四、闪避卡测试结果
+
+测试流程：
+
+- 选择 A
+- 选择槽位1
+- 选择 Dodge
+- 选择敌人意图1
+- 点击确认安排
+
+测试结果：
+
+- 选择信息正确显示 Dodge。
+- 日志提示：
+  - `Dodge v1 is not connected to Resolver yet`
+- 没有调用任何 Assign 方法。
+- A 槽位1保持为空。
+- Dodge 没有进入 ExecutionPlan。
+- 说明 Dodge 第一版的安全拦截正常。
+
+## 五、拼点罪卡测试结果
+
+测试流程：
+
+- 选择 B
+- 选择槽位1
+- 选择 ClashSin
+- 选择敌人意图1
+- 点击确认安排
+- 点击战斗开始
+
+测试结果：
+
+- B 槽位1成功绑定敌人意图1。
+- 当前 ClashSin 临时复用 `atk_001`，因此槽位卡牌名称仍显示“基础攻击”，卡牌类型为 Attack。
+- 低速原目标槽位响应规则正常：
+  - B 速度低于敌人
+  - 但 B 槽位1正是敌人原目标槽位
+  - 因此响应成功
+  - 不改写 `actualTarget`
+- ExecutionPlan 生成 1 个：
+  - `RespondedEnemyIntent`
+- 正式进入：
+  - `BattleExecutionPlanExecutor`
+  - `BattleResolver.ResolveRespondedEnemyIntent(...)`
+  - Attack vs enemy Attack 拼点
+- 本次结果：
+  - `PlayerWin`
+  - 玩家点数 10
+  - 敌人点数 2
+  - 敌人受到 20 点伤害
+- B 负罪感增加 2。
+- B 槽位1标记为已使用。
+- `BattleExecutionPlan 已全部完成`。
+
+结论：
+
+ClashSin 第一版可以复用现有 Attack 主链路：
+
+```text
+BattleActionSlotManager
+→ BattleExecutionPlanManager
+→ BattleExecutionPlanExecutor
+→ BattleResolver
+```
+
+没有新增第二套战斗逻辑。
+
+## 六、旧功能回归测试
+
+### 1. B Ability 可用性拦截
+
+测试：
+
+- B
+- 槽位2
+- Ability
+- 敌人本体 / FreeAction
+- 确认安排
+
+结果：
+
+- 因 B 的 Bullet 层数不足，在确认安排阶段失败。
+- 日志提示当前卡牌不能使用。
+- B 槽位2保持为空。
+- 没有生成未完成的 FreeAction item。
+- 之前完成的卡牌可用性前置检查仍正常。
+
+### 2. A Ability 正常执行
+
+测试：
+
+- A
+- 槽位2
+- Ability
+- 敌人本体 / FreeAction
+- 确认安排
+- 战斗开始
+
+结果：
+
+- A 槽位2成功安排 Ability FreeAction。
+- ExecutionPlan 包含：
+  - `UnrespondedEnemyIntent`
+  - `FreeAction`
+- 未响应敌人意图正常命中 B。
+- A Ability 正常进入：
+  - `BattleResolver.ResolveFreeAbilityAction(...)`
+- Ability 不进入拼点、不造成伤害。
+- A 负罪感增加 2。
+- A 槽位2标记为已使用。
+- `BattleExecutionPlan 已全部完成`。
+
+## 七、四槽位与回合流程
+
+确认：
+
+- A1 / A2 / B1 / B2 四槽位显示正常。
+- EndTurn（结束回合）正常。
+- PrepareNextTurn（准备下一回合）正常。
+- 下一回合重新创建 A/B 各 2 个槽位，共 4 个。
+- 槽位重新为空。
+- 敌人意图队列重新生成成功。
+
+## 八、UI 文案调整
+
+当前脚本字段仍叫：
+
+- `selectFreeAttackModeButton`
+- `ActionModeFreeAttack`
+
+但在设计语义上，它代表的是“选择敌人本体作为目标”。
+
+Unity 按钮显示文字已建议从：
+
+- `偷刀敌人`
+
+改为：
+
+- `敌人本体`
+
+当前只调整 UI 显示文字，不重命名脚本字段，避免再次扩大 Controller 修改范围。
+
+未来目标选择正式扩展时再统一改为：
+
+- 敌人本体
+- 敌人意图1
+- 敌人意图2
+- 被动守备
+
+## 九、当前结论
+
+- A/B 五卡选择 UI 地基通过。
+- Defense / Dodge 可以被选择，但在 Resolver 接入前不会进入槽位。
+- ClashSin 可以暂时按 Attack 路径执行。
+- 原有 Attack / Ability / Responded / Unresponded 主链路没有被破坏。
+- 编码恢复后重新补入的选择流程已经完成 Unity 回归验证。
+- 本阶段可以视为闭环。
+
+## 十、当前未处理内容
+
+- Defense vs enemy Attack 正式 Resolver。
+- Dodge vs enemy Attack 正式 Resolver。
+- 被动守备 / 空挂防御。
+- 空挂闪避和连续闪避。
+- 敌人意图2。
+- 正式目标选择系统。
+- 卡牌 CD 显示与按钮不可用状态。
+- 正式普通攻击与拼点罪卡 JSON 拆分。
+- 胜利 / 失败与 BattleEnded 阶段。
+- 正式战斗 UI 美术。
+- Buff 系统独立迭代。

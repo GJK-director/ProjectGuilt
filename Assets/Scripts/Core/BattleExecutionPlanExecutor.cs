@@ -142,21 +142,46 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
-        BattleResolveResult result = BattleResolver.ResolveUnrespondedEnemyIntent(item.enemyIntent);
+        BattleActionSlot passiveGuardSlot = FindFirstValidPassiveGuardSlot(item);
+        BattleResolveResult result = null;
 
-        Debug.Log(
-            item.order +
-            ". UnrespondedEnemyIntent Resolver 结算结果\n" +
-            "   resultType：" + (result != null ? result.resultType : "无") + "\n" +
-            "   isSuccess：" + (result != null && result.isSuccess) + "\n" +
-            "   shouldCompleteItem：" + (result != null && result.shouldCompleteItem) + "\n" +
-            "   playerCardUsed：" + (result != null && result.playerCardUsed) + "\n" +
-            "   enemyCardUsed：" + (result != null && result.enemyCardUsed) + "\n" +
-            "   hasDamage：" + (result != null && result.hasDamage) + "\n" +
-            "   damage：" + (result != null ? result.damage : 0) + "\n" +
-            "   triggeredEventChain：" + (result != null && result.triggeredEventChain) + "\n" +
-            "   message：" + (result != null ? result.message : "BattleResolveResult 为空")
-        );
+        if (passiveGuardSlot != null)
+        {
+            Debug.Log(
+                item.order +
+                ". UnrespondedEnemyIntent：被动守备接管，使用 " +
+                passiveGuardSlot.GetDisplaySlotName() +
+                " / " +
+                passiveGuardSlot.GetCardName()
+            );
+
+            result = BattleResolver.ResolveRespondedEnemyIntent(passiveGuardSlot, item.enemyIntent);
+
+            LogResolveResult(item.order, "PassiveGuard Resolver 结算结果", result);
+
+            if (result == null || !result.isSuccess || !result.shouldCompleteItem)
+            {
+                Debug.LogWarning(
+                    item.order +
+                    ". UnrespondedEnemyIntent 被动守备未完成：Resolver 未返回可完成结果，Executor 不补做结算"
+                );
+
+                return false;
+            }
+
+            if (result.playerCardUsed)
+            {
+                passiveGuardSlot.MarkUsed();
+                Debug.Log(item.order + ". UnrespondedEnemyIntent：被动守备槽位已标记为已使用");
+            }
+
+            item.isCompleted = true;
+            return true;
+        }
+
+        result = BattleResolver.ResolveUnrespondedEnemyIntent(item.enemyIntent);
+
+        LogResolveResult(item.order, "UnrespondedEnemyIntent Resolver 结算结果", result);
 
         if (result == null || !result.isSuccess || !result.shouldCompleteItem)
         {
@@ -170,6 +195,90 @@ public static class BattleExecutionPlanExecutor
 
         item.isCompleted = true;
         return true;
+    }
+
+    // FindFirstValidPassiveGuardSlot = 执行时选择第一张仍然有效的被动守备
+    static BattleActionSlot FindFirstValidPassiveGuardSlot(BattleExecutionItem item)
+    {
+        if (item == null || item.passiveGuardCandidates == null || item.passiveGuardCandidates.Count == 0)
+        {
+            return null;
+        }
+
+        foreach (BattleActionSlot slot in item.passiveGuardCandidates)
+        {
+            if (!IsPassiveGuardSlotStillValid(slot, item.enemyIntent))
+            {
+                continue;
+            }
+
+            return slot;
+        }
+
+        return null;
+    }
+
+    // IsPassiveGuardSlotStillValid = 判断候选守备在执行时是否仍然可用
+    static bool IsPassiveGuardSlotStillValid(BattleActionSlot slot, BattleEnemyIntent enemyIntent)
+    {
+        if (slot == null || enemyIntent == null || enemyIntent.actualTargetCharacter == null)
+        {
+            return false;
+        }
+
+        if (slot.IsEmpty())
+        {
+            return false;
+        }
+
+        if (slot.slotType != BattleActionSlotType.PassiveGuard)
+        {
+            return false;
+        }
+
+        if (slot.isUsed)
+        {
+            return false;
+        }
+
+        if (slot.actor == null || slot.cardState == null || slot.cardState.cardData == null)
+        {
+            return false;
+        }
+
+        if (slot.cardState.cardData.cardType != CardType.Defense)
+        {
+            return false;
+        }
+
+        if (!object.ReferenceEquals(slot.owner, enemyIntent.actualTargetCharacter) ||
+            !object.ReferenceEquals(slot.actor, enemyIntent.actualTargetCharacter) ||
+            !object.ReferenceEquals(slot.target, enemyIntent.actualTargetCharacter))
+        {
+            return false;
+        }
+
+        return BattleCardManager.CanUseCard(slot.cardState);
+    }
+
+    // LogResolveResult = 打印 Resolver 返回结果
+    static void LogResolveResult(int order, string title, BattleResolveResult result)
+    {
+        Debug.Log(
+            order +
+            ". " +
+            title +
+            "\n" +
+            "   resultType：" + (result != null ? result.resultType : "无") + "\n" +
+            "   isSuccess：" + (result != null && result.isSuccess) + "\n" +
+            "   shouldCompleteItem：" + (result != null && result.shouldCompleteItem) + "\n" +
+            "   playerCardUsed：" + (result != null && result.playerCardUsed) + "\n" +
+            "   enemyCardUsed：" + (result != null && result.enemyCardUsed) + "\n" +
+            "   hasDamage：" + (result != null && result.hasDamage) + "\n" +
+            "   damage：" + (result != null ? result.damage : 0) + "\n" +
+            "   triggeredEventChain：" + (result != null && result.triggeredEventChain) + "\n" +
+            "   message：" + (result != null ? result.message : "BattleResolveResult 为空")
+        );
     }
 
     // PrintFreeActionStepPreview = 打印自由行动执行步骤预览
@@ -213,7 +322,8 @@ public static class BattleExecutionPlanExecutor
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             item.actionSlot,
-            item.enemyIntent
+            item.enemyIntent,
+            item.passiveGuardCandidates
         );
 
         if (result == null)
@@ -250,6 +360,18 @@ public static class BattleExecutionPlanExecutor
         {
             item.actionSlot.MarkUsed();
             Debug.Log(item.order + ". RespondedEnemyIntent：玩家行动槽位已标记为已使用");
+        }
+
+        if (result.triggeredPassiveGuardSlot != null &&
+            !object.ReferenceEquals(result.triggeredPassiveGuardSlot, item.actionSlot) &&
+            !result.triggeredPassiveGuardSlot.isUsed)
+        {
+            result.triggeredPassiveGuardSlot.MarkUsed();
+            Debug.Log(
+                item.order +
+                ". RespondedEnemyIntent：触发的 PassiveGuard 槽位已标记为已使用：" +
+                result.triggeredPassiveGuardSlot.GetDisplaySlotName()
+            );
         }
 
         item.isCompleted = true;
@@ -354,6 +476,9 @@ public static class BattleExecutionPlanExecutor
             ? "槽位" + item.enemyIntent.actualTargetSlotIndex
             : "槽位无效(" + item.enemyIntent.actualTargetSlotIndex + ")";
         string enemyAttackPointRangeText = GetEnemyAttackPointRangeText(item.enemyIntent);
+        int passiveGuardCandidateCount = item.passiveGuardCandidates != null
+            ? item.passiveGuardCandidates.Count
+            : 0;
 
         Debug.Log(
             item.order +
@@ -363,6 +488,7 @@ public static class BattleExecutionPlanExecutor
             "   " + enemyAttackPointRangeText + "\n" +
             "   将命中角色：" + targetCharacterName + "\n" +
             "   将命中槽位：" + targetSlotText + "\n" +
+            "   被动守备候选数：" + passiveGuardCandidateCount + "\n" +
             "   当前仅预览点数范围和命中目标，不 roll 点数，不造成伤害"
         );
     }

@@ -35,6 +35,7 @@ public class BattleSimpleUIController : MonoBehaviour
     [SerializeField] private Button selectClashSinCardButton;
     [SerializeField] private Button selectFreeAttackModeButton;
     [SerializeField] private Button selectRespondIntent1ModeButton;
+    [SerializeField] private Button selectPassiveGuardModeButton;
     [SerializeField] private Button confirmAssignSelectedActionButton;
     [SerializeField] private Button clearSelectionButton;
     [SerializeField] private Button battleStartButton;
@@ -66,6 +67,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private const string ActionModeFreeAttack = "FreeAttack";
     private const string ActionModeRespondIntent1 = "RespondIntent1";
+    private const string ActionModePassiveGuard = "PassiveGuard";
 
     private CharacterData selectedActor;
     private int selectedSlotIndex = 1;
@@ -295,6 +297,11 @@ public class BattleSimpleUIController : MonoBehaviour
             selectRespondIntent1ModeButton.onClick.AddListener(OnClickSelectRespondIntent1Mode);
         }
 
+        if (selectPassiveGuardModeButton != null)
+        {
+            selectPassiveGuardModeButton.onClick.AddListener(OnClickSelectPassiveGuardMode);
+        }
+
         if (confirmAssignSelectedActionButton != null)
         {
             confirmAssignSelectedActionButton.onClick.AddListener(OnClickConfirmAssignSelectedAction);
@@ -406,6 +413,11 @@ public class BattleSimpleUIController : MonoBehaviour
         if (selectRespondIntent1ModeButton != null)
         {
             selectRespondIntent1ModeButton.onClick.RemoveListener(OnClickSelectRespondIntent1Mode);
+        }
+
+        if (selectPassiveGuardModeButton != null)
+        {
+            selectPassiveGuardModeButton.onClick.RemoveListener(OnClickSelectPassiveGuardMode);
         }
 
         if (confirmAssignSelectedActionButton != null)
@@ -641,6 +653,13 @@ public class BattleSimpleUIController : MonoBehaviour
         RefreshView();
     }
 
+    private void OnClickSelectPassiveGuardMode()
+    {
+        selectedActionMode = ActionModePassiveGuard;
+        lastLog = "Selected mode: PassiveGuard";
+        RefreshView();
+    }
+
     private void OnClickConfirmAssignSelectedAction()
     {
         if (!HasRuntimeState())
@@ -692,15 +711,33 @@ public class BattleSimpleUIController : MonoBehaviour
 
         if (IsSelectedDefenseCard())
         {
-            lastLog = "Defense v1 is not connected to Resolver yet";
-            RefreshView();
-            return;
+            if (selectedActionMode == ActionModeFreeAttack)
+            {
+                lastLog = "防御卡不能以敌人本体作为目标，请选择敌人意图";
+                RefreshView();
+                return;
+            }
+
+            if (selectedActionMode != ActionModeRespondIntent1 && selectedActionMode != ActionModePassiveGuard)
+            {
+                lastLog = "Defense v1 only supports RespondIntent1";
+                RefreshView();
+                return;
+            }
         }
 
         if (IsSelectedDodgeCard())
         {
-            lastLog = "Dodge v1 is not connected to Resolver yet";
+            lastLog = selectedActionMode == ActionModePassiveGuard
+                ? "闪避的被动守备尚未接入"
+                : "Dodge v1 is not connected to Resolver yet";
             RefreshView();
+            return;
+        }
+
+        if (selectedActionMode == ActionModePassiveGuard)
+        {
+            ConfirmAssignSelectedPassiveGuard();
             return;
         }
 
@@ -748,6 +785,97 @@ public class BattleSimpleUIController : MonoBehaviour
         RefreshView();
     }
 
+    private void ConfirmAssignSelectedPassiveGuard()
+    {
+        if (!HasRuntimeState())
+        {
+            return;
+        }
+
+        if (!CanEditActionSlots())
+        {
+            lastLog = "Cannot edit slots outside Prepare phase or after plan creation";
+            RefreshView();
+            return;
+        }
+
+        if (selectedActor == null)
+        {
+            lastLog = "Confirm failed: select actor first";
+            RefreshView();
+            return;
+        }
+
+        if (selectedSlotIndex != 1 && selectedSlotIndex != 2)
+        {
+            lastLog = "Confirm failed: slot index must be 1 or 2";
+            RefreshView();
+            return;
+        }
+
+        if (selectedCardState == null || selectedCardState.cardData == null)
+        {
+            lastLog = "Confirm failed: select card first";
+            RefreshView();
+            return;
+        }
+
+        if (IsSelectedClashSinCard())
+        {
+            lastLog = "拼点罪卡不能作为被动守备";
+            RefreshView();
+            return;
+        }
+
+        if (IsSelectedAttackCard())
+        {
+            lastLog = "攻击卡不能作为被动守备";
+            RefreshView();
+            return;
+        }
+
+        if (IsSelectedAbilityCard())
+        {
+            lastLog = "能力牌不能作为被动守备";
+            RefreshView();
+            return;
+        }
+
+        if (IsSelectedDodgeCard())
+        {
+            lastLog = "闪避的被动守备尚未接入";
+            RefreshView();
+            return;
+        }
+
+        if (!IsSelectedDefenseCard())
+        {
+            lastLog = "PassiveGuard v1 only supports Defense";
+            RefreshView();
+            return;
+        }
+
+        if (!CanAssignSelectedCard(selectedActor))
+        {
+            RefreshView();
+            return;
+        }
+
+        bool result = BattleActionSlotManager.AssignPassiveGuard(
+            runtimeState.actionSlots,
+            selectedActor,
+            selectedSlotIndex,
+            selectedActor,
+            selectedCardState
+        );
+
+        lastLog = result
+            ? GetSelectedActorLabel() + " slot " + selectedSlotIndex + " assigned PassiveGuard: " + selectedCardState.GetCardName()
+            : "Assign failed: " + GetSelectedActorLabel() + " slot " + selectedSlotIndex + " cannot assign PassiveGuard";
+
+        RefreshView();
+    }
+
     private void ConfirmAssignSelectedRespondIntent1()
     {
         if (IsSelectedAbilityCard())
@@ -757,9 +885,9 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        if (!IsSelectedAttackCard())
+        if (!IsSelectedAttackCard() && !IsSelectedDefenseCard())
         {
-            lastLog = "RespondIntent1 v1 only supports Attack or ClashSin";
+            lastLog = "RespondIntent1 v1 only supports Attack, ClashSin, or Defense";
             RefreshView();
             return;
         }
@@ -1165,6 +1293,11 @@ public class BattleSimpleUIController : MonoBehaviour
         if (selectedActionMode == ActionModeRespondIntent1)
         {
             return "RespondIntent1";
+        }
+
+        if (selectedActionMode == ActionModePassiveGuard)
+        {
+            return "PassiveGuard";
         }
 
         return "NoMode";

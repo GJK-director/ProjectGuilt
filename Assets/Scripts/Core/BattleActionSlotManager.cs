@@ -292,6 +292,83 @@ public static class BattleActionSlotManager
         return true;
     }
 
+    // AssignPassiveGuard = owner 版本安排被动守备
+    // 被动守备只写入槽位，不绑定敌人意图，不处理 CD / 事件 / 伤害。
+    public static bool AssignPassiveGuard(
+        List<BattleActionSlot> slots,
+        CharacterData owner,
+        int slotIndex,
+        CharacterData actor,
+        BattleCardState cardState
+    )
+    {
+        if (slots == null)
+        {
+            Debug.LogWarning("安排被动守备失败：槽位列表为空");
+            return false;
+        }
+
+        if (owner == null)
+        {
+            Debug.LogWarning("安排被动守备失败：owner 为空");
+            return false;
+        }
+
+        if (actor == null)
+        {
+            Debug.LogWarning("安排被动守备失败：行动者为空");
+            return false;
+        }
+
+        if (!object.ReferenceEquals(owner, actor))
+        {
+            Debug.LogWarning("安排被动守备失败：第一版要求 owner 与 actor 相同");
+            return false;
+        }
+
+        if (cardState == null)
+        {
+            Debug.LogWarning("安排被动守备失败：卡牌状态为空");
+            return false;
+        }
+
+        if (cardState.cardData == null)
+        {
+            Debug.LogWarning("安排被动守备失败：卡牌数据为空");
+            return false;
+        }
+
+        if (cardState.cardData.cardType != CardType.Defense)
+        {
+            Debug.LogWarning("安排被动守备失败：第一版只允许 Defense，当前卡牌类型：" + cardState.cardData.cardType);
+            return false;
+        }
+
+        BattleActionSlot slot = GetSlot(slots, owner, slotIndex);
+
+        if (slot == null)
+        {
+            return false;
+        }
+
+        if (!CanAssignCardToSlot(slots, slot, cardState))
+        {
+            return false;
+        }
+
+        slot.AssignPassiveGuard(actor, cardState);
+
+        Debug.Log(
+            slot.GetDisplaySlotName() +
+            " 安排被动守备成功：" +
+            slot.GetActorName() +
+            " 使用 " +
+            slot.GetCardName()
+        );
+
+        return true;
+    }
+
     // PrintSlotStates = 打印当前所有行动槽位状态
     // 只用于调试查看，不执行任何战斗逻辑。
     public static void PrintSlotStates(List<BattleActionSlot> slots)

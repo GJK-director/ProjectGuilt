@@ -44,7 +44,8 @@ public static class BattleExecutionPlanManager
                     order,
                     BattleExecutionItemType.RespondedEnemyIntent,
                     intent,
-                    actionSlot
+                    actionSlot,
+                    CollectRespondedPassiveGuardCandidates(actionSlots, intent, actionSlot)
                 ));
 
                 order++;
@@ -61,7 +62,8 @@ public static class BattleExecutionPlanManager
                     order,
                     BattleExecutionItemType.UnrespondedEnemyIntent,
                     intent,
-                    null
+                    null,
+                    CollectPassiveGuardCandidates(actionSlots, intent)
                 ));
 
                 order++;
@@ -103,7 +105,8 @@ public static class BattleExecutionPlanManager
                         order,
                         BattleExecutionItemType.RespondedEnemyIntent,
                         slot.enemyIntent,
-                        slot
+                        slot,
+                        CollectRespondedPassiveGuardCandidates(actionSlots, slot.enemyIntent, slot)
                     ));
 
                     handledHighSpeedIntents.Add(slot.enemyIntent);
@@ -138,11 +141,14 @@ public static class BattleExecutionPlanManager
 
             if (intent.isResponded)
             {
+                BattleActionSlot actionSlot = FindSlotByEnemyIntent(actionSlots, intent);
+
                 executionPlan.AddItem(new BattleExecutionItem(
                     order,
                     BattleExecutionItemType.RespondedEnemyIntent,
                     intent,
-                    FindSlotByEnemyIntent(actionSlots, intent)
+                    actionSlot,
+                    CollectRespondedPassiveGuardCandidates(actionSlots, intent, actionSlot)
                 ));
 
                 order++;
@@ -153,7 +159,8 @@ public static class BattleExecutionPlanManager
                 order,
                 BattleExecutionItemType.UnrespondedEnemyIntent,
                 intent,
-                null
+                null,
+                CollectPassiveGuardCandidates(actionSlots, intent)
             ));
 
             order++;
@@ -279,6 +286,10 @@ public static class BattleExecutionPlanManager
             return;
         }
 
+        int passiveGuardCandidateCount = item.passiveGuardCandidates != null
+            ? item.passiveGuardCandidates.Count
+            : 0;
+
         Debug.Log(
             item.order +
             ". RespondedEnemyIntent：" +
@@ -288,7 +299,9 @@ public static class BattleExecutionPlanManager
             " 处理 敌人意图" +
             item.enemyIntent.intentOrder +
             "，当前实际目标：" +
-            item.enemyIntent.GetActualTargetSlotText()
+            item.enemyIntent.GetActualTargetSlotText() +
+            "，被动守备候选数：" +
+            passiveGuardCandidateCount
         );
     }
 
@@ -302,13 +315,148 @@ public static class BattleExecutionPlanManager
             return;
         }
 
+        int passiveGuardCandidateCount = item.passiveGuardCandidates != null
+            ? item.passiveGuardCandidates.Count
+            : 0;
+
         Debug.Log(
             item.order +
             ". UnrespondedEnemyIntent：敌人意图" +
             item.enemyIntent.intentOrder +
             " 未响应，未来按 actualTarget 执行，目标：" +
-            item.enemyIntent.GetActualTargetSlotText()
+            item.enemyIntent.GetActualTargetSlotText() +
+            "，被动守备候选数：" +
+            passiveGuardCandidateCount
         );
+    }
+
+    // CollectRespondedPassiveGuardCandidates = 为 Attack vs Attack 已响应意图收集被动守备候选
+    static List<BattleActionSlot> CollectRespondedPassiveGuardCandidates(
+        List<BattleActionSlot> actionSlots,
+        BattleEnemyIntent enemyIntent,
+        BattleActionSlot responseSlot
+    )
+    {
+        if (!ShouldCollectPassiveGuardForRespondedItem(enemyIntent, responseSlot))
+        {
+            return new List<BattleActionSlot>();
+        }
+
+        return CollectPassiveGuardCandidates(actionSlots, enemyIntent);
+    }
+
+    // ShouldCollectPassiveGuardForRespondedItem = 只有 Attack vs Attack 响应才携带被动守备候选
+    static bool ShouldCollectPassiveGuardForRespondedItem(
+        BattleEnemyIntent enemyIntent,
+        BattleActionSlot responseSlot
+    )
+    {
+        if (enemyIntent == null || responseSlot == null)
+        {
+            return false;
+        }
+
+        if (responseSlot.slotType != BattleActionSlotType.RespondToEnemyIntent)
+        {
+            return false;
+        }
+
+        if (responseSlot.cardState == null || responseSlot.cardState.cardData == null)
+        {
+            return false;
+        }
+
+        if (enemyIntent.enemyCardState == null || enemyIntent.enemyCardState.cardData == null)
+        {
+            return false;
+        }
+
+        return responseSlot.cardState.cardData.cardType == CardType.Attack &&
+            enemyIntent.enemyCardState.cardData.cardType == CardType.Attack;
+    }
+
+    // CollectPassiveGuardCandidates = 为敌人意图收集被动守备候选
+    // 这里只保存候选引用，不在计划生成阶段最终决定使用哪一个。
+    static List<BattleActionSlot> CollectPassiveGuardCandidates(
+        List<BattleActionSlot> actionSlots,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        List<BattleActionSlot> candidates = new List<BattleActionSlot>();
+
+        if (actionSlots == null || enemyIntent == null || enemyIntent.actualTargetCharacter == null)
+        {
+            return candidates;
+        }
+
+        CharacterData target = enemyIntent.actualTargetCharacter;
+
+        foreach (BattleActionSlot slot in actionSlots)
+        {
+            if (!IsPassiveGuardCandidateForTarget(slot, target))
+            {
+                continue;
+            }
+
+            candidates.Add(slot);
+        }
+
+        candidates.Sort(CompareActionSlotIndex);
+        return candidates;
+    }
+
+    // IsPassiveGuardCandidateForTarget = 判断槽位是否是目标角色的被动守备候选
+    static bool IsPassiveGuardCandidateForTarget(BattleActionSlot slot, CharacterData target)
+    {
+        if (slot == null || target == null)
+        {
+            return false;
+        }
+
+        if (slot.slotType != BattleActionSlotType.PassiveGuard)
+        {
+            return false;
+        }
+
+        if (slot.isUsed)
+        {
+            return false;
+        }
+
+        if (!object.ReferenceEquals(slot.owner, target) ||
+            !object.ReferenceEquals(slot.actor, target) ||
+            !object.ReferenceEquals(slot.target, target))
+        {
+            return false;
+        }
+
+        if (slot.cardState == null || slot.cardState.cardData == null)
+        {
+            return false;
+        }
+
+        return slot.cardState.cardData.cardType == CardType.Defense;
+    }
+
+    // CompareActionSlotIndex = 按角色内槽位编号升序排序
+    static int CompareActionSlotIndex(BattleActionSlot left, BattleActionSlot right)
+    {
+        if (left == null && right == null)
+        {
+            return 0;
+        }
+
+        if (left == null)
+        {
+            return 1;
+        }
+
+        if (right == null)
+        {
+            return -1;
+        }
+
+        return left.slotIndex.CompareTo(right.slotIndex);
     }
 
     // IsActionSlotReady = 判断槽位是否有可加入计划的行动

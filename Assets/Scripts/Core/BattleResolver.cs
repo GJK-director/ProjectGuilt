@@ -1,4 +1,5 @@
 ﻿// 脚本中文说明：战斗结算器。负责处理卡牌使用、拼点、生效、命中、伤害和击杀事件。
+using System.Collections.Generic;
 using UnityEngine;
 
 public class BattleResolveResult
@@ -20,6 +21,8 @@ public class BattleResolveResult
 
     public bool isTieLimitReached;
     public bool triggeredEventChain;
+
+    public BattleActionSlot triggeredPassiveGuardSlot;
 
     public string message;
 }
@@ -311,10 +314,19 @@ public static class BattleResolver
     }
 
     // ResolveRespondedEnemyIntent = 正式结算已响应敌人意图
-    // 第一版只支持玩家攻击卡 vs 敌人攻击卡。
+    // 第一版支持玩家攻击卡 vs 敌人攻击卡，以及玩家防御卡 vs 敌人攻击卡。
     public static BattleResolveResult ResolveRespondedEnemyIntent(
         BattleActionSlot actionSlot,
         BattleEnemyIntent enemyIntent
+    )
+    {
+        return ResolveRespondedEnemyIntent(actionSlot, enemyIntent, null);
+    }
+
+    public static BattleResolveResult ResolveRespondedEnemyIntent(
+        BattleActionSlot actionSlot,
+        BattleEnemyIntent enemyIntent,
+        IReadOnlyList<BattleActionSlot> passiveGuardCandidates
     )
     {
         if (actionSlot == null)
@@ -365,23 +377,13 @@ public static class BattleResolver
         CardTestData playerCard = actionSlot.cardState.cardData;
         CardTestData enemyCard = enemyIntent.enemyCardState.cardData;
 
-        if (playerCard.cardType != CardType.Attack || enemyCard.cardType != CardType.Attack)
+        if (enemyCard.cardType != CardType.Attack)
         {
             return CreateUnsupportedResolveResult(
                 "ResolveRespondedEnemyIntent 暂不支持该卡牌对抗类型：玩家 " +
                 playerCard.cardType +
                 " / 敌人 " +
                 enemyCard.cardType
-            );
-        }
-
-        if (IsInvalidPointRange(playerCard.minPoint, playerCard.maxPoint))
-        {
-            return CreateInvalidResolveResult(
-                "ResolveRespondedEnemyIntent 失败：玩家卡牌点数范围异常：" +
-                playerCard.minPoint +
-                "-" +
-                playerCard.maxPoint
             );
         }
 
@@ -395,7 +397,42 @@ public static class BattleResolver
             );
         }
 
-        return ResolveRespondedAttackVsAttack(actionSlot, enemyIntent);
+        if (playerCard.cardType == CardType.Attack)
+        {
+            if (IsInvalidPointRange(playerCard.minPoint, playerCard.maxPoint))
+            {
+                return CreateInvalidResolveResult(
+                    "ResolveRespondedEnemyIntent 失败：玩家卡牌点数范围异常：" +
+                    playerCard.minPoint +
+                    "-" +
+                    playerCard.maxPoint
+                );
+            }
+
+            return ResolveRespondedAttackVsAttack(actionSlot, enemyIntent, passiveGuardCandidates);
+        }
+
+        if (playerCard.cardType == CardType.Defense)
+        {
+            if (IsInvalidPointRange(playerCard.minPoint, playerCard.maxPoint))
+            {
+                return CreateInvalidResolveResult(
+                    "ResolveRespondedEnemyIntent 失败：玩家防御卡点数范围异常：" +
+                    playerCard.minPoint +
+                    "-" +
+                    playerCard.maxPoint
+                );
+            }
+
+            return ResolveRespondedDefenseVsAttack(actionSlot, enemyIntent);
+        }
+
+        return CreateUnsupportedResolveResult(
+            "ResolveRespondedEnemyIntent 暂不支持该卡牌对抗类型：玩家 " +
+            playerCard.cardType +
+            " / 敌人 " +
+            enemyCard.cardType
+        );
     }
 
     // ResolveUnrespondedEnemyIntent = 正式结算无人响应敌人意图
@@ -574,7 +611,8 @@ public static class BattleResolver
 
     static BattleResolveResult ResolveRespondedAttackVsAttack(
         BattleActionSlot actionSlot,
-        BattleEnemyIntent enemyIntent
+        BattleEnemyIntent enemyIntent,
+        IReadOnlyList<BattleActionSlot> passiveGuardCandidates
     )
     {
         CharacterData playerUnit = actionSlot.actor;
@@ -654,6 +692,22 @@ public static class BattleResolver
                 ClashResult.Win
             );
 
+            if (!isPlayerWin)
+            {
+                BattleResolveResult passiveGuardResult = TryResolveEnemyWinPassiveGuard(
+                    passiveGuardCandidates,
+                    enemyIntent,
+                    playerPoint,
+                    enemyPoint,
+                    attempt
+                );
+
+                if (passiveGuardResult != null)
+                {
+                    return passiveGuardResult;
+                }
+            }
+
             int damageScaled = BattleCalculator.GetFinalDamageScaled(
                 attacker,
                 defender,
@@ -727,6 +781,399 @@ public static class BattleResolver
         Debug.Log(tieLimitResult.message);
 
         return tieLimitResult;
+    }
+
+    static BattleResolveResult TryResolveEnemyWinPassiveGuard(
+        IReadOnlyList<BattleActionSlot> passiveGuardCandidates,
+        BattleEnemyIntent enemyIntent,
+        int playerPoint,
+        int enemyPoint,
+        int clashAttemptCount
+    )
+    {
+        BattleActionSlot selectedPassiveGuardSlot = FindFirstValidPassiveGuardSlot(
+            passiveGuardCandidates,
+            enemyIntent
+        );
+
+        if (selectedPassiveGuardSlot == null)
+        {
+            return null;
+        }
+
+        Debug.Log(
+            "EnemyWin 触发 PassiveGuard 候选：" +
+            selectedPassiveGuardSlot.GetDisplaySlotName() +
+            " / " +
+            selectedPassiveGuardSlot.GetCardName() +
+            "，将复用敌人拼赢点数 " +
+            enemyPoint +
+            "，未重新 Roll"
+        );
+
+        BattleResolveResult defenseResult = ResolveDefenseVsAttackWithKnownEnemyPoint(
+            selectedPassiveGuardSlot,
+            enemyIntent,
+            enemyPoint
+        );
+
+        if (defenseResult == null)
+        {
+            Debug.LogWarning("EnemyWin PassiveGuard 结算失败：Defense Resolver 返回空结果，回退原 EnemyWin 伤害流程");
+            return null;
+        }
+
+        if (!defenseResult.playerCardUsed)
+        {
+            Debug.LogWarning("EnemyWin PassiveGuard 未成功使用 Defense，回退原 EnemyWin 伤害流程：" + defenseResult.message);
+            return null;
+        }
+
+        if (!defenseResult.isSuccess || !defenseResult.shouldCompleteItem)
+        {
+            Debug.LogWarning("EnemyWin PassiveGuard 已进入 Defense 使用流程但结果不可完成，不回退原始伤害：" + defenseResult.message);
+            defenseResult.triggeredPassiveGuardSlot = selectedPassiveGuardSlot;
+            return defenseResult;
+        }
+
+        BattleResolveResult result = new BattleResolveResult();
+        result.isSuccess = true;
+        result.shouldCompleteItem = true;
+        result.playerCardUsed = true;
+        result.enemyCardUsed = true;
+        result.hasDamage = defenseResult.hasDamage;
+        result.damage = defenseResult.damage;
+        result.damagedCharacter = defenseResult.damagedCharacter;
+        result.resultType = defenseResult.resultType == "DefenseFullBlock"
+            ? "EnemyWinPassiveGuardFullBlock"
+            : "EnemyWinPassiveGuardReducedDamage";
+        result.playerPoint = playerPoint;
+        result.enemyPoint = enemyPoint;
+        result.clashAttemptCount = clashAttemptCount;
+        result.isTieLimitReached = false;
+        result.triggeredEventChain = true;
+        result.triggeredPassiveGuardSlot = selectedPassiveGuardSlot;
+        result.message =
+            "ResolveRespondedEnemyIntent 完成：" +
+            result.resultType +
+            "，玩家最终拼点 " +
+            playerPoint +
+            "，敌人最终胜利点数 " +
+            enemyPoint +
+            "，实际触发 PassiveGuard 槽位 " +
+            selectedPassiveGuardSlot.GetDisplaySlotName() +
+            "，防御结果 " +
+            defenseResult.resultType +
+            "，最终伤害 " +
+            defenseResult.damage +
+            "。复用敌人拼赢点数，未重新 Roll";
+
+        Debug.Log(result.message);
+
+        return result;
+    }
+
+    static BattleActionSlot FindFirstValidPassiveGuardSlot(
+        IReadOnlyList<BattleActionSlot> passiveGuardCandidates,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        if (passiveGuardCandidates == null || passiveGuardCandidates.Count == 0)
+        {
+            return null;
+        }
+
+        foreach (BattleActionSlot slot in passiveGuardCandidates)
+        {
+            if (!IsPassiveGuardSlotStillValid(slot, enemyIntent))
+            {
+                continue;
+            }
+
+            return slot;
+        }
+
+        return null;
+    }
+
+    static bool IsPassiveGuardSlotStillValid(
+        BattleActionSlot slot,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        if (slot == null || enemyIntent == null || enemyIntent.actualTargetCharacter == null)
+        {
+            return false;
+        }
+
+        if (slot.IsEmpty())
+        {
+            return false;
+        }
+
+        if (slot.slotType != BattleActionSlotType.PassiveGuard)
+        {
+            return false;
+        }
+
+        if (slot.isUsed)
+        {
+            return false;
+        }
+
+        if (!object.ReferenceEquals(slot.owner, enemyIntent.actualTargetCharacter) ||
+            !object.ReferenceEquals(slot.actor, enemyIntent.actualTargetCharacter) ||
+            !object.ReferenceEquals(slot.target, enemyIntent.actualTargetCharacter))
+        {
+            return false;
+        }
+
+        if (slot.cardState == null || slot.cardState.cardData == null)
+        {
+            return false;
+        }
+
+        if (slot.cardState.cardData.cardType != CardType.Defense)
+        {
+            return false;
+        }
+
+        return BattleCardManager.CanUseCard(slot.cardState);
+    }
+
+
+    // ================================
+    // 防御响应敌人攻击
+    // ================================
+
+    static BattleResolveResult ResolveRespondedDefenseVsAttack(
+        BattleActionSlot actionSlot,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        CharacterData playerUnit = actionSlot.actor;
+        BattleCardState defenseCardState = actionSlot.cardState;
+        CharacterData enemyUnit = enemyIntent.enemy;
+        BattleCardState enemyCardState = enemyIntent.enemyCardState;
+        CharacterData actualTarget = enemyIntent.actualTargetCharacter;
+
+        if (defenseCardState == null || defenseCardState.cardData == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedDefenseVsAttack 失败：玩家防御卡为空");
+        }
+
+        if (enemyCardState == null || enemyCardState.cardData == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedDefenseVsAttack 失败：敌人攻击卡为空");
+        }
+
+        if (defenseCardState.cardData.cardType != CardType.Defense)
+        {
+            return CreateInvalidResolveResult(
+                "ResolveRespondedDefenseVsAttack 失败：玩家卡牌不是 Defense：" +
+                defenseCardState.cardData.cardType
+            );
+        }
+
+        if (enemyCardState.cardData.cardType != CardType.Attack)
+        {
+            return CreateInvalidResolveResult(
+                "ResolveRespondedDefenseVsAttack 失败：敌人卡牌不是 Attack：" +
+                enemyCardState.cardData.cardType
+            );
+        }
+
+        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
+        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
+
+        int enemyFinalAttackPoint = BattleCalculator.GetFinalClashPoint(enemyUnit, enemyCardState.cardData);
+
+        return ResolveDefenseVsAttackCore(
+            actionSlot,
+            enemyIntent,
+            enemyFinalAttackPoint,
+            true,
+            true,
+            "ResolveRespondedDefenseVsAttack",
+            false
+        );
+    }
+
+    // ResolveDefenseVsAttackWithKnownEnemyPoint = 使用外层已经确定的敌人最终攻击点数继续防御结算。
+    // 不重新 Roll 敌人点数，不触发敌人 ClashStart / ClashWin / ClashLose / Resolved。
+    internal static BattleResolveResult ResolveDefenseVsAttackWithKnownEnemyPoint(
+        BattleActionSlot defenseSlot,
+        BattleEnemyIntent enemyIntent,
+        int knownEnemyAttackPoint
+    )
+    {
+        if (defenseSlot == null)
+        {
+            return CreateInvalidResolveResult("ResolveDefenseVsAttackWithKnownEnemyPoint 失败：防御槽位为空");
+        }
+
+        if (defenseSlot.actor == null)
+        {
+            return CreateInvalidResolveResult("ResolveDefenseVsAttackWithKnownEnemyPoint 失败：防御者为空");
+        }
+
+        if (defenseSlot.cardState == null || defenseSlot.cardState.cardData == null)
+        {
+            return CreateInvalidResolveResult("ResolveDefenseVsAttackWithKnownEnemyPoint 失败：防御卡为空");
+        }
+
+        if (enemyIntent == null)
+        {
+            return CreateInvalidResolveResult("ResolveDefenseVsAttackWithKnownEnemyPoint 失败：敌人意图为空");
+        }
+
+        if (enemyIntent.enemy == null)
+        {
+            return CreateInvalidResolveResult("ResolveDefenseVsAttackWithKnownEnemyPoint 失败：敌人为空");
+        }
+
+        if (enemyIntent.enemyCardState == null || enemyIntent.enemyCardState.cardData == null)
+        {
+            return CreateInvalidResolveResult("ResolveDefenseVsAttackWithKnownEnemyPoint 失败：敌人攻击卡为空");
+        }
+
+        if (enemyIntent.actualTargetCharacter == null)
+        {
+            return CreateInvalidResolveResult("ResolveDefenseVsAttackWithKnownEnemyPoint 失败：实际目标为空");
+        }
+
+        if (defenseSlot.cardState.cardData.cardType != CardType.Defense)
+        {
+            return CreateInvalidResolveResult(
+                "ResolveDefenseVsAttackWithKnownEnemyPoint 失败：玩家卡牌不是 Defense：" +
+                defenseSlot.cardState.cardData.cardType
+            );
+        }
+
+        if (IsInvalidPointRange(defenseSlot.cardState.cardData.minPoint, defenseSlot.cardState.cardData.maxPoint))
+        {
+            return CreateInvalidResolveResult(
+                "ResolveDefenseVsAttackWithKnownEnemyPoint 失败：玩家防御卡点数范围异常：" +
+                defenseSlot.cardState.cardData.minPoint +
+                "-" +
+                defenseSlot.cardState.cardData.maxPoint
+            );
+        }
+
+        if (enemyIntent.enemyCardState.cardData.cardType != CardType.Attack)
+        {
+            return CreateInvalidResolveResult(
+                "ResolveDefenseVsAttackWithKnownEnemyPoint 失败：敌人卡牌不是 Attack：" +
+                enemyIntent.enemyCardState.cardData.cardType
+            );
+        }
+
+        int clampedKnownEnemyAttackPoint = Mathf.Max(0, knownEnemyAttackPoint);
+
+        return ResolveDefenseVsAttackCore(
+            defenseSlot,
+            enemyIntent,
+            clampedKnownEnemyAttackPoint,
+            false,
+            false,
+            "ResolveDefenseVsAttackWithKnownEnemyPoint",
+            true
+        );
+    }
+
+    static BattleResolveResult ResolveDefenseVsAttackCore(
+        BattleActionSlot defenseSlot,
+        BattleEnemyIntent enemyIntent,
+        int enemyFinalAttackPoint,
+        bool shouldTriggerEnemyResolved,
+        bool enemyCardUsed,
+        string messagePrefix,
+        bool isKnownPointContinuation
+    )
+    {
+        CharacterData playerUnit = defenseSlot.actor;
+        BattleCardState defenseCardState = defenseSlot.cardState;
+        CharacterData enemyUnit = enemyIntent.enemy;
+        BattleCardState enemyCardState = enemyIntent.enemyCardState;
+        CharacterData actualTarget = enemyIntent.actualTargetCharacter;
+
+        enemyFinalAttackPoint = Mathf.Max(0, enemyFinalAttackPoint);
+
+        int playerFinalDefensePointScaled = BattleCalculator.GetFinalDefensePointScaled(playerUnit, defenseCardState.cardData);
+        int playerFinalDefensePoint = BattleCalculator.ConvertScaledDamageToHPDamage(playerFinalDefensePointScaled);
+        int remainingAttackPoint = BattleCalculator.CalculateRemainingAttackPointAfterDefense(
+            enemyFinalAttackPoint,
+            playerFinalDefensePointScaled
+        );
+
+        TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, defenseCardState, 0, 0, false, false);
+
+        if (shouldTriggerEnemyResolved)
+        {
+            TriggerBattleEvent(BattleTiming.Resolved, enemyUnit, actualTarget, enemyCardState, enemyFinalAttackPoint, 0, false, false);
+        }
+
+        TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, defenseCardState, playerFinalDefensePoint, 0, false, false);
+
+        int finalHpDamage = 0;
+        bool isFullBlock = remainingAttackPoint == 0;
+
+        if (!isFullBlock)
+        {
+            int damageScaled = BattleCalculator.GetFinalDamageScaled(
+                enemyUnit,
+                actualTarget,
+                enemyCardState.cardData,
+                remainingAttackPoint
+            );
+
+            finalHpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+
+            if (finalHpDamage > 0)
+            {
+                TriggerBattleEvent(BattleTiming.Hit, enemyUnit, actualTarget, enemyCardState, remainingAttackPoint, finalHpDamage, true, false);
+                ApplyDamageAndTriggerEvents(enemyUnit, actualTarget, enemyCardState, finalHpDamage, remainingAttackPoint);
+            }
+        }
+
+        BattleResolveResult result = new BattleResolveResult();
+        result.isSuccess = true;
+        result.shouldCompleteItem = true;
+        result.playerCardUsed = true;
+        result.enemyCardUsed = enemyCardUsed;
+        result.hasDamage = finalHpDamage > 0;
+        result.damage = finalHpDamage;
+        result.damagedCharacter = finalHpDamage > 0 ? actualTarget : null;
+        result.resultType = isFullBlock ? "DefenseFullBlock" : "DefenseReducedDamage";
+        result.playerPoint = playerFinalDefensePoint;
+        result.enemyPoint = enemyFinalAttackPoint;
+        result.clashAttemptCount = 0;
+        result.isTieLimitReached = false;
+        result.triggeredEventChain = true;
+        string enemyPointLabel = isKnownPointContinuation ? "knownEnemyAttackPoint " : "敌人最终攻击点数 ";
+
+        result.message =
+            messagePrefix +
+            " 完成：" +
+            result.resultType +
+            "，" +
+            enemyPointLabel +
+            enemyFinalAttackPoint +
+            "，玩家最终防御点数 " +
+            playerFinalDefensePoint +
+            "，剩余攻击点数 " +
+            remainingAttackPoint +
+            "，最终 HP 伤害 " +
+            finalHpDamage;
+
+        if (isKnownPointContinuation)
+        {
+            result.message += "。使用已确定敌人点数，未重新 Roll";
+        }
+
+        Debug.Log(result.message);
+
+        return result;
     }
 
 

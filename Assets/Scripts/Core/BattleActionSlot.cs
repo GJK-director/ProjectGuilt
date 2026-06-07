@@ -2,6 +2,7 @@
 // BattleActionSlotType = 行动槽位类型
 // RespondToEnemyIntent：响应敌人意图
 // FreeAction：不直接响应敌人意图的自由行动，第一版只用于 Ability 罪卡测试
+// PassiveGuard：被动守备，等待敌人攻击实际命中本槽位 owner 时触发
 public enum BattleActionSlotType
 {
     // RespondToEnemyIntent = 响应敌人意图
@@ -10,7 +11,11 @@ public enum BattleActionSlotType
 
     // FreeAction = 自由行动
     // 例如：玩家不响应敌人意图，而是自己使用 Ability 罪卡。
-    FreeAction
+    FreeAction,
+
+    // PassiveGuard = 被动守备
+    // 例如：玩家把 Defense 放在自己的槽位中，等待无人响应的敌人攻击命中自己时触发。
+    PassiveGuard
 }
 
 // BattleActionSlot = 行动槽位
@@ -122,6 +127,21 @@ public class BattleActionSlot
         this.actor = actor;
         this.cardState = cardState;
         this.target = target;
+        enemyIntent = null;
+        isUsed = false;
+    }
+
+    // AssignPassiveGuard = 安排被动守备
+    // 被动守备不绑定具体敌人意图，不主动进入执行队列，实际触发时才算使用。
+    public void AssignPassiveGuard(
+        CharacterData actor,
+        BattleCardState cardState
+    )
+    {
+        slotType = BattleActionSlotType.PassiveGuard;
+        this.actor = actor;
+        this.cardState = cardState;
+        target = actor;
         enemyIntent = null;
         isUsed = false;
     }

@@ -12,6 +12,9 @@ public enum BattleTestMode
     BattleStateViewDataActionSlotBasic,
     BattleStateViewDataOwnerActionSlotBasic,
     BattleResolverResolveRespondedAttackVsAttackBasic,
+    BattleResolverResolveRespondedDefenseFullBlockBasic,
+    BattleResolverResolveRespondedDefenseReducedDamageBasic,
+    BattleResolverDefenseKnownEnemyPointBasic,
     ActionSlotLowSpeedOriginalSlotResponseBasic,
     ActionSlotLowSpeedIllegalResponseFail,
     ActionSlotResponseOverwriteBasic,
@@ -21,8 +24,22 @@ public enum BattleTestMode
     ActionSlotExecutionPlanExecuteHighSpeedFreeAttackMixedBasic,
     ActionSlotExecutionPlanExecuteLowSpeedFreeAttackMixedBasic,
     ActionSlotExecutionPlanExecuteUnrespondedBasic,
+    ActionSlotPassiveGuardCandidateOrderBasic,
+    ActionSlotPassiveGuardSkipInvalidCandidateBasic,
+    ActionSlotPassiveGuardFullBlockBasic,
+    ActionSlotPassiveGuardReducedDamageBasic,
+    ActionSlotPassiveGuardTargetMismatchBasic,
+    ActionSlotPassiveGuardRespondedIntentNotTriggeredBasic,
+    ActionSlotPassiveGuardAssignLegalityBasic,
     ActionSlotExecutionPlanExecuteRespondedBasic,
     ActionSlotExecutionPlanExecuteRespondedEnemyWin,
+    ActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardReducedDamageBasic,
+    ActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardFullBlockBasic,
+    ActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardCandidateOrderBasic,
+    ActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardSkipInvalidBasic,
+    ActionSlotExecutionPlanExecuteRespondedEnemyWinNoPassiveGuardBasic,
+    ActionSlotExecutionPlanExecuteRespondedPlayerWinPassiveGuardNotTriggeredBasic,
+    ActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardTargetMismatchBasic,
     ActionSlotExecutionPlanExecuteRespondedTieLimit,
     ActionSlotExecutionPlanExecuteMixedBasic
 }
@@ -125,6 +142,24 @@ public class CardLoadTest : MonoBehaviour
             return;
         }
 
+        if (testMode == BattleTestMode.BattleResolverResolveRespondedDefenseFullBlockBasic)
+        {
+            RunBattleResolverResolveRespondedDefenseFullBlockBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleResolverResolveRespondedDefenseReducedDamageBasic)
+        {
+            RunBattleResolverResolveRespondedDefenseReducedDamageBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleResolverDefenseKnownEnemyPointBasic)
+        {
+            RunBattleResolverDefenseKnownEnemyPointBasicTestSequence();
+            return;
+        }
+
         if (testMode == BattleTestMode.ActionSlotLowSpeedOriginalSlotResponseBasic)
         {
             RunActionSlotLowSpeedOriginalSlotResponseBasicTestSequence();
@@ -179,6 +214,48 @@ public class CardLoadTest : MonoBehaviour
             return;
         }
 
+        if (testMode == BattleTestMode.ActionSlotPassiveGuardCandidateOrderBasic)
+        {
+            RunActionSlotPassiveGuardCandidateOrderBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotPassiveGuardSkipInvalidCandidateBasic)
+        {
+            RunActionSlotPassiveGuardSkipInvalidCandidateBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotPassiveGuardFullBlockBasic)
+        {
+            RunActionSlotPassiveGuardFullBlockBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotPassiveGuardReducedDamageBasic)
+        {
+            RunActionSlotPassiveGuardReducedDamageBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotPassiveGuardTargetMismatchBasic)
+        {
+            RunActionSlotPassiveGuardTargetMismatchBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotPassiveGuardRespondedIntentNotTriggeredBasic)
+        {
+            RunActionSlotPassiveGuardRespondedIntentNotTriggeredBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotPassiveGuardAssignLegalityBasic)
+        {
+            RunActionSlotPassiveGuardAssignLegalityBasicTestSequence();
+            return;
+        }
+
         if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteRespondedBasic)
         {
             RunActionSlotExecutionPlanExecuteRespondedBasicTestSequence();
@@ -188,6 +265,48 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteRespondedEnemyWin)
         {
             RunActionSlotExecutionPlanExecuteRespondedEnemyWinTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardReducedDamageBasic)
+        {
+            RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardReducedDamageBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardFullBlockBasic)
+        {
+            RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardFullBlockBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardCandidateOrderBasic)
+        {
+            RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardCandidateOrderBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardSkipInvalidBasic)
+        {
+            RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardSkipInvalidBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteRespondedEnemyWinNoPassiveGuardBasic)
+        {
+            RunActionSlotExecutionPlanExecuteRespondedEnemyWinNoPassiveGuardBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteRespondedPlayerWinPassiveGuardNotTriggeredBasic)
+        {
+            RunActionSlotExecutionPlanExecuteRespondedPlayerWinPassiveGuardNotTriggeredBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardTargetMismatchBasic)
+        {
+            RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardTargetMismatchBasicTestSequence();
             return;
         }
 
@@ -862,6 +981,67 @@ public class CardLoadTest : MonoBehaviour
         );
     }
 
+    // RunBattleResolverResolveRespondedDefenseFullBlockBasicTestSequence = 测试 Defense 完全抵挡敌人攻击
+    void RunBattleResolverResolveRespondedDefenseFullBlockBasicTestSequence()
+    {
+        Debug.Log("===== BattleResolver ResolveRespondedEnemyIntent Defense 完全防御测试开始 =====");
+        Debug.Log("本测试使用固定点数临时 CardData，直接调用正式入口 BattleResolver.ResolveRespondedEnemyIntent(...)");
+
+        RunBattleResolverRespondedDefenseVsAttackSubTest(
+            "DefenseFullBlock",
+            4,
+            4,
+            6,
+            6,
+            2,
+            "DefenseFullBlock",
+            0
+        );
+    }
+
+    // RunBattleResolverResolveRespondedDefenseReducedDamageBasicTestSequence = 测试 Defense 减少敌人攻击伤害
+    void RunBattleResolverResolveRespondedDefenseReducedDamageBasicTestSequence()
+    {
+        Debug.Log("===== BattleResolver ResolveRespondedEnemyIntent Defense 减伤测试开始 =====");
+        Debug.Log("本测试使用固定点数临时 CardData，直接调用正式入口 BattleResolver.ResolveRespondedEnemyIntent(...)");
+
+        RunBattleResolverRespondedDefenseVsAttackSubTest(
+            "DefenseReducedDamage",
+            8,
+            8,
+            3,
+            3,
+            2,
+            "DefenseReducedDamage",
+            5
+        );
+    }
+
+    // RunBattleResolverDefenseKnownEnemyPointBasicTestSequence = 测试已知敌人最终攻击点数的 Defense continuation
+    void RunBattleResolverDefenseKnownEnemyPointBasicTestSequence()
+    {
+        Debug.Log("===== BattleResolver known-point Defense continuation 测试开始 =====");
+        Debug.Log("本测试直接调用 BattleResolver.ResolveDefenseVsAttackWithKnownEnemyPoint(...)，不接入 Attack EnemyWin / PassiveGuard");
+
+        RunBattleResolverDefenseKnownEnemyPointSubTest(
+            "KnownPointDefenseReducedDamage",
+            8,
+            5,
+            "DefenseReducedDamage",
+            3,
+            3
+        );
+
+        RunBattleResolverDefenseKnownEnemyPointSubTest(
+            "KnownPointDefenseFullBlock",
+            4,
+            6,
+            "DefenseFullBlock",
+            0,
+            0
+        );
+    }
+
     // RunBattleResolverResolveUnrespondedEnemyIntentBasicTestSequence = 测试 BattleResolver 正式无人响应敌人意图入口
     void RunBattleResolverResolveUnrespondedEnemyIntentBasicTestSequence()
     {
@@ -1405,6 +1585,218 @@ public class CardLoadTest : MonoBehaviour
             Debug.Log("平局上限验证：玩家 HP 是否不变：" + (testPlayer.currentHP == playerHPBefore));
             Debug.Log("平局上限验证：原目标 HP 是否不变：" + (testOriginalTarget.currentHP == originalTargetHPBefore));
             Debug.Log("平局上限验证：敌人 HP 是否不变：" + (testEnemy.currentHP == enemyHPBefore));
+        }
+    }
+
+    void RunBattleResolverRespondedDefenseVsAttackSubTest(
+        string title,
+        int enemyMinPoint,
+        int enemyMaxPoint,
+        int defenseMinPoint,
+        int defenseMaxPoint,
+        int defenseCooldown,
+        string expectedResultType,
+        int expectedDamage
+    )
+    {
+        Debug.Log("===== 子测试：" + title + " =====");
+
+        CharacterData testDefender = new CharacterData(title + "防御者", 30, 5, 5);
+        CharacterData testEnemy = new CharacterData(title + "敌人", 30, 5, 5);
+
+        CardTestData defenseCard = new CardTestData
+        {
+            cardID = title + "_player_defense",
+            cardName = title + "玩家防御",
+            cardType = CardType.Defense,
+            isClashable = false,
+            minPoint = defenseMinPoint,
+            maxPoint = defenseMaxPoint,
+            cooldown = defenseCooldown,
+            defenseFormula = "PointAsDefense"
+        };
+
+        CardTestData enemyAttackCard = new CardTestData
+        {
+            cardID = title + "_enemy_attack",
+            cardName = title + "敌人攻击",
+            cardType = CardType.Attack,
+            isClashable = true,
+            minPoint = enemyMinPoint,
+            maxPoint = enemyMaxPoint,
+            damageFormula = "PointAsDamage"
+        };
+
+        BattleCardState defenseCardState = BattleCardManager.CreateBattleCard(
+            testDefender,
+            defenseCard,
+            title + "_player_defense_copy_0"
+        );
+
+        BattleCardState enemyCardState = BattleCardManager.CreateBattleCard(
+            testEnemy,
+            enemyAttackCard,
+            title + "_enemy_attack_copy_0"
+        );
+
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            title + "_enemy_intent_001",
+            testEnemy,
+            enemyCardState,
+            testDefender,
+            1,
+            1
+        );
+
+        BattleActionSlot actionSlot = new BattleActionSlot(1);
+        actionSlot.AssignResponse(testDefender, defenseCardState, enemyIntent, false);
+        enemyIntent.MarkResponded();
+
+        int defenderHPBefore = testDefender.currentHP;
+        int defenseCooldownBefore = defenseCardState.currentCooldown;
+
+        Debug.Log("执行前 防御者 HP：" + defenderHPBefore + " / " + testDefender.maxHP);
+        Debug.Log("执行前 Defense CD：" + defenseCooldownBefore);
+        Debug.Log("敌人固定攻击点数：" + enemyMinPoint + "-" + enemyMaxPoint);
+        Debug.Log("玩家固定防御点数：" + defenseMinPoint + "-" + defenseMaxPoint);
+        Debug.Log("响应目标：" + enemyIntent.GetActualTargetSlotText());
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(actionSlot, enemyIntent);
+
+        PrintBattleResolveResult(result);
+
+        Debug.Log("执行后 防御者 HP：" + testDefender.currentHP + " / " + testDefender.maxHP);
+        Debug.Log("执行后 Defense CD：" + defenseCardState.currentCooldown);
+
+        Debug.Log("预期 resultType：" + expectedResultType + "，实际是否符合：" + (result != null && result.resultType == expectedResultType));
+        Debug.Log("预期 damage：" + expectedDamage + "，实际是否符合：" + (result != null && result.damage == expectedDamage));
+        Debug.Log("预期 hasDamage：" + (expectedDamage > 0) + "，实际是否符合：" + (result != null && result.hasDamage == (expectedDamage > 0)));
+        Debug.Log("预期 playerCardUsed：True，实际是否符合：" + (result != null && result.playerCardUsed));
+        Debug.Log("预期 enemyCardUsed：True，实际是否符合：" + (result != null && result.enemyCardUsed));
+        Debug.Log("预期 shouldCompleteItem：True，实际是否符合：" + (result != null && result.shouldCompleteItem));
+        Debug.Log("预期 triggeredEventChain：True，实际是否符合：" + (result != null && result.triggeredEventChain));
+        Debug.Log("预期 Defense CD 进入配置 cooldown：" + (defenseCardState.currentCooldown == defenseCooldown));
+        Debug.Log("预期剩余攻击点数出现在 message：" + (result != null && result.message.Contains("剩余攻击点数")));
+
+        if (expectedDamage == 0)
+        {
+            Debug.Log("完全防御验证：防御者 HP 是否不变：" + (testDefender.currentHP == defenderHPBefore));
+            Debug.Log("完全防御验证：message 是否包含剩余攻击点数 0：" + (result != null && result.message.Contains("剩余攻击点数 0")));
+        }
+        else
+        {
+            Debug.Log("减伤防御验证：防御者 HP 是否按最终伤害下降：" + (testDefender.currentHP == defenderHPBefore - expectedDamage));
+            Debug.Log("减伤防御验证：使用剩余攻击点数进入伤害公式，而不是最终伤害减防御值：" + (result != null && result.message.Contains("剩余攻击点数")));
+        }
+    }
+
+    void RunBattleResolverDefenseKnownEnemyPointSubTest(
+        string title,
+        int knownEnemyAttackPoint,
+        int defensePoint,
+        string expectedResultType,
+        int expectedRemainingAttackPoint,
+        int expectedDamage
+    )
+    {
+        Debug.Log("===== 子测试：" + title + " =====");
+
+        CharacterData testDefender = new CharacterData(title + "防御者", 30, 5, 5);
+        CharacterData testEnemy = new CharacterData(title + "敌人", 30, 5, 5);
+
+        CardTestData defenseCard = new CardTestData
+        {
+            cardID = title + "_player_defense",
+            cardName = title + "玩家防御",
+            cardType = CardType.Defense,
+            isClashable = false,
+            minPoint = defensePoint,
+            maxPoint = defensePoint,
+            cooldown = 2,
+            defenseFormula = "PointAsDefense"
+        };
+
+        CardTestData enemyAttackCard = new CardTestData
+        {
+            cardID = title + "_enemy_attack",
+            cardName = title + "敌人攻击",
+            cardType = CardType.Attack,
+            isClashable = true,
+            minPoint = 1,
+            maxPoint = 1,
+            cooldown = 2,
+            damageFormula = "PointAsDamage"
+        };
+
+        BattleCardState defenseCardState = BattleCardManager.CreateBattleCard(
+            testDefender,
+            defenseCard,
+            title + "_player_defense_copy_0"
+        );
+
+        BattleCardState enemyCardState = BattleCardManager.CreateBattleCard(
+            testEnemy,
+            enemyAttackCard,
+            title + "_enemy_attack_copy_0"
+        );
+
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            title + "_enemy_intent_001",
+            testEnemy,
+            enemyCardState,
+            testDefender,
+            1,
+            1
+        );
+
+        BattleActionSlot defenseSlot = new BattleActionSlot(1);
+        defenseSlot.AssignResponse(testDefender, defenseCardState, enemyIntent, false);
+        enemyIntent.MarkResponded();
+
+        int defenderHPBefore = testDefender.currentHP;
+        int defenseCooldownBefore = defenseCardState.currentCooldown;
+        int enemyCooldownBefore = enemyCardState.currentCooldown;
+        int enemyUseCountBefore = enemyCardState.currentUseCount;
+
+        Debug.Log("执行前 防御者 HP：" + defenderHPBefore + " / " + testDefender.maxHP);
+        Debug.Log("执行前 Defense CD：" + defenseCooldownBefore);
+        Debug.Log("执行前 敌人卡 CD：" + enemyCooldownBefore);
+        Debug.Log("敌人卡自身点数范围故意设为：1-1");
+        Debug.Log("传入 knownEnemyAttackPoint：" + knownEnemyAttackPoint);
+        Debug.Log("玩家固定防御点数：" + defensePoint + "-" + defensePoint);
+
+        BattleResolveResult result = BattleResolver.ResolveDefenseVsAttackWithKnownEnemyPoint(
+            defenseSlot,
+            enemyIntent,
+            knownEnemyAttackPoint
+        );
+
+        PrintBattleResolveResult(result);
+
+        Debug.Log("执行后 防御者 HP：" + testDefender.currentHP + " / " + testDefender.maxHP);
+        Debug.Log("执行后 Defense CD：" + defenseCardState.currentCooldown);
+        Debug.Log("执行后 敌人卡 CD：" + enemyCardState.currentCooldown);
+        Debug.Log("执行后 敌人卡 UseCount：" + enemyCardState.currentUseCount);
+
+        Debug.Log("预期 resultType：" + expectedResultType + "，实际是否符合：" + (result != null && result.resultType == expectedResultType));
+        Debug.Log("预期 enemyPoint 使用传入 knownEnemyAttackPoint：" + (result != null && result.enemyPoint == Mathf.Max(0, knownEnemyAttackPoint)));
+        Debug.Log("预期未使用敌人卡自身 1-1 点数：" + (result != null && result.enemyPoint != 1));
+        Debug.Log("预期剩余攻击点数出现在 message：" + (result != null && result.message.Contains("剩余攻击点数 " + expectedRemainingAttackPoint)));
+        Debug.Log("预期 message 写明未重新 Roll：" + (result != null && result.message.Contains("使用已确定敌人点数，未重新 Roll")));
+        Debug.Log("预期 damage：" + expectedDamage + "，实际是否符合：" + (result != null && result.damage == expectedDamage));
+        Debug.Log("预期防御者 HP 按最终伤害变化：" + (testDefender.currentHP == defenderHPBefore - expectedDamage));
+        Debug.Log("预期 playerCardUsed：True，实际是否符合：" + (result != null && result.playerCardUsed));
+        Debug.Log("预期 enemyCardUsed：False，实际是否符合：" + (result != null && !result.enemyCardUsed));
+        Debug.Log("预期 Defense 进入 CD：" + (defenseCardState.currentCooldown == defenseCard.cooldown));
+        Debug.Log("预期敌人卡没有由该入口进入 CD：" + (enemyCardState.currentCooldown == enemyCooldownBefore));
+        Debug.Log("预期敌人卡 UseCount 未变化：" + (enemyCardState.currentUseCount == enemyUseCountBefore));
+        Debug.Log("预期 shouldCompleteItem：True，实际是否符合：" + (result != null && result.shouldCompleteItem));
+        Debug.Log("预期 triggeredEventChain：True，实际是否符合：" + (result != null && result.triggeredEventChain));
+
+        if (expectedDamage == 0)
+        {
+            Debug.Log("完全防御验证：防御者 HP 是否不变：" + (testDefender.currentHP == defenderHPBefore));
+            Debug.Log("完全防御验证：没有虚假伤害：" + (result != null && !result.hasDamage && result.damage == 0));
         }
     }
 
@@ -2478,6 +2870,229 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("重复执行前后 HP 是否保持不变：" + (hpBeforeRepeatExecute == allyB.currentHP));
     }
 
+    // RunActionSlotPassiveGuardCandidateOrderBasicTestSequence = 测试两张 PassiveGuard 按槽位顺序选择
+    void RunActionSlotPassiveGuardCandidateOrderBasicTestSequence()
+    {
+        Debug.Log("===== PassiveGuard 候选顺序测试开始 =====");
+
+        StartTurn();
+
+        CardTestData enemyAttackCard = CreateFixedAttackCardData("passive_guard_order_enemy_attack", "被动守备顺序测试敌人攻击", 4);
+        BattleCardState enemyAttack = BattleCardManager.CreateBattleCard(enemy, enemyAttackCard, "passive_guard_order_enemy_attack_copy_0");
+        BattleCardState guard1 = CreateTestDefenseCardForCharacter(allyB, "passive_guard_order_b_defense_1", 6, 1);
+        BattleCardState guard2 = CreateTestDefenseCardForCharacter(allyB, "passive_guard_order_b_defense_2", 6, 1);
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "passive_guard_order_intent_001",
+            enemy,
+            enemyAttack,
+            allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2);
+
+        bool assignB1 = BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 1, allyB, guard1);
+        bool assignB2 = BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 2, allyB, guard2);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(executionPlan);
+
+        Debug.Log("预期 B槽位1 PassiveGuard 安排成功：" + assignB1);
+        Debug.Log("预期 B槽位2 PassiveGuard 安排成功：" + assignB2);
+        Debug.Log("预期 item 候选数量为 2：" + (item != null && item.passiveGuardCandidates != null && item.passiveGuardCandidates.Count == 2));
+        Debug.Log("预期第 1 候选为 B槽位1：" + (item != null && item.passiveGuardCandidates.Count > 0 && item.passiveGuardCandidates[0].slotIndex == 1));
+        Debug.Log("预期第 2 候选为 B槽位2：" + (item != null && item.passiveGuardCandidates.Count > 1 && item.passiveGuardCandidates[1].slotIndex == 2));
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        Debug.Log("预期只触发 B槽位1：" + (BattleActionSlotManager.GetSlot(actionSlots, allyB, 1).isUsed && !BattleActionSlotManager.GetSlot(actionSlots, allyB, 2).isUsed));
+        Debug.Log("预期 B槽位1 Defense 进入 CD：" + (guard1.currentCooldown == guard1.cardData.cooldown));
+        Debug.Log("预期 B槽位2 Defense CD 不变：" + (guard2.currentCooldown == 0));
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+    }
+
+    // RunActionSlotPassiveGuardSkipInvalidCandidateBasicTestSequence = 测试第一候选执行前失效时跳过
+    void RunActionSlotPassiveGuardSkipInvalidCandidateBasicTestSequence()
+    {
+        Debug.Log("===== PassiveGuard 跳过失效候选测试开始 =====");
+
+        StartTurn();
+
+        CardTestData enemyAttackCard = CreateFixedAttackCardData("passive_guard_skip_enemy_attack", "被动守备跳过测试敌人攻击", 4);
+        BattleCardState enemyAttack = BattleCardManager.CreateBattleCard(enemy, enemyAttackCard, "passive_guard_skip_enemy_attack_copy_0");
+        BattleCardState guard1 = CreateTestDefenseCardForCharacter(allyB, "passive_guard_skip_b_defense_1", 6, 1);
+        BattleCardState guard2 = CreateTestDefenseCardForCharacter(allyB, "passive_guard_skip_b_defense_2", 6, 1);
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "passive_guard_skip_intent_001",
+            enemy,
+            enemyAttack,
+            allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2);
+
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 1, allyB, guard1);
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 2, allyB, guard2);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(actionSlots, intentQueue);
+        BattleActionSlotManager.GetSlot(actionSlots, allyB, 1).MarkUsed();
+
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        Debug.Log("预期 B槽位1 保持已使用但未进入 CD：" + (BattleActionSlotManager.GetSlot(actionSlots, allyB, 1).isUsed && guard1.currentCooldown == 0));
+        Debug.Log("预期 B槽位2 接管并 MarkUsed：" + BattleActionSlotManager.GetSlot(actionSlots, allyB, 2).isUsed);
+        Debug.Log("预期 B槽位2 Defense 进入 CD：" + (guard2.currentCooldown == guard2.cardData.cooldown));
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+    }
+
+    // RunActionSlotPassiveGuardFullBlockBasicTestSequence = 测试被动守备完全防御
+    void RunActionSlotPassiveGuardFullBlockBasicTestSequence()
+    {
+        RunActionSlotPassiveGuardDefenseSubTest(
+            "PassiveGuardFullBlock",
+            4,
+            6,
+            "DefenseFullBlock",
+            0
+        );
+    }
+
+    // RunActionSlotPassiveGuardReducedDamageBasicTestSequence = 测试被动守备减伤
+    void RunActionSlotPassiveGuardReducedDamageBasicTestSequence()
+    {
+        RunActionSlotPassiveGuardDefenseSubTest(
+            "PassiveGuardReducedDamage",
+            8,
+            3,
+            "DefenseReducedDamage",
+            5
+        );
+    }
+
+    // RunActionSlotPassiveGuardTargetMismatchBasicTestSequence = 测试目标角色不匹配时不触发
+    void RunActionSlotPassiveGuardTargetMismatchBasicTestSequence()
+    {
+        Debug.Log("===== PassiveGuard 目标不匹配测试开始 =====");
+
+        StartTurn();
+
+        CardTestData enemyAttackCard = CreateFixedAttackCardData("passive_guard_mismatch_enemy_attack", "被动守备目标不匹配敌人攻击", 4);
+        BattleCardState enemyAttack = BattleCardManager.CreateBattleCard(enemy, enemyAttackCard, "passive_guard_mismatch_enemy_attack_copy_0");
+        BattleCardState allyAGuard = CreateTestDefenseCardForCharacter(allyA, "passive_guard_mismatch_a_defense", 6, 1);
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "passive_guard_mismatch_intent_001",
+            enemy,
+            enemyAttack,
+            allyB,
+            1,
+            1
+        );
+
+        int allyBHPBefore = allyB.currentHP;
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2);
+
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyA, 1, allyA, allyAGuard);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(executionPlan);
+
+        Debug.Log("预期 A 的 PassiveGuard 不进入 B 的候选：" + (item != null && item.passiveGuardCandidates.Count == 0));
+
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        Debug.Log("预期正常走 Unresponded，B HP 下降：" + (allyB.currentHP < allyBHPBefore));
+        Debug.Log("预期 A Defense CD 不变：" + (allyAGuard.currentCooldown == 0));
+        Debug.Log("预期 A槽位1 未 MarkUsed：" + !BattleActionSlotManager.GetSlot(actionSlots, allyA, 1).isUsed);
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+    }
+
+    // RunActionSlotPassiveGuardRespondedIntentNotTriggeredBasicTestSequence = 测试已有指定响应时不触发 PassiveGuard
+    void RunActionSlotPassiveGuardRespondedIntentNotTriggeredBasicTestSequence()
+    {
+        Debug.Log("===== PassiveGuard 已有指定响应不触发测试开始 =====");
+
+        StartTurn();
+
+        CardTestData lowEnemyAttackCard = CreateFixedAttackCardData("passive_guard_responded_enemy_attack", "被动守备指定响应敌人攻击", 1);
+        BattleCardState enemyAttack = BattleCardManager.CreateBattleCard(enemy, lowEnemyAttackCard, "passive_guard_responded_enemy_attack_copy_0");
+        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(allyB, "passive_guard_responded_b_attack", 10);
+        BattleCardState passiveGuard = CreateTestDefenseCardForCharacter(allyB, "passive_guard_responded_b_defense", 6, 1);
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            "passive_guard_responded_intent_001",
+            enemy,
+            enemyAttack,
+            allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, allyB, 1, allyB, responseAttack, intent1);
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 2, allyB, passiveGuard);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(executionPlan);
+
+        Debug.Log("预期计划第 1 项为 RespondedEnemyIntent：" + (item != null && item.executionType == BattleExecutionItemType.RespondedEnemyIntent));
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        Debug.Log("预期 B槽位2 PassiveGuard 未 MarkUsed：" + !BattleActionSlotManager.GetSlot(actionSlots, allyB, 2).isUsed);
+        Debug.Log("预期 B槽位2 Defense CD 不变：" + (passiveGuard.currentCooldown == 0));
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+    }
+
+    // RunActionSlotPassiveGuardAssignLegalityBasicTestSequence = 测试被动守备安排合法性
+    void RunActionSlotPassiveGuardAssignLegalityBasicTestSequence()
+    {
+        Debug.Log("===== PassiveGuard 安排合法性测试开始 =====");
+
+        StartTurn();
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2);
+        BattleCardState guard1 = CreateTestDefenseCardForCharacter(allyB, "passive_guard_legality_b_defense_1", 6, 1);
+        BattleCardState guard2 = CreateTestDefenseCardForCharacter(allyB, "passive_guard_legality_b_defense_2", 6, 1);
+        BattleCardState guard3 = CreateTestDefenseCardForCharacter(allyB, "passive_guard_legality_b_defense_3", 6, 1);
+        BattleCardState attackCard = CreateFixedAttackCardForCharacter(allyA, "passive_guard_legality_a_attack", 4);
+        BattleCardState abilityCard = CreateCardStateForCharacter(allyA, "passive_guard_legality_a_ability", "测试 Ability", "Ability", 0, 0);
+        BattleCardState dodgeCard = CreateCardStateForCharacter(allyA, "passive_guard_legality_a_dodge", "测试 Dodge", CardType.Dodge, 0, 0);
+
+        bool assignB1 = BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 1, allyB, guard1);
+        bool repeatSameCard = BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 2, allyB, guard1);
+        bool assignB2 = BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 2, allyB, guard2);
+        bool attackRejected = BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyA, 1, allyA, attackCard);
+        bool abilityRejected = BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyA, 1, allyA, abilityCard);
+        bool dodgeRejected = BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyA, 1, allyA, dodgeCard);
+        bool thirdDefenseOnOccupiedSlot = BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 1, allyB, guard3);
+
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        Debug.Log("预期同角色两个不同槽位可分别安排 Defense PassiveGuard：" + (assignB1 && assignB2));
+        Debug.Log("预期同一 BattleCardState 不能重复安排：" + !repeatSameCard);
+        Debug.Log("预期 Attack 不能 AssignPassiveGuard：" + !attackRejected);
+        Debug.Log("预期 Ability 不能 AssignPassiveGuard：" + !abilityRejected);
+        Debug.Log("预期 Dodge 不能 AssignPassiveGuard：" + !dodgeRejected);
+        Debug.Log("预期已占用槽位不能再安排第三张 Defense：" + !thirdDefenseOnOccupiedSlot);
+    }
+
     // RunActionSlotExecutionPlanExecuteRespondedBasicTestSequence = 执行已响应敌人意图正式执行基础测试
     void RunActionSlotExecutionPlanExecuteRespondedBasicTestSequence()
     {
@@ -2616,6 +3231,146 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
         Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
         Debug.Log("敌人胜利分支验证：我方角色A 应作为 actualTargetCharacter 扣血");
+    }
+
+    // RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardReducedDamageBasicTestSequence = 敌人胜利后触发 PassiveGuard 减伤
+    void RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardReducedDamageBasicTestSequence()
+    {
+        RunRespondedAttackPassiveGuardSubTest(
+            "RespondedEnemyWinPassiveGuardReducedDamage",
+            4,
+            8,
+            2,
+            5,
+            -1,
+            false,
+            false,
+            true,
+            false,
+            3,
+            true,
+            "EnemyWinPassiveGuardReducedDamage"
+        );
+    }
+
+    // RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardFullBlockBasicTestSequence = 敌人胜利后触发 PassiveGuard 完全防御
+    void RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardFullBlockBasicTestSequence()
+    {
+        RunRespondedAttackPassiveGuardSubTest(
+            "RespondedEnemyWinPassiveGuardFullBlock",
+            4,
+            8,
+            2,
+            10,
+            -1,
+            false,
+            false,
+            true,
+            false,
+            0,
+            true,
+            "EnemyWinPassiveGuardFullBlock"
+        );
+    }
+
+    // RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardCandidateOrderBasicTestSequence = 多候选时按槽位顺序选择第一张
+    void RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardCandidateOrderBasicTestSequence()
+    {
+        RunRespondedAttackPassiveGuardSubTest(
+            "RespondedEnemyWinPassiveGuardCandidateOrder",
+            4,
+            8,
+            3,
+            5,
+            10,
+            false,
+            false,
+            true,
+            false,
+            3,
+            true,
+            "EnemyWinPassiveGuardReducedDamage"
+        );
+    }
+
+    // RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardSkipInvalidBasicTestSequence = 第一候选执行前失效时跳过
+    void RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardSkipInvalidBasicTestSequence()
+    {
+        RunRespondedAttackPassiveGuardSubTest(
+            "RespondedEnemyWinPassiveGuardSkipInvalid",
+            4,
+            8,
+            3,
+            5,
+            10,
+            true,
+            false,
+            false,
+            true,
+            0,
+            true,
+            "EnemyWinPassiveGuardFullBlock"
+        );
+    }
+
+    // RunActionSlotExecutionPlanExecuteRespondedEnemyWinNoPassiveGuardBasicTestSequence = 没有守备时回退原 EnemyWin 伤害
+    void RunActionSlotExecutionPlanExecuteRespondedEnemyWinNoPassiveGuardBasicTestSequence()
+    {
+        RunRespondedAttackPassiveGuardSubTest(
+            "RespondedEnemyWinNoPassiveGuard",
+            4,
+            8,
+            2,
+            -1,
+            -1,
+            false,
+            false,
+            false,
+            false,
+            8,
+            false,
+            "EnemyWin"
+        );
+    }
+
+    // RunActionSlotExecutionPlanExecuteRespondedPlayerWinPassiveGuardNotTriggeredBasicTestSequence = 玩家胜利时不触发 PassiveGuard
+    void RunActionSlotExecutionPlanExecuteRespondedPlayerWinPassiveGuardNotTriggeredBasicTestSequence()
+    {
+        RunRespondedAttackPassiveGuardSubTest(
+            "RespondedPlayerWinPassiveGuardNotTriggered",
+            10,
+            4,
+            2,
+            8,
+            -1,
+            false,
+            false,
+            false,
+            false,
+            0,
+            false,
+            "PlayerWin"
+        );
+    }
+
+    // RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardTargetMismatchBasicTestSequence = 目标角色不匹配时不触发守备
+    void RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardTargetMismatchBasicTestSequence()
+    {
+        RunRespondedAttackPassiveGuardSubTest(
+            "RespondedEnemyWinPassiveGuardTargetMismatch",
+            4,
+            8,
+            2,
+            10,
+            -1,
+            false,
+            true,
+            false,
+            false,
+            8,
+            false,
+            "EnemyWin"
+        );
     }
 
     // RunActionSlotExecutionPlanExecuteRespondedTieLimitTestSequence = 执行已响应敌人意图连续平局上限测试
@@ -2774,6 +3529,190 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
     }
 
+    void RunRespondedAttackPassiveGuardSubTest(
+        string title,
+        int playerAttackPoint,
+        int enemyAttackPoint,
+        int slotCountPerCharacter,
+        int guardSlot2DefensePoint,
+        int guardSlot3DefensePoint,
+        bool invalidateGuardSlot2BeforeExecute,
+        bool guardSlot2OwnerIsAllyA,
+        bool expectGuardSlot2Used,
+        bool expectGuardSlot3Used,
+        int expectedDamageToAllyB,
+        bool expectPassiveGuardResult,
+        string expectedResultTypeInLog
+    )
+    {
+        Debug.Log("===== " + title + " 测试开始 =====");
+        Debug.Log("预期 resultType 出现在 Resolver 日志：" + expectedResultTypeInLog);
+
+        StartTurn();
+
+        int allyBHPBefore = allyB.currentHP;
+        int enemyHPBefore = enemy.currentHP;
+
+        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(
+            allyB,
+            title + "_b_response_attack",
+            playerAttackPoint
+        );
+
+        CardTestData enemyAttackCard = CreateObservableEnemyAttackCardData(
+            title + "_enemy_attack",
+            title + "敌人攻击",
+            enemyAttackPoint
+        );
+
+        BattleCardState enemyAttack = BattleCardManager.CreateBattleCard(
+            enemy,
+            enemyAttackCard,
+            title + "_enemy_attack_copy_0"
+        );
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            title + "_intent_001",
+            enemy,
+            enemyAttack,
+            allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(
+            allyA,
+            allyB,
+            slotCountPerCharacter
+        );
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            allyB,
+            1,
+            allyB,
+            responseAttack,
+            intent1
+        );
+
+        BattleCardState guardSlot2 = null;
+        BattleCardState guardSlot3 = null;
+
+        if (guardSlot2DefensePoint >= 0)
+        {
+            CharacterData guardOwner = guardSlot2OwnerIsAllyA ? allyA : allyB;
+            guardSlot2 = CreateTestDefenseCardForCharacter(
+                guardOwner,
+                title + "_guard_slot_2",
+                guardSlot2DefensePoint,
+                1
+            );
+
+            BattleActionSlotManager.AssignPassiveGuard(
+                actionSlots,
+                guardOwner,
+                2,
+                guardOwner,
+                guardSlot2
+            );
+        }
+
+        if (guardSlot3DefensePoint >= 0)
+        {
+            guardSlot3 = CreateTestDefenseCardForCharacter(
+                allyB,
+                title + "_guard_slot_3",
+                guardSlot3DefensePoint,
+                1
+            );
+
+            BattleActionSlotManager.AssignPassiveGuard(
+                actionSlots,
+                allyB,
+                3,
+                allyB,
+                guardSlot3
+            );
+        }
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
+            actionSlots,
+            intentQueue
+        );
+
+        BattleExecutionItem firstItem = GetFirstExecutionItem(executionPlan);
+        int candidateCount = firstItem != null && firstItem.passiveGuardCandidates != null
+            ? firstItem.passiveGuardCandidates.Count
+            : 0;
+
+        Debug.Log("计划生成后 Responded item 被动守备候选数：" + candidateCount);
+
+        if (invalidateGuardSlot2BeforeExecute)
+        {
+            BattleActionSlot guardSlot = BattleActionSlotManager.GetSlot(actionSlots, allyB, 2);
+
+            if (guardSlot != null && guardSlot.cardState != null)
+            {
+                guardSlot.cardState.currentCooldown = 1;
+                Debug.Log("执行前手动让 B槽位2 PassiveGuard 失效：currentCooldown = 1");
+            }
+        }
+
+        BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        BattleActionSlot responseSlot = BattleActionSlotManager.GetSlot(actionSlots, allyB, 1);
+        BattleActionSlot guardSlot2After = guardSlot2OwnerIsAllyA
+            ? BattleActionSlotManager.GetSlot(actionSlots, allyA, 2)
+            : BattleActionSlotManager.GetSlot(actionSlots, allyB, 2);
+        bool shouldCheckGuardSlot3 = guardSlot3DefensePoint >= 0 && slotCountPerCharacter >= 3;
+        BattleActionSlot guardSlot3After = shouldCheckGuardSlot3
+            ? BattleActionSlotManager.GetSlot(actionSlots, allyB, 3)
+            : null;
+
+        Debug.Log("执行后 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
+        Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+        Debug.Log("预期 B HP 变化：" + expectedDamageToAllyB + "，实际是否符合：" + (allyB.currentHP == allyBHPBefore - expectedDamageToAllyB));
+        Debug.Log("预期主响应 B槽位1 MarkUsed：" + (responseSlot != null && responseSlot.isUsed));
+        Debug.Log("预期 B槽位2 / A槽位2 PassiveGuard 使用状态：" + expectGuardSlot2Used + "，实际是否符合：" + IsSlotUsedStateExpected(guardSlot2After, expectGuardSlot2Used));
+
+        if (shouldCheckGuardSlot3)
+        {
+            Debug.Log("预期 B槽位3 PassiveGuard 使用状态：" + expectGuardSlot3Used + "，实际是否符合：" + IsSlotUsedStateExpected(guardSlot3After, expectGuardSlot3Used));
+        }
+
+        Debug.Log("预期 PassiveGuard 结果：" + expectPassiveGuardResult + "，实际可从 resultType 日志确认：" + expectedResultTypeInLog);
+        int expectedEnemyUseCount = playerAttackPoint < enemyAttackPoint ? 1 : 0;
+        Debug.Log("预期敌人 UseCount：" + expectedEnemyUseCount + "，实际是否符合：" + (enemyAttack.currentUseCount == expectedEnemyUseCount));
+        Debug.Log("预期敌人卡没有被 known-point Defense 第二次完成：" + (enemyAttack.currentUseCount == expectedEnemyUseCount));
+        Debug.Log("预期 B槽位2 Defense CD：" + (guardSlot2 != null ? guardSlot2.currentCooldown : -1));
+
+        if (shouldCheckGuardSlot3)
+        {
+            Debug.Log("预期 B槽位3 Defense CD：" + (guardSlot3 != null ? guardSlot3.currentCooldown : -1));
+        }
+
+        if (playerAttackPoint > enemyAttackPoint)
+        {
+            Debug.Log("PlayerWin 分支：敌人 HP 是否下降：" + (enemy.currentHP < enemyHPBefore));
+        }
+        else if (expectedDamageToAllyB == 0)
+        {
+            Debug.Log("EnemyWin + FullBlock 分支：实际目标角色 HP 是否保持不变：" + (allyB.currentHP == allyBHPBefore));
+        }
+        else
+        {
+            Debug.Log("EnemyWin 分支：实际目标角色 HP 是否按预期下降：" + (allyB.currentHP == allyBHPBefore - expectedDamageToAllyB));
+        }
+
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+    }
+
     // ================================
     // Action Slot 测试辅助方法
     // ================================
@@ -2801,6 +3740,152 @@ public class CardLoadTest : MonoBehaviour
             allyAAttackCardState.cardData,
             instanceID
         );
+    }
+
+    // CreateFixedAttackCardForCharacter = 给测试角色创建固定点数攻击卡
+    BattleCardState CreateFixedAttackCardForCharacter(CharacterData owner, string instanceID, int point)
+    {
+        return BattleCardManager.CreateBattleCard(
+            owner,
+            CreateFixedAttackCardData(instanceID + "_data", "固定点数攻击", point),
+            instanceID
+        );
+    }
+
+    // CreateTestDefenseCardForCharacter = 给测试角色创建固定点数防御卡
+    BattleCardState CreateTestDefenseCardForCharacter(CharacterData owner, string instanceID, int defensePoint, int cooldown)
+    {
+        CardTestData defenseCard = new CardTestData
+        {
+            cardID = instanceID + "_data",
+            cardName = "固定点数防御",
+            cardType = CardType.Defense,
+            isClashable = false,
+            minPoint = defensePoint,
+            maxPoint = defensePoint,
+            cooldown = cooldown,
+            defenseFormula = "PointAsDefense"
+        };
+
+        return BattleCardManager.CreateBattleCard(owner, defenseCard, instanceID);
+    }
+
+    // CreateFixedAttackCardData = 创建固定点数攻击卡数据
+    CardTestData CreateFixedAttackCardData(string cardID, string cardName, int point)
+    {
+        return new CardTestData
+        {
+            cardID = cardID,
+            cardName = cardName,
+            cardType = CardType.Attack,
+            isClashable = true,
+            minPoint = point,
+            maxPoint = point,
+            damageFormula = "PointAsDamage",
+            maxUseCount = 3
+        };
+    }
+
+    // CreateObservableEnemyAttackCardData = 创建可观察 UseCount 的敌人攻击测试卡
+    CardTestData CreateObservableEnemyAttackCardData(string cardID, string cardName, int point)
+    {
+        CardTestData cardData = CreateFixedAttackCardData(cardID, cardName, point);
+        cardData.isSinCard = true;
+        cardData.sinCardCategory = SinCardCategory.Clash;
+        cardData.sinCardUseRule = SinCardUseRule.UseCount;
+        cardData.maxUseCount = 3;
+        return cardData;
+    }
+
+    bool IsSlotUsedStateExpected(BattleActionSlot slot, bool expectedUsed)
+    {
+        if (slot == null)
+        {
+            return !expectedUsed;
+        }
+
+        return slot.isUsed == expectedUsed;
+    }
+
+    // CreateCardStateForCharacter = 创建指定 cardType 的测试卡牌状态
+    BattleCardState CreateCardStateForCharacter(
+        CharacterData owner,
+        string instanceID,
+        string cardName,
+        string cardType,
+        int minPoint,
+        int maxPoint
+    )
+    {
+        CardTestData cardData = new CardTestData
+        {
+            cardID = instanceID + "_data",
+            cardName = cardName,
+            cardType = cardType,
+            isClashable = false,
+            minPoint = minPoint,
+            maxPoint = maxPoint,
+            maxUseCount = 3
+        };
+
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
+    }
+
+    // GetFirstExecutionItem = 读取计划中的第一项
+    BattleExecutionItem GetFirstExecutionItem(BattleExecutionPlan executionPlan)
+    {
+        if (executionPlan == null || executionPlan.executionItems == null || executionPlan.executionItems.Count == 0)
+        {
+            return null;
+        }
+
+        return executionPlan.executionItems[0];
+    }
+
+    // RunActionSlotPassiveGuardDefenseSubTest = 被动守备完整执行子测试
+    void RunActionSlotPassiveGuardDefenseSubTest(
+        string title,
+        int enemyAttackPoint,
+        int defensePoint,
+        string expectedResultType,
+        int expectedDamage
+    )
+    {
+        Debug.Log("===== " + title + " 测试开始 =====");
+
+        StartTurn();
+
+        int hpBefore = allyB.currentHP;
+        CardTestData enemyAttackCard = CreateFixedAttackCardData(title + "_enemy_attack", title + "敌人攻击", enemyAttackPoint);
+        BattleCardState enemyAttack = BattleCardManager.CreateBattleCard(enemy, enemyAttackCard, title + "_enemy_attack_copy_0");
+        BattleCardState passiveGuard = CreateTestDefenseCardForCharacter(allyB, title + "_b_defense", defensePoint, 1);
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(
+            title + "_intent_001",
+            enemy,
+            enemyAttack,
+            allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2);
+
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 1, allyB, passiveGuard);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(actionSlots, intentQueue);
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+        BattleActionSlotManager.PrintSlotStates(actionSlots);
+
+        Debug.Log("预期 resultType 出现在 Defense Resolver 日志：" + expectedResultType);
+        Debug.Log("预期最终伤害：" + expectedDamage + "，实际 HP 是否符合：" + (allyB.currentHP == hpBefore - expectedDamage));
+        Debug.Log("预期只使用 B槽位1：" + BattleActionSlotManager.GetSlot(actionSlots, allyB, 1).isUsed);
+        Debug.Log("预期 Defense 进入 CD：" + (passiveGuard.currentCooldown == passiveGuard.cardData.cooldown));
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
     }
 
     // PrintEnemyIntentActualTarget = 打印敌人意图当前实际目标

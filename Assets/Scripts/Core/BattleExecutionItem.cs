@@ -1,4 +1,6 @@
 ﻿// 脚本中文说明：战斗执行项。负责记录执行计划中的单个处理项目，例如已响应敌人意图、无人响应敌人意图或自由行动。
+using System.Collections.Generic;
+
 // BattleExecutionItemType = 战斗执行项类型
 // Type = 类型，用来区分这一项到底是响应敌人意图、无人响应敌人意图，还是自由行动。
 public enum BattleExecutionItemType
@@ -38,6 +40,10 @@ public class BattleExecutionItem
     // 如果这一项是 UnrespondedEnemyIntent，无人响应敌人意图时可能没有 actionSlot。
     public BattleActionSlot actionSlot;
 
+    // passiveGuardCandidates = 被动守备候选槽位
+    // 只保存槽位引用，不复制槽位。当前只给 UnrespondedEnemyIntent 使用。
+    public List<BattleActionSlot> passiveGuardCandidates;
+
     // isCompleted = 是否已经完成
     // 用来记录这个执行项是否已经被执行过。
     public bool isCompleted;
@@ -58,13 +64,20 @@ public class BattleExecutionItem
 
         // actionSlot = 行动槽位
         // BattleActionSlot = 战斗行动槽位。
-        BattleActionSlot actionSlot
+        BattleActionSlot actionSlot,
+
+        // passiveGuardCandidates = 被动守备候选槽位
+        // 如果没有候选，允许传 null，构造函数会转为空列表。
+        List<BattleActionSlot> passiveGuardCandidates = null
     )
     {
         this.order = order;
         this.executionType = executionType;
         this.enemyIntent = enemyIntent;
         this.actionSlot = actionSlot;
+        this.passiveGuardCandidates = passiveGuardCandidates != null
+            ? passiveGuardCandidates
+            : new List<BattleActionSlot>();
         isCompleted = false;
     }
 }
