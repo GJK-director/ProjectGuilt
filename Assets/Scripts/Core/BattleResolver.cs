@@ -314,7 +314,7 @@ public static class BattleResolver
     }
 
     // ResolveRespondedEnemyIntent = 正式结算已响应敌人意图
-    // 第一版支持玩家攻击卡 vs 敌人攻击卡，以及玩家防御卡 vs 敌人攻击卡。
+    // 当前支持玩家 Attack / Defense / Dodge 指定响应敌人 Attack。
     public static BattleResolveResult ResolveRespondedEnemyIntent(
         BattleActionSlot actionSlot,
         BattleEnemyIntent enemyIntent
@@ -410,6 +410,21 @@ public static class BattleResolver
             }
 
             return ResolveRespondedAttackVsAttack(actionSlot, enemyIntent, passiveGuardCandidates);
+        }
+
+        if (playerCard.cardType == CardType.Dodge)
+        {
+            if (IsInvalidPointRange(playerCard.minPoint, playerCard.maxPoint))
+            {
+                return CreateInvalidResolveResult(
+                    "ResolveRespondedEnemyIntent 失败：玩家闪避卡点数范围异常：" +
+                    playerCard.minPoint +
+                    "-" +
+                    playerCard.maxPoint
+                );
+            }
+
+            return ResolveRespondedDodgeVsAttack(actionSlot, enemyIntent);
         }
 
         if (playerCard.cardType == CardType.Defense)
@@ -690,6 +705,18 @@ public static class BattleResolver
                 false,
                 false,
                 ClashResult.Win
+            );
+
+            TriggerBattleEvent(
+                BattleTiming.Resolved,
+                loser,
+                attacker,
+                loserCardState,
+                loserPoint,
+                0,
+                false,
+                false,
+                ClashResult.Lose
             );
 
             if (!isPlayerWin)
@@ -1180,6 +1207,214 @@ public static class BattleResolver
     // ================================
     // 闪避 vs 攻击
     // ================================
+
+    static BattleResolveResult ResolveRespondedDodgeVsAttack(
+        BattleActionSlot playerSlot,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        if (playerSlot == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedDodgeVsAttack 失败：玩家响应槽位为空");
+        }
+
+        if (enemyIntent == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedDodgeVsAttack 失败：敌人意图为空");
+        }
+
+        CharacterData playerUnit = playerSlot.actor;
+        BattleCardState dodgeCardState = playerSlot.cardState;
+        CharacterData enemyUnit = enemyIntent.enemy;
+        BattleCardState enemyCardState = enemyIntent.enemyCardState;
+        CharacterData actualTarget = enemyIntent.actualTargetCharacter;
+
+        if (playerUnit == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedDodgeVsAttack 失败：玩家单位为空");
+        }
+
+        if (enemyUnit == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedDodgeVsAttack 失败：敌人单位为空");
+        }
+
+        if (dodgeCardState == null || dodgeCardState.cardData == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedDodgeVsAttack 失败：玩家闪避卡为空");
+        }
+
+        if (enemyCardState == null || enemyCardState.cardData == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedDodgeVsAttack 失败：敌人攻击卡为空");
+        }
+
+        if (actualTarget == null)
+        {
+            return CreateInvalidResolveResult("ResolveRespondedDodgeVsAttack 失败：实际目标为空");
+        }
+
+        if (dodgeCardState.cardData.cardType != CardType.Dodge)
+        {
+            return CreateInvalidResolveResult(
+                "ResolveRespondedDodgeVsAttack 失败：玩家卡牌不是 Dodge：" +
+                dodgeCardState.cardData.cardType
+            );
+        }
+
+        if (enemyCardState.cardData.cardType != CardType.Attack)
+        {
+            return CreateInvalidResolveResult(
+                "ResolveRespondedDodgeVsAttack 失败：敌人卡牌不是 Attack：" +
+                enemyCardState.cardData.cardType
+            );
+        }
+
+        if (IsInvalidPointRange(dodgeCardState.cardData.minPoint, dodgeCardState.cardData.maxPoint))
+        {
+            return CreateInvalidResolveResult(
+                "ResolveRespondedDodgeVsAttack 失败：玩家闪避卡点数范围异常：" +
+                dodgeCardState.cardData.minPoint +
+                "-" +
+                dodgeCardState.cardData.maxPoint
+            );
+        }
+
+        if (IsInvalidPointRange(enemyCardState.cardData.minPoint, enemyCardState.cardData.maxPoint))
+        {
+            return CreateInvalidResolveResult(
+                "ResolveRespondedDodgeVsAttack 失败：敌人攻击卡点数范围异常：" +
+                enemyCardState.cardData.minPoint +
+                "-" +
+                enemyCardState.cardData.maxPoint
+            );
+        }
+
+        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
+        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
+
+        int playerDodgePoint = 0;
+        int enemyAttackPoint = 0;
+
+        for (int attempt = 1; attempt <= MaxRespondedEnemyIntentClashAttempts; attempt++)
+        {
+            playerDodgePoint = BattleCalculator.GetFinalClashPoint(playerUnit, dodgeCardState.cardData);
+            enemyAttackPoint = BattleCalculator.GetFinalClashPoint(enemyUnit, enemyCardState.cardData);
+
+            if (playerDodgePoint == enemyAttackPoint)
+            {
+                Debug.Log(
+                    "ResolveRespondedDodgeVsAttack 第" +
+                    attempt +
+                    "次平局：玩家 Dodge 点数 " +
+                    playerDodgePoint +
+                    "，敌人 Attack 点数 " +
+                    enemyAttackPoint
+                );
+
+                continue;
+            }
+
+            if (playerDodgePoint > enemyAttackPoint)
+            {
+                TriggerBattleEvent(BattleTiming.ClashWin, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
+                TriggerBattleEvent(BattleTiming.ClashLose, enemyUnit, playerUnit, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Lose);
+                TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
+                TriggerBattleEvent(BattleTiming.Resolved, enemyUnit, playerUnit, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Lose);
+
+                BattleResolveResult result = new BattleResolveResult();
+                result.isSuccess = true;
+                result.shouldCompleteItem = true;
+                result.playerCardUsed = true;
+                result.enemyCardUsed = true;
+                result.hasDamage = false;
+                result.damage = 0;
+                result.damagedCharacter = null;
+                result.resultType = "DodgeSuccess";
+                result.playerPoint = playerDodgePoint;
+                result.enemyPoint = enemyAttackPoint;
+                result.clashAttemptCount = attempt;
+                result.isTieLimitReached = false;
+                result.triggeredEventChain = true;
+                result.message =
+                    "ResolveRespondedDodgeVsAttack 完成：DodgeSuccess，玩家 Dodge 点数 " +
+                    playerDodgePoint +
+                    "，敌人 Attack 点数 " +
+                    enemyAttackPoint +
+                    "。闪避成功，不触发 Hit / AfterDamage / AfterKill";
+
+                Debug.Log(result.message);
+
+                return result;
+            }
+
+            TriggerBattleEvent(BattleTiming.ClashWin, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Win);
+            TriggerBattleEvent(BattleTiming.ClashLose, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
+            TriggerBattleEvent(BattleTiming.Resolved, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Win);
+            TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
+
+            int damageScaled = BattleCalculator.GetFinalDamageScaled(
+                enemyUnit,
+                actualTarget,
+                enemyCardState.cardData,
+                enemyAttackPoint
+            );
+            int hpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+
+            TriggerBattleEvent(BattleTiming.Hit, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, hpDamage, hpDamage > 0, false, ClashResult.Win);
+            ApplyDamageAndTriggerEvents(enemyUnit, actualTarget, enemyCardState, hpDamage, enemyAttackPoint);
+
+            BattleResolveResult failedResult = new BattleResolveResult();
+            failedResult.isSuccess = true;
+            failedResult.shouldCompleteItem = true;
+            failedResult.playerCardUsed = true;
+            failedResult.enemyCardUsed = true;
+            failedResult.hasDamage = hpDamage > 0;
+            failedResult.damage = hpDamage;
+            failedResult.damagedCharacter = hpDamage > 0 ? actualTarget : null;
+            failedResult.resultType = "DodgeFailed";
+            failedResult.playerPoint = playerDodgePoint;
+            failedResult.enemyPoint = enemyAttackPoint;
+            failedResult.clashAttemptCount = attempt;
+            failedResult.isTieLimitReached = false;
+            failedResult.triggeredEventChain = true;
+            failedResult.message =
+                "ResolveRespondedDodgeVsAttack 完成：DodgeFailed，玩家 Dodge 点数 " +
+                playerDodgePoint +
+                "，敌人 Attack 点数 " +
+                enemyAttackPoint +
+                "，最终 HP 伤害 " +
+                hpDamage +
+                "。复用敌人最终胜利点数，未重新 Roll";
+
+            Debug.Log(failedResult.message);
+
+            return failedResult;
+        }
+
+        BattleResolveResult tieLimitResult = new BattleResolveResult();
+        tieLimitResult.isSuccess = true;
+        tieLimitResult.shouldCompleteItem = true;
+        tieLimitResult.playerCardUsed = false;
+        tieLimitResult.enemyCardUsed = false;
+        tieLimitResult.hasDamage = false;
+        tieLimitResult.damage = 0;
+        tieLimitResult.damagedCharacter = null;
+        tieLimitResult.resultType = "TieLimit";
+        tieLimitResult.playerPoint = playerDodgePoint;
+        tieLimitResult.enemyPoint = enemyAttackPoint;
+        tieLimitResult.clashAttemptCount = MaxRespondedEnemyIntentClashAttempts;
+        tieLimitResult.isTieLimitReached = true;
+        tieLimitResult.triggeredEventChain = false;
+        tieLimitResult.message =
+            "ResolveRespondedDodgeVsAttack 连续 " +
+            MaxRespondedEnemyIntentClashAttempts +
+            " 次平局仍未分出胜负，自动结束，双方不造成伤害，双方卡牌不算成功使用";
+
+        Debug.Log(tieLimitResult.message);
+
+        return tieLimitResult;
+    }
 
     static void HandleDodgeVsMultipleAttacks(
         CharacterData allyUnit,

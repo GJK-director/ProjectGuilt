@@ -63,7 +63,7 @@ public static class BattleExecutionPlanManager
                     BattleExecutionItemType.UnrespondedEnemyIntent,
                     intent,
                     null,
-                    CollectPassiveGuardCandidates(actionSlots, intent)
+                    CollectPassiveGuardCandidates(actionSlots, intent, true)
                 ));
 
                 order++;
@@ -160,7 +160,7 @@ public static class BattleExecutionPlanManager
                 BattleExecutionItemType.UnrespondedEnemyIntent,
                 intent,
                 null,
-                CollectPassiveGuardCandidates(actionSlots, intent)
+                CollectPassiveGuardCandidates(actionSlots, intent, true)
             ));
 
             order++;
@@ -342,7 +342,7 @@ public static class BattleExecutionPlanManager
             return new List<BattleActionSlot>();
         }
 
-        return CollectPassiveGuardCandidates(actionSlots, enemyIntent);
+        return CollectPassiveGuardCandidates(actionSlots, enemyIntent, false);
     }
 
     // ShouldCollectPassiveGuardForRespondedItem = 只有 Attack vs Attack 响应才携带被动守备候选
@@ -379,7 +379,8 @@ public static class BattleExecutionPlanManager
     // 这里只保存候选引用，不在计划生成阶段最终决定使用哪一个。
     static List<BattleActionSlot> CollectPassiveGuardCandidates(
         List<BattleActionSlot> actionSlots,
-        BattleEnemyIntent enemyIntent
+        BattleEnemyIntent enemyIntent,
+        bool allowDodge
     )
     {
         List<BattleActionSlot> candidates = new List<BattleActionSlot>();
@@ -393,7 +394,7 @@ public static class BattleExecutionPlanManager
 
         foreach (BattleActionSlot slot in actionSlots)
         {
-            if (!IsPassiveGuardCandidateForTarget(slot, target))
+            if (!IsPassiveGuardCandidateForTarget(slot, target, allowDodge))
             {
                 continue;
             }
@@ -406,7 +407,7 @@ public static class BattleExecutionPlanManager
     }
 
     // IsPassiveGuardCandidateForTarget = 判断槽位是否是目标角色的被动守备候选
-    static bool IsPassiveGuardCandidateForTarget(BattleActionSlot slot, CharacterData target)
+    static bool IsPassiveGuardCandidateForTarget(BattleActionSlot slot, CharacterData target, bool allowDodge)
     {
         if (slot == null || target == null)
         {
@@ -435,7 +436,12 @@ public static class BattleExecutionPlanManager
             return false;
         }
 
-        return slot.cardState.cardData.cardType == CardType.Defense;
+        if (slot.cardState.cardData.cardType == CardType.Defense)
+        {
+            return true;
+        }
+
+        return allowDodge && slot.cardState.cardData.cardType == CardType.Dodge;
     }
 
     // CompareActionSlotIndex = 按角色内槽位编号升序排序

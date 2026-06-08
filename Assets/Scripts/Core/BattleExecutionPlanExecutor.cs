@@ -246,7 +246,8 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
-        if (slot.cardState.cardData.cardType != CardType.Defense)
+        if (slot.cardState.cardData.cardType != CardType.Defense &&
+            slot.cardState.cardData.cardType != CardType.Dodge)
         {
             return false;
         }

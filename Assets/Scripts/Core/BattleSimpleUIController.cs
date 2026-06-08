@@ -728,11 +728,19 @@ public class BattleSimpleUIController : MonoBehaviour
 
         if (IsSelectedDodgeCard())
         {
-            lastLog = selectedActionMode == ActionModePassiveGuard
-                ? "闪避的被动守备尚未接入"
-                : "Dodge v1 is not connected to Resolver yet";
-            RefreshView();
-            return;
+            if (selectedActionMode == ActionModeFreeAttack)
+            {
+                lastLog = "闪避卡不能以敌人本体作为目标，请选择敌人意图";
+                RefreshView();
+                return;
+            }
+
+            if (selectedActionMode != ActionModeRespondIntent1 && selectedActionMode != ActionModePassiveGuard)
+            {
+                lastLog = "Dodge v1 only supports RespondIntent1 or PassiveGuard";
+                RefreshView();
+                return;
+            }
         }
 
         if (selectedActionMode == ActionModePassiveGuard)
@@ -841,16 +849,9 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        if (IsSelectedDodgeCard())
+        if (!IsSelectedDefenseCard() && !IsSelectedDodgeCard())
         {
-            lastLog = "闪避的被动守备尚未接入";
-            RefreshView();
-            return;
-        }
-
-        if (!IsSelectedDefenseCard())
-        {
-            lastLog = "PassiveGuard v1 only supports Defense";
+            lastLog = "PassiveGuard v1 only supports Defense or Dodge";
             RefreshView();
             return;
         }
@@ -885,9 +886,9 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        if (!IsSelectedAttackCard() && !IsSelectedDefenseCard())
+        if (!IsSelectedAttackCard() && !IsSelectedDefenseCard() && !IsSelectedDodgeCard())
         {
-            lastLog = "RespondIntent1 v1 only supports Attack, ClashSin, or Defense";
+            lastLog = "RespondIntent1 v1 only supports Attack, ClashSin, Defense, or Dodge";
             RefreshView();
             return;
         }

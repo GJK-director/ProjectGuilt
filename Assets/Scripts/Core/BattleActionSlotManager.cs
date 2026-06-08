@@ -338,9 +338,10 @@ public static class BattleActionSlotManager
             return false;
         }
 
-        if (cardState.cardData.cardType != CardType.Defense)
+        if (cardState.cardData.cardType != CardType.Defense &&
+            cardState.cardData.cardType != CardType.Dodge)
         {
-            Debug.LogWarning("安排被动守备失败：第一版只允许 Defense，当前卡牌类型：" + cardState.cardData.cardType);
+            Debug.LogWarning("安排被动守备失败：当前只允许 Defense 或 Dodge，当前卡牌类型：" + cardState.cardData.cardType);
             return false;
         }
 

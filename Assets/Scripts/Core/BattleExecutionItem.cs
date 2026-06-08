@@ -41,7 +41,10 @@ public class BattleExecutionItem
     public BattleActionSlot actionSlot;
 
     // passiveGuardCandidates = 被动守备候选槽位
-    // 只保存槽位引用，不复制槽位。当前只给 UnrespondedEnemyIntent 使用。
+    // 由 PlanManager 收集并按槽位序号升序保存，只保存槽位引用，不复制槽位。
+    // 当前同时服务 UnrespondedEnemyIntent，以及 RespondedEnemyIntent 中的 Attack vs Attack 敌人胜利分支。
+    // 执行或结算时会再次验证候选是否仍有效；一张敌人卡最多触发一张守备。
+    // 未触发的候选不会 MarkUsed，也不会进入 CD。
     public List<BattleActionSlot> passiveGuardCandidates;
 
     // isCompleted = 是否已经完成
