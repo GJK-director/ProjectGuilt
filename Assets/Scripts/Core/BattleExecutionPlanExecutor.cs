@@ -10,6 +10,16 @@ public static class BattleExecutionPlanExecutor
     // Execute = 执行，ExecutionPlan = 执行计划。
     public static void ExecuteExecutionPlan(BattleExecutionPlan plan)
     {
+        ExecuteExecutionPlanInternal(plan, null);
+    }
+
+    public static void ExecuteExecutionPlan(BattleExecutionPlan plan, BattleRuntimeState runtimeState)
+    {
+        ExecuteExecutionPlanInternal(plan, runtimeState);
+    }
+
+    static void ExecuteExecutionPlanInternal(BattleExecutionPlan plan, BattleRuntimeState runtimeState)
+    {
         Debug.Log("===== BattleExecutionPlan 正式执行开始 =====");
         Debug.Log("提示：RespondedEnemyIntent / UnrespondedEnemyIntent / FreeAction 已交给 BattleResolver 正式入口处理");
 
@@ -21,8 +31,18 @@ public static class BattleExecutionPlanExecutor
 
         bool allItemsCompleted = true;
 
-        foreach (BattleExecutionItem item in plan.executionItems)
+        for (int i = 0; i < plan.executionItems.Count; i++)
         {
+            if (runtimeState != null && runtimeState.IsBattleEnded)
+            {
+                Debug.Log("战斗已经结束，Executor 拒绝继续执行 BattleExecutionPlan");
+                MarkRemainingItemsCompletedBecauseBattleEnded(plan, i);
+                allItemsCompleted = true;
+                break;
+            }
+
+            BattleExecutionItem item = plan.executionItems[i];
+
             if (item == null)
             {
                 Debug.LogWarning("执行计划项为空，跳过");
@@ -36,40 +56,39 @@ public static class BattleExecutionPlanExecutor
                 continue;
             }
 
+            bool isCompleted = false;
+
             // 无人响应敌人意图：敌人攻击按 actualTarget 直接处理。
             if (item.executionType == BattleExecutionItemType.UnrespondedEnemyIntent)
             {
-                bool isCompleted = ExecuteUnrespondedEnemyIntent(item);
+                isCompleted = ExecuteUnrespondedEnemyIntent(item);
+            }
+            else if (item.executionType == BattleExecutionItemType.RespondedEnemyIntent)
+            {
+                // 已响应敌人意图：交给 BattleResolver 正式入口处理。
+                isCompleted = ExecuteRespondedEnemyIntent(item);
+            }
+            else if (item.executionType == BattleExecutionItemType.FreeAction)
+            {
+                // 自由行动：交给 BattleResolver 正式入口处理。
+                isCompleted = ExecuteFreeAction(item);
+            }
 
-                if (!isCompleted)
-                {
-                    allItemsCompleted = false;
-                }
-
+            if (!isCompleted)
+            {
+                allItemsCompleted = false;
                 continue;
             }
 
-            // 已响应敌人意图：交给 BattleResolver 正式入口处理。
-            if (item.executionType == BattleExecutionItemType.RespondedEnemyIntent)
+            if (runtimeState != null)
             {
-                bool isCompleted = ExecuteRespondedEnemyIntent(item);
+                runtimeState.EvaluateBattleEnd();
 
-                if (!isCompleted)
+                if (runtimeState.IsBattleEnded)
                 {
-                    allItemsCompleted = false;
-                }
-
-                continue;
-            }
-
-            // 自由行动：交给 BattleResolver 正式入口处理。
-            if (item.executionType == BattleExecutionItemType.FreeAction)
-            {
-                bool isCompleted = ExecuteFreeAction(item);
-
-                if (!isCompleted)
-                {
-                    allItemsCompleted = false;
+                    MarkRemainingItemsCompletedBecauseBattleEnded(plan, i + 1);
+                    allItemsCompleted = true;
+                    break;
                 }
             }
         }
@@ -82,6 +101,27 @@ public static class BattleExecutionPlanExecutor
         }
 
         Debug.Log("当前仍有未完成执行项");
+    }
+
+    static void MarkRemainingItemsCompletedBecauseBattleEnded(BattleExecutionPlan plan, int startIndex)
+    {
+        if (plan == null || plan.executionItems == null)
+        {
+            return;
+        }
+
+        for (int i = startIndex; i < plan.executionItems.Count; i++)
+        {
+            BattleExecutionItem item = plan.executionItems[i];
+
+            if (item == null || item.isCompleted)
+            {
+                continue;
+            }
+
+            item.isCompleted = true;
+            Debug.Log(item.order + ". 因 BattleEnded 跳过");
+        }
     }
 
     // PrintExecutionPlanStepPreview = 打印执行步骤预览
@@ -140,6 +180,11 @@ public static class BattleExecutionPlanExecutor
         {
             Debug.LogWarning("执行 UnrespondedEnemyIntent 失败：item 为空");
             return false;
+        }
+
+        if (TryCompleteEnemyItemBecauseActualTargetDead(item))
+        {
+            return true;
         }
 
         BattleActionSlot passiveGuardSlot = FindFirstValidPassiveGuardSlot(item);
@@ -226,6 +271,11 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
+        if (enemyIntent.actualTargetCharacter.IsDead())
+        {
+            return false;
+        }
+
         if (slot.IsEmpty())
         {
             return false;
@@ -241,7 +291,17 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
-        if (slot.actor == null || slot.cardState == null || slot.cardState.cardData == null)
+        if (slot.owner == null || slot.actor == null || slot.target == null)
+        {
+            return false;
+        }
+
+        if (slot.owner.IsDead() || slot.actor.IsDead() || slot.target.IsDead())
+        {
+            return false;
+        }
+
+        if (slot.cardState == null || slot.cardState.cardData == null)
         {
             return false;
         }
@@ -321,6 +381,23 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
+        if (TryCompleteEnemyItemBecauseActualTargetDead(item))
+        {
+            return true;
+        }
+
+        if (item.actionSlot != null &&
+            item.actionSlot.actor != null &&
+            item.actionSlot.actor.IsDead())
+        {
+            Debug.Log(
+                item.order +
+                ". 响应角色已死亡，原响应失效，敌人意图转为Unresponded处理"
+            );
+
+            return ExecuteUnrespondedEnemyIntent(item);
+        }
+
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             item.actionSlot,
             item.enemyIntent,
@@ -389,6 +466,15 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
+        if (item.actionSlot != null &&
+            item.actionSlot.actor != null &&
+            item.actionSlot.actor.IsDead())
+        {
+            Debug.Log(item.order + ". FreeAction角色已死亡，本次行动跳过");
+            item.isCompleted = true;
+            return true;
+        }
+
         BattleResolveResult result = BattleResolver.ResolveFreeAction(item.actionSlot);
 
         Debug.Log(
@@ -405,7 +491,7 @@ public static class BattleExecutionPlanExecutor
             "   message：" + (result != null ? result.message : "BattleResolveResult 为空")
         );
 
-        if (result == null || !result.isSuccess || !result.shouldCompleteItem)
+        if (result == null || !result.shouldCompleteItem)
         {
             Debug.LogWarning(
                 item.order +
@@ -415,12 +501,38 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
+        if (!result.isSuccess)
+        {
+            Debug.LogWarning(
+                item.order +
+                ". FreeAction执行时不可用，本次行动按跳过完成：" +
+                result.message
+            );
+        }
+
         if (result.playerCardUsed && item.actionSlot != null)
         {
             item.actionSlot.MarkUsed();
             Debug.Log(item.order + ". FreeAction：玩家行动槽位已标记为已使用");
         }
 
+        item.isCompleted = true;
+        return true;
+    }
+
+    static bool TryCompleteEnemyItemBecauseActualTargetDead(BattleExecutionItem item)
+    {
+        if (item == null || item.enemyIntent == null || item.enemyIntent.actualTargetCharacter == null)
+        {
+            return false;
+        }
+
+        if (!item.enemyIntent.actualTargetCharacter.IsDead())
+        {
+            return false;
+        }
+
+        Debug.Log(item.order + ". 敌人意图实际目标已死亡，本次敌人行动跳过");
         item.isCompleted = true;
         return true;
     }

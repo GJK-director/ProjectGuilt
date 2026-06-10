@@ -342,10 +342,12 @@ public static class BattleExecutionPlanManager
             return new List<BattleActionSlot>();
         }
 
-        return CollectPassiveGuardCandidates(actionSlots, enemyIntent, false);
+        return CollectPassiveGuardCandidates(actionSlots, enemyIntent, true);
     }
 
-    // ShouldCollectPassiveGuardForRespondedItem = 只有 Attack vs Attack 响应才携带被动守备候选
+    // ShouldCollectPassiveGuardForRespondedItem = 支持的响应类型提前携带被动守备候选
+    // 正常 Responded Resolver 只会在 Attack vs Attack EnemyWin 中使用这些候选。
+    // 如果响应者执行前死亡，Executor 会回落 Unresponded，此时也复用这些候选。
     static bool ShouldCollectPassiveGuardForRespondedItem(
         BattleEnemyIntent enemyIntent,
         BattleActionSlot responseSlot
@@ -371,8 +373,16 @@ public static class BattleExecutionPlanManager
             return false;
         }
 
-        return responseSlot.cardState.cardData.cardType == CardType.Attack &&
-            enemyIntent.enemyCardState.cardData.cardType == CardType.Attack;
+        if (enemyIntent.enemyCardState.cardData.cardType != CardType.Attack)
+        {
+            return false;
+        }
+
+        string playerCardType = responseSlot.cardState.cardData.cardType;
+
+        return playerCardType == CardType.Attack ||
+            playerCardType == CardType.Defense ||
+            playerCardType == CardType.Dodge;
     }
 
     // CollectPassiveGuardCandidates = 为敌人意图收集被动守备候选
@@ -414,12 +424,27 @@ public static class BattleExecutionPlanManager
             return false;
         }
 
+        if (target.IsDead())
+        {
+            return false;
+        }
+
         if (slot.slotType != BattleActionSlotType.PassiveGuard)
         {
             return false;
         }
 
         if (slot.isUsed)
+        {
+            return false;
+        }
+
+        if (slot.owner == null || slot.actor == null || slot.target == null)
+        {
+            return false;
+        }
+
+        if (slot.owner.IsDead() || slot.actor.IsDead() || slot.target.IsDead())
         {
             return false;
         }

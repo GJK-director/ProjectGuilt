@@ -2,6 +2,13 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+public enum BattleResult
+{
+    None,
+    Victory,
+    Defeat
+}
+
 // BattleRuntimeState = 战斗运行时状态
 // 第一版只做状态容器，不执行战斗逻辑，也不处理回合结算。
 public class BattleRuntimeState
@@ -29,6 +36,13 @@ public class BattleRuntimeState
     // currentPhase = 当前阶段文本，第一版先用字符串，不急着做 enum。
     public string currentPhase;
 
+    public BattleResult battleResult;
+
+    public bool IsBattleEnded
+    {
+        get { return currentPhase == "BattleEnded"; }
+    }
+
     public BattleRuntimeState()
     {
         battleUnits = new List<CharacterData>();
@@ -37,6 +51,7 @@ public class BattleRuntimeState
         currentExecutionPlan = null;
         currentTurn = 1;
         currentPhase = "Init";
+        battleResult = BattleResult.None;
     }
 
     // SetCharacters = 设置当前战斗主要角色，并重建 battleUnits。
@@ -103,7 +118,19 @@ public class BattleRuntimeState
     // 第一版只组合 BattleTurnProcessor.EndTurn 和 RuntimeState 清理，不生成下一回合。
     public void EndCurrentTurnAndClearRuntimeObjects()
     {
-        BattleTurnProcessor.EndTurn(battleUnits);
+        if (IsBattleEnded)
+        {
+            Debug.Log("战斗已结束，不能结束回合");
+            return;
+        }
+
+        if (currentExecutionPlan != null && !currentExecutionPlan.isCompleted)
+        {
+            Debug.LogWarning("ExecutionPlan尚未完成，不能结束回合");
+            return;
+        }
+
+        BattleTurnProcessor.EndTurn(GetLivingTurnParticipants());
         ClearCurrentTurnRuntimeObjects();
         SetPhase("TurnEnded");
     }
@@ -115,12 +142,125 @@ public class BattleRuntimeState
         List<BattleEnemyIntent> newIntentQueue
     )
     {
+        if (IsBattleEnded)
+        {
+            Debug.Log("战斗已结束，不能准备下一回合");
+            return;
+        }
+
+        if (currentExecutionPlan != null && !currentExecutionPlan.isCompleted)
+        {
+            Debug.LogWarning("ExecutionPlan尚未完成，不能准备下一回合");
+            return;
+        }
+
+        List<BattleActionSlot> filteredActionSlots = FilterLivingActionSlotsForNextTurn(newActionSlots);
+
+        if (filteredActionSlots.Count == 0)
+        {
+            EvaluateBattleEnd();
+
+            if (IsBattleEnded)
+            {
+                Debug.Log("战斗已结束，不能准备空的下一回合");
+                return;
+            }
+
+            Debug.LogWarning("没有存活角色行动槽位，不能准备下一回合");
+            return;
+        }
+
         AdvanceTurn();
-        BattleTurnProcessor.StartTurn(battleUnits);
-        SetActionSlots(newActionSlots);
+        BattleTurnProcessor.StartTurn(GetLivingTurnParticipants());
+        SetActionSlots(filteredActionSlots);
         SetIntentQueue(newIntentQueue);
         ClearExecutionPlan();
         SetPhase("Prepare");
+    }
+
+    List<BattleActionSlot> FilterLivingActionSlotsForNextTurn(List<BattleActionSlot> slots)
+    {
+        List<BattleActionSlot> filteredSlots = new List<BattleActionSlot>();
+
+        if (slots == null)
+        {
+            Debug.LogWarning("准备下一回合失败：新行动槽位列表为空");
+            return filteredSlots;
+        }
+
+        int filteredCount = 0;
+
+        foreach (BattleActionSlot slot in slots)
+        {
+            if (slot == null)
+            {
+                Debug.LogWarning("准备下一回合：发现空槽位，已跳过");
+                filteredCount++;
+                continue;
+            }
+
+            if (slot.owner == null)
+            {
+                Debug.LogWarning("准备下一回合：发现owner为空的槽位，已跳过");
+                filteredCount++;
+                continue;
+            }
+
+            if (slot.owner.IsDead())
+            {
+                filteredCount++;
+                continue;
+            }
+
+            if (slot.actor != null && slot.actor.IsDead())
+            {
+                filteredCount++;
+                continue;
+            }
+
+            filteredSlots.Add(slot);
+        }
+
+        if (filteredCount > 0)
+        {
+            Debug.Log("准备下一回合：过滤死亡或无效角色槽位数量：" + filteredCount);
+        }
+
+        return filteredSlots;
+    }
+
+    List<CharacterData> GetLivingTurnParticipants()
+    {
+        List<CharacterData> participants = new List<CharacterData>();
+
+        AddLivingTurnParticipant(participants, allyA);
+        AddLivingTurnParticipant(participants, allyB);
+        AddLivingTurnParticipant(participants, enemy);
+
+        return participants;
+    }
+
+    void AddLivingTurnParticipant(List<CharacterData> participants, CharacterData character)
+    {
+        if (participants == null || character == null)
+        {
+            return;
+        }
+
+        if (character.IsDead())
+        {
+            return;
+        }
+
+        foreach (CharacterData participant in participants)
+        {
+            if (object.ReferenceEquals(participant, character))
+            {
+                return;
+            }
+        }
+
+        participants.Add(character);
     }
 
     // SetPhase = 设置当前阶段文本。
@@ -135,12 +275,47 @@ public class BattleRuntimeState
         currentTurn++;
     }
 
+    public BattleResult EvaluateBattleEnd()
+    {
+        if (IsBattleEnded)
+        {
+            return battleResult;
+        }
+
+        bool allyADead = allyA != null && allyA.IsDead();
+        bool allyBDead = allyB != null && allyB.IsDead();
+        bool playerAllDead = allyADead && allyBDead;
+        bool enemyDead = enemy != null && enemy.IsDead();
+
+        if (playerAllDead)
+        {
+            SetBattleEnded(BattleResult.Defeat);
+            return battleResult;
+        }
+
+        if (enemyDead)
+        {
+            SetBattleEnded(BattleResult.Victory);
+            return battleResult;
+        }
+
+        return battleResult;
+    }
+
+    void SetBattleEnded(BattleResult result)
+    {
+        battleResult = result;
+        SetPhase("BattleEnded");
+        Debug.Log("检测到战斗结束：" + battleResult);
+    }
+
     // PrintRuntimeState = 打印当前运行时状态，只读不改状态。
     public void PrintRuntimeState()
     {
         Debug.Log("===== BattleRuntimeState 当前状态 =====");
         Debug.Log("当前回合：" + currentTurn);
         Debug.Log("当前阶段：" + currentPhase);
+        Debug.Log("战斗结果：" + battleResult);
         Debug.Log("allyA：" + GetCharacterSummary(allyA));
         Debug.Log("allyB：" + GetCharacterSummary(allyB));
         Debug.Log("enemy：" + GetCharacterSummary(enemy));

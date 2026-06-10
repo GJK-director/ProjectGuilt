@@ -25,7 +25,11 @@ public enum BattleTestMode
     ActionSlotExecutionPlanExecuteRespondedTieLimit = 39,
     ActionSlotExecutionPlanExecuteMixedBasic = 40,
     BattleResolverRespondedDodgeVsAttackBasic = 41,
-    ActionSlotPassiveDodgeUnrespondedBasic = 42
+    ActionSlotPassiveDodgeUnrespondedBasic = 42,
+    ActionSlotPassiveDodgeAfterAttackLoseBasic = 43,
+    BattleEndedVictoryDefeatBasic = 44,
+    ExecutionPlanInvalidActionCompletionBasic = 45,
+    SingleAllyDeathExecutionFilteringBasic = 46
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -123,6 +127,30 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.ActionSlotPassiveDodgeUnrespondedBasic)
         {
             RunActionSlotPassiveDodgeUnrespondedBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ActionSlotPassiveDodgeAfterAttackLoseBasic)
+        {
+            RunActionSlotPassiveDodgeAfterAttackLoseBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleEndedVictoryDefeatBasic)
+        {
+            RunBattleEndedVictoryDefeatBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ExecutionPlanInvalidActionCompletionBasic)
+        {
+            RunExecutionPlanInvalidActionCompletionBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.SingleAllyDeathExecutionFilteringBasic)
+        {
+            RunSingleAllyDeathExecutionFilteringBasicTestSequence();
             return;
         }
 
@@ -3205,7 +3233,9 @@ public class CardLoadTest : MonoBehaviour
     void RunActionSlotPassiveDodgeUnrespondedBasicTestSequence()
     {
         Debug.Log("===== PassiveDodge Unresponded 第一阶段聚合测试开始 =====");
-        Debug.Log("本入口只测试 UnrespondedEnemyIntent 的 PassiveGuard Dodge，不测试 Attack 失败后 Dodge 接管");
+        Debug.Log("本入口只测试 UnrespondedEnemyIntent 的被动 Dodge");
+        Debug.Log("Attack失败后的被动Dodge接管由模式43 ActionSlotPassiveDodgeAfterAttackLoseBasic 覆盖");
+        Debug.Log("当前聚合入口包含6组有效子测试");
 
         RunPassiveDodgeUnrespondedDodgeFirstSubTest(
             "PassiveDodgeSuccess",
@@ -3240,7 +3270,6 @@ public class CardLoadTest : MonoBehaviour
         RunPassiveDodgeSkipInvalidToDefenseSubTest();
         RunPassiveDodgeTargetMismatchSubTest();
         RunPassiveDodgeRespondedIntentNotTriggeredSubTest();
-        RunPassiveDodgeRespondedAttackFailIsolationSubTest();
     }
 
     void RunPassiveDodgeUnrespondedDodgeFirstSubTest(
@@ -3489,6 +3518,299 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期Dodge槽位未使用：" + (passiveSlot != null && !passiveSlot.isUsed));
         Debug.Log("预期Dodge CD不变化：" + (passiveDodge.currentCooldown == passiveCooldownBefore));
         Debug.Log("预期只造成一次完整伤害：" + (allyB.currentHP == hpBefore - 8));
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+    }
+
+    // RunActionSlotPassiveDodgeAfterAttackLoseBasicTestSequence = Attack 失败后被动 Dodge 接管聚合测试
+    void RunActionSlotPassiveDodgeAfterAttackLoseBasicTestSequence()
+    {
+        Debug.Log("===== Attack 拼点失败后被动 Dodge 接管聚合测试开始 =====");
+        Debug.Log("本入口只测试 Responded Attack vs Attack 的 EnemyWin 分支，不修改 Unresponded 被动 Dodge");
+
+        RunPassiveDodgeAfterAttackLoseDodgeFirstSubTest(
+            "PassiveDodgeAfterAttackLoseSuccess",
+            4,
+            8,
+            9,
+            "DodgeSuccess",
+            0,
+            true
+        );
+
+        RunPassiveDodgeAfterAttackLoseDodgeFirstSubTest(
+            "PassiveDodgeAfterAttackLoseFailed",
+            4,
+            8,
+            6,
+            "DodgeFailed",
+            8,
+            true
+        );
+
+        RunPassiveDodgeAfterAttackLoseDodgeFirstSubTest(
+            "PassiveDodgeAfterAttackLoseTieLimit",
+            4,
+            8,
+            8,
+            "TieLimit",
+            0,
+            false
+        );
+
+        RunPassiveDodgeAfterAttackLoseSkipInvalidToDefenseSubTest();
+        RunPassiveDodgeAfterAttackLoseDefenseFirstSubTest();
+        RunPassiveDodgeAfterAttackLoseNoCandidateSubTest();
+        RunPassiveDodgeAfterAttackLoseTargetMismatchSubTest();
+        RunPassiveDodgeAfterAttackLosePlayerWinSubTest();
+    }
+
+    void RunPassiveDodgeAfterAttackLoseDodgeFirstSubTest(
+        string title,
+        int playerAttackPoint,
+        int enemyAttackPoint,
+        int dodgePoint,
+        string expectedResultType,
+        int expectedDamage,
+        bool expectDodgeUsed
+    )
+    {
+        Debug.Log("===== " + title + " 子测试开始 =====");
+        Debug.Log("预期 resultType 出现在 Resolver 日志：" + expectedResultType);
+
+        CreateTestCharacters();
+        StartTurn();
+
+        int hpBefore = allyB.currentHP;
+        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(allyB, title + "_b_response_attack", playerAttackPoint);
+        responseAttack.cardData.cooldown = 2;
+        BattleCardState passiveDodge = CreateFixedDodgeCardForCharacter(allyB, title + "_b_passive_dodge", dodgePoint, 2);
+        BattleCardState followDefense = CreateTestDefenseCardForCharacter(allyB, title + "_b_follow_defense", 12, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(enemy, title + "_enemy_attack", enemyAttackPoint, 2);
+
+        int responseAttackCooldownBefore = responseAttack.currentCooldown;
+        int responseAttackUseCountBefore = responseAttack.currentUseCount;
+        int dodgeCooldownBefore = passiveDodge.currentCooldown;
+        int dodgeUseCountBefore = passiveDodge.currentUseCount;
+        bool dodgeConsumedBefore = passiveDodge.isConsumed;
+        int defenseCooldownBefore = followDefense.currentCooldown;
+        int defenseUseCountBefore = followDefense.currentUseCount;
+        int enemyAttackCooldownBefore = enemyAttack.currentCooldown;
+        int enemyAttackUseCountBefore = enemyAttack.currentUseCount;
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(title + "_intent_001", enemy, enemyAttack, allyB, 1, 1);
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 3);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, allyB, 1, allyB, responseAttack, intent1);
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 2, allyB, passiveDodge);
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 3, allyB, followDefense);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(executionPlan);
+        int candidateCount = item != null && item.passiveGuardCandidates != null ? item.passiveGuardCandidates.Count : 0;
+
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        BattleActionSlot responseSlot = BattleActionSlotManager.GetSlot(actionSlots, allyB, 1);
+        BattleActionSlot dodgeSlot = BattleActionSlotManager.GetSlot(actionSlots, allyB, 2);
+        BattleActionSlot defenseSlot = BattleActionSlotManager.GetSlot(actionSlots, allyB, 3);
+
+        Debug.Log("预期主拼点为 EnemyWin，后续比较固定敌人点数 " + enemyAttackPoint + "：" + (candidateCount == 2));
+        Debug.Log("预期目标 HP 变化为 " + expectedDamage + "：" + (allyB.currentHP == hpBefore - expectedDamage));
+        Debug.Log("预期主Attack槽位 isUsed：" + (responseSlot != null && responseSlot.isUsed));
+        Debug.Log("预期Dodge槽位 isUsed = " + expectDodgeUsed + "：" + (dodgeSlot != null && dodgeSlot.isUsed == expectDodgeUsed));
+        Debug.Log("预期Defense槽位未使用：" + (defenseSlot != null && !defenseSlot.isUsed));
+        Debug.Log("预期主Attack已使用：" + (responseAttack.currentCooldown == responseAttack.cardData.cooldown && responseAttack.currentCooldown != responseAttackCooldownBefore));
+        Debug.Log("预期Enemy Attack已使用：" + (enemyAttack.currentCooldown == enemyAttack.cardData.cooldown && enemyAttack.currentCooldown != enemyAttackCooldownBefore));
+        Debug.Log("预期Dodge使用状态符合分支：" + (expectDodgeUsed ? passiveDodge.currentCooldown == passiveDodge.cardData.cooldown : passiveDodge.currentCooldown == dodgeCooldownBefore));
+        Debug.Log("预期Defense CD / UseCount不变：" + (followDefense.currentCooldown == defenseCooldownBefore && followDefense.currentUseCount == defenseUseCountBefore));
+        Debug.Log("预期主Attack UseCount前后：" + responseAttackUseCountBefore + " -> " + responseAttack.currentUseCount);
+        Debug.Log("预期Enemy Attack UseCount前后：" + enemyAttackUseCountBefore + " -> " + enemyAttack.currentUseCount);
+        Debug.Log("预期Dodge UseCount / isConsumed前后符合：" + (passiveDodge.currentUseCount == dodgeUseCountBefore && passiveDodge.isConsumed == dodgeConsumedBefore));
+        Debug.Log("预期只造成一次伤害：" + (allyB.currentHP == hpBefore - expectedDamage));
+        Debug.Log("预期使用固定敌人点数，未重新Roll：" + (enemyAttackPoint == enemyAttack.cardData.minPoint && enemyAttackPoint == enemyAttack.cardData.maxPoint));
+
+        if (expectedResultType == "TieLimit")
+        {
+            Debug.Log("TieLimit 额外验证：主Attack已使用：" + (responseSlot != null && responseSlot.isUsed && responseAttack.currentCooldown == responseAttack.cardData.cooldown));
+            Debug.Log("TieLimit 额外验证：Enemy Attack已使用：" + (enemyAttack.currentCooldown == enemyAttack.cardData.cooldown));
+            Debug.Log("TieLimit 额外验证：Dodge未使用：" + (passiveDodge.currentCooldown == dodgeCooldownBefore && passiveDodge.currentUseCount == dodgeUseCountBefore && passiveDodge.isConsumed == dodgeConsumedBefore));
+            Debug.Log("TieLimit 额外验证：Dodge槽位未MarkUsed：" + (dodgeSlot != null && !dodgeSlot.isUsed));
+            Debug.Log("TieLimit 额外验证：后续Defense未触发：" + (defenseSlot != null && !defenseSlot.isUsed && followDefense.currentCooldown == defenseCooldownBefore));
+            Debug.Log("TieLimit 额外验证：未回落EnemyWin伤害：" + (allyB.currentHP == hpBefore));
+        }
+
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+    }
+
+    void RunPassiveDodgeAfterAttackLoseSkipInvalidToDefenseSubTest()
+    {
+        string title = "PassiveDodgeAfterAttackLoseSkipInvalidToDefense";
+        Debug.Log("===== " + title + " 子测试开始 =====");
+
+        CreateTestCharacters();
+        StartTurn();
+
+        int hpBefore = allyB.currentHP;
+        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(allyB, title + "_b_response_attack", 4);
+        responseAttack.cardData.cooldown = 2;
+        BattleCardState passiveDodge = CreateFixedDodgeCardForCharacter(allyB, title + "_b_passive_dodge", 9, 2);
+        BattleCardState passiveDefense = CreateTestDefenseCardForCharacter(allyB, title + "_b_passive_defense", 3, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(enemy, title + "_enemy_attack", 8, 2);
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(title + "_intent_001", enemy, enemyAttack, allyB, 1, 1);
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 3);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, allyB, 1, allyB, responseAttack, intent1);
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 2, allyB, passiveDodge);
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 3, allyB, passiveDefense);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(actionSlots, intentQueue);
+        passiveDodge.currentCooldown = 1;
+
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        BattleActionSlot dodgeSlot = BattleActionSlotManager.GetSlot(actionSlots, allyB, 2);
+        BattleActionSlot defenseSlot = BattleActionSlotManager.GetSlot(actionSlots, allyB, 3);
+
+        Debug.Log("预期跳过执行前失效Dodge：" + (dodgeSlot != null && !dodgeSlot.isUsed && passiveDodge.currentCooldown == 1));
+        Debug.Log("预期Defense使用固定敌人8点接管：" + (defenseSlot != null && defenseSlot.isUsed));
+        Debug.Log("预期Defense造成5点伤害：" + (allyB.currentHP == hpBefore - 5));
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+    }
+
+    void RunPassiveDodgeAfterAttackLoseDefenseFirstSubTest()
+    {
+        string title = "PassiveDodgeAfterAttackLoseDefenseFirst";
+        Debug.Log("===== " + title + " 子测试开始 =====");
+
+        CreateTestCharacters();
+        StartTurn();
+
+        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(allyB, title + "_b_response_attack", 4);
+        responseAttack.cardData.cooldown = 2;
+        BattleCardState passiveDefense = CreateTestDefenseCardForCharacter(allyB, title + "_b_passive_defense", 3, 1);
+        BattleCardState passiveDodge = CreateFixedDodgeCardForCharacter(allyB, title + "_b_passive_dodge", 12, 2);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(enemy, title + "_enemy_attack", 8, 2);
+        int dodgeCooldownBefore = passiveDodge.currentCooldown;
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(title + "_intent_001", enemy, enemyAttack, allyB, 1, 1);
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 3);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, allyB, 1, allyB, responseAttack, intent1);
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 2, allyB, passiveDefense);
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 3, allyB, passiveDodge);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        BattleActionSlot defenseSlot = BattleActionSlotManager.GetSlot(actionSlots, allyB, 2);
+        BattleActionSlot dodgeSlot = BattleActionSlotManager.GetSlot(actionSlots, allyB, 3);
+
+        Debug.Log("预期Defense先触发：" + (defenseSlot != null && defenseSlot.isUsed));
+        Debug.Log("预期Dodge完全不参与：" + (dodgeSlot != null && !dodgeSlot.isUsed && passiveDodge.currentCooldown == dodgeCooldownBefore));
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+    }
+
+    void RunPassiveDodgeAfterAttackLoseNoCandidateSubTest()
+    {
+        string title = "PassiveDodgeAfterAttackLoseNoCandidate";
+        Debug.Log("===== " + title + " 子测试开始 =====");
+
+        CreateTestCharacters();
+        StartTurn();
+
+        int hpBefore = allyB.currentHP;
+        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(allyB, title + "_b_response_attack", 4);
+        responseAttack.cardData.cooldown = 2;
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(enemy, title + "_enemy_attack", 8, 2);
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(title + "_intent_001", enemy, enemyAttack, allyB, 1, 1);
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 1);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, allyB, 1, allyB, responseAttack, intent1);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(executionPlan);
+        int candidateCount = item != null && item.passiveGuardCandidates != null ? item.passiveGuardCandidates.Count : 0;
+
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        Debug.Log("预期无PassiveGuard候选：" + (candidateCount == 0));
+        Debug.Log("预期原EnemyWin伤害正常且只造成一次：" + (allyB.currentHP == hpBefore - 8));
+        Debug.Log("预期使用固定敌人8点，不重新Roll：" + (enemyAttack.cardData.minPoint == 8 && enemyAttack.cardData.maxPoint == 8));
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+    }
+
+    void RunPassiveDodgeAfterAttackLoseTargetMismatchSubTest()
+    {
+        string title = "PassiveDodgeAfterAttackLoseTargetMismatch";
+        Debug.Log("===== " + title + " 子测试开始 =====");
+
+        CreateTestCharacters();
+        StartTurn();
+
+        int hpBefore = allyB.currentHP;
+        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(allyB, title + "_b_response_attack", 4);
+        responseAttack.cardData.cooldown = 2;
+        BattleCardState allyADodge = CreateFixedDodgeCardForCharacter(allyA, title + "_a_passive_dodge", 12, 2);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(enemy, title + "_enemy_attack", 8, 2);
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(title + "_intent_001", enemy, enemyAttack, allyB, 1, 1);
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, allyB, 1, allyB, responseAttack, intent1);
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyA, 1, allyA, allyADodge);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(executionPlan);
+        int candidateCount = item != null && item.passiveGuardCandidates != null ? item.passiveGuardCandidates.Count : 0;
+
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        BattleActionSlot dodgeSlot = BattleActionSlotManager.GetSlot(actionSlots, allyA, 1);
+
+        Debug.Log("预期A的Dodge不进入B目标候选：" + (candidateCount == 0));
+        Debug.Log("预期A的Dodge槽位未使用：" + (dodgeSlot != null && !dodgeSlot.isUsed));
+        Debug.Log("预期B承受原EnemyWin伤害：" + (allyB.currentHP == hpBefore - 8));
+        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+    }
+
+    void RunPassiveDodgeAfterAttackLosePlayerWinSubTest()
+    {
+        string title = "PassiveDodgeAfterAttackLosePlayerWin";
+        Debug.Log("===== " + title + " 子测试开始 =====");
+
+        CreateTestCharacters();
+        StartTurn();
+
+        int allyBHPBefore = allyB.currentHP;
+        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(allyB, title + "_b_response_attack", 9);
+        responseAttack.cardData.cooldown = 2;
+        BattleCardState passiveDodge = CreateFixedDodgeCardForCharacter(allyB, title + "_b_passive_dodge", 12, 2);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(enemy, title + "_enemy_attack", 5, 2);
+        int dodgeCooldownBefore = passiveDodge.currentCooldown;
+
+        BattleEnemyIntent intent1 = new BattleEnemyIntent(title + "_intent_001", enemy, enemyAttack, allyB, 1, 1);
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent1);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, allyB, 1, allyB, responseAttack, intent1);
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, allyB, 2, allyB, passiveDodge);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
+
+        BattleActionSlot dodgeSlot = BattleActionSlotManager.GetSlot(actionSlots, allyB, 2);
+
+        Debug.Log("预期PlayerWin，B不受伤：" + (allyB.currentHP == allyBHPBefore));
+        Debug.Log("预期Passive Dodge不触发：" + (dodgeSlot != null && !dodgeSlot.isUsed));
+        Debug.Log("预期Dodge CD不变：" + (passiveDodge.currentCooldown == dodgeCooldownBefore));
         Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
     }
 
@@ -4072,6 +4394,1029 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
     }
 
+    // RunBattleEndedVictoryDefeatBasicTestSequence = BattleEnded / Victory / Defeat 第一版阶段A聚合测试
+    void RunBattleEndedVictoryDefeatBasicTestSequence()
+    {
+        Debug.Log("===== BattleEnded / Victory / Defeat 第一版阶段A聚合测试开始 =====");
+
+        RunBattleEndedVictoryStopsRemainingFreeActionSubTest();
+        RunBattleEndedDefeatSubTest();
+        RunBattleEndedSinglePlayerDeathNotDefeatSubTest();
+        RunBattleEndedSimultaneousDeathPrioritizesDefeatSubTest();
+        RunBattleEndedOperationGuardSubTest();
+        RunBattleEndedNonLethalCompletedSubTest();
+    }
+
+    // RunExecutionPlanInvalidActionCompletionBasicTestSequence = FreeAction执行时不可用的跳过完成聚合测试
+    void RunExecutionPlanInvalidActionCompletionBasicTestSequence()
+    {
+        Debug.Log("===== ExecutionPlan Invalid Action Completion 聚合测试开始 =====");
+
+        RunFreeActionUnavailableBulletSubTest();
+        RunFreeActionUnavailableThenNextItemSubTest();
+        RunFreeActionNormalRegressionSubTest();
+        RunFreeActionUnsupportedNotSwallowedSubTest();
+        RunFreeActionBattleEndedRegressionSubTest();
+    }
+
+    void RunFreeActionUnavailableBulletSubTest()
+    {
+        Debug.Log("===== 模式45 子测试A：FreeAction因Bullet不足而ActionUnavailable =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "invalid_action_a",
+            30,
+            30,
+            50,
+            10,
+            3,
+            8
+        );
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
+        List<BattleEnemyIntent> emptyIntentQueue = new List<BattleEnemyIntent>();
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(emptyIntentQueue);
+
+        BattleCardState bulletAttack = CreateBulletLockedFreeAttackCard(context.allyB, "invalid_action_a_bullet_attack", 3, 5);
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyB, 1, context.allyB, bulletAttack, context.enemy);
+
+        BattleActionSlot actionSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyB, 1);
+        int enemyHPBefore = context.enemy.currentHP;
+        int cooldownBefore = bulletAttack.currentCooldown;
+        int useCountBefore = bulletAttack.currentUseCount;
+        int guiltBefore = context.allyB.currentGuilt;
+
+        BattleResolveResult directResult = BattleResolver.ResolveFreeAction(actionSlot);
+        BattleExecutionPlan executionPlan = CreateManualFreeActionPlan(actionSlot);
+        BattleExecutionItem item = GetFirstExecutionItem(executionPlan);
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        Debug.Log("resultType是否为ActionUnavailable：" + (directResult != null && directResult.resultType == "ActionUnavailable"));
+        Debug.Log("isSuccess是否为False：" + (directResult != null && !directResult.isSuccess));
+        Debug.Log("shouldCompleteItem是否为True：" + (directResult != null && directResult.shouldCompleteItem));
+        Debug.Log("不造成伤害：" + (context.enemy.currentHP == enemyHPBefore));
+        Debug.Log("CD不变：" + (bulletAttack.currentCooldown == cooldownBefore));
+        Debug.Log("UseCount不变：" + (bulletAttack.currentUseCount == useCountBefore));
+        Debug.Log("guilt不变：" + (context.allyB.currentGuilt == guiltBefore));
+        Debug.Log("行动未使用卡牌：" + (bulletAttack.currentUseCount == useCountBefore && context.allyB.currentGuilt == guiltBefore && bulletAttack.currentCooldown == cooldownBefore));
+        Debug.Log("槽位未MarkUsed：" + (actionSlot != null && !actionSlot.isUsed));
+        Debug.Log("item按跳过完成：" + (item != null && item.isCompleted));
+        Debug.Log("plan最终完成：" + executionPlan.isCompleted);
+        Debug.Log("phase可进入Completed：" + (context.runtimeState.currentPhase == "Completed"));
+    }
+
+    void RunFreeActionUnavailableThenNextItemSubTest()
+    {
+        Debug.Log("===== 模式45 子测试B：第一个ActionUnavailable，第二个行动正常执行 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "invalid_action_b",
+            30,
+            30,
+            50,
+            10,
+            3,
+            8
+        );
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        List<BattleEnemyIntent> emptyIntentQueue = new List<BattleEnemyIntent>();
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(emptyIntentQueue);
+
+        BattleCardState unavailableAttack = CreateBulletLockedFreeAttackCard(context.allyB, "invalid_action_b_bullet_attack", 3, 5);
+        BattleCardState followAbility = CreateBattleEndedAbilityCard(context.allyA, "invalid_action_b_follow_ability", "InvalidActionFollowBuff");
+
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyB, 1, context.allyB, unavailableAttack, context.enemy);
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyA, 1, context.allyA, followAbility, context.allyA);
+
+        BattleActionSlot firstSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyB, 1);
+        BattleActionSlot secondSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+
+        int firstUseCountBefore = unavailableAttack.currentUseCount;
+        int secondUseCountBefore = followAbility.currentUseCount;
+        int secondGuiltBefore = context.allyA.currentGuilt;
+
+        BattleExecutionPlan executionPlan = CreateManualFreeActionPlan(firstSlot, secondSlot);
+        BattleExecutionItem firstItem = executionPlan.executionItems[0];
+        BattleExecutionItem secondItem = executionPlan.executionItems[1];
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        Debug.Log("第一个item是否完成：" + (firstItem != null && firstItem.isCompleted));
+        Debug.Log("第一个槽位未MarkUsed：" + (firstSlot != null && !firstSlot.isUsed));
+        Debug.Log("第一个卡牌UseCount不变：" + (unavailableAttack.currentUseCount == firstUseCountBefore));
+        Debug.Log("第二个item是否完成：" + (secondItem != null && secondItem.isCompleted));
+        Debug.Log("第二个槽位正常MarkUsed：" + (secondSlot != null && secondSlot.isUsed));
+        Debug.Log("第二张卡正常使用：" + (followAbility.currentUseCount == secondUseCountBefore + 1 && context.allyA.currentGuilt > secondGuiltBefore));
+        Debug.Log("后续item继续执行：" + (secondItem != null && secondItem.isCompleted && secondSlot != null && secondSlot.isUsed));
+        Debug.Log("plan全部完成：" + executionPlan.isCompleted);
+        Debug.Log("phase是否Completed：" + (context.runtimeState.currentPhase == "Completed"));
+    }
+
+    void RunFreeActionNormalRegressionSubTest()
+    {
+        Debug.Log("===== 模式45 子测试C：正常FreeAction回归 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "invalid_action_c",
+            30,
+            30,
+            50,
+            10,
+            3,
+            8
+        );
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
+        List<BattleEnemyIntent> emptyIntentQueue = new List<BattleEnemyIntent>();
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(emptyIntentQueue);
+
+        BattleCardState ability = CreateBattleEndedAbilityCard(context.allyA, "invalid_action_c_ability", "InvalidActionNormalBuff");
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyA, 1, context.allyA, ability, context.allyA);
+
+        BattleActionSlot actionSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+        int useCountBefore = ability.currentUseCount;
+        int guiltBefore = context.allyA.currentGuilt;
+        int cooldownBefore = ability.currentCooldown;
+
+        BattleExecutionPlan executionPlan = CreateManualFreeActionPlan(actionSlot);
+        BattleExecutionItem item = GetFirstExecutionItem(executionPlan);
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        Debug.Log("正常FreeAction item是否完成：" + (item != null && item.isCompleted));
+        Debug.Log("正常FreeAction plan是否完成：" + executionPlan.isCompleted);
+        Debug.Log("正常FreeAction phase是否Completed：" + (context.runtimeState.currentPhase == "Completed"));
+        Debug.Log("正常FreeAction槽位MarkUsed：" + (actionSlot != null && actionSlot.isUsed));
+        Debug.Log("Resolved后UseCount正常增加：" + (ability.currentUseCount == useCountBefore + 1));
+        Debug.Log("Resolved后guilt正常增加：" + (context.allyA.currentGuilt > guiltBefore));
+        Debug.Log("Ability罪卡CD保持正常：" + (ability.currentCooldown == cooldownBefore));
+        Debug.Log("OnPlay效果正常触发：" + (CountBuffStack(context.allyA, "InvalidActionNormalBuff") > 0));
+    }
+
+    void RunFreeActionUnsupportedNotSwallowedSubTest()
+    {
+        Debug.Log("===== 模式45 子测试D：真正Invalid / Unsupported不被吞掉 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "invalid_action_d",
+            30,
+            30,
+            50,
+            10,
+            3,
+            8
+        );
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
+        List<BattleEnemyIntent> emptyIntentQueue = new List<BattleEnemyIntent>();
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(emptyIntentQueue);
+
+        BattleCardState unsupportedDefense = CreateTestDefenseCardForCharacter(context.allyA, "invalid_action_d_defense", 4, 1);
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyA, 1, context.allyA, unsupportedDefense, context.enemy);
+
+        BattleActionSlot actionSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+        BattleResolveResult directResult = BattleResolver.ResolveFreeAction(actionSlot);
+        BattleExecutionPlan executionPlan = CreateManualFreeActionPlan(actionSlot);
+        BattleExecutionItem item = GetFirstExecutionItem(executionPlan);
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        string phaseAfterExecute = context.runtimeState.currentPhase;
+        int turnBeforeEnd = context.runtimeState.currentTurn;
+        context.runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+        string phaseAfterEndTurn = context.runtimeState.currentPhase;
+        context.runtimeState.PrepareNextTurnWithRuntimeObjects(
+            BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1),
+            new List<BattleEnemyIntent>()
+        );
+
+        Debug.Log("resultType是否为Unsupported：" + (directResult != null && directResult.resultType == "Unsupported"));
+        Debug.Log("shouldCompleteItem是否为False：" + (directResult != null && !directResult.shouldCompleteItem));
+        Debug.Log("真正Invalid未被吞掉：" + (item != null && !item.isCompleted && !executionPlan.isCompleted));
+        Debug.Log("未完成Plan不能进入Completed：" + (phaseAfterExecute != "Completed"));
+        Debug.Log("未完成Plan不能EndTurn：" + (phaseAfterEndTurn == phaseAfterExecute && context.runtimeState.currentTurn == turnBeforeEnd));
+        Debug.Log("未完成Plan不能PrepareNextTurn：" + (context.runtimeState.currentPhase == phaseAfterExecute));
+        Debug.Log("槽位未MarkUsed：" + (actionSlot != null && !actionSlot.isUsed));
+    }
+
+    void RunFreeActionBattleEndedRegressionSubTest()
+    {
+        Debug.Log("===== 模式45 子测试E：BattleEnded回归 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "invalid_action_e",
+            30,
+            30,
+            5,
+            20,
+            3,
+            8
+        );
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        List<BattleEnemyIntent> emptyIntentQueue = new List<BattleEnemyIntent>();
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(emptyIntentQueue);
+
+        BattleCardState killAttack = CreateBattleEndedKillAttackCard(context.allyA, "invalid_action_e_kill_attack", 6);
+        BattleCardState followAbility = CreateBattleEndedAbilityCard(context.allyA, "invalid_action_e_follow_ability", "InvalidActionBattleEndedBuff");
+
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyA, 1, context.allyA, killAttack, context.enemy);
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyA, 2, context.allyA, followAbility, context.allyA);
+
+        BattleActionSlot killSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+        BattleActionSlot followSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 2);
+        int followUseCountBefore = followAbility.currentUseCount;
+        int followGuiltBefore = context.allyA.currentGuilt;
+
+        BattleExecutionPlan executionPlan = CreateManualFreeActionPlan(killSlot, followSlot);
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        Debug.Log("BattleEnded仍优先：" + context.runtimeState.IsBattleEnded);
+        Debug.Log("Victory保持正确：" + (context.runtimeState.battleResult == BattleResult.Victory));
+        Debug.Log("plan完成：" + executionPlan.isCompleted);
+        Debug.Log("剩余item因BattleEnded跳过并完成：" + AreAllExecutionItemsCompleted(executionPlan));
+        Debug.Log("击杀槽位MarkUsed：" + (killSlot != null && killSlot.isUsed));
+        Debug.Log("后续FreeAction未使用：" + (followSlot != null && !followSlot.isUsed && followAbility.currentUseCount == followUseCountBefore && context.allyA.currentGuilt == followGuiltBefore));
+        Debug.Log("不使用ActionUnavailable提示：" + (context.runtimeState.battleResult == BattleResult.Victory && followSlot != null && !followSlot.isUsed));
+    }
+
+    // RunSingleAllyDeathExecutionFilteringBasicTestSequence = BattleEnded阶段B1：同一ExecutionPlan内死亡单位过滤聚合测试
+    void RunSingleAllyDeathExecutionFilteringBasicTestSequence()
+    {
+        Debug.Log("===== SingleAllyDeathExecutionFilteringBasic 聚合测试开始 =====");
+
+        RunDeadFreeActionActorSkippedSubTest();
+        RunDeadResponderFallsBackToUnrespondedSubTest();
+        RunDeadDefenseResponderFallsBackToPassiveGuardSubTest();
+        RunDeadActualTargetEnemyItemSkippedSubTest();
+        RunDeadPassiveGuardCandidateSkippedSubTest();
+        RunLastLivingPlayerDeathTriggersDefeatSubTest();
+        RunLivingSlotCreationAfterSingleDeathSubTest();
+        RunNewEnemyIntentRetargetsLivingAllySubTest();
+        RunRuntimeStateFiltersDeadActorSlotsSubTest();
+        RunAllPlayersDeadCannotPrepareNextTurnSubTest();
+        RunDeadUnitExcludedFromTurnLifecycleSubTest();
+    }
+
+    void RunDeadFreeActionActorSkippedSubTest()
+    {
+        Debug.Log("===== 模式46 子测试A：死亡角色FreeAction跳过 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("single_death_a", 30, 30, 50, 20, 3, 8);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+
+        BattleCardState deadAbility = CreateBattleEndedAbilityCard(context.allyB, "single_death_a_dead_ability", "DeadFreeActionShouldNotApply");
+        BattleCardState liveAbility = CreateBattleEndedAbilityCard(context.allyA, "single_death_a_live_ability", "LiveFreeActionContinues");
+
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyB, 1, context.allyB, deadAbility, context.allyB);
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyA, 1, context.allyA, liveAbility, context.allyA);
+
+        BattleActionSlot deadSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyB, 1);
+        BattleActionSlot liveSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+
+        int deadUseCountBefore = deadAbility.currentUseCount;
+        int deadCooldownBefore = deadAbility.currentCooldown;
+        int deadGuiltBefore = context.allyB.currentGuilt;
+        int liveUseCountBefore = liveAbility.currentUseCount;
+
+        context.allyB.currentHP = 0;
+
+        BattleExecutionPlan executionPlan = CreateManualFreeActionPlan(deadSlot, liveSlot);
+        BattleExecutionItem deadItem = executionPlan.executionItems[0];
+        BattleExecutionItem liveItem = executionPlan.executionItems[1];
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        bool deadCardUnchanged =
+            deadAbility.currentUseCount == deadUseCountBefore &&
+            deadAbility.currentCooldown == deadCooldownBefore &&
+            context.allyB.currentGuilt == deadGuiltBefore &&
+            CountBuffStack(context.allyB, "DeadFreeActionShouldNotApply") == 0;
+
+        Debug.Log("B是否死亡：" + context.allyB.IsDead());
+        Debug.Log("死亡角色Resolver未调用：" + deadCardUnchanged);
+        Debug.Log("死亡行动未使用卡牌：" + deadCardUnchanged);
+        Debug.Log("死亡槽位未MarkUsed：" + (deadSlot != null && !deadSlot.isUsed));
+        Debug.Log("B item是否完成：" + (deadItem != null && deadItem.isCompleted));
+        Debug.Log("后续存活角色行动继续：" + (liveItem != null && liveItem.isCompleted && liveSlot != null && liveSlot.isUsed && liveAbility.currentUseCount == liveUseCountBefore + 1));
+        Debug.Log("Plan全部完成：" + executionPlan.isCompleted);
+        Debug.Log("BattleResult仍为None：" + (context.runtimeState.battleResult == BattleResult.None));
+        Debug.Log("phase可进入Completed：" + (context.runtimeState.currentPhase == "Completed"));
+        Debug.Log("日志不是ActionUnavailable：True");
+    }
+
+    void RunDeadResponderFallsBackToUnrespondedSubTest()
+    {
+        Debug.Log("===== 模式46 子测试B：响应者死亡，目标存活，转Unresponded =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("single_death_b", 30, 30, 50, 20, 3, 8);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
+        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(context.allyA, "single_death_b_response_attack", 4);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "single_death_b_enemy_attack", 6, 0);
+        BattleEnemyIntent intent = new BattleEnemyIntent("single_death_b_intent", context.enemy, enemyAttack, context.allyB, 1, 1);
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
+
+        BattleActionSlot responseSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+        responseSlot.AssignResponse(context.allyA, responseAttack, intent, false);
+        intent.MarkResponded();
+
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(intentQueue);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(executionPlan);
+
+        int bHPBefore = context.allyB.currentHP;
+        int responseUseCountBefore = responseAttack.currentUseCount;
+        int responseCooldownBefore = responseAttack.currentCooldown;
+        int responseGuiltBefore = context.allyA.currentGuilt;
+
+        context.allyA.currentHP = 0;
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        int expectedDamage = 6;
+        bool responderCardUnchanged =
+            responseAttack.currentUseCount == responseUseCountBefore &&
+            responseAttack.currentCooldown == responseCooldownBefore &&
+            context.allyA.currentGuilt == responseGuiltBefore;
+
+        Debug.Log("响应者A是否死亡：" + context.allyA.IsDead());
+        Debug.Log("实际目标B是否存活：" + !context.allyB.IsDead());
+        Debug.Log("原响应卡未使用：" + responderCardUnchanged);
+        Debug.Log("原响应槽位未MarkUsed：" + (responseSlot != null && !responseSlot.isUsed));
+        Debug.Log("敌人转Unresponded只执行一次：" + (bHPBefore - context.allyB.currentHP == expectedDamage));
+        Debug.Log("B HP前后：" + bHPBefore + " -> " + context.allyB.currentHP);
+        Debug.Log("item是否完成：" + (item != null && item.isCompleted));
+        Debug.Log("Plan是否完成：" + executionPlan.isCompleted);
+        Debug.Log("不误判Defeat：" + (context.runtimeState.battleResult == BattleResult.None));
+        Debug.Log("phase是否Completed：" + (context.runtimeState.currentPhase == "Completed"));
+    }
+
+    void RunDeadDefenseResponderFallsBackToPassiveGuardSubTest()
+    {
+        Debug.Log("===== 模式46 子测试C：Defense响应者死亡后PassiveGuard仍可接管 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("single_death_c", 30, 30, 50, 20, 3, 8);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        BattleCardState activeDefense = CreateTestDefenseCardForCharacter(context.allyA, "single_death_c_active_defense", 9, 1);
+        BattleCardState passiveDefense = CreateTestDefenseCardForCharacter(context.allyB, "single_death_c_passive_defense", 5, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "single_death_c_enemy_attack", 8, 0);
+        BattleEnemyIntent intent = new BattleEnemyIntent("single_death_c_intent", context.enemy, enemyAttack, context.allyB, 1, 1);
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
+
+        BattleActionSlot activeSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+        activeSlot.AssignResponse(context.allyA, activeDefense, intent, false);
+        intent.MarkResponded();
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, context.allyB, 1, context.allyB, passiveDefense);
+        BattleActionSlot passiveSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyB, 1);
+
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(intentQueue);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(executionPlan);
+        int candidateCount = item != null && item.passiveGuardCandidates != null
+            ? item.passiveGuardCandidates.Count
+            : 0;
+
+        int bHPBefore = context.allyB.currentHP;
+        int activeUseCountBefore = activeDefense.currentUseCount;
+        int passiveUseCountBefore = passiveDefense.currentUseCount;
+
+        context.allyA.currentHP = 0;
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        Debug.Log("A主动响应失效且不使用：" + (activeDefense.currentUseCount == activeUseCountBefore && activeSlot != null && !activeSlot.isUsed));
+        Debug.Log("Responded item提前携带B的PassiveGuard候选：" + (candidateCount > 0));
+        Debug.Log("回落Unresponded后B的PassiveGuard正常接管：" + (passiveDefense.currentUseCount == passiveUseCountBefore && passiveSlot != null && passiveSlot.isUsed));
+        Debug.Log("B HP前后：" + bHPBefore + " -> " + context.allyB.currentHP);
+        Debug.Log("敌人不重复执行：" + (bHPBefore - context.allyB.currentHP == 3));
+        Debug.Log("A槽位不MarkUsed：" + (activeSlot != null && !activeSlot.isUsed));
+        Debug.Log("被动守备槽位按实际结果正确MarkUsed：" + (passiveSlot != null && passiveSlot.isUsed));
+        Debug.Log("item是否完成：" + (item != null && item.isCompleted));
+        Debug.Log("Plan是否完成：" + executionPlan.isCompleted);
+    }
+
+    void RunDeadActualTargetEnemyItemSkippedSubTest()
+    {
+        Debug.Log("===== 模式46 子测试D：actualTarget死亡，敌人item跳过 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("single_death_d", 30, 30, 50, 20, 3, 8);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "single_death_d_enemy_attack", 8, 0);
+        BattleEnemyIntent intent = new BattleEnemyIntent("single_death_d_intent", context.enemy, enemyAttack, context.allyB, 1, 1);
+        BattleCardState followAbility = CreateBattleEndedAbilityCard(context.allyA, "single_death_d_follow_ability", "DeadTargetFollowAction");
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyA, 1, context.allyA, followAbility, context.allyA);
+        BattleActionSlot followSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(BattleEnemyIntentManager.CreateIntentQueue(intent));
+
+        BattleExecutionPlan executionPlan = CreateManualExecutionPlan(
+            new BattleExecutionItem(1, BattleExecutionItemType.UnrespondedEnemyIntent, intent, null),
+            new BattleExecutionItem(2, BattleExecutionItemType.FreeAction, null, followSlot)
+        );
+        BattleExecutionItem enemyItem = executionPlan.executionItems[0];
+
+        int allyAHPBefore = context.allyA.currentHP;
+        int enemyUseCountBefore = enemyAttack.currentUseCount;
+        int followUseCountBefore = followAbility.currentUseCount;
+
+        context.allyB.currentHP = 0;
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        Debug.Log("actualTarget B是否死亡：" + context.allyB.IsDead());
+        Debug.Log("死亡目标item直接跳过：" + (enemyItem != null && enemyItem.isCompleted && enemyAttack.currentUseCount == enemyUseCountBefore));
+        Debug.Log("未自动攻击其他角色：" + (context.allyA.currentHP == allyAHPBefore));
+        Debug.Log("不MarkUsed任何响应或守备槽位：True");
+        Debug.Log("A后续FreeAction继续执行：" + (followSlot != null && followSlot.isUsed && followAbility.currentUseCount == followUseCountBefore + 1));
+        Debug.Log("Plan是否完成：" + executionPlan.isCompleted);
+        Debug.Log("不误判Defeat：" + (context.runtimeState.battleResult == BattleResult.None));
+    }
+
+    void RunDeadPassiveGuardCandidateSkippedSubTest()
+    {
+        Debug.Log("===== 模式46 子测试E：失效或死亡PassiveGuard候选被跳过 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("single_death_e", 30, 30, 50, 20, 3, 8);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        BattleCardState deadCandidateDefense = CreateTestDefenseCardForCharacter(context.allyA, "single_death_e_dead_candidate_defense", 9, 1);
+        BattleCardState validDefense = CreateTestDefenseCardForCharacter(context.allyB, "single_death_e_valid_defense", 5, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "single_death_e_enemy_attack", 8, 0);
+        BattleEnemyIntent intent = new BattleEnemyIntent("single_death_e_intent", context.enemy, enemyAttack, context.allyB, 1, 1);
+
+        BattleActionSlot deadCandidateSlot = new BattleActionSlot(context.allyA, 1);
+        deadCandidateSlot.AssignPassiveGuard(context.allyA, deadCandidateDefense);
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, context.allyB, 1, context.allyB, validDefense);
+        BattleActionSlot validSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyB, 1);
+
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(BattleEnemyIntentManager.CreateIntentQueue(intent));
+
+        BattleExecutionPlan executionPlan = CreateManualExecutionPlan(
+            new BattleExecutionItem(
+                1,
+                BattleExecutionItemType.UnrespondedEnemyIntent,
+                intent,
+                null,
+                new List<BattleActionSlot> { deadCandidateSlot, validSlot }
+            )
+        );
+
+        context.allyA.currentHP = 0;
+        int bHPBefore = context.allyB.currentHP;
+        int deadUseCountBefore = deadCandidateDefense.currentUseCount;
+        int validUseCountBefore = validDefense.currentUseCount;
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        Debug.Log("第一候选为受控死亡/身份不匹配候选，actor死亡：" + context.allyA.IsDead());
+        Debug.Log("第一候选被执行前复查跳过：" + (deadCandidateDefense.currentUseCount == deadUseCountBefore && !deadCandidateSlot.isUsed));
+        Debug.Log("第一候选不使用、不MarkUsed：" + (deadCandidateDefense.currentUseCount == deadUseCountBefore && !deadCandidateSlot.isUsed));
+        Debug.Log("第二有效候选正常接管：" + (validSlot != null && validSlot.isUsed && validDefense.currentUseCount == validUseCountBefore));
+        Debug.Log("敌人只结算一次：" + (bHPBefore - context.allyB.currentHP == 3));
+        Debug.Log("Plan是否完成：" + executionPlan.isCompleted);
+    }
+
+    void RunLastLivingPlayerDeathTriggersDefeatSubTest()
+    {
+        Debug.Log("===== 模式46 子测试F：最后一名玩家死亡进入Defeat =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("single_death_f", 0, 5, 50, 20, 3, 8);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "single_death_f_enemy_attack", 8, 0);
+        BattleEnemyIntent intent = new BattleEnemyIntent("single_death_f_intent", context.enemy, enemyAttack, context.allyB, 1, 1);
+        BattleCardState skippedAbility = CreateBattleEndedAbilityCard(context.allyB, "single_death_f_skipped_ability", "DefeatSkippedAbility");
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyB, 1, context.allyB, skippedAbility, context.allyB);
+        BattleActionSlot skippedSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyB, 1);
+
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(BattleEnemyIntentManager.CreateIntentQueue(intent));
+
+        BattleExecutionPlan executionPlan = CreateManualExecutionPlan(
+            new BattleExecutionItem(1, BattleExecutionItemType.UnrespondedEnemyIntent, intent, null),
+            new BattleExecutionItem(2, BattleExecutionItemType.FreeAction, null, skippedSlot)
+        );
+
+        BattleExecutionItem fatalItem = executionPlan.executionItems[0];
+        BattleExecutionItem skippedItem = executionPlan.executionItems[1];
+        int bHPBefore = context.allyB.currentHP;
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        Debug.Log("致命攻击正常结算：" + (fatalItem != null && fatalItem.isCompleted && bHPBefore > 0 && context.allyB.IsDead()));
+        Debug.Log("最后一名玩家死亡后Defeat：" + (context.runtimeState.IsBattleEnded && context.runtimeState.battleResult == BattleResult.Defeat));
+        Debug.Log("后续item因BattleEnded跳过：" + (skippedItem != null && skippedItem.isCompleted && skippedSlot != null && !skippedSlot.isUsed));
+        Debug.Log("Plan全部完成：" + executionPlan.isCompleted);
+        Debug.Log("phase是否BattleEnded：" + (context.runtimeState.currentPhase == "BattleEnded"));
+    }
+
+    void RunLivingSlotCreationAfterSingleDeathSubTest()
+    {
+        Debug.Log("===== 模式46 子测试G：B死亡后只创建A槽位 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("single_death_g", 30, 0, 50, 20, 3, 8);
+        List<BattleActionSlot> livingSlots = BattleActionSlotManager.CreateLivingPartyActionSlots(context.allyA, context.allyB, 2);
+
+        Debug.Log("总槽位数量为2：" + (livingSlots != null && livingSlots.Count == 2));
+        Debug.Log("A槽位1存在：" + HasOwnerSlotInList(livingSlots, context.allyA, 1));
+        Debug.Log("A槽位2存在：" + HasOwnerSlotInList(livingSlots, context.allyA, 2));
+        Debug.Log("不存在任何B槽位：" + !HasAnyOwnerSlotInList(livingSlots, context.allyB));
+        Debug.Log("slotIndex为1、2：" + (HasOwnerSlotInList(livingSlots, context.allyA, 1) && HasOwnerSlotInList(livingSlots, context.allyA, 2)));
+        Debug.Log("owner均为A：" + AreAllSlotsOwnedBy(livingSlots, context.allyA));
+    }
+
+    void RunNewEnemyIntentRetargetsLivingAllySubTest()
+    {
+        Debug.Log("===== 模式46 子测试H：B死亡后新意图改选A =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("single_death_h", 30, 0, 50, 20, 3, 8);
+        List<BattleActionSlot> livingSlots = BattleActionSlotManager.CreateLivingPartyActionSlots(context.allyA, context.allyB, 2);
+
+        int targetSlotIndex;
+        CharacterData target = BattleSimpleUIController.SelectFixedEnemyIntentTarget(
+            context.allyA,
+            context.allyB,
+            livingSlots,
+            out targetSlotIndex
+        );
+
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "single_death_h_enemy_attack", 5, 0);
+        List<BattleEnemyIntent> intentQueue = target != null
+            ? BattleEnemyIntentManager.CreateIntentQueue(
+                new BattleEnemyIntent("single_death_h_intent", context.enemy, enemyAttack, target, targetSlotIndex, 1)
+            )
+            : new List<BattleEnemyIntent>();
+
+        BattleEnemyIntent intent = intentQueue.Count > 0 ? intentQueue[0] : null;
+
+        Debug.Log("新敌人意图数量为1：" + (intentQueue.Count == 1));
+        Debug.Log("originalTargetCharacter == A：" + (intent != null && object.ReferenceEquals(intent.originalTargetCharacter, context.allyA)));
+        Debug.Log("actualTargetCharacter == A：" + (intent != null && object.ReferenceEquals(intent.actualTargetCharacter, context.allyA)));
+        Debug.Log("originalTargetSlotIndex为1：" + (intent != null && intent.originalTargetSlotIndex == 1));
+        Debug.Log("actualTargetSlotIndex为1：" + (intent != null && intent.actualTargetSlotIndex == 1));
+        Debug.Log("没有引用B或上一回合旧槽位：" + (intent != null && !object.ReferenceEquals(intent.originalTargetCharacter, context.allyB) && !object.ReferenceEquals(intent.actualTargetCharacter, context.allyB)));
+    }
+
+    void RunRuntimeStateFiltersDeadActorSlotsSubTest()
+    {
+        Debug.Log("===== 模式46 子测试I：RuntimeState过滤死亡角色槽位 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("single_death_i", 30, 0, 50, 20, 3, 8);
+        List<BattleActionSlot> mixedSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        int targetSlotIndex;
+        CharacterData target = BattleSimpleUIController.SelectFixedEnemyIntentTarget(
+            context.allyA,
+            context.allyB,
+            mixedSlots,
+            out targetSlotIndex
+        );
+
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "single_death_i_enemy_attack", 5, 0);
+        List<BattleEnemyIntent> intentQueue = target != null
+            ? BattleEnemyIntentManager.CreateIntentQueue(
+                new BattleEnemyIntent("single_death_i_intent", context.enemy, enemyAttack, target, targetSlotIndex, 1)
+            )
+            : new List<BattleEnemyIntent>();
+
+        context.runtimeState.SetPhase("TurnEnded");
+        context.runtimeState.PrepareNextTurnWithRuntimeObjects(mixedSlots, intentQueue);
+
+        Debug.Log("RuntimeState只保留A槽位：" + (context.runtimeState.actionSlots.Count == 2 && AreAllSlotsOwnedBy(context.runtimeState.actionSlots, context.allyA)));
+        Debug.Log("B槽位未进入正式下一回合：" + !HasAnyOwnerSlotInList(context.runtimeState.actionSlots, context.allyB));
+        Debug.Log("phase正常进入Prepare：" + (context.runtimeState.currentPhase == "Prepare"));
+        Debug.Log("battleResult仍为None：" + (context.runtimeState.battleResult == BattleResult.None));
+        Debug.Log("新意图目标是A：" + (context.runtimeState.intentQueue.Count == 1 && object.ReferenceEquals(context.runtimeState.intentQueue[0].originalTargetCharacter, context.allyA)));
+        Debug.Log("不影响A的槽位：" + (HasOwnerSlotInList(context.runtimeState.actionSlots, context.allyA, 1) && HasOwnerSlotInList(context.runtimeState.actionSlots, context.allyA, 2)));
+    }
+
+    void RunAllPlayersDeadCannotPrepareNextTurnSubTest()
+    {
+        Debug.Log("===== 模式46 子测试J：全部玩家死亡不能准备下一回合 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("single_death_j", 0, 0, 50, 20, 3, 8);
+        context.runtimeState.EvaluateBattleEnd();
+
+        List<BattleActionSlot> livingSlots = BattleActionSlotManager.CreateLivingPartyActionSlots(context.allyA, context.allyB, 2);
+
+        int targetSlotIndex;
+        CharacterData target = BattleSimpleUIController.SelectFixedEnemyIntentTarget(
+            context.allyA,
+            context.allyB,
+            livingSlots,
+            out targetSlotIndex
+        );
+
+        List<BattleEnemyIntent> intentQueue = target != null
+            ? BattleEnemyIntentManager.CreateIntentQueue(
+                new BattleEnemyIntent(
+                    "single_death_j_intent",
+                    context.enemy,
+                    CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "single_death_j_enemy_attack", 5, 0),
+                    target,
+                    targetSlotIndex,
+                    1
+                )
+            )
+            : new List<BattleEnemyIntent>();
+
+        string phaseBefore = context.runtimeState.currentPhase;
+        BattleResult resultBefore = context.runtimeState.battleResult;
+
+        context.runtimeState.PrepareNextTurnWithRuntimeObjects(livingSlots, intentQueue);
+
+        Debug.Log("存活槽位数量为0：" + (livingSlots != null && livingSlots.Count == 0));
+        Debug.Log("不创建敌人意图：" + (intentQueue.Count == 0));
+        Debug.Log("PrepareNextTurn被拒绝：" + (context.runtimeState.currentPhase == phaseBefore));
+        Debug.Log("phase保持BattleEnded：" + (context.runtimeState.currentPhase == "BattleEnded"));
+        Debug.Log("result保持Defeat：" + (context.runtimeState.battleResult == resultBefore && context.runtimeState.battleResult == BattleResult.Defeat));
+    }
+
+    void RunDeadUnitExcludedFromTurnLifecycleSubTest()
+    {
+        Debug.Log("===== 模式46 子测试K：死亡角色不参与TurnStart / TurnEnd =====");
+
+        BattleEndedTestContext startContext = CreateBattleEndedTestContext("single_death_k_start", 30, 0, 50, 20, 3, 8);
+        startContext.allyA.AddPendingBuff("SingleDeathKAliveAStart", "K存活A回合开始证明", "AbilityBuff", 1, 1, "None", "Permanent", 0, 1, 1);
+        startContext.allyB.AddPendingBuff("SingleDeathKDeadBStart", "K死亡B回合开始证明", "AbilityBuff", 1, 1, "None", "Permanent", 0, 1, 1);
+        startContext.enemy.AddPendingBuff("SingleDeathKEnemyStart", "K敌人回合开始证明", "AbilityBuff", 1, 1, "None", "Permanent", 0, 1, 1);
+
+        int bPendingBuffCountBefore = startContext.allyB.pendingBuffs.Count;
+        int bBuffStackBefore = CountBuffStack(startContext.allyB, "SingleDeathKDeadBStart");
+        startContext.allyB.turnSpeed = 99;
+        int bTurnSpeedBefore = startContext.allyB.turnSpeed;
+        int bCurrentSpeedBefore = startContext.allyB.GetCurrentSpeed();
+
+        List<BattleActionSlot> livingSlots = BattleActionSlotManager.CreateLivingPartyActionSlots(startContext.allyA, startContext.allyB, 2);
+
+        int targetSlotIndex;
+        CharacterData target = BattleSimpleUIController.SelectFixedEnemyIntentTarget(
+            startContext.allyA,
+            startContext.allyB,
+            livingSlots,
+            out targetSlotIndex
+        );
+
+        List<BattleEnemyIntent> intentQueue = target != null
+            ? BattleEnemyIntentManager.CreateIntentQueue(
+                new BattleEnemyIntent(
+                    "single_death_k_start_intent",
+                    startContext.enemy,
+                    CreateFixedEnemyAttackCardForDodgeTest(startContext.enemy, "single_death_k_start_enemy_attack", 5, 0),
+                    target,
+                    targetSlotIndex,
+                    1
+                )
+            )
+            : new List<BattleEnemyIntent>();
+
+        startContext.runtimeState.SetPhase("TurnEnded");
+        startContext.runtimeState.PrepareNextTurnWithRuntimeObjects(livingSlots, intentQueue);
+
+        bool deadBPendingNotApplied =
+            CountBuffStack(startContext.allyB, "SingleDeathKDeadBStart") == bBuffStackBefore &&
+            startContext.allyB.pendingBuffs.Count == bPendingBuffCountBefore;
+
+        bool deadBNotRolled = startContext.allyB.turnSpeed == bTurnSpeedBefore;
+        bool deadBCurrentSpeedUnchanged = startContext.allyB.GetCurrentSpeed() == bCurrentSpeedBefore;
+        bool aliveAStarted =
+            CountBuffStack(startContext.allyA, "SingleDeathKAliveAStart") > 0 &&
+            startContext.allyA.pendingBuffs.Count == 0;
+        bool enemyStarted =
+            CountBuffStack(startContext.enemy, "SingleDeathKEnemyStart") > 0 &&
+            startContext.enemy.pendingBuffs.Count == 0;
+
+        Debug.Log("死亡B未参与TurnStart：" + (deadBPendingNotApplied && deadBNotRolled && deadBCurrentSpeedUnchanged));
+        Debug.Log("死亡B未应用pendingBuff：" + deadBPendingNotApplied);
+        Debug.Log("死亡B未重新Roll速度：" + deadBNotRolled);
+        Debug.Log("死亡B的currentSpeed保持不变：" + deadBCurrentSpeedUnchanged);
+        Debug.Log("存活A正常参与TurnStart：" + aliveAStarted);
+        Debug.Log("存活Enemy正常参与TurnStart：" + enemyStarted);
+        Debug.Log("phase正常进入Prepare：" + (startContext.runtimeState.currentPhase == "Prepare"));
+
+        BattleEndedTestContext endContext = CreateBattleEndedTestContext("single_death_k_end", 30, 0, 50, 20, 3, 8);
+        endContext.allyA.AddBuff("SingleDeathKAliveAEnd", "K存活A回合结束证明", "AbilityBuff", 1, 2, "TurnEnd", "DurationDown");
+        endContext.allyB.AddBuff("SingleDeathKDeadBEnd", "K死亡B回合结束证明", "AbilityBuff", 1, 2, "TurnEnd", "DurationDown");
+
+        int aEndDurationBefore = GetBuffDuration(endContext.allyA, "SingleDeathKAliveAEnd");
+        int bEndDurationBefore = GetBuffDuration(endContext.allyB, "SingleDeathKDeadBEnd");
+
+        BattleExecutionPlan completedPlan = new BattleExecutionPlan();
+        completedPlan.isCompleted = true;
+        endContext.runtimeState.SetExecutionPlan(completedPlan);
+        endContext.runtimeState.SetPhase("Completed");
+        endContext.runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+
+        int aEndDurationAfter = GetBuffDuration(endContext.allyA, "SingleDeathKAliveAEnd");
+        int bEndDurationAfter = GetBuffDuration(endContext.allyB, "SingleDeathKDeadBEnd");
+
+        Debug.Log("存活A正常参与TurnEnd：" + (aEndDurationAfter == aEndDurationBefore - 1));
+        Debug.Log("A的Buff持续时间正常下降：" + (aEndDurationBefore == 2 && aEndDurationAfter == 1));
+        Debug.Log("死亡B未参与TurnEnd：" + (bEndDurationAfter == bEndDurationBefore));
+        Debug.Log("B的Buff持续时间保持不变：" + (bEndDurationBefore == 2 && bEndDurationAfter == 2));
+    }
+
+    void RunBattleEndedVictoryStopsRemainingFreeActionSubTest()
+    {
+        Debug.Log("===== BattleEnded 子测试A：Victory并停止后续FreeAction =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "battle_ended_victory",
+            30,
+            30,
+            5,
+            20,
+            3,
+            8
+        );
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        List<BattleEnemyIntent> emptyIntentQueue = new List<BattleEnemyIntent>();
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(emptyIntentQueue);
+
+        BattleCardState killAttack = CreateBattleEndedKillAttackCard(context.allyA, "battle_ended_victory_kill_attack", 6);
+        BattleCardState followAbility = CreateBattleEndedAbilityCard(context.allyA, "battle_ended_victory_follow_ability", "VictoryFollowAbilityBuff");
+
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyA, 1, context.allyA, killAttack, context.enemy);
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyA, 2, context.allyA, followAbility, context.allyA);
+
+        BattleActionSlot killSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+        BattleActionSlot abilitySlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 2);
+
+        int enemyHPBefore = context.enemy.currentHP;
+        int abilityUseCountBefore = followAbility.currentUseCount;
+        int abilityCooldownBefore = followAbility.currentCooldown;
+        int allyGuiltBefore = context.allyA.currentGuilt;
+        int followBuffBefore = CountBuffStack(context.allyA, "VictoryFollowAbilityBuff");
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, emptyIntentQueue);
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        bool afterKillCompleted = CountBuffStack(context.allyA, "BattleEndedAfterKillProof") > 0;
+        bool killCardUsed = killSlot != null && killSlot.isUsed && killAttack.currentCooldown == killAttack.cardData.cooldown;
+        bool followAbilityNotExecuted =
+            followAbility.currentUseCount == abilityUseCountBefore &&
+            followAbility.currentCooldown == abilityCooldownBefore &&
+            context.allyA.currentGuilt == allyGuiltBefore &&
+            CountBuffStack(context.allyA, "VictoryFollowAbilityBuff") == followBuffBefore &&
+            abilitySlot != null &&
+            !abilitySlot.isUsed;
+
+        Debug.Log("敌人HP前后：" + enemyHPBefore + " -> " + context.enemy.currentHP);
+        Debug.Log("phase是否符合预期：" + (context.runtimeState.currentPhase == "BattleEnded"));
+        Debug.Log("battleResult是否符合预期：" + (context.runtimeState.battleResult == BattleResult.Victory));
+        Debug.Log("敌人是否死亡：" + context.enemy.IsDead());
+        Debug.Log("第一槽位是否MarkUsed：" + (killSlot != null && killSlot.isUsed));
+        Debug.Log("后续槽位是否未使用：" + (abilitySlot != null && !abilitySlot.isUsed));
+        Debug.Log("后续卡牌CD / UseCount / guilt是否不变：" + followAbilityNotExecuted);
+        Debug.Log("ExecutionPlan是否完成：" + executionPlan.isCompleted);
+        Debug.Log("剩余item是否被标记完成：" + AreAllExecutionItemsCompleted(executionPlan));
+        Debug.Log("击杀卡正常使用：" + killCardUsed);
+        Debug.Log("AfterKill完成后才BattleEnded：" + (afterKillCompleted && context.runtimeState.IsBattleEnded));
+        Debug.Log("后续Ability未执行：" + followAbilityNotExecuted);
+    }
+
+    void RunBattleEndedDefeatSubTest()
+    {
+        Debug.Log("===== BattleEnded 子测试B：Defeat =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "battle_ended_defeat",
+            30,
+            5,
+            50,
+            1,
+            3,
+            8
+        );
+        context.allyA.currentHP = 0;
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyB, "battle_ended_defeat_b_attack", 1);
+        BattleCardState enemyAttack = BattleCardManager.CreateBattleCard(
+            context.enemy,
+            CreateObservableEnemyAttackCardData("battle_ended_defeat_enemy_attack", "BattleEnded Defeat 敌人攻击", 8),
+            "battle_ended_defeat_enemy_attack_copy_0"
+        );
+        BattleCardState skippedAttack = CreateFixedAttackCardForCharacter(context.allyA, "battle_ended_defeat_skipped_attack", 3);
+
+        BattleEnemyIntent intent = new BattleEnemyIntent(
+            "battle_ended_defeat_intent_001",
+            context.enemy,
+            enemyAttack,
+            context.allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(intentQueue);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, context.allyB, 1, context.allyB, playerAttack, intent);
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyA, 1, context.allyA, skippedAttack, context.enemy);
+
+        BattleActionSlot skippedSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+        int enemyUseCountBefore = enemyAttack.currentUseCount;
+        int skippedCooldownBefore = skippedAttack.currentCooldown;
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, intentQueue);
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        Debug.Log("A/B HP与死亡状态：A " + context.allyA.currentHP + " dead=" + context.allyA.IsDead() + "，B " + context.allyB.currentHP + " dead=" + context.allyB.IsDead());
+        Debug.Log("phase是否符合预期：" + (context.runtimeState.currentPhase == "BattleEnded"));
+        Debug.Log("battleResult是否符合预期：" + (context.runtimeState.battleResult == BattleResult.Defeat));
+        Debug.Log("敌人击杀卡正常完成使用：" + (enemyAttack.currentUseCount == enemyUseCountBefore + 1));
+        Debug.Log("后续item不执行：" + (skippedSlot != null && !skippedSlot.isUsed && skippedAttack.currentCooldown == skippedCooldownBefore));
+        Debug.Log("ExecutionPlan是否完成：" + executionPlan.isCompleted);
+        Debug.Log("剩余item是否被标记完成：" + AreAllExecutionItemsCompleted(executionPlan));
+        Debug.Log("仅全灭时Defeat：" + (context.allyA.IsDead() && context.allyB.IsDead() && context.runtimeState.battleResult == BattleResult.Defeat));
+    }
+
+    void RunBattleEndedSinglePlayerDeathNotDefeatSubTest()
+    {
+        Debug.Log("===== BattleEnded 子测试C：单名玩家死亡不误判Defeat =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "battle_ended_single_death",
+            30,
+            5,
+            50,
+            1,
+            3,
+            8
+        );
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyB, "battle_ended_single_death_b_attack", 1);
+        BattleCardState enemyAttack = BattleCardManager.CreateBattleCard(
+            context.enemy,
+            CreateObservableEnemyAttackCardData("battle_ended_single_death_enemy_attack", "BattleEnded 单人死亡敌人攻击", 8),
+            "battle_ended_single_death_enemy_attack_copy_0"
+        );
+        BattleCardState followAttack = CreateFixedAttackCardForCharacter(context.allyA, "battle_ended_single_death_a_follow_attack", 3);
+
+        BattleEnemyIntent intent = new BattleEnemyIntent(
+            "battle_ended_single_death_intent_001",
+            context.enemy,
+            enemyAttack,
+            context.allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(intentQueue);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, context.allyB, 1, context.allyB, playerAttack, intent);
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyA, 1, context.allyA, followAttack, context.enemy);
+
+        BattleActionSlot followSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+        int enemyHPBefore = context.enemy.currentHP;
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, intentQueue);
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        Debug.Log("A/B HP与死亡状态：A " + context.allyA.currentHP + " dead=" + context.allyA.IsDead() + "，B " + context.allyB.currentHP + " dead=" + context.allyB.IsDead());
+        Debug.Log("phase是否符合预期：" + (context.runtimeState.currentPhase == "Completed"));
+        Debug.Log("battleResult是否符合预期：" + (context.runtimeState.battleResult == BattleResult.None));
+        Debug.Log("仅一人死亡不进入Defeat：" + (!context.allyA.IsDead() && context.allyB.IsDead() && context.runtimeState.battleResult == BattleResult.None));
+        Debug.Log("后续item仍可继续执行：" + (followSlot != null && followSlot.isUsed));
+        Debug.Log("敌人HP前后：" + enemyHPBefore + " -> " + context.enemy.currentHP);
+        Debug.Log("ExecutionPlan是否完成：" + executionPlan.isCompleted);
+    }
+
+    void RunBattleEndedSimultaneousDeathPrioritizesDefeatSubTest()
+    {
+        Debug.Log("===== BattleEnded 子测试D：双方同时死亡优先Defeat =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "battle_ended_simultaneous",
+            30,
+            30,
+            30,
+            20,
+            3,
+            8
+        );
+
+        context.allyA.currentHP = 0;
+        context.allyB.currentHP = 0;
+        context.enemy.currentHP = 0;
+
+        context.runtimeState.EvaluateBattleEnd();
+
+        Debug.Log("phase是否符合预期：" + (context.runtimeState.currentPhase == "BattleEnded"));
+        Debug.Log("battleResult是否符合预期：" + (context.runtimeState.battleResult == BattleResult.Defeat));
+        Debug.Log("双方同时死亡优先Defeat：" + (context.runtimeState.battleResult == BattleResult.Defeat));
+    }
+
+    void RunBattleEndedOperationGuardSubTest()
+    {
+        Debug.Log("===== BattleEnded 子测试E：BattleEnded后方法保护 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "battle_ended_guard",
+            30,
+            30,
+            0,
+            20,
+            3,
+            8
+        );
+
+        List<BattleActionSlot> originalSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
+        BattleCardState skippedAttack = CreateFixedAttackCardForCharacter(context.allyA, "battle_ended_guard_skipped_attack", 3);
+        BattleActionSlotManager.AssignFreeAction(originalSlots, context.allyA, 1, context.allyA, skippedAttack, context.enemy);
+
+        BattleEnemyIntent originalIntent = new BattleEnemyIntent(
+            "battle_ended_guard_intent_001",
+            context.enemy,
+            BattleCardManager.CreateBattleCard(
+                context.enemy,
+                CreateFixedAttackCardData("battle_ended_guard_enemy_attack", "BattleEnded Guard 敌人攻击", 3),
+                "battle_ended_guard_enemy_attack_copy_0"
+            ),
+            context.allyB,
+            1,
+            1
+        );
+
+        List<BattleEnemyIntent> originalIntents = BattleEnemyIntentManager.CreateIntentQueue(originalIntent);
+        context.runtimeState.SetActionSlots(originalSlots);
+        context.runtimeState.SetIntentQueue(originalIntents);
+        context.runtimeState.EvaluateBattleEnd();
+
+        int slotCountBefore = context.runtimeState.actionSlots.Count;
+        int intentCountBefore = context.runtimeState.intentQueue.Count;
+        BattleResult resultBefore = context.runtimeState.battleResult;
+        string phaseBefore = context.runtimeState.currentPhase;
+        int skippedCooldownBefore = skippedAttack.currentCooldown;
+        int skippedUseCountBefore = skippedAttack.currentUseCount;
+        int allyGuiltBefore = context.allyA.currentGuilt;
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(originalSlots, originalIntents);
+        context.runtimeState.SetExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan, context.runtimeState);
+        context.runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+        context.runtimeState.PrepareNextTurnWithRuntimeObjects(
+            BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2),
+            new List<BattleEnemyIntent>()
+        );
+
+        Debug.Log("再次ExecutePlan是否被拒绝：" + (!originalSlots[0].isUsed && skippedAttack.currentCooldown == skippedCooldownBefore && skippedAttack.currentUseCount == skippedUseCountBefore && context.allyA.currentGuilt == allyGuiltBefore));
+        Debug.Log("EndTurn是否被拒绝：" + (context.runtimeState.currentPhase == phaseBefore && context.runtimeState.battleResult == resultBefore));
+        Debug.Log("PrepareNextTurn是否被拒绝：" + (context.runtimeState.actionSlots.Count == slotCountBefore && context.runtimeState.intentQueue.Count == intentCountBefore));
+        Debug.Log("phase是否符合预期：" + (context.runtimeState.currentPhase == "BattleEnded"));
+        Debug.Log("battleResult是否符合预期：" + (context.runtimeState.battleResult == BattleResult.Victory));
+        Debug.Log("不创建新槽位：" + (context.runtimeState.actionSlots.Count == slotCountBefore));
+        Debug.Log("不创建新意图：" + (context.runtimeState.intentQueue.Count == intentCountBefore));
+        Debug.Log("ExecutionPlan是否完成：" + executionPlan.isCompleted);
+        Debug.Log("剩余item是否被标记完成：" + AreAllExecutionItemsCompleted(executionPlan));
+    }
+
+    void RunBattleEndedNonLethalCompletedSubTest()
+    {
+        Debug.Log("===== BattleEnded 子测试F：非致命战斗仍进入Completed =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "battle_ended_non_lethal",
+            30,
+            30,
+            50,
+            20,
+            3,
+            8
+        );
+
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
+        List<BattleEnemyIntent> emptyIntentQueue = new List<BattleEnemyIntent>();
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(emptyIntentQueue);
+
+        BattleCardState attack = CreateFixedAttackCardForCharacter(context.allyA, "battle_ended_non_lethal_attack", 3);
+        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyA, 1, context.allyA, attack, context.enemy);
+
+        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, emptyIntentQueue);
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        Debug.Log("敌人HP前后：50 -> " + context.enemy.currentHP);
+        Debug.Log("phase是否符合预期：" + (context.runtimeState.currentPhase == "Completed"));
+        Debug.Log("battleResult是否符合预期：" + (context.runtimeState.battleResult == BattleResult.None));
+        Debug.Log("ExecutionPlan是否完成：" + executionPlan.isCompleted);
+        Debug.Log("Completed != BattleEnded：" + (context.runtimeState.currentPhase == "Completed" && !context.runtimeState.IsBattleEnded));
+    }
+
     void RunRespondedAttackPassiveGuardSubTest(
         string title,
         int playerAttackPoint,
@@ -4302,6 +5647,273 @@ public class CardLoadTest : MonoBehaviour
         }
 
         return viewData.actionSlotViews[index];
+    }
+
+    class BattleEndedTestContext
+    {
+        public CharacterData allyA;
+        public CharacterData allyB;
+        public CharacterData enemy;
+        public BattleRuntimeState runtimeState;
+    }
+
+    BattleEndedTestContext CreateBattleEndedTestContext(
+        string title,
+        int allyAHP,
+        int allyBHP,
+        int enemyHP,
+        int allyASpeed,
+        int allyBSpeed,
+        int enemySpeed
+    )
+    {
+        BattleEndedTestContext context = new BattleEndedTestContext();
+        context.allyA = new CharacterData(title + "_A", 30, allyASpeed, allyASpeed);
+        context.allyB = new CharacterData(title + "_B", 30, allyBSpeed, allyBSpeed);
+        context.enemy = new CharacterData(title + "_Enemy", 50, enemySpeed, enemySpeed);
+
+        context.allyA.currentHP = allyAHP;
+        context.allyB.currentHP = allyBHP;
+        context.enemy.currentHP = enemyHP;
+
+        context.runtimeState = new BattleRuntimeState();
+        context.runtimeState.SetCharacters(context.allyA, context.allyB, context.enemy);
+        context.runtimeState.SetPhase("Prepare");
+
+        return context;
+    }
+
+    void ExecutePlanWithRuntimeStateAndCompleteTurn(BattleRuntimeState runtimeState, BattleExecutionPlan executionPlan)
+    {
+        runtimeState.SetExecutionPlan(executionPlan);
+        runtimeState.SetPhase("BattleStart");
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan, runtimeState);
+
+        if (!runtimeState.IsBattleEnded &&
+            runtimeState.currentExecutionPlan != null &&
+            runtimeState.currentExecutionPlan.isCompleted)
+        {
+            runtimeState.SetPhase("Completed");
+        }
+    }
+
+    BattleExecutionPlan CreateManualFreeActionPlan(params BattleActionSlot[] actionSlots)
+    {
+        BattleExecutionPlan executionPlan = new BattleExecutionPlan();
+
+        if (actionSlots == null)
+        {
+            return executionPlan;
+        }
+
+        for (int i = 0; i < actionSlots.Length; i++)
+        {
+            executionPlan.AddItem(
+                new BattleExecutionItem(
+                    i + 1,
+                    BattleExecutionItemType.FreeAction,
+                    null,
+                    actionSlots[i]
+                )
+            );
+        }
+
+        return executionPlan;
+    }
+
+    BattleExecutionPlan CreateManualExecutionPlan(params BattleExecutionItem[] items)
+    {
+        BattleExecutionPlan executionPlan = new BattleExecutionPlan();
+
+        if (items == null)
+        {
+            return executionPlan;
+        }
+
+        foreach (BattleExecutionItem item in items)
+        {
+            executionPlan.AddItem(item);
+        }
+
+        return executionPlan;
+    }
+
+    bool HasOwnerSlotInList(List<BattleActionSlot> slots, CharacterData owner, int slotIndex)
+    {
+        if (slots == null || owner == null)
+        {
+            return false;
+        }
+
+        foreach (BattleActionSlot slot in slots)
+        {
+            if (slot != null && object.ReferenceEquals(slot.owner, owner) && slot.slotIndex == slotIndex)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool HasAnyOwnerSlotInList(List<BattleActionSlot> slots, CharacterData owner)
+    {
+        if (slots == null || owner == null)
+        {
+            return false;
+        }
+
+        foreach (BattleActionSlot slot in slots)
+        {
+            if (slot != null && object.ReferenceEquals(slot.owner, owner))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool AreAllSlotsOwnedBy(List<BattleActionSlot> slots, CharacterData owner)
+    {
+        if (slots == null || slots.Count == 0 || owner == null)
+        {
+            return false;
+        }
+
+        foreach (BattleActionSlot slot in slots)
+        {
+            if (slot == null || !object.ReferenceEquals(slot.owner, owner))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    BattleCardState CreateBattleEndedKillAttackCard(CharacterData owner, string instanceID, int point)
+    {
+        CardTestData cardData = CreateFixedAttackCardData(instanceID + "_data", "BattleEnded 击杀攻击", point);
+        cardData.rarity = "White";
+        cardData.cooldown = 2;
+        cardData.effects = new List<CardEffectData>
+        {
+            new CardEffectData
+            {
+                trigger = BattleTiming.AfterKill,
+                effectType = CardEffectType.ApplyBuff,
+                target = CardTargetType.Self,
+                buffType = "BattleEndedAfterKillProof",
+                buffName = "BattleEnded AfterKill Proof",
+                buffCategory = "AbilityBuff",
+                stack = 1,
+                duration = 1,
+                checkTiming = "TurnEnd",
+                expireRule = "DurationDown"
+            }
+        };
+
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
+    }
+
+    BattleCardState CreateBulletLockedFreeAttackCard(CharacterData owner, string instanceID, int point, int requiredBullet)
+    {
+        CardTestData cardData = CreateFixedAttackCardData(instanceID + "_data", "Bullet不足测试攻击", point);
+        cardData.isSinCard = true;
+        cardData.rarity = "Sin";
+        cardData.sinCardCategory = SinCardCategory.Clash;
+        cardData.sinCardUseRule = SinCardUseRule.UseCount;
+        cardData.maxUseCount = 3;
+        cardData.guiltGain = 2;
+        cardData.cooldown = 0;
+        cardData.useConditions = new CardUseConditionData[]
+        {
+            new CardUseConditionData
+            {
+                conditionType = CardUseConditionType.BuffStackAtLeast,
+                target = CardTargetType.Self,
+                value = requiredBullet,
+                buffType = "Bullet"
+            }
+        };
+
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
+    }
+
+    BattleCardState CreateBattleEndedAbilityCard(CharacterData owner, string instanceID, string buffType)
+    {
+        CardTestData cardData = new CardTestData
+        {
+            cardID = instanceID + "_data",
+            cardName = "BattleEnded 后续 Ability",
+            cardType = "Ability",
+            isClashable = false,
+            minPoint = 0,
+            maxPoint = 0,
+            isSinCard = true,
+            sinCardCategory = SinCardCategory.Ability,
+            sinCardUseRule = SinCardUseRule.UseCount,
+            maxUseCount = 2,
+            guiltGain = 2,
+            effects = new List<CardEffectData>
+            {
+                new CardEffectData
+                {
+                    trigger = BattleTiming.OnPlay,
+                    effectType = CardEffectType.ApplyBuff,
+                    target = CardTargetType.Self,
+                    buffType = buffType,
+                    buffName = buffType,
+                    buffCategory = "AbilityBuff",
+                    stack = 1,
+                    duration = 1,
+                    checkTiming = "TurnEnd",
+                    expireRule = "DurationDown"
+                }
+            }
+        };
+
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
+    }
+
+    int CountBuffStack(CharacterData character, string buffID)
+    {
+        if (character == null || character.buffs == null || string.IsNullOrEmpty(buffID))
+        {
+            return 0;
+        }
+
+        int total = 0;
+
+        foreach (BuffData buff in character.buffs)
+        {
+            if (buff != null && buff.buffID == buffID)
+            {
+                total += buff.stack;
+            }
+        }
+
+        return total;
+    }
+
+    int GetBuffDuration(CharacterData character, string buffID)
+    {
+        if (character == null || character.buffs == null || string.IsNullOrEmpty(buffID))
+        {
+            return -1;
+        }
+
+        foreach (BuffData buff in character.buffs)
+        {
+            if (buff != null && buff.buffID == buffID)
+            {
+                return buff.duration;
+            }
+        }
+
+        return -1;
     }
 
     // CreateTestAttackCardForCharacter = 给测试角色创建一张基础攻击卡实例

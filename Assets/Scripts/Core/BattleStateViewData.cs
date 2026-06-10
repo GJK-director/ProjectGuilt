@@ -6,6 +6,7 @@ public class BattleStateViewData
 {
     public int currentTurn;
     public string currentPhase;
+    public string battleResult;
 
     public string allyAName;
     public int allyAHP;
@@ -44,11 +45,13 @@ public class BattleStateViewData
         if (runtimeState == null)
         {
             viewData.currentPhase = "None";
+            viewData.battleResult = BattleResult.None.ToString();
             return viewData;
         }
 
         viewData.currentTurn = runtimeState.currentTurn;
         viewData.currentPhase = runtimeState.currentPhase;
+        viewData.battleResult = runtimeState.battleResult.ToString();
 
         FillAllyA(viewData, runtimeState.allyA);
         FillAllyB(viewData, runtimeState.allyB);
@@ -84,6 +87,7 @@ public class BattleStateViewData
         Debug.Log("===== BattleStateViewData 当前状态快照 =====");
         Debug.Log("当前回合：" + currentTurn);
         Debug.Log("当前阶段：" + currentPhase);
+        Debug.Log("战斗结果：" + battleResult);
         Debug.Log("allyA：" + allyAName + " HP：" + allyAHP + " / " + allyAMaxHP + "，速度：" + allyASpeed + "，负罪感：" + allyAGuilt);
         Debug.Log("allyB：" + allyBName + " HP：" + allyBHP + " / " + allyBMaxHP + "，速度：" + allyBSpeed + "，负罪感：" + allyBGuilt);
         Debug.Log("enemy：" + enemyName + " HP：" + enemyHP + " / " + enemyMaxHP + "，速度：" + enemySpeed);

@@ -105,8 +105,9 @@ public class BattleSimpleUIController : MonoBehaviour
 
         runtimeState = new BattleRuntimeState();
         runtimeState.SetCharacters(allyA, allyB, enemy);
-        runtimeState.SetActionSlots(BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2));
-        runtimeState.SetIntentQueue(CreateFixedEnemyIntentQueue());
+        List<BattleActionSlot> initialActionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2);
+        runtimeState.SetActionSlots(initialActionSlots);
+        runtimeState.SetIntentQueue(CreateFixedEnemyIntentQueue(initialActionSlots));
         runtimeState.SetPhase("Prepare");
 
         lastLog = "初始化完成：已进入 Prepare 阶段";
@@ -116,7 +117,7 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         allyA = new CharacterData("我方角色A", 30, 20, 20);
         allyB = new CharacterData("我方角色B", 30, 3, 5);
-        enemy = new CharacterData("敌人", 999, 5, 8);
+        enemy = new CharacterData("敌人", 50, 5, 8);
     }
 
     void AddTestBuffs()
@@ -205,11 +206,20 @@ public class BattleSimpleUIController : MonoBehaviour
         );
     }
 
-    List<BattleEnemyIntent> CreateFixedEnemyIntentQueue()
+    List<BattleEnemyIntent> CreateFixedEnemyIntentQueue(List<BattleActionSlot> actionSlots)
     {
-        if (enemy == null || enemyAttackCardState == null || allyB == null)
+        if (enemy == null || enemyAttackCardState == null)
         {
-            Debug.LogWarning("创建固定敌人意图失败：敌人 / 敌人卡牌 / 目标角色数据不完整");
+            Debug.LogWarning("创建固定敌人意图失败：敌人 / 敌人卡牌数据不完整");
+            return new List<BattleEnemyIntent>();
+        }
+
+        int targetSlotIndex;
+        CharacterData target = SelectFixedEnemyIntentTarget(allyA, allyB, actionSlots, out targetSlotIndex);
+
+        if (target == null)
+        {
+            Debug.LogWarning("创建固定敌人意图失败：没有可用的存活目标槽位");
             return new List<BattleEnemyIntent>();
         }
 
@@ -217,12 +227,59 @@ public class BattleSimpleUIController : MonoBehaviour
             "ui_fixed_enemy_intent_001",
             enemy,
             enemyAttackCardState,
-            allyB,
-            1,
+            target,
+            targetSlotIndex,
             1
         );
 
+        Debug.Log("敌人新意图目标改为：" + target.characterName + " 槽位" + targetSlotIndex);
+
         return BattleEnemyIntentManager.CreateIntentQueue(enemyIntent);
+    }
+
+    internal static CharacterData SelectFixedEnemyIntentTarget(
+        CharacterData allyA,
+        CharacterData allyB,
+        List<BattleActionSlot> actionSlots,
+        out int targetSlotIndex
+    )
+    {
+        targetSlotIndex = 1;
+
+        if (allyB != null && !allyB.IsDead())
+        {
+            return HasOwnerSlot(actionSlots, allyB, targetSlotIndex)
+                ? allyB
+                : null;
+        }
+
+        if (allyA != null && !allyA.IsDead())
+        {
+            return HasOwnerSlot(actionSlots, allyA, targetSlotIndex)
+                ? allyA
+                : null;
+        }
+
+        return null;
+    }
+
+    static bool HasOwnerSlot(List<BattleActionSlot> actionSlots, CharacterData owner, int slotIndex)
+    {
+        if (actionSlots == null || owner == null)
+        {
+            return false;
+        }
+
+        foreach (BattleActionSlot slot in actionSlots)
+        {
+            if (slot != null && object.ReferenceEquals(slot.owner, owner) && slot.slotIndex == slotIndex)
+            {
+                return true;
+            }
+        }
+
+        Debug.LogWarning("存活目标 " + owner.characterName + " 缺少槽位" + slotIndex + "，不创建敌人意图");
+        return false;
     }
 
     void BindButtonEvents()
@@ -564,17 +621,35 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void OnClickSelectActorA()
     {
-        selectedActor = allyA;
-        selectedCardState = null;
-        lastLog = "Selected actor: A";
-        RefreshView();
+        TrySelectActor(allyA, "A");
     }
 
     private void OnClickSelectActorB()
     {
-        selectedActor = allyB;
+        TrySelectActor(allyB, "B");
+    }
+
+    void TrySelectActor(CharacterData actor, string actorLabel)
+    {
+        if (actor == null)
+        {
+            ClearSelectedActionState();
+            lastLog = "Selected actor failed: actor is null";
+            RefreshView();
+            return;
+        }
+
+        if (actor.IsDead())
+        {
+            ClearSelectedActionState();
+            lastLog = "该角色已经死亡，不能安排行动";
+            RefreshView();
+            return;
+        }
+
+        selectedActor = actor;
         selectedCardState = null;
-        lastLog = "Selected actor: B";
+        lastLog = "Selected actor: " + actorLabel;
         RefreshView();
     }
 
@@ -669,7 +744,9 @@ public class BattleSimpleUIController : MonoBehaviour
 
         if (!CanEditActionSlots())
         {
-            lastLog = "Cannot edit slots outside Prepare phase or after plan creation";
+            lastLog = runtimeState.IsBattleEnded
+                ? "战斗已经结束，无法继续操作"
+                : "Cannot edit slots outside Prepare phase or after plan creation";
             RefreshView();
             return;
         }
@@ -677,6 +754,14 @@ public class BattleSimpleUIController : MonoBehaviour
         if (selectedActor == null)
         {
             lastLog = "Confirm failed: select actor first";
+            RefreshView();
+            return;
+        }
+
+        if (selectedActor.IsDead())
+        {
+            ClearSelectedActionState();
+            lastLog = "该角色已经死亡，不能安排行动";
             RefreshView();
             return;
         }
@@ -802,7 +887,9 @@ public class BattleSimpleUIController : MonoBehaviour
 
         if (!CanEditActionSlots())
         {
-            lastLog = "Cannot edit slots outside Prepare phase or after plan creation";
+            lastLog = runtimeState.IsBattleEnded
+                ? "战斗已经结束，无法继续操作"
+                : "Cannot edit slots outside Prepare phase or after plan creation";
             RefreshView();
             return;
         }
@@ -926,12 +1013,17 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void OnClickClearSelection()
     {
+        ClearSelectedActionState();
+        lastLog = "Selection cleared";
+        RefreshView();
+    }
+
+    void ClearSelectedActionState()
+    {
         selectedActor = null;
         selectedSlotIndex = 1;
         selectedCardState = null;
         selectedActionMode = null;
-        lastLog = "Selection cleared";
-        RefreshView();
     }
 
     private void OnClickBattleStart()
@@ -939,6 +1031,13 @@ public class BattleSimpleUIController : MonoBehaviour
         if (runtimeState == null)
         {
             lastLog = "战斗状态未初始化，无法开始战斗";
+            RefreshView();
+            return;
+        }
+
+        if (runtimeState.IsBattleEnded)
+        {
+            lastLog = "战斗已经结束，不能再次开始战斗";
             RefreshView();
             return;
         }
@@ -962,10 +1061,26 @@ public class BattleSimpleUIController : MonoBehaviour
             runtimeState.SetPhase("BattleStart");
             BattleExecutionPlanManager.PrintExecutionPlan(runtimeState.currentExecutionPlan);
 
-            BattleExecutionPlanExecutor.ExecuteExecutionPlan(runtimeState.currentExecutionPlan);
-            runtimeState.SetPhase("Completed");
+            BattleExecutionPlanExecutor.ExecuteExecutionPlan(runtimeState.currentExecutionPlan, runtimeState);
 
-            lastLog = "战斗开始：已执行当前已有计划";
+            if (!runtimeState.IsBattleEnded)
+            {
+                if (IsCurrentPlanCompleted())
+                {
+                    runtimeState.SetPhase("Completed");
+                    lastLog = "战斗开始：已执行当前已有计划";
+                }
+                else
+                {
+                    lastLog = "ExecutionPlan仍有未完成项，不能进入Completed";
+                }
+            }
+
+            if (runtimeState.IsBattleEnded)
+            {
+                lastLog = "战斗结束：" + runtimeState.battleResult;
+            }
+
             RefreshView();
             return;
         }
@@ -987,10 +1102,26 @@ public class BattleSimpleUIController : MonoBehaviour
         runtimeState.SetPhase("BattleStart");
         BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
 
-        BattleExecutionPlanExecutor.ExecuteExecutionPlan(runtimeState.currentExecutionPlan);
-        runtimeState.SetPhase("Completed");
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(runtimeState.currentExecutionPlan, runtimeState);
 
-        lastLog = "战斗开始：已生成并执行本回合计划";
+        if (!runtimeState.IsBattleEnded)
+        {
+            if (IsCurrentPlanCompleted())
+            {
+                runtimeState.SetPhase("Completed");
+                lastLog = "战斗开始：已生成并执行本回合计划";
+            }
+            else
+            {
+                lastLog = "ExecutionPlan仍有未完成项，不能进入Completed";
+            }
+        }
+
+        if (runtimeState.IsBattleEnded)
+        {
+            lastLog = "战斗结束：" + runtimeState.battleResult;
+        }
+
         RefreshView();
     }
 
@@ -998,6 +1129,13 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         if (!HasRuntimeState())
         {
+            return;
+        }
+
+        if (runtimeState.IsBattleEnded)
+        {
+            lastLog = "战斗已经结束，无法继续操作";
+            RefreshView();
             return;
         }
 
@@ -1033,6 +1171,13 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        if (runtimeState.IsBattleEnded)
+        {
+            lastLog = "战斗已经结束，无法继续操作";
+            RefreshView();
+            return;
+        }
+
         if (!HasCurrentPlan())
         {
             lastLog = "当前没有执行计划，请先生成计划或点击战斗开始";
@@ -1047,10 +1192,26 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        BattleExecutionPlanExecutor.ExecuteExecutionPlan(runtimeState.currentExecutionPlan);
-        runtimeState.SetPhase("Completed");
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(runtimeState.currentExecutionPlan, runtimeState);
 
-        lastLog = "执行计划已执行，plan.isCompleted = " + runtimeState.currentExecutionPlan.isCompleted;
+        if (!runtimeState.IsBattleEnded)
+        {
+            if (IsCurrentPlanCompleted())
+            {
+                runtimeState.SetPhase("Completed");
+                lastLog = "执行计划已执行，plan.isCompleted = " + runtimeState.currentExecutionPlan.isCompleted;
+            }
+            else
+            {
+                lastLog = "ExecutionPlan仍有未完成项，不能进入Completed";
+            }
+        }
+
+        if (runtimeState.IsBattleEnded)
+        {
+            lastLog = "战斗结束：" + runtimeState.battleResult;
+        }
+
         RefreshView();
     }
 
@@ -1061,14 +1222,24 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        if (runtimeState.IsBattleEnded)
+        {
+            lastLog = "战斗已经结束，无法继续操作";
+            RefreshView();
+            return;
+        }
+
         if (!CanEndTurn())
         {
-            lastLog = "当前不能结束回合，请先完成战斗结算";
+            lastLog = HasCurrentPlan() && !IsCurrentPlanCompleted()
+                ? "执行计划尚未完成，不能结束回合"
+                : "当前不能结束回合，请先完成战斗结算";
             RefreshView();
             return;
         }
 
         runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+        ClearSelectedActionState();
         lastLog = "当前回合已结束，临时对象已清理";
         RefreshView();
     }
@@ -1080,6 +1251,13 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        if (runtimeState.IsBattleEnded)
+        {
+            lastLog = "战斗已经结束，无法继续操作";
+            RefreshView();
+            return;
+        }
+
         if (!CanPrepareNextTurn())
         {
             lastLog = "当前不能准备下一回合，请先结束当前回合";
@@ -1087,11 +1265,32 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        List<BattleActionSlot> newActionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2);
-        List<BattleEnemyIntent> newIntentQueue = CreateFixedEnemyIntentQueue();
+        List<BattleActionSlot> newActionSlots = BattleActionSlotManager.CreateLivingPartyActionSlots(allyA, allyB, 2);
+
+        if (newActionSlots == null || newActionSlots.Count == 0)
+        {
+            runtimeState.EvaluateBattleEnd();
+            lastLog = runtimeState.IsBattleEnded
+                ? "战斗已经结束，无法继续操作"
+                : "没有存活角色行动槽位，不能准备下一回合";
+            RefreshView();
+            return;
+        }
+
+        List<BattleEnemyIntent> newIntentQueue = CreateFixedEnemyIntentQueue(newActionSlots);
 
         runtimeState.PrepareNextTurnWithRuntimeObjects(newActionSlots, newIntentQueue);
-        lastLog = "下一回合已准备，阶段：Prepare";
+
+        if (IsPhase("Prepare"))
+        {
+            ClearSelectedActionState();
+            lastLog = "下一回合已准备，阶段：Prepare";
+        }
+        else
+        {
+            lastLog = "准备下一回合失败";
+        }
+
         RefreshView();
     }
 
@@ -1099,7 +1298,12 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         BattleStateViewData viewData = BattleStateViewData.FromRuntimeState(runtimeState);
 
-        SetText(topInfoText, "回合：" + viewData.currentTurn + "\n阶段：" + viewData.currentPhase);
+        SetText(
+            topInfoText,
+            "回合：" + viewData.currentTurn +
+            "\n阶段：" + viewData.currentPhase +
+            "\n战斗结果：" + viewData.battleResult
+        );
         SetText(enemyStateText, FormatEnemyState(viewData));
         SetText(allyAStateText, FormatAllyState("A", viewData.allyAName, viewData.allyAHP, viewData.allyAMaxHP, viewData.allyASpeed, viewData.allyAGuilt));
         SetText(allyBStateText, FormatAllyState("B", viewData.allyBName, viewData.allyBHP, viewData.allyBMaxHP, viewData.allyBSpeed, viewData.allyBGuilt));
@@ -1126,27 +1330,31 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private bool CanEditActionSlots()
     {
-        return IsPhase("Prepare") && !HasCurrentPlan();
+        return runtimeState != null && !runtimeState.IsBattleEnded && IsPhase("Prepare") && !HasCurrentPlan();
     }
 
     private bool CanCreatePlan()
     {
-        return IsPhase("Prepare") && !HasCurrentPlan();
+        return runtimeState != null && !runtimeState.IsBattleEnded && IsPhase("Prepare") && !HasCurrentPlan();
     }
 
     private bool CanExecutePlan()
     {
-        return HasCurrentPlan() && !runtimeState.currentExecutionPlan.isCompleted;
+        return runtimeState != null && !runtimeState.IsBattleEnded && HasCurrentPlan() && !runtimeState.currentExecutionPlan.isCompleted;
     }
 
     private bool CanEndTurn()
     {
-        return IsPhase("Completed");
+        return runtimeState != null &&
+            !runtimeState.IsBattleEnded &&
+            IsPhase("Completed") &&
+            HasCurrentPlan() &&
+            IsCurrentPlanCompleted();
     }
 
     private bool CanPrepareNextTurn()
     {
-        return IsPhase("TurnEnded");
+        return runtimeState != null && !runtimeState.IsBattleEnded && IsPhase("TurnEnded");
     }
 
     bool HasRuntimeState()

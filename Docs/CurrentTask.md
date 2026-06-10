@@ -9194,3 +9194,716 @@ UI 不调用 Resolver、不 Roll 点、不计算伤害。
 - `GetFinalDodgePoint(...)`。
 - 正式闪避动画与 UI 表现。
 - 全局守备系统重构。
+
+## 八十五、Attack 拼点失败后被动 Dodge 使用已确定敌人点数接管测试通过
+
+本阶段完成的是 Attack 拼点失败后，被动 Dodge 使用已确定敌人点数继续接管的第二阶段闭环。
+
+当前范围只包括：
+
+```text
+玩家 Attack 响应敌人 Attack
+→ 玩家拼点失败
+→ 敌人已经得到最终胜利点数
+→ PassiveGuard 第一张有效候选若为 Dodge
+→ Dodge 使用固定敌人点数继续判定
+```
+
+本阶段没有实现：
+
+- 连续闪避。
+- 敌人意图2。
+- 多敌人。
+- Dodge 专属 Buff。
+- 正式动画或 UI 表现。
+- 全局守备系统重构。
+
+注意：这不代表 Dodge 系统全部完成，也不代表完整战斗场景逻辑已经全部完成。
+
+### 1. Responded 候选范围
+
+Responded Attack vs Attack 现在允许收集：
+
+- Defense。
+- Dodge。
+
+只有 Attack vs Attack 的 `RespondedEnemyIntent` item 才携带这些 PassiveGuard 候选。
+
+主动 Defense 或主动 Dodge 响应不会携带额外 PassiveGuard 候选。
+
+候选继续满足：
+
+- owner / actor / target 匹配实际目标。
+- 槽位未使用。
+- 卡牌存在并可用。
+- 按 `slotIndex` 升序。
+
+### 2. known-point Dodge 入口
+
+新增私有入口：
+
+```csharp
+ResolveDodgeVsAttackWithKnownEnemyPoint(...)
+```
+
+用途：
+
+```text
+Attack vs Attack EnemyWin
+→ PassiveGuard Dodge continuation
+```
+
+规则：
+
+- 不重新 Roll 敌人点数。
+- 不重新触发敌人 `ClashStart`。
+- 不重新触发敌人 `ClashWin` / `ClashLose` / `Resolved`。
+- 只检查并 Roll Dodge 使用者自身。
+- 敌人胜利点数最低钳制为 0。
+- Dodge 仍复用 `GetFinalClashPoint(...)`。
+- 最多尝试 10 次。
+- 平局时只重新 Roll Dodge，敌人点数保持固定。
+
+### 3. 事件边界
+
+Attack vs Attack 分出 EnemyWin 后，已经完成：
+
+```text
+Enemy Attack ClashWin
+Player Attack ClashLose
+Enemy Attack Resolved
+Player Attack Resolved
+```
+
+known-point Dodge 不能重复上述敌人事件。
+
+DodgeSuccess：
+
+```text
+Dodge ClashWin
+Dodge Resolved
+无伤
+```
+
+DodgeFailed：
+
+```text
+Dodge ClashLose
+Dodge Resolved
+Enemy Attack Hit
+正式伤害链
+```
+
+TieLimit：
+
+```text
+只反复 Roll Dodge
+不触发 Dodge ClashWin / ClashLose / Resolved
+无伤
+```
+
+### 4. DodgeSuccess
+
+规则：
+
+```text
+Dodge 点数 > 固定敌人点数
+```
+
+结果：
+
+- 玩家无伤。
+- Player Attack、Enemy Attack、Dodge 都算使用。
+- Player Attack 槽位和 Dodge 槽位都 `MarkUsed`。
+- Dodge 正常进入 CD。
+- 后续 Defense 或 Dodge 不触发。
+- Enemy item 与 `ExecutionPlan` 正常完成。
+
+### 5. DodgeFailed
+
+规则：
+
+```text
+Dodge 点数 < 固定敌人点数
+```
+
+结果：
+
+- Dodge 不提供减伤。
+- 使用固定敌人胜利点数进入伤害公式。
+- 不重新 Roll 敌人点数。
+- 只造成一次伤害。
+- Player Attack、Enemy Attack、Dodge 都算使用。
+- Player Attack 槽位和 Dodge 槽位都 `MarkUsed`。
+- 后续 Defense 或 Dodge 不触发。
+- 不回落原 EnemyWin 造成第二次伤害。
+
+### 6. 固定点数下的 TieLimit
+
+规则：
+
+```text
+Dodge 点数 == 固定敌人点数
+→ 只重新 Roll Dodge
+→ 最多 10 次
+```
+
+连续 10 次仍相等：
+
+- 玩家无伤。
+- Player Attack 和 Enemy Attack 已经使用，状态不回退。
+- Player Attack 槽位仍 `MarkUsed`。
+- Dodge 不算使用。
+- Dodge 不进入 CD。
+- Dodge 槽位不 `MarkUsed`。
+- 后续 Defense 或 Dodge 不触发。
+- 不回落原 EnemyWin 伤害。
+- Enemy item 与 `ExecutionPlan` 正常完成。
+
+明确区分：
+
+```text
+Unresponded Dodge TieLimit：
+Dodge 和 Enemy Attack 都不使用。
+
+Attack 失败后的 known-point Dodge TieLimit：
+Player Attack 和 Enemy Attack 已使用。
+只有被动 Dodge 不使用。
+```
+
+### 7. 双槽位 MarkUsed
+
+继续使用现有结果结构，不新增字段。
+
+规则：
+
+```text
+playerCardUsed = true
+```
+
+始终表示主响应 Attack 已经使用。
+
+被动 Dodge 额外槽位通过：
+
+```csharp
+triggeredPassiveGuardSlot
+```
+
+表达。
+
+- DodgeSuccess / DodgeFailed：设置为 Dodge 槽位。
+- Dodge TieLimit：保持 null。
+- Executor 无需修改。
+- TieLimit 时只 `MarkUsed` Player Attack 槽位，不 `MarkUsed` Dodge 槽位。
+
+### 8. 候选顺序
+
+候选顺序规则：
+
+- 第一张有效候选被选中后立即停止。
+- Defense 在前则 Defense 优先。
+- Dodge 在前则 Dodge 优先。
+- Dodge 成功、失败或 TieLimit 后都不再查找后续守备。
+- 只有候选在执行前失效时，才跳过并检查下一候选。
+- 下一候选可以是 Defense 或 Dodge。
+
+### 9. 聚合测试入口
+
+新增聚合测试入口：
+
+```text
+ActionSlotPassiveDodgeAfterAttackLoseBasic = 43
+```
+
+说明：
+
+- 显式整数 43。
+- `BattleTestMode` 从 22 项变为 23 项。
+- 旧枚举值未重排。
+- 场景保存的 `testMode` 未由代码修改。
+- 使用一个聚合入口覆盖 8 组测试，避免下拉继续膨胀。
+
+### 10. 模式43八组测试
+
+模式43记录以下 8 组 Unity 测试全部通过，没有发现预期验证为 False：
+
+1. Attack 失败后 Dodge 成功：
+   - Player Attack 4。
+   - Enemy Attack 8。
+   - Dodge 9。
+   - 无伤，两个玩家槽位均使用。
+2. Attack 失败后 Dodge 失败：
+   - Dodge 6 对固定敌人 8 点。
+   - 造成一次 8 点伤害。
+   - 后续 Defense 不触发。
+3. Attack 失败后 Dodge TieLimit：
+   - Dodge 固定 8。
+   - 连续 10 次与敌人固定 8 点相等。
+   - Player Attack 和 Enemy Attack 已使用。
+   - Dodge 未使用、未进 CD、未 `MarkUsed`。
+   - 无伤且不回落。
+4. 第一候选 Dodge 执行前失效：
+   - 跳过 Dodge。
+   - Defense 使用固定敌人点数接管。
+5. Defense 在前：
+   - Defense 优先触发。
+   - Dodge 完全不参与。
+6. 无候选：
+   - 回落原 EnemyWin 伤害。
+   - 使用已确定敌人点数。
+   - 不重新 Roll。
+   - 只造成一次伤害。
+7. 目标不匹配：
+   - A 的 Dodge 不能保护 B。
+8. PlayerWin：
+   - 玩家 Attack 拼赢。
+   - Passive Dodge 不触发。
+
+### 11. 旧流程回归
+
+known-point Defense 回归：
+
+```text
+ActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardReducedDamageBasic
+```
+
+结果通过：
+
+- 敌人固定点数 8。
+- Defense 点数 5。
+- 最终伤害 3。
+- HP 30 → 27。
+- Player Attack 和 Defense 槽位均正确 `MarkUsed`。
+- 不重复处理敌人卡。
+- `ExecutionPlan` 完成。
+
+Unresponded 被动 Dodge 回归：
+
+模式42已明确只测试：
+
+```text
+UnrespondedEnemyIntent
+```
+
+过时的：
+
+```text
+PassiveDodgeRespondedAttackFailIsolation
+```
+
+已从模式42聚合入口移除，但测试方法本体保留。
+
+模式42现在包含 6 组有效子测试：
+
+1. DodgeSuccess。
+2. DodgeFailed。
+3. DodgeTieLimit。
+4. 失效 Dodge 跳过后 Defense 接管。
+5. 目标不匹配。
+6. 已有主动响应时不触发 Unresponded 被动 Dodge。
+
+重新运行后 6 组全部通过，没有预期验证为 False。
+
+### 12. 测试职责划分
+
+明确记录：
+
+```text
+模式42：
+只负责 UnrespondedEnemyIntent 被动 Dodge。
+
+模式43：
+负责 Attack 拼点失败后 known-point 被动 Dodge 接管。
+```
+
+旧规则：
+
+```text
+Attack 失败后被动 Dodge 不接管
+```
+
+已经废弃，不再作为有效断言。
+
+### 13. 未修改内容
+
+本阶段没有修改：
+
+- `BattleExecutionPlanExecutor`。
+- `BattleExecutionItem`。
+- `BattleSimpleUIController`。
+- `BattleActionSlotManager`。
+- `BattleCalculator`。
+- JSON。
+- 场景。
+- Prefab。
+- RuntimeState。
+- ViewData。
+
+UI 之前已经允许 Dodge + PassiveGuard，因此本阶段不需要额外 UI 接入。
+
+### 14. 本阶段结论
+
+本阶段完成：
+
+- Attack 失败后的被动 Dodge 接管。
+- 固定敌人点数规则。
+- DodgeSuccess / DodgeFailed / TieLimit。
+- 敌人点数和事件去重。
+- 双槽位 `MarkUsed` 规则。
+- Defense / Dodge 候选顺序。
+- 模式43八组测试通过。
+- known-point Defense 回归通过。
+- 模式42清理后六组回归通过。
+
+本阶段可以结束。
+
+### 15. 仍未处理内容
+
+后续仍保留：
+
+- 连续闪避。
+- Dodge 成功后继续处理下一张敌人攻击。
+- 敌人意图2。
+- 多敌人。
+- Dodge 专属 Buff。
+- `GetFinalDodgePoint(...)` 拆分。
+- 正式闪避动画与 UI 表现。
+- 全局守备系统重构。
+- 复杂多张守备优先级扩展。
+
+## 八十六、BattleEnded / Victory / Defeat 第一版阶段A测试通过
+
+### 一、BattleResult 与 BattleEnded
+
+新增战斗结果：
+
+```csharp
+BattleResult.None
+BattleResult.Victory
+BattleResult.Defeat
+```
+
+`BattleRuntimeState` 新增：
+
+- `battleResult`
+- `IsBattleEnded`
+- `EvaluateBattleEnd()`
+
+当前判定规则：
+
+```text
+A、B全部死亡 → Defeat
+否则敌人死亡 → Victory
+双方同时死亡 → Defeat
+```
+
+进入整场战斗结束状态时：
+
+```text
+currentPhase = BattleEnded
+```
+
+明确区分：
+
+```text
+Completed = 本回合 ExecutionPlan 完成
+BattleEnded = 整场战斗结束
+```
+
+两者不能混用。
+
+### 二、结束检测时机
+
+结束检测在每个 item 完整执行后由 Executor 调用。
+
+顺序为：
+
+```text
+Resolver结算
+→ 伤害
+→ AfterDamage
+→ AfterKill
+→ 卡牌使用状态完成
+→ 槽位MarkUsed
+→ item完成
+→ EvaluateBattleEnd
+```
+
+因此击杀卡会先正常完成：
+
+- `Resolved`
+- CD
+- UseCount
+- guilt
+- AfterKill
+- `MarkUsed`
+
+然后才进入 Victory / Defeat。
+
+### 三、ExecutionPlan 停止
+
+BattleEnded 后：
+
+- 后续 item 不执行。
+- 剩余 item 打印“因 BattleEnded 跳过”。
+- 剩余 item 标记完成。
+- Plan 最终仍可显示全部完成。
+- 后续卡牌不使用、不进 CD、不增加 UseCount / guilt、不 `MarkUsed`。
+
+### 四、BattleEnded 后保护
+
+以下操作会被拒绝：
+
+- 再次执行 `ExecutionPlan`。
+- `BattleStart`。
+- 确认安排。
+- `EndTurn`。
+- `PrepareNextTurn`。
+
+BattleEnded 后：
+
+- 不改变结果。
+- 不创建新槽位。
+- 不创建新敌人意图。
+- 不进入下一回合。
+
+### 五、Simple UI 显示
+
+现有状态文本显示：
+
+```text
+阶段：BattleEnded
+战斗结果：Victory / Defeat
+```
+
+当前没有新增正式胜负面板。
+
+Simple UI 测试敌人初始 HP 已从：
+
+```text
+999
+```
+
+调整为：
+
+```text
+50
+```
+
+该调整只用于方便多回合自然击杀测试，没有修改伤害或卡牌规则。
+
+### 六、模式44
+
+新增测试入口：
+
+```text
+BattleEndedVictoryDefeatBasic = 44
+```
+
+包含 6 组：
+
+1. Victory 后停止后续 Ability。
+2. Defeat。
+3. 单名玩家死亡不误判 Defeat。
+4. 双方同时死亡优先 Defeat。
+5. BattleEnded 后方法保护。
+6. 非致命战斗仍进入 Completed。
+
+6 组 Unity 测试全部通过，没有预期验证为 False。
+
+### 七、Simple UI 手动验证
+
+手动验证记录：
+
+- 敌人 50 HP 经过多回合正常攻击降到 0。
+- 进入 BattleEnded / Victory。
+- 击杀后剩余敌人意图和 FreeAction 均因 BattleEnded 跳过。
+- `ExecutionPlan` 正常完成。
+- 再次 BattleStart 被阻止。
+- 确认安排被阻止。
+- EndTurn 被阻止。
+- PrepareNextTurn 被阻止。
+- 界面正确显示 Victory。
+
+### 八、阶段A未处理
+
+后续仍保留：
+
+- 单名玩家死亡后续战。
+- 死亡角色下一回合槽位过滤。
+- 敌人意图改选存活目标。
+- 死亡响应者转 Unresponded。
+- 死亡目标 item 跳过。
+- 死亡 PassiveGuard 失效。
+- 多敌人、奖励、重开、正式胜负 UI。
+
+## 八十七、FreeAction ActionUnavailable与ExecutionPlan完成保护测试通过
+
+### 一、问题来源
+
+Simple UI 曾出现：
+
+```text
+B安排基础攻击
+→ 执行时Bullet不足
+→ Resolver返回Invalid
+→ item未完成
+→ plan存在未完成项
+→ UI仍错误进入Completed并允许EndTurn
+```
+
+### 二、ActionUnavailable
+
+新增专用结果：
+
+```text
+resultType = ActionUnavailable
+isSuccess = false
+shouldCompleteItem = true
+playerCardUsed = false
+enemyCardUsed = false
+```
+
+仅用于：
+
+```text
+合法FreeAction
+但执行瞬间CanUseCard失败
+```
+
+当前接入：
+
+- FreeAction Attack
+- FreeAction Ability
+
+不用于：
+
+- 空槽位。
+- 空角色。
+- 空目标。
+- 空卡牌。
+- 类型错误。
+- 点数异常。
+- Unsupported。
+- 其他结构错误。
+
+原 Invalid / Unsupported 语义保持不变。
+
+### 三、执行失败并跳过语义
+
+ActionUnavailable 结果：
+
+- 不造成伤害。
+- 不触发 Resolved。
+- 不进 CD。
+- 不增加 UseCount。
+- 不增加 guilt。
+- 不执行 effects。
+- 槽位不 `MarkUsed`。
+- item 标记完成。
+- 后续 item 继续。
+- Plan 最终可以完成。
+
+### 四、Executor 规则
+
+FreeAction 现在只要：
+
+```text
+shouldCompleteItem = true
+```
+
+即可完成 item。
+
+正常成功：
+
+```text
+isSuccess = true
+playerCardUsed = true
+```
+
+正常 `MarkUsed`。
+
+ActionUnavailable：
+
+```text
+isSuccess = false
+playerCardUsed = false
+```
+
+按跳过完成，不 `MarkUsed`。
+
+Invalid / Unsupported：
+
+```text
+shouldCompleteItem = false
+```
+
+仍保持未完成，不会被吞掉。
+
+Responded / Unresponded 规则未修改。
+
+### 五、Completed 与回合保护
+
+Simple UI 只有在：
+
+```text
+currentExecutionPlan.isCompleted = true
+```
+
+时才能进入 Completed。
+
+未完成计划：
+
+- 不进入 Completed。
+- 不能 EndTurn。
+- 不能 PrepareNextTurn。
+
+`BattleRuntimeState` 也增加核心保护，避免绕过 UI。
+
+### 六、模式45
+
+新增测试入口：
+
+```text
+ExecutionPlanInvalidActionCompletionBasic = 45
+```
+
+包含 5 组：
+
+1. Bullet 不足返回 ActionUnavailable。
+2. 第一个 ActionUnavailable 后第二个 item 继续执行。
+3. 正常 FreeAction 回归。
+4. Unsupported 不被吞掉。
+5. BattleEnded 回归。
+
+5 组 Unity 测试全部通过。
+
+### 七、Simple UI 回归
+
+实测流程：
+
+```text
+A基础攻击正常执行
+B基础攻击因Bullet不足返回ActionUnavailable
+```
+
+结果：
+
+- B 卡牌不使用。
+- B 槽位不 `MarkUsed`。
+- Plan 正常完成。
+- 不再出现“当前仍有未完成执行项”。
+- 正常进入 Completed。
+- EndTurn 正常。
+- PrepareNextTurn 正常。
+- 新一回合槽位和敌人意图正常重建。
+
+### 八、未处理内容
+
+后续仍保留：
+
+- Responded 响应卡执行时失效后的规则。
+- 是否转为 Unresponded。
+- UI 安排前 CanUseCard 校验统一。
+- 正式 Skipped 状态或 item 状态 enum。
+- 全部 phase enum 重构。

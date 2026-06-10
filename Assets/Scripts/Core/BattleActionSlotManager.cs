@@ -73,6 +73,50 @@ public static class BattleActionSlotManager
         return slots;
     }
 
+    // CreateLivingPartyActionSlots = 为仍存活的我方角色创建下一回合行动槽位
+    // 保留 CreatePartyActionSlots 原行为，避免影响历史测试主动创建死亡角色槽位的能力。
+    public static List<BattleActionSlot> CreateLivingPartyActionSlots(
+        CharacterData allyA,
+        CharacterData allyB,
+        int slotCountPerCharacter
+    )
+    {
+        List<BattleActionSlot> slots = new List<BattleActionSlot>();
+
+        AddLivingCharacterActionSlots(slots, allyA, slotCountPerCharacter, "A");
+        AddLivingCharacterActionSlots(slots, allyB, slotCountPerCharacter, "B");
+
+        Debug.Log("下一回合只为存活角色创建行动槽位，数量：" + slots.Count);
+        return slots;
+    }
+
+    static void AddLivingCharacterActionSlots(
+        List<BattleActionSlot> slots,
+        CharacterData character,
+        int slotCountPerCharacter,
+        string label
+    )
+    {
+        if (slots == null)
+        {
+            return;
+        }
+
+        if (character == null)
+        {
+            Debug.LogWarning("创建存活角色行动槽位：角色" + label + "为空，跳过");
+            return;
+        }
+
+        if (character.IsDead())
+        {
+            Debug.Log("创建存活角色行动槽位：" + character.characterName + " 已死亡，跳过");
+            return;
+        }
+
+        slots.AddRange(CreateCharacterActionSlots(character, slotCountPerCharacter));
+    }
+
     // AssignResponseToEnemyIntent = 安排一个槽位响应敌人意图
     // slots = 所有行动槽位。
     // slotIndex = 要放入的槽位编号。
