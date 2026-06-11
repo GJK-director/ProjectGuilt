@@ -29,7 +29,8 @@ public enum BattleTestMode
     ActionSlotPassiveDodgeAfterAttackLoseBasic = 43,
     BattleEndedVictoryDefeatBasic = 44,
     ExecutionPlanInvalidActionCompletionBasic = 45,
-    SingleAllyDeathExecutionFilteringBasic = 46
+    SingleAllyDeathExecutionFilteringBasic = 46,
+    BuffTriggerConsumeOrderBasic = 47
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -151,6 +152,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.SingleAllyDeathExecutionFilteringBasic)
         {
             RunSingleAllyDeathExecutionFilteringBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BuffTriggerConsumeOrderBasic)
+        {
+            RunBuffTriggerConsumeOrderBasicTestSequence();
             return;
         }
 
@@ -4419,6 +4426,353 @@ public class CardLoadTest : MonoBehaviour
         RunFreeActionBattleEndedRegressionSubTest();
     }
 
+    // RunBuffTriggerConsumeOrderBasicTestSequence = Buff阶段A：ClashStart一次性数值Buff读取与消费顺序聚合测试
+    void RunBuffTriggerConsumeOrderBasicTestSequence()
+    {
+        Debug.Log("===== BuffTriggerConsumeOrderBasic 聚合测试开始 =====");
+
+        RunBuffAttackWinConsumeSubTest();
+        RunBuffAttackLoseConsumeSubTest();
+        RunBuffClashRerollKeepUntilConsumeSubTest();
+        RunBuffAttackTieLimitKeepSubTest();
+        RunBuffDodgeConsumeSubTest();
+        RunBuffDodgeTieLimitKeepSubTest();
+        RunBuffKnownPointDodgeConsumeSubTest();
+        RunBuffDefenseConsumeSubTest();
+        RunBuffEventNewNextClashBuffKeptSubTest();
+        RunBuffPureReadNoMutationSubTest();
+    }
+
+    void RunBuffAttackWinConsumeSubTest()
+    {
+        Debug.Log("===== 模式47 子测试A：Attack正常生效后消费 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("buff_a", 30, 30, 50, 10, 3, 8);
+        BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "buff_a_player_attack", 5);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_a_enemy_attack", 6, 0);
+        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 1);
+
+        int playerStackBefore = CountBuffStack(context.allyA, "NextClashPointUp");
+        int playerInstanceBefore = CountBuffInstances(context.allyA, "NextClashPointUp");
+        BattleActionSlot actionSlot = CreateRespondedSlot(context.allyA, playerAttack);
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("buff_a_intent", context.enemy, enemyAttack, context.allyA, 1);
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(actionSlot, intent);
+
+        int playerStackAfter = CountBuffStack(context.allyA, "NextClashPointUp");
+        int playerInstanceAfter = CountBuffInstances(context.allyA, "NextClashPointUp");
+        bool pointApplied = result != null && result.playerPoint == 8;
+        bool consumed = playerStackBefore == 3 && playerStackAfter == 0 && playerInstanceBefore == 1 && playerInstanceAfter == 0;
+
+        Debug.Log("点数加成是否实际生效：" + pointApplied);
+        Debug.Log("Buff消费前stack：" + playerStackBefore);
+        Debug.Log("Buff消费后stack：" + playerStackAfter);
+        Debug.Log("Buff实例数量前后：" + playerInstanceBefore + " -> " + playerInstanceAfter);
+        Debug.Log("是否只消费一次：" + consumed);
+        Debug.Log("卡牌UseCount / CD / guilt：" + playerAttack.currentUseCount + " / " + playerAttack.currentCooldown + " / " + context.allyA.currentGuilt);
+        Debug.Log("Attack加成先读取后消费：" + (pointApplied && consumed && result != null && result.playerCardUsed));
+    }
+
+    void RunBuffAttackLoseConsumeSubTest()
+    {
+        Debug.Log("===== 模式47 子测试B：Attack失败方也消费 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("buff_b", 30, 30, 50, 10, 3, 8);
+        BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "buff_b_player_attack", 5);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_b_enemy_attack", 9, 0);
+        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 1);
+
+        int stackBefore = CountBuffStack(context.allyA, "NextClashPointUp");
+        int instanceBefore = CountBuffInstances(context.allyA, "NextClashPointUp");
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, playerAttack),
+            CreateEnemyAttackIntent("buff_b_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        int stackAfter = CountBuffStack(context.allyA, "NextClashPointUp");
+        int instanceAfter = CountBuffInstances(context.allyA, "NextClashPointUp");
+        bool pointApplied = result != null && result.playerPoint == 8;
+        bool consumed = stackBefore == 3 && stackAfter == 0 && instanceBefore == 1 && instanceAfter == 0;
+
+        Debug.Log("点数加成是否实际生效：" + pointApplied);
+        Debug.Log("Buff消费前stack：" + stackBefore);
+        Debug.Log("Buff消费后stack：" + stackAfter);
+        Debug.Log("Buff实例数量前后：" + instanceBefore + " -> " + instanceAfter);
+        Debug.Log("失败方Buff正常消费：" + (pointApplied && consumed && result != null && result.resultType == "EnemyWin"));
+    }
+
+    void RunBuffClashRerollKeepUntilConsumeSubTest()
+    {
+        Debug.Log("===== 模式47 子测试C：平局重投期间Buff保持 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("buff_c", 30, 30, 50, 10, 3, 8);
+        BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "buff_c_player_attack", 5);
+        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 1);
+
+        context.allyA.CheckBuffsByTiming(BattleTiming.ClashStart, false);
+
+        int firstReadPoint = BattleCalculator.GetFinalClashPoint(context.allyA, playerAttack.cardData);
+        int stackAfterFirstRead = CountBuffStack(context.allyA, "NextClashPointUp");
+        int secondReadPoint = BattleCalculator.GetFinalClashPoint(context.allyA, playerAttack.cardData);
+        int stackAfterSecondRead = CountBuffStack(context.allyA, "NextClashPointUp");
+        int consumedStack = context.allyA.ConsumeTriggeredBuffs(BattleTiming.ClashStart, "NextClashPointUp");
+        int stackAfterConsume = CountBuffStack(context.allyA, "NextClashPointUp");
+
+        bool keptDuringReads = firstReadPoint == 8 && secondReadPoint == 8 && stackAfterFirstRead == 3 && stackAfterSecondRead == 3;
+        bool consumedOnce = consumedStack == 3 && stackAfterConsume == 0;
+
+        Debug.Log("点数加成是否实际生效：" + (firstReadPoint == 8 && secondReadPoint == 8));
+        Debug.Log("Buff消费前stack：" + stackAfterSecondRead);
+        Debug.Log("Buff消费后stack：" + stackAfterConsume);
+        Debug.Log("Buff实例数量前后：" + 1 + " -> " + CountBuffInstances(context.allyA, "NextClashPointUp"));
+        Debug.Log("平局重投期间Buff保持：" + (keptDuringReads && consumedOnce));
+    }
+
+    void RunBuffAttackTieLimitKeepSubTest()
+    {
+        Debug.Log("===== 模式47 子测试D：Attack TieLimit不消费 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("buff_d", 30, 30, 50, 10, 3, 8);
+        BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "buff_d_player_attack", 5);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_d_enemy_attack", 5, 0);
+        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 1);
+        AddClashStartOneShotBuff(context.enemy, "NextClashPointUp", 3, 1);
+
+        BattleActionSlot actionSlot = CreateRespondedSlot(context.allyA, playerAttack);
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("buff_d_intent", context.enemy, enemyAttack, context.allyA, 1);
+        BattleExecutionPlan executionPlan = CreateManualExecutionPlan(
+            new BattleExecutionItem(1, BattleExecutionItemType.RespondedEnemyIntent, intent, actionSlot)
+        );
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
+
+        bool buffsKept =
+            CountBuffStack(context.allyA, "NextClashPointUp") == 3 &&
+            CountBuffStack(context.enemy, "NextClashPointUp") == 3;
+        bool cardsNotUsed = playerAttack.currentCooldown == 0 && enemyAttack.currentCooldown == 0;
+
+        Debug.Log("TieLimit Buff不消费：" + (buffsKept && !actionSlot.isUsed));
+        Debug.Log("item是否完成：" + (executionPlan.executionItems[0].isCompleted));
+        Debug.Log("plan是否完成：" + executionPlan.isCompleted);
+        Debug.Log("槽位是否MarkUsed：" + actionSlot.isUsed);
+        Debug.Log("卡牌UseCount / CD / guilt：" + playerAttack.currentUseCount + " / " + playerAttack.currentCooldown + " / " + context.allyA.currentGuilt);
+        Debug.Log("TieLimit时状态是否保持：" + (buffsKept && cardsNotUsed && !actionSlot.isUsed));
+    }
+
+    void RunBuffDodgeConsumeSubTest()
+    {
+        Debug.Log("===== 模式47 子测试E：指定Dodge Buff先读取后消费 =====");
+
+        BattleEndedTestContext successContext = CreateBattleEndedTestContext("buff_e_success", 30, 30, 50, 10, 3, 8);
+        BattleCardState successDodge = CreateFixedDodgeCardForCharacter(successContext.allyA, "buff_e_success_dodge", 4, 1);
+        BattleCardState successEnemy = CreateFixedEnemyAttackCardForDodgeTest(successContext.enemy, "buff_e_success_enemy", 5, 0);
+        AddClashStartOneShotBuff(successContext.allyA, "NextClashPointUp", 3, 1);
+        AddClashStartOneShotBuff(successContext.enemy, "NextClashPointUp", 1, 1);
+        successContext.allyA.AddBuff("Strength", "强壮", "UpBuff", 9, 1, "TurnEnd", "DurationDown");
+
+        BattleResolveResult successResult = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(successContext.allyA, successDodge),
+            CreateEnemyAttackIntent("buff_e_success_intent", successContext.enemy, successEnemy, successContext.allyA, 1)
+        );
+
+        bool successConsumed =
+            successResult != null &&
+            successResult.resultType == "DodgeSuccess" &&
+            successResult.playerPoint == 7 &&
+            successResult.enemyPoint == 6 &&
+            CountBuffStack(successContext.allyA, "NextClashPointUp") == 0 &&
+            CountBuffStack(successContext.enemy, "NextClashPointUp") == 0 &&
+            CountBuffStack(successContext.allyA, "Strength") == 9;
+
+        BattleEndedTestContext failedContext = CreateBattleEndedTestContext("buff_e_failed", 30, 30, 50, 10, 3, 8);
+        BattleCardState failedDodge = CreateFixedDodgeCardForCharacter(failedContext.allyA, "buff_e_failed_dodge", 2, 1);
+        BattleCardState failedEnemy = CreateFixedEnemyAttackCardForDodgeTest(failedContext.enemy, "buff_e_failed_enemy", 5, 0);
+        AddClashStartOneShotBuff(failedContext.allyA, "NextClashPointUp", 1, 1);
+        AddClashStartOneShotBuff(failedContext.enemy, "NextClashPointUp", 1, 1);
+
+        BattleResolveResult failedResult = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(failedContext.allyA, failedDodge),
+            CreateEnemyAttackIntent("buff_e_failed_intent", failedContext.enemy, failedEnemy, failedContext.allyA, 1)
+        );
+
+        bool failedConsumed =
+            failedResult != null &&
+            failedResult.resultType == "DodgeFailed" &&
+            failedResult.playerPoint == 3 &&
+            failedResult.enemyPoint == 6 &&
+            CountBuffStack(failedContext.allyA, "NextClashPointUp") == 0 &&
+            CountBuffStack(failedContext.enemy, "NextClashPointUp") == 0;
+
+        Debug.Log("Dodge Buff先读取后消费：" + (successConsumed && failedConsumed));
+        Debug.Log("点数加成是否实际生效：" + (successResult != null && successResult.playerPoint == 7 && failedResult != null && failedResult.playerPoint == 3));
+        Debug.Log("Dodge不读取或消费Strength / Weakness：" + (CountBuffStack(successContext.allyA, "Strength") == 9));
+    }
+
+    void RunBuffDodgeTieLimitKeepSubTest()
+    {
+        Debug.Log("===== 模式47 子测试F：Dodge TieLimit不消费 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("buff_f", 30, 30, 50, 10, 3, 8);
+        BattleCardState dodge = CreateFixedDodgeCardForCharacter(context.allyA, "buff_f_dodge", 5, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_f_enemy", 5, 0);
+        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 1);
+        AddClashStartOneShotBuff(context.enemy, "NextClashPointUp", 3, 1);
+
+        BattleActionSlot actionSlot = CreateRespondedSlot(context.allyA, dodge);
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            actionSlot,
+            CreateEnemyAttackIntent("buff_f_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool kept =
+            result != null &&
+            result.resultType == "TieLimit" &&
+            CountBuffStack(context.allyA, "NextClashPointUp") == 3 &&
+            CountBuffStack(context.enemy, "NextClashPointUp") == 3 &&
+            !actionSlot.isUsed &&
+            dodge.currentCooldown == 0;
+
+        Debug.Log("Dodge Buff不消费：" + kept);
+        Debug.Log("敌人Attack Buff不消费：" + (CountBuffStack(context.enemy, "NextClashPointUp") == 3));
+        Debug.Log("双方卡牌不使用：" + (result != null && !result.playerCardUsed && !result.enemyCardUsed));
+        Debug.Log("槽位不MarkUsed：" + !actionSlot.isUsed);
+    }
+
+    void RunBuffKnownPointDodgeConsumeSubTest()
+    {
+        Debug.Log("===== 模式47 子测试G：known-point Dodge不重复消费敌人Buff =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("buff_g", 30, 30, 50, 10, 3, 8);
+        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(context.allyB, "buff_g_response_attack", 4);
+        BattleCardState enemyAttack = CreateAttackCardWithNextClashBuffEffect(context.enemy, "buff_g_enemy_attack", 5, BattleTiming.Resolved, 9);
+        BattleCardState passiveDodge = CreateFixedDodgeCardForCharacter(context.allyB, "buff_g_passive_dodge", 4, 1);
+        AddClashStartOneShotBuff(context.enemy, "NextClashPointUp", 2, 1);
+        AddClashStartOneShotBuff(context.allyB, "NextClashPointUp", 4, 1);
+
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("buff_g_intent", context.enemy, enemyAttack, context.allyB, 1);
+        BattleActionSlot responseSlot = CreateRespondedSlot(context.allyB, responseAttack);
+        BattleActionSlot passiveDodgeSlot = new BattleActionSlot(context.allyB, 2);
+        passiveDodgeSlot.AssignPassiveGuard(context.allyB, passiveDodge);
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            responseSlot,
+            intent,
+            new List<BattleActionSlot> { passiveDodgeSlot }
+        );
+
+        bool dodgeConsumed = CountBuffStack(context.allyB, "NextClashPointUp") == 0;
+        bool enemyNewBuffKept = CountBuffStack(context.enemy, "NextClashPointUp") == 9;
+        bool knownPointWorked =
+            result != null &&
+            result.resultType == "DodgeSuccess" &&
+            result.enemyPoint == 7 &&
+            result.triggeredPassiveGuardSlot == passiveDodgeSlot;
+
+        Debug.Log("Dodge点数获得加成：" + (knownPointWorked && result.playerPoint == 4));
+        Debug.Log("DodgeSuccess或DodgeFailed后Dodge Buff消费：" + dodgeConsumed);
+        Debug.Log("known-point Dodge未重复消费敌人Buff：" + (enemyNewBuffKept && knownPointWorked));
+        Debug.Log("known-point敌人点数不重新Roll：" + (result != null && result.enemyPoint == 7));
+    }
+
+    void RunBuffDefenseConsumeSubTest()
+    {
+        Debug.Log("===== 模式47 子测试H：Defense一次性数值Buff先生效后消费 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("buff_h", 30, 30, 50, 10, 3, 8);
+        BattleCardState defense = CreateTestDefenseCardForCharacter(context.allyA, "buff_h_defense", 3, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_h_enemy", 4, 0);
+        AddClashStartOneShotBuff(context.allyA, "GuardUp", 4, 1);
+        AddClashStartOneShotBuff(context.enemy, "NextClashPointUp", 2, 1);
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, defense),
+            CreateEnemyAttackIntent("buff_h_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool defenseBuffConsumed =
+            result != null &&
+            result.resultType == "DefenseFullBlock" &&
+            result.playerPoint == 7 &&
+            result.enemyPoint == 6 &&
+            CountBuffStack(context.allyA, "GuardUp") == 0 &&
+            CountBuffStack(context.enemy, "NextClashPointUp") == 0;
+
+        BattleEndedTestContext knownContext = CreateBattleEndedTestContext("buff_h_known", 30, 30, 50, 10, 3, 8);
+        BattleCardState knownDefense = CreateTestDefenseCardForCharacter(knownContext.allyA, "buff_h_known_defense", 3, 1);
+        BattleCardState knownEnemyAttack = CreateFixedEnemyAttackCardForDodgeTest(knownContext.enemy, "buff_h_known_enemy", 4, 0);
+        AddClashStartOneShotBuff(knownContext.allyA, "GuardDown", 1, 1);
+        AddClashStartOneShotBuff(knownContext.enemy, "NextClashPointUp", 5, 1);
+        BattleActionSlot knownDefenseSlot = CreateRespondedSlot(knownContext.allyA, knownDefense);
+        BattleResolveResult knownResult = BattleResolver.ResolveDefenseVsAttackWithKnownEnemyPoint(
+            knownDefenseSlot,
+            CreateEnemyAttackIntent("buff_h_known_intent", knownContext.enemy, knownEnemyAttack, knownContext.allyA, 1),
+            4
+        );
+
+        bool knownDefenseRule =
+            knownResult != null &&
+            knownResult.playerPoint == 2 &&
+            CountBuffStack(knownContext.allyA, "GuardDown") == 0 &&
+            CountBuffStack(knownContext.enemy, "NextClashPointUp") == 5;
+
+        Debug.Log("Defense一次性Buff先生效后消费：" + (defenseBuffConsumed && knownDefenseRule));
+        Debug.Log("FullBlock或ReducedDamage后再消费：" + defenseBuffConsumed);
+        Debug.Log("known-point Defense只消费Defense侧Buff：" + knownDefenseRule);
+    }
+
+    void RunBuffEventNewNextClashBuffKeptSubTest()
+    {
+        Debug.Log("===== 模式47 子测试I：事件中新获得NextClashPointUp保留 =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("buff_i", 30, 30, 50, 10, 3, 8);
+        BattleCardState playerAttack = CreateAttackCardWithNextClashBuffEffect(context.allyA, "buff_i_player_attack", 5, BattleTiming.ClashWin, 7);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_i_enemy", 6, 0);
+        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 1);
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, playerAttack),
+            CreateEnemyAttackIntent("buff_i_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool oldConsumedNewKept =
+            result != null &&
+            result.resultType == "PlayerWin" &&
+            result.playerPoint == 8 &&
+            CountBuffStack(context.allyA, "NextClashPointUp") == 7 &&
+            CountBuffInstances(context.allyA, "NextClashPointUp") == 1;
+
+        Debug.Log("本次开始前旧Buff被消费：" + (result != null && result.playerPoint == 8));
+        Debug.Log("事件中新获得Buff仍存在：" + (CountBuffStack(context.allyA, "NextClashPointUp") == 7));
+        Debug.Log("事件中新获得Buff未被误删：" + oldConsumedNewKept);
+    }
+
+    void RunBuffPureReadNoMutationSubTest()
+    {
+        Debug.Log("===== 模式47 子测试J：纯读取不修改Buff =====");
+
+        BattleEndedTestContext context = CreateBattleEndedTestContext("buff_j", 30, 30, 50, 10, 3, 8);
+        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 4);
+
+        int stackBefore = CountBuffStack(context.allyA, "NextClashPointUp");
+        int instanceBefore = CountBuffInstances(context.allyA, "NextClashPointUp");
+        int durationBefore = GetBuffDuration(context.allyA, "NextClashPointUp");
+        int readStack = context.allyA.GetBuffStack("NextClashPointUp");
+        int stackAfter = CountBuffStack(context.allyA, "NextClashPointUp");
+        int instanceAfter = CountBuffInstances(context.allyA, "NextClashPointUp");
+        int durationAfter = GetBuffDuration(context.allyA, "NextClashPointUp");
+
+        bool pureRead =
+            readStack == stackBefore &&
+            stackBefore == stackAfter &&
+            instanceBefore == instanceAfter &&
+            durationBefore == durationAfter;
+
+        Debug.Log("当前完整Buff点数范围预览尚未接入");
+        Debug.Log("读取前后Buff stack不变：" + (stackBefore == stackAfter));
+        Debug.Log("duration不变：" + (durationBefore == durationAfter));
+        Debug.Log("Buff实例数量不变：" + (instanceBefore == instanceAfter));
+        Debug.Log("纯读取不修改Buff：" + pureRead);
+    }
+
     void RunFreeActionUnavailableBulletSubTest()
     {
         Debug.Log("===== 模式45 子测试A：FreeAction因Bullet不足而ActionUnavailable =====");
@@ -5898,6 +6252,26 @@ public class CardLoadTest : MonoBehaviour
         return total;
     }
 
+    int CountBuffInstances(CharacterData character, string buffID)
+    {
+        if (character == null || character.buffs == null || string.IsNullOrEmpty(buffID))
+        {
+            return 0;
+        }
+
+        int total = 0;
+
+        foreach (BuffData buff in character.buffs)
+        {
+            if (buff != null && buff.buffID == buffID)
+            {
+                total++;
+            }
+        }
+
+        return total;
+    }
+
     int GetBuffDuration(CharacterData character, string buffID)
     {
         if (character == null || character.buffs == null || string.IsNullOrEmpty(buffID))
@@ -5914,6 +6288,49 @@ public class CardLoadTest : MonoBehaviour
         }
 
         return -1;
+    }
+
+    void AddClashStartOneShotBuff(CharacterData character, string buffID, int stack, int duration)
+    {
+        if (character == null)
+        {
+            return;
+        }
+
+        character.AddBuff(
+            buffID,
+            buffID,
+            "AbilityBuff",
+            stack,
+            duration,
+            BattleTiming.ClashStart,
+            "ConsumeOnTrigger"
+        );
+    }
+
+    BattleActionSlot CreateRespondedSlot(CharacterData actor, BattleCardState cardState)
+    {
+        BattleActionSlot actionSlot = new BattleActionSlot(actor, 1);
+        actionSlot.AssignResponse(actor, cardState, null, false);
+        return actionSlot;
+    }
+
+    BattleEnemyIntent CreateEnemyAttackIntent(
+        string intentID,
+        CharacterData enemyUnit,
+        BattleCardState enemyAttack,
+        CharacterData target,
+        int targetSlotIndex
+    )
+    {
+        return new BattleEnemyIntent(
+            intentID,
+            enemyUnit,
+            enemyAttack,
+            target,
+            targetSlotIndex,
+            1
+        );
     }
 
     // CreateTestAttackCardForCharacter = 给测试角色创建一张基础攻击卡实例
@@ -6001,6 +6418,35 @@ public class CardLoadTest : MonoBehaviour
             damageFormula = "PointAsDamage",
             maxUseCount = 3
         };
+    }
+
+    BattleCardState CreateAttackCardWithNextClashBuffEffect(
+        CharacterData owner,
+        string instanceID,
+        int point,
+        string trigger,
+        int nextClashPointUpStack
+    )
+    {
+        CardTestData cardData = CreateFixedAttackCardData(instanceID + "_data", "事件生成NextClashPointUp攻击", point);
+        cardData.effects = new List<CardEffectData>
+        {
+            new CardEffectData
+            {
+                trigger = trigger,
+                effectType = CardEffectType.ApplyBuff,
+                target = CardTargetType.Self,
+                buffType = "NextClashPointUp",
+                buffName = "下一次拼点点数增加",
+                buffCategory = "AbilityBuff",
+                stack = nextClashPointUpStack,
+                duration = 1,
+                checkTiming = BattleTiming.ClashStart,
+                expireRule = "ConsumeOnTrigger"
+            }
+        };
+
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
     }
 
     // CreateResolvedStateAttackCardData = 创建用于验证 Resolved 使用状态的固定点攻击卡

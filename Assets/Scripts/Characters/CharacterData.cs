@@ -392,7 +392,7 @@ public class CharacterData
     // 这个函数只处理 Buff 自己的变化 / 消失
     // 不处理卡牌给不给 Buff
     // ================================
-    public void CheckBuffsByTiming(string timing)
+    public void CheckBuffsByTiming(string timing, bool consumeTriggeredBuffs = true)
     {
         if (BattleDebugSettings.ShowBuffLog)
         {
@@ -470,6 +470,16 @@ public class CharacterData
             // 触发一次后消失
             if (buff.expireRule == "ConsumeOnTrigger")
             {
+                if (!consumeTriggeredBuffs)
+                {
+                    if (BattleDebugSettings.ShowBuffLog)
+                    {
+                        Debug.Log(buff.buffName + " 本次检测暂缓触发后消失");
+                    }
+
+                    continue;
+                }
+
                 if (BattleDebugSettings.ShowBuffLog)
                 {
                     Debug.Log(buff.buffName + " 触发后消失");
@@ -492,6 +502,70 @@ public class CharacterData
 
             Debug.LogWarning("未知的 Buff 消失规则：" + buff.expireRule);
         }
+    }
+
+    public int ConsumeTriggeredBuffs(string timing, params string[] buffIDs)
+    {
+        if (string.IsNullOrEmpty(timing) || buffIDs == null || buffIDs.Length == 0)
+        {
+            return 0;
+        }
+
+        int consumedStack = 0;
+
+        for (int i = buffs.Count - 1; i >= 0; i--)
+        {
+            BuffData buff = buffs[i];
+
+            if (buff == null)
+            {
+                continue;
+            }
+
+            if (buff.checkTiming != timing)
+            {
+                continue;
+            }
+
+            if (buff.expireRule != "ConsumeOnTrigger")
+            {
+                continue;
+            }
+
+            if (!IsBuffIDInList(buff.buffID, buffIDs))
+            {
+                continue;
+            }
+
+            consumedStack += buff.stack;
+
+            if (BattleDebugSettings.ShowBuffLog)
+            {
+                Debug.Log(characterName + " 消耗一次性数值Buff：" + buff.buffName + " x" + buff.stack);
+            }
+
+            buffs.RemoveAt(i);
+        }
+
+        return consumedStack;
+    }
+
+    bool IsBuffIDInList(string buffID, string[] buffIDs)
+    {
+        if (string.IsNullOrEmpty(buffID) || buffIDs == null)
+        {
+            return false;
+        }
+
+        foreach (string allowedBuffID in buffIDs)
+        {
+            if (buffID == allowedBuffID)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     // 打印当前角色身上的全部状态

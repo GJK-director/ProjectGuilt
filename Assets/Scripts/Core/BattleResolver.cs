@@ -32,6 +32,9 @@ public class BattleResolveResult
 public static class BattleResolver
 {
     const int MaxRespondedEnemyIntentClashAttempts = 10;
+    const string BuffNextClashPointUp = "NextClashPointUp";
+    const string BuffGuardUp = "GuardUp";
+    const string BuffGuardDown = "GuardDown";
 
     // ResolveFreeAction = 正式结算自由行动
     // 第一版支持 Ability FreeAction 和 Attack FreeAction，不处理防御、闪避等自由行动。
@@ -636,8 +639,8 @@ public static class BattleResolver
         BattleCardState enemyCardState = enemyIntent.enemyCardState;
         CharacterData actualTarget = enemyIntent.actualTargetCharacter;
 
-        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
-        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
+        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
+        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
         int playerPoint = 0;
         int enemyPoint = 0;
@@ -670,6 +673,9 @@ public static class BattleResolver
             int winnerPoint = isPlayerWin ? playerPoint : enemyPoint;
             int loserPoint = isPlayerWin ? enemyPoint : playerPoint;
             string resultType = isPlayerWin ? "PlayerWin" : "EnemyWin";
+
+            ConsumeClashPointBuffs(playerUnit);
+            ConsumeClashPointBuffs(enemyUnit);
 
             TriggerBattleEvent(
                 BattleTiming.ClashWin,
@@ -1048,8 +1054,8 @@ public static class BattleResolver
             );
         }
 
-        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
-        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
+        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
+        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
         int enemyFinalAttackPoint = BattleCalculator.GetFinalClashPoint(enemyUnit, enemyCardState.cardData);
 
@@ -1133,6 +1139,8 @@ public static class BattleResolver
             );
         }
 
+        defenseSlot.actor.CheckBuffsByTiming(BattleTiming.ClashStart, false);
+
         int clampedKnownEnemyAttackPoint = Mathf.Max(0, knownEnemyAttackPoint);
 
         return ResolveDefenseVsAttackCore(
@@ -1170,6 +1178,13 @@ public static class BattleResolver
             enemyFinalAttackPoint,
             playerFinalDefensePointScaled
         );
+
+        ConsumeDefensePointBuffs(playerUnit);
+
+        if (!isKnownPointContinuation)
+        {
+            ConsumeClashPointBuffs(enemyUnit);
+        }
 
         TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, defenseCardState, 0, 0, false, false);
 
@@ -1320,7 +1335,7 @@ public static class BattleResolver
         BattleCardState dodgeCardState = dodgeSlot.cardState;
         BattleCardState enemyCardState = enemyIntent.enemyCardState;
 
-        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
+        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
         int playerDodgePoint = 0;
 
@@ -1345,6 +1360,8 @@ public static class BattleResolver
 
             if (playerDodgePoint > fixedEnemyAttackPoint)
             {
+                ConsumeClashPointBuffs(playerUnit);
+
                 TriggerBattleEvent(BattleTiming.ClashWin, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
                 TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
 
@@ -1373,6 +1390,8 @@ public static class BattleResolver
 
                 return successResult;
             }
+
+            ConsumeClashPointBuffs(playerUnit);
 
             TriggerBattleEvent(BattleTiming.ClashLose, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
             TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
@@ -1522,8 +1541,8 @@ public static class BattleResolver
             );
         }
 
-        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
-        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
+        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
+        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
         int playerDodgePoint = 0;
         int enemyAttackPoint = 0;
@@ -1549,6 +1568,9 @@ public static class BattleResolver
 
             if (playerDodgePoint > enemyAttackPoint)
             {
+                ConsumeClashPointBuffs(playerUnit);
+                ConsumeClashPointBuffs(enemyUnit);
+
                 TriggerBattleEvent(BattleTiming.ClashWin, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
                 TriggerBattleEvent(BattleTiming.ClashLose, enemyUnit, playerUnit, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Lose);
                 TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
@@ -1579,6 +1601,9 @@ public static class BattleResolver
 
                 return result;
             }
+
+            ConsumeClashPointBuffs(playerUnit);
+            ConsumeClashPointBuffs(enemyUnit);
 
             TriggerBattleEvent(BattleTiming.ClashWin, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Win);
             TriggerBattleEvent(BattleTiming.ClashLose, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
@@ -1805,6 +1830,26 @@ public static class BattleResolver
                 true
             );
         }
+    }
+
+    static int ConsumeClashPointBuffs(CharacterData unit)
+    {
+        return ConsumeClashStartTriggeredBuffs(unit, BuffNextClashPointUp);
+    }
+
+    static int ConsumeDefensePointBuffs(CharacterData unit)
+    {
+        return ConsumeClashStartTriggeredBuffs(unit, BuffGuardUp, BuffGuardDown);
+    }
+
+    static int ConsumeClashStartTriggeredBuffs(CharacterData unit, params string[] buffIDs)
+    {
+        if (unit == null)
+        {
+            return 0;
+        }
+
+        return unit.ConsumeTriggeredBuffs(BattleTiming.ClashStart, buffIDs);
     }
 
 

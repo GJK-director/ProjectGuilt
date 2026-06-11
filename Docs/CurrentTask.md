@@ -9907,3 +9907,387 @@ B基础攻击因Bullet不足返回ActionUnavailable
 - UI 安排前 CanUseCard 校验统一。
 - 正式 Skipped 状态或 item 状态 enum。
 - 全部 phase enum 重构。
+
+## 八十八、单名玩家死亡后继续战斗阶段B测试通过
+
+### 一、阶段目标
+
+阶段A已经完成整场战斗结束规则：
+
+```text
+敌人死亡 → Victory
+A、B全部死亡 → Defeat
+```
+
+阶段B补齐的是：
+
+```text
+A或B只有一人死亡
+另一人仍然存活
+→ 战斗继续
+```
+
+本阶段分为：
+
+- B1：同一 `ExecutionPlan` 内的死亡单位处理。
+- B2：单名角色死亡后的下一回合续战。
+
+### 二、B1：同一ExecutionPlan内死亡单位处理
+
+死亡角色 `FreeAction` 执行前由 Executor 检查：
+
+```text
+actionSlot.actor.IsDead()
+```
+
+如果执行者已经死亡：
+
+- 不调用 Resolver。
+- 不触发 OnPlay。
+- 不触发 Resolved。
+- 不造成伤害。
+- 不执行卡牌 effects。
+- 不进入 CD。
+- 不增加 UseCount。
+- 不增加 guilt。
+- 槽位不 `MarkUsed`。
+- 当前 item 直接标记完成。
+- 后续 item 继续执行。
+
+该跳过明确区别于 `ActionUnavailable`。`ActionUnavailable` 仍只用于合法 `FreeAction` 在执行瞬间 `CanUseCard` 失败。
+
+敌人意图执行前，如果：
+
+```text
+enemyIntent.actualTargetCharacter.IsDead()
+```
+
+则整个敌人 item 跳过，不 Roll 点、不调用 Resolver、不造成伤害、不使用响应卡或 PassiveGuard、不 `MarkUsed` 任何槽位，并标记 item 完成。上一回合已经生成的旧意图不会在执行阶段临时转火。
+
+`RespondedEnemyIntent` 执行前，如果响应角色死亡但 `actualTargetCharacter` 仍存活，则原响应失效，敌人意图转为 `Unresponded` 处理。死亡响应者的卡牌不使用、不进 CD、UseCount / guilt 不变化，响应槽位不 `MarkUsed`，敌人行动只执行一次。
+
+Responded item 会提前携带 `actualTarget` 的 PassiveGuard 候选。正常主动响应结算时不使用这些候选，只有响应角色死亡并回落 `Unresponded` 时才可能使用。原有 Attack vs Attack EnemyWin 后的 known-point Defense / Dodge PassiveGuard 规则保持不变。
+
+死亡 PassiveGuard 候选过滤补入了三个阶段：
+
+- `BattleExecutionPlanManager` 生成候选时。
+- `BattleExecutionPlanExecutor` 执行前复查时。
+- `BattleResolver` known-point 候选复查时。
+
+以下候选无效：
+
+- `actualTarget` 已死亡。
+- `slot.owner` 已死亡。
+- `slot.actor` 已死亡。
+- `slot.targetCharacter` 已死亡。
+
+失效候选不使用、不 `MarkUsed`、不进 CD、不增加 UseCount / guilt，并继续检查下一张候选。候选顺序继续按 `slotIndex` 升序处理。
+
+### 三、B2：单名角色死亡后的下一回合续战
+
+新增：
+
+```csharp
+BattleActionSlotManager.CreateLivingPartyActionSlots(...)
+```
+
+保留原有：
+
+```csharp
+CreatePartyActionSlots(...)
+```
+
+新方法规则：
+
+- A 存活时，为 A 创建行动槽位。
+- B 存活时，为 B 创建行动槽位。
+- 死亡角色不创建任何槽位。
+- 每个存活角色的 `slotIndex` 仍然从 1 开始。
+- 每一回合创建新的槽位对象。
+- 不保留上一回合的槽位对象。
+
+例如：
+
+```text
+A存活，B死亡
+→ A槽位1
+→ A槽位2
+→ 不存在B的正式Runtime槽位
+```
+
+`BattleRuntimeState.PrepareNextTurnWithRuntimeObjects(...)` 会对传入的新槽位进行最终安全过滤。死亡 owner 或死亡 actor 对应的槽位不会进入正式下一回合。
+
+明确：
+
+- 不修改全局 `SetActionSlots` 行为。
+- 不删除 `RuntimeState` 中的角色引用。
+- 只保护正式 `PrepareNextTurn` 流程。
+- 历史测试仍然可以显式构造死亡角色槽位。
+
+如果 A、B 全部死亡：
+
+- 不创建可操作的空回合。
+- BattleEnded / Defeat 保护继续生效。
+- 不进入新的 Prepare 阶段。
+
+Simple UI 下一回合固定敌人意图目标规则：
+
+```text
+B存活 → 攻击B槽位1
+B死亡且A存活 → 攻击A槽位1
+A死亡且B存活 → 攻击B槽位1
+A、B都死亡 → 不创建敌人意图
+```
+
+该目标选择只发生在创建新一回合敌人意图时，不会修改上一回合已经生成的旧意图。创建新意图时直接将最终存活目标传给构造函数，因此 `originalTargetCharacter` 和 `actualTargetCharacter` 会同时指向最终存活目标，`originalTargetSlotIndex` 和 `actualTargetSlotIndex` 会同时为槽位 1。
+
+Simple UI 对死亡角色选择增加保护：
+
+- 点击死亡角色时，不允许设置为 `selectedActor`。
+- 清空当前行动选择。
+- 不保留之前选择的存活角色。
+- 提示“该角色已经死亡，不能安排行动”。
+- 确认安排入口也会再次检查 `selectedActor` 是否死亡。
+
+EndTurn 成功后与 PrepareNextTurn 成功后，都会清理当前安排选择：
+
+- `selectedActor`
+- `selectedSlotIndex`
+- `selectedCardState`
+- `selectedActionMode`
+- 其他当前安排流程使用的临时选择
+
+下一回合 UI 恢复为：
+
+```text
+NoActor
+NoCard
+NoMode
+```
+
+不会保留上一回合的死亡角色、旧槽位、旧卡牌或旧用途。
+
+### 四、死亡角色回合生命周期过滤
+
+模式46测试过程中发现并修复：
+
+```text
+死亡B虽然没有下一回合行动槽位
+但仍然被固定 battleUnits 列表传入 TurnStart 和 TurnEnd
+```
+
+真实原因：
+
+```text
+battleUnits 是 SetCharacters(...) 时建立的固定 A / B / enemy 引用列表。
+角色死亡后不会自动从 battleUnits 中移除。
+```
+
+因此新增：
+
+```csharp
+GetLivingTurnParticipants()
+```
+
+收集顺序：
+
+```text
+allyA
+allyB
+enemy
+```
+
+过滤规则：
+
+- `null` 角色跳过。
+- `IsDead() == true` 的角色跳过。
+- 相同 `CharacterData` 引用不重复加入。
+- 保持 A、B、Enemy 原有顺序。
+
+正式调用改为：
+
+```csharp
+BattleTurnProcessor.StartTurn(GetLivingTurnParticipants());
+BattleTurnProcessor.EndTurn(GetLivingTurnParticipants());
+```
+
+死亡角色不再参与：
+
+- `ApplyPendingBuffsAtTurnStart`
+- `RollTurnSpeed`
+- TurnStart Buff 检测
+- TurnEnd Buff 检测
+- `DurationDown` 持续时间推进
+- 其他 TurnStart / TurnEnd 角色生命周期处理
+
+存活角色和存活敌人继续正常参与 TurnStart 与 TurnEnd。死亡角色引用仍然保留在 `RuntimeState` 中，为未来可能的复活系统保留结构空间。
+
+### 五、模式46聚合测试
+
+测试入口：
+
+```text
+SingleAllyDeathExecutionFilteringBasic = 46
+```
+
+没有新增模式47。
+
+模式46最终包含 A-K 共 11 组子测试：
+
+1. 死亡角色 FreeAction 跳过。
+2. 响应者死亡后转 Unresponded。
+3. Defense 响应者死亡后 PassiveGuard 接管。
+4. `actualTarget` 死亡后敌人 item 跳过。
+5. 死亡或失效 PassiveGuard 候选跳过。
+6. 最后一名玩家死亡进入 Defeat。
+7. B 死亡后只创建 A 槽位。
+8. B 死亡后新意图改选 A。
+9. RuntimeState 过滤死亡角色槽位。
+10. 全部玩家死亡后不能准备下一回合。
+11. 死亡角色不参与 TurnStart / TurnEnd。
+
+子测试K验证：
+
+- 死亡 B 不应用 pendingBuff。
+- 死亡 B 不重新 Roll 速度。
+- 死亡 B 的 currentSpeed 保持不变。
+- 死亡 B 不执行 TurnEnd。
+- 死亡 B 的 Buff 持续时间不下降。
+- 存活 A 正常参与 TurnStart。
+- 存活 Enemy 正常参与 TurnStart。
+- 存活 A 正常参与 TurnEnd。
+- A 的 `DurationDown` Buff 正常推进。
+
+最终确认：
+
+```text
+模式46 A-K 全部 Unity 测试通过
+没有预期断言为 False
+```
+
+### 六、Simple UI手动验证
+
+B 自然死亡流程：
+
+- Simple UI 中连续空过回合，让敌人以无人响应攻击 B。
+- B HP 下降到 0。
+- A 仍然存活。
+- `BattleResult` 保持 `None`。
+- 没有误判 Defeat。
+- 当前回合正常完成。
+- 可以正常 EndTurn。
+- 可以正常 PrepareNextTurn。
+
+B 死亡后的下一回合：
+
+- `RuntimeState` 中只存在 A 槽位1和 A 槽位2。
+- 不存在 B 的正式 Runtime 槽位。
+- UI 中仍然显示的 B 槽位区域只是固定界面显示占位。
+- 新敌人意图目标改为 A 槽位1。
+- 敌人实际执行时也攻击 A。
+- 显示目标与实际结算目标一致。
+- 跨回合选择状态清空为 `NoActor / NoCard / NoMode`。
+
+死亡 B 选择保护：
+
+- 点击选择 B 后，UI 提示“该角色已经死亡，不能安排行动”。
+- B 不能成为 `selectedActor`。
+- B 不能选择正式槽位。
+- B 不能安排卡牌。
+- 不会错误保留之前的 A 选择。
+
+A 独自继续战斗：
+
+```text
+选择A
+→ 槽位1
+→ 基础攻击
+→ 敌人本体
+→ 确认安排
+→ 战斗开始
+```
+
+实测确认：
+
+- A 正常使用基础攻击。
+- A 卡牌正常 Resolved。
+- A 对敌人造成伤害。
+- A 槽位正常 `MarkUsed`。
+- 敌人按照新意图攻击 A。
+- A 正常受到伤害。
+- `ExecutionPlan` 全部完成。
+- 战斗可以继续推进。
+
+最终 Defeat：
+
+```text
+阶段：BattleEnded
+战斗结果：Defeat
+```
+
+角色状态：
+
+```text
+A HP：0 / 30
+B HP：0 / 30
+敌人仍然存活
+```
+
+本次 Defeat 来自玩家全灭，不是敌人死亡导致 Victory。BattleEnded 后 UI 提示战斗已经结束，并阻止：
+
+- BattleStart。
+- 确认安排。
+- EndTurn。
+- PrepareNextTurn。
+
+### 七、阶段B完成结论
+
+当前已经形成以下第一版完整流程：
+
+```text
+双角色战斗
+→ 单名角色死亡
+→ 另一名角色继续战斗
+→ 下一回合只生成存活角色槽位
+→ 敌人新意图改选存活目标
+→ 死亡角色不能继续安排行动
+→ 存活角色独自战斗
+→ 最终全灭进入Defeat
+```
+
+明确当前完成范围是：
+
+```text
+单敌人
+单意图
+双角色
+无复活条件下
+第一版死亡续战闭环
+```
+
+不要宣称多敌人、多意图或完整正式战斗系统已经全部完成。
+
+### 八、仍未实现的边界
+
+后续仍保留：
+
+- 复活系统。
+- 濒死状态。
+- 死亡动画。
+- 角色退场动画。
+- 死亡角色按钮隐藏或正式禁用表现。
+- 多敌人死亡与 Victory 判断。
+- 敌人意图2。
+- 多意图下的死亡目标处理。
+- 嘲讽系统。
+- 仇恨系统。
+- 随机目标选择。
+- 旧敌人意图执行过程中自动转移目标。
+- 正式 Skipped item 状态。
+- Unresponded 敌人卡完整事件链。
+- Unresponded 敌人卡 CD / UseCount 统一。
+- Responded 卡牌因 CanUseCard 失败后的处理规则。
+- 正式 Victory / Defeat 面板。
+- 战斗奖励流程。
+- 战斗重开流程。
+- BattlePhase enum 重构。
