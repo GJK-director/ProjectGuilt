@@ -5,6 +5,9 @@
 // 注意：
 // BuffData 不负责决定“哪张卡给了这个状态”
 // 卡牌给状态，是战斗逻辑 / 卡牌效果系统负责的
+using System;
+using System.Collections.Generic;
+
 public class BuffData
 {
     // buffID = 状态ID
@@ -70,4 +73,25 @@ public class BuffData
         checkTiming = timing;
         expireRule = rule;
     }
+}
+
+[Serializable]
+public class BuffDefinitionData
+{
+    public string buffID;
+    public string buffName;
+    public string buffCategory;
+    public string effectType;
+    public string targetStat;
+    public float valuePerStack;
+    public string defaultCheckTiming;
+    public string defaultExpireRule;
+    public string consumeRule;
+    public string description;
+}
+
+[Serializable]
+public class BuffDefinitionList
+{
+    public List<BuffDefinitionData> buffs;
 }

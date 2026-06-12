@@ -8,6 +8,7 @@ public static class BuffCategory
 
     // DownBuff = 负面状态
     public const string DownBuff = "DownBuff";
+    public const string Debuff = "Debuff";
 
     // AbilityBuff = 能力状态 / 资源状态
     // 例如：子弹、弹药、护盾层数、特殊计数等

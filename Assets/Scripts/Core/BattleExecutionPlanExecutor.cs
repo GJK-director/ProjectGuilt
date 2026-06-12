@@ -66,7 +66,7 @@ public static class BattleExecutionPlanExecutor
             else if (item.executionType == BattleExecutionItemType.RespondedEnemyIntent)
             {
                 // 已响应敌人意图：交给 BattleResolver 正式入口处理。
-                isCompleted = ExecuteRespondedEnemyIntent(item);
+                isCompleted = ExecuteRespondedEnemyIntent(item, runtimeState);
             }
             else if (item.executionType == BattleExecutionItemType.FreeAction)
             {
@@ -176,6 +176,14 @@ public static class BattleExecutionPlanExecutor
     // Executor 只负责分派和完成状态，正式结算交给 BattleResolver。
     static bool ExecuteUnrespondedEnemyIntent(BattleExecutionItem item)
     {
+        return ExecuteUnrespondedEnemyIntent(item, item != null ? item.passiveGuardCandidates : null);
+    }
+
+    static bool ExecuteUnrespondedEnemyIntent(
+        BattleExecutionItem item,
+        System.Collections.Generic.List<BattleActionSlot> passiveGuardCandidates
+    )
+    {
         if (item == null)
         {
             Debug.LogWarning("执行 UnrespondedEnemyIntent 失败：item 为空");
@@ -187,7 +195,10 @@ public static class BattleExecutionPlanExecutor
             return true;
         }
 
-        BattleActionSlot passiveGuardSlot = FindFirstValidPassiveGuardSlot(item);
+        BattleActionSlot passiveGuardSlot = FindFirstValidPassiveGuardSlot(
+            passiveGuardCandidates,
+            item.enemyIntent
+        );
         BattleResolveResult result = null;
 
         if (passiveGuardSlot != null)
@@ -243,16 +254,19 @@ public static class BattleExecutionPlanExecutor
     }
 
     // FindFirstValidPassiveGuardSlot = 执行时选择第一张仍然有效的被动守备
-    static BattleActionSlot FindFirstValidPassiveGuardSlot(BattleExecutionItem item)
+    static BattleActionSlot FindFirstValidPassiveGuardSlot(
+        System.Collections.Generic.IReadOnlyList<BattleActionSlot> passiveGuardCandidates,
+        BattleEnemyIntent enemyIntent
+    )
     {
-        if (item == null || item.passiveGuardCandidates == null || item.passiveGuardCandidates.Count == 0)
+        if (passiveGuardCandidates == null || passiveGuardCandidates.Count == 0)
         {
             return null;
         }
 
-        foreach (BattleActionSlot slot in item.passiveGuardCandidates)
+        foreach (BattleActionSlot slot in passiveGuardCandidates)
         {
-            if (!IsPassiveGuardSlotStillValid(slot, item.enemyIntent))
+            if (!IsPassiveGuardSlotStillValid(slot, enemyIntent))
             {
                 continue;
             }
@@ -319,7 +333,7 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
-        return BattleCardManager.CanUseCard(slot.cardState);
+        return BattleCardManager.CanUseCard(slot.actor, enemyIntent.enemy, slot.cardState);
     }
 
     // LogResolveResult = 打印 Resolver 返回结果
@@ -373,7 +387,7 @@ public static class BattleExecutionPlanExecutor
 
     // ExecuteRespondedEnemyIntent = 执行已响应的敌人意图
     // Executor 只负责分派和完成状态，正式结算交给 BattleResolver。
-    static bool ExecuteRespondedEnemyIntent(BattleExecutionItem item)
+    static bool ExecuteRespondedEnemyIntent(BattleExecutionItem item, BattleRuntimeState runtimeState)
     {
         if (item == null)
         {
@@ -426,6 +440,11 @@ public static class BattleExecutionPlanExecutor
 
         if (!result.isSuccess || !result.shouldCompleteItem)
         {
+            if (result.resultType == "ActionUnavailable" && result.shouldCompleteItem)
+            {
+                return ExecuteRespondedActionUnavailableFallback(item, runtimeState, result);
+            }
+
             Debug.LogWarning(
                 item.order +
                 ". RespondedEnemyIntent 未完成：Resolver 未返回可完成结果，Executor 不补做结算"
@@ -454,6 +473,54 @@ public static class BattleExecutionPlanExecutor
 
         item.isCompleted = true;
         return true;
+    }
+
+    static bool ExecuteRespondedActionUnavailableFallback(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        BattleResolveResult result
+    )
+    {
+        if (item == null || item.enemyIntent == null)
+        {
+            Debug.LogWarning("Responded ActionUnavailable 回落失败：item或敌人意图为空");
+            return false;
+        }
+
+        BattleEnemyIntent enemyIntent = item.enemyIntent;
+
+        if (enemyIntent.originalTargetCharacter == null)
+        {
+            Debug.LogWarning("Responded ActionUnavailable 回落失败：originalTargetCharacter为空");
+            return false;
+        }
+
+        Debug.Log(
+            item.order +
+            ". RespondedEnemyIntent 响应卡不可用，撤销目标改写并转 Unresponded：" +
+            result.message
+        );
+
+        enemyIntent.SetActualTarget(
+            enemyIntent.originalTargetCharacter,
+            enemyIntent.originalTargetSlotIndex
+        );
+
+        if (TryCompleteEnemyItemBecauseActualTargetDead(item))
+        {
+            return true;
+        }
+
+        System.Collections.Generic.List<BattleActionSlot> fallbackCandidates =
+            runtimeState != null
+                ? BattleExecutionPlanManager.CollectPassiveGuardCandidatesForTarget(
+                    runtimeState.actionSlots,
+                    enemyIntent.actualTargetCharacter,
+                    true
+                )
+                : new System.Collections.Generic.List<BattleActionSlot>();
+
+        return ExecuteUnrespondedEnemyIntent(item, fallbackCandidates);
     }
 
     // ExecuteFreeAction = 执行自由行动

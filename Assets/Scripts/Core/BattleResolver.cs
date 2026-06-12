@@ -33,8 +33,19 @@ public static class BattleResolver
 {
     const int MaxRespondedEnemyIntentClashAttempts = 10;
     const string BuffNextClashPointUp = "NextClashPointUp";
+    const string BuffNextCardPointUp = "NextCardPointUp";
     const string BuffGuardUp = "GuardUp";
     const string BuffGuardDown = "GuardDown";
+    const string ConsumeRuleFormalClashResolved = "FormalClashResolved";
+    const string ConsumeRuleSuccessfulPointCardUsed = "SuccessfulPointCardUsed";
+
+    struct PointBuffSnapshot
+    {
+        public int nextCardPointStack;
+        public int nextCardPointModifier;
+        public int nextClashPointStack;
+        public int nextClashPointModifier;
+    }
 
     // ResolveFreeAction = 正式结算自由行动
     // 第一版支持 Ability FreeAction 和 Attack FreeAction，不处理防御、闪避等自由行动。
@@ -171,9 +182,15 @@ public static class BattleResolver
             "，不进入拼点"
         );
 
+        PointBuffSnapshot userPointBuffSnapshot = CapturePointBuffSnapshot(user);
+
         TriggerBattleEvent(BattleTiming.BeforeUse, user, target, actionSlot.cardState, 0, 0, false, false);
 
-        int playerAttackPoint = BattleCalculator.Rollpoint(attackCard.minPoint, attackCard.maxPoint);
+        int playerAttackPoint = BattleCalculator.GetFinalAttackPointWithoutClash(
+            user,
+            attackCard,
+            userPointBuffSnapshot.nextCardPointModifier
+        );
         int damageScaled = BattleCalculator.GetFinalDamageScaled(
             user,
             target,
@@ -181,6 +198,8 @@ public static class BattleResolver
             playerAttackPoint
         );
         int finalHpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+
+        ConsumeSuccessfulPointCardBuffs(user, userPointBuffSnapshot);
 
         TriggerBattleEvent(BattleTiming.Resolved, user, target, actionSlot.cardState, playerAttackPoint, 0, false, false);
         TriggerBattleEvent(BattleTiming.Hit, user, target, actionSlot.cardState, playerAttackPoint, finalHpDamage, finalHpDamage > 0, false);
@@ -412,6 +431,16 @@ public static class BattleResolver
                 );
             }
 
+            if (!BattleCardManager.CanUseCard(actionSlot.actor, enemyIntent.enemy, actionSlot.cardState))
+            {
+                return CreateActionUnavailableResult(
+                    "ResolveRespondedEnemyIntent：响应卡执行时已不可用，本次响应变为空卡。" +
+                    actionSlot.actor.characterName +
+                    " 的卡牌不能使用：" +
+                    actionSlot.cardState.GetCardName()
+                );
+            }
+
             return ResolveRespondedAttackVsAttack(actionSlot, enemyIntent, passiveGuardCandidates);
         }
 
@@ -427,6 +456,16 @@ public static class BattleResolver
                 );
             }
 
+            if (!BattleCardManager.CanUseCard(actionSlot.actor, enemyIntent.enemy, actionSlot.cardState))
+            {
+                return CreateActionUnavailableResult(
+                    "ResolveRespondedEnemyIntent：响应卡执行时已不可用，本次响应变为空卡。" +
+                    actionSlot.actor.characterName +
+                    " 的卡牌不能使用：" +
+                    actionSlot.cardState.GetCardName()
+                );
+            }
+
             return ResolveRespondedDodgeVsAttack(actionSlot, enemyIntent);
         }
 
@@ -439,6 +478,16 @@ public static class BattleResolver
                     playerCard.minPoint +
                     "-" +
                     playerCard.maxPoint
+                );
+            }
+
+            if (!BattleCardManager.CanUseCard(actionSlot.actor, enemyIntent.enemy, actionSlot.cardState))
+            {
+                return CreateActionUnavailableResult(
+                    "ResolveRespondedEnemyIntent：响应卡执行时已不可用，本次响应变为空卡。" +
+                    actionSlot.actor.characterName +
+                    " 的卡牌不能使用：" +
+                    actionSlot.cardState.GetCardName()
                 );
             }
 
@@ -514,8 +563,15 @@ public static class BattleResolver
 
         CharacterData enemyUnit = enemyIntent.enemy;
         CharacterData target = enemyIntent.actualTargetCharacter;
+        PointBuffSnapshot enemyPointBuffSnapshot = CapturePointBuffSnapshot(enemyUnit);
 
-        int enemyAttackPoint = BattleCalculator.Rollpoint(enemyCard.minPoint, enemyCard.maxPoint);
+        TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, target, enemyIntent.enemyCardState, 0, 0, false, false);
+
+        int enemyAttackPoint = BattleCalculator.GetFinalAttackPointWithoutClash(
+            enemyUnit,
+            enemyCard,
+            enemyPointBuffSnapshot.nextCardPointModifier
+        );
         int damageScaled = BattleCalculator.GetFinalDamageScaled(
             enemyUnit,
             target,
@@ -523,6 +579,8 @@ public static class BattleResolver
             enemyAttackPoint
         );
         int finalHpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+
+        ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
 
         target.TakeDamage(finalHpDamage);
 
@@ -639,6 +697,12 @@ public static class BattleResolver
         BattleCardState enemyCardState = enemyIntent.enemyCardState;
         CharacterData actualTarget = enemyIntent.actualTargetCharacter;
 
+        PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(playerUnit);
+        PointBuffSnapshot enemyPointBuffSnapshot = CapturePointBuffSnapshot(enemyUnit);
+
+        TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, actualTarget, enemyCardState, 0, 0, false, false);
+        TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, playerCardState, 0, 0, false, false);
+
         enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
         playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
@@ -647,8 +711,18 @@ public static class BattleResolver
 
         for (int attempt = 1; attempt <= MaxRespondedEnemyIntentClashAttempts; attempt++)
         {
-            playerPoint = BattleCalculator.GetFinalClashPoint(playerUnit, playerCardState.cardData);
-            enemyPoint = BattleCalculator.GetFinalClashPoint(enemyUnit, enemyCardState.cardData);
+            playerPoint = BattleCalculator.GetFinalClashPoint(
+                playerUnit,
+                playerCardState.cardData,
+                playerPointBuffSnapshot.nextClashPointModifier,
+                playerPointBuffSnapshot.nextCardPointModifier
+            );
+            enemyPoint = BattleCalculator.GetFinalClashPoint(
+                enemyUnit,
+                enemyCardState.cardData,
+                enemyPointBuffSnapshot.nextClashPointModifier,
+                enemyPointBuffSnapshot.nextCardPointModifier
+            );
 
             if (playerPoint == enemyPoint)
             {
@@ -674,8 +748,10 @@ public static class BattleResolver
             int loserPoint = isPlayerWin ? enemyPoint : playerPoint;
             string resultType = isPlayerWin ? "PlayerWin" : "EnemyWin";
 
-            ConsumeClashPointBuffs(playerUnit);
-            ConsumeClashPointBuffs(enemyUnit);
+            ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
+            ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
+            ConsumeClashPointBuffs(enemyUnit, enemyPointBuffSnapshot);
+            ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
 
             TriggerBattleEvent(
                 BattleTiming.ClashWin,
@@ -1009,7 +1085,7 @@ public static class BattleResolver
             return false;
         }
 
-        return BattleCardManager.CanUseCard(slot.cardState);
+        return BattleCardManager.CanUseCard(slot.actor, enemyIntent.enemy, slot.cardState);
     }
 
 
@@ -1054,10 +1130,20 @@ public static class BattleResolver
             );
         }
 
+        PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(playerUnit);
+        PointBuffSnapshot enemyPointBuffSnapshot = CapturePointBuffSnapshot(enemyUnit);
+
+        TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, actualTarget, enemyCardState, 0, 0, false, false);
+        TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, defenseCardState, 0, 0, false, false);
+
         enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
         playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
-        int enemyFinalAttackPoint = BattleCalculator.GetFinalClashPoint(enemyUnit, enemyCardState.cardData);
+        int enemyFinalAttackPoint = BattleCalculator.GetFinalAttackPointWithoutClash(
+            enemyUnit,
+            enemyCardState.cardData,
+            enemyPointBuffSnapshot.nextCardPointModifier
+        );
 
         return ResolveDefenseVsAttackCore(
             actionSlot,
@@ -1066,7 +1152,9 @@ public static class BattleResolver
             true,
             true,
             "ResolveRespondedDefenseVsAttack",
-            false
+            false,
+            playerPointBuffSnapshot,
+            enemyPointBuffSnapshot
         );
     }
 
@@ -1139,6 +1227,20 @@ public static class BattleResolver
             );
         }
 
+        if (!BattleCardManager.CanUseCard(defenseSlot.actor, enemyIntent.enemy, defenseSlot.cardState))
+        {
+            return CreateActionUnavailableResult(
+                "ResolveDefenseVsAttackWithKnownEnemyPoint：防御卡执行时已不可用，本次守备跳过。" +
+                defenseSlot.actor.characterName +
+                " 的卡牌不能使用：" +
+                defenseSlot.cardState.GetCardName()
+            );
+        }
+
+        PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(defenseSlot.actor);
+
+        TriggerBattleEvent(BattleTiming.BeforeUse, defenseSlot.actor, enemyIntent.enemy, defenseSlot.cardState, 0, 0, false, false);
+
         defenseSlot.actor.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
         int clampedKnownEnemyAttackPoint = Mathf.Max(0, knownEnemyAttackPoint);
@@ -1150,7 +1252,9 @@ public static class BattleResolver
             false,
             false,
             "ResolveDefenseVsAttackWithKnownEnemyPoint",
-            true
+            true,
+            playerPointBuffSnapshot,
+            new PointBuffSnapshot()
         );
     }
 
@@ -1161,7 +1265,9 @@ public static class BattleResolver
         bool shouldTriggerEnemyResolved,
         bool enemyCardUsed,
         string messagePrefix,
-        bool isKnownPointContinuation
+        bool isKnownPointContinuation,
+        PointBuffSnapshot playerPointBuffSnapshot,
+        PointBuffSnapshot enemyPointBuffSnapshot
     )
     {
         CharacterData playerUnit = defenseSlot.actor;
@@ -1172,7 +1278,11 @@ public static class BattleResolver
 
         enemyFinalAttackPoint = Mathf.Max(0, enemyFinalAttackPoint);
 
-        int playerFinalDefensePointScaled = BattleCalculator.GetFinalDefensePointScaled(playerUnit, defenseCardState.cardData);
+        int playerFinalDefensePointScaled = BattleCalculator.GetFinalDefensePointScaled(
+            playerUnit,
+            defenseCardState.cardData,
+            playerPointBuffSnapshot.nextCardPointModifier
+        );
         int playerFinalDefensePoint = BattleCalculator.ConvertScaledDamageToHPDamage(playerFinalDefensePointScaled);
         int remainingAttackPoint = BattleCalculator.CalculateRemainingAttackPointAfterDefense(
             enemyFinalAttackPoint,
@@ -1180,13 +1290,12 @@ public static class BattleResolver
         );
 
         ConsumeDefensePointBuffs(playerUnit);
+        ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
 
         if (!isKnownPointContinuation)
         {
-            ConsumeClashPointBuffs(enemyUnit);
+            ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
         }
-
-        TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, defenseCardState, 0, 0, false, false);
 
         if (shouldTriggerEnemyResolved)
         {
@@ -1261,7 +1370,7 @@ public static class BattleResolver
     // 闪避 vs 攻击
     // ================================
 
-    static BattleResolveResult ResolveDodgeVsAttackWithKnownEnemyPoint(
+    internal static BattleResolveResult ResolveDodgeVsAttackWithKnownEnemyPoint(
         BattleActionSlot dodgeSlot,
         BattleEnemyIntent enemyIntent,
         int knownEnemyAttackPoint
@@ -1335,13 +1444,32 @@ public static class BattleResolver
         BattleCardState dodgeCardState = dodgeSlot.cardState;
         BattleCardState enemyCardState = enemyIntent.enemyCardState;
 
+        if (!BattleCardManager.CanUseCard(playerUnit, enemyUnit, dodgeCardState))
+        {
+            return CreateActionUnavailableResult(
+                "ResolveDodgeVsAttackWithKnownEnemyPoint：闪避卡执行时已不可用，本次守备跳过。" +
+                playerUnit.characterName +
+                " 的卡牌不能使用：" +
+                dodgeCardState.GetCardName()
+            );
+        }
+
+        PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(playerUnit);
+
+        TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, dodgeCardState, 0, 0, false, false);
+
         playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
         int playerDodgePoint = 0;
 
         for (int attempt = 1; attempt <= MaxRespondedEnemyIntentClashAttempts; attempt++)
         {
-            playerDodgePoint = BattleCalculator.GetFinalClashPoint(playerUnit, dodgeCardState.cardData);
+            playerDodgePoint = BattleCalculator.GetFinalClashPoint(
+                playerUnit,
+                dodgeCardState.cardData,
+                playerPointBuffSnapshot.nextClashPointModifier,
+                playerPointBuffSnapshot.nextCardPointModifier
+            );
 
             if (playerDodgePoint == fixedEnemyAttackPoint)
             {
@@ -1360,7 +1488,8 @@ public static class BattleResolver
 
             if (playerDodgePoint > fixedEnemyAttackPoint)
             {
-                ConsumeClashPointBuffs(playerUnit);
+                ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
+                ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
 
                 TriggerBattleEvent(BattleTiming.ClashWin, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
                 TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
@@ -1391,7 +1520,8 @@ public static class BattleResolver
                 return successResult;
             }
 
-            ConsumeClashPointBuffs(playerUnit);
+            ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
+            ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
 
             TriggerBattleEvent(BattleTiming.ClashLose, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
             TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
@@ -1541,6 +1671,12 @@ public static class BattleResolver
             );
         }
 
+        PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(playerUnit);
+        PointBuffSnapshot enemyPointBuffSnapshot = CapturePointBuffSnapshot(enemyUnit);
+
+        TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, actualTarget, enemyCardState, 0, 0, false, false);
+        TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, dodgeCardState, 0, 0, false, false);
+
         enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
         playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
@@ -1549,8 +1685,18 @@ public static class BattleResolver
 
         for (int attempt = 1; attempt <= MaxRespondedEnemyIntentClashAttempts; attempt++)
         {
-            playerDodgePoint = BattleCalculator.GetFinalClashPoint(playerUnit, dodgeCardState.cardData);
-            enemyAttackPoint = BattleCalculator.GetFinalClashPoint(enemyUnit, enemyCardState.cardData);
+            playerDodgePoint = BattleCalculator.GetFinalClashPoint(
+                playerUnit,
+                dodgeCardState.cardData,
+                playerPointBuffSnapshot.nextClashPointModifier,
+                playerPointBuffSnapshot.nextCardPointModifier
+            );
+            enemyAttackPoint = BattleCalculator.GetFinalClashPoint(
+                enemyUnit,
+                enemyCardState.cardData,
+                enemyPointBuffSnapshot.nextClashPointModifier,
+                enemyPointBuffSnapshot.nextCardPointModifier
+            );
 
             if (playerDodgePoint == enemyAttackPoint)
             {
@@ -1568,8 +1714,10 @@ public static class BattleResolver
 
             if (playerDodgePoint > enemyAttackPoint)
             {
-                ConsumeClashPointBuffs(playerUnit);
-                ConsumeClashPointBuffs(enemyUnit);
+                ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
+                ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
+                ConsumeClashPointBuffs(enemyUnit, enemyPointBuffSnapshot);
+                ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
 
                 TriggerBattleEvent(BattleTiming.ClashWin, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
                 TriggerBattleEvent(BattleTiming.ClashLose, enemyUnit, playerUnit, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Lose);
@@ -1602,8 +1750,10 @@ public static class BattleResolver
                 return result;
             }
 
-            ConsumeClashPointBuffs(playerUnit);
-            ConsumeClashPointBuffs(enemyUnit);
+            ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
+            ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
+            ConsumeClashPointBuffs(enemyUnit, enemyPointBuffSnapshot);
+            ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
 
             TriggerBattleEvent(BattleTiming.ClashWin, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Win);
             TriggerBattleEvent(BattleTiming.ClashLose, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
@@ -1834,7 +1984,50 @@ public static class BattleResolver
 
     static int ConsumeClashPointBuffs(CharacterData unit)
     {
-        return ConsumeClashStartTriggeredBuffs(unit, BuffNextClashPointUp);
+        if (unit == null)
+        {
+            return 0;
+        }
+
+        return unit.ConsumeBuffsByRule(ConsumeRuleFormalClashResolved);
+    }
+
+    static int ConsumeClashPointBuffs(CharacterData unit, PointBuffSnapshot snapshot)
+    {
+        if (unit == null)
+        {
+            return 0;
+        }
+
+        return unit.ConsumeBuffStackByRule(
+            BuffNextClashPointUp,
+            ConsumeRuleFormalClashResolved,
+            snapshot.nextClashPointStack
+        );
+    }
+
+    static int ConsumeSuccessfulPointCardBuffs(CharacterData unit)
+    {
+        if (unit == null)
+        {
+            return 0;
+        }
+
+        return unit.ConsumeBuffsByRule(ConsumeRuleSuccessfulPointCardUsed);
+    }
+
+    static int ConsumeSuccessfulPointCardBuffs(CharacterData unit, PointBuffSnapshot snapshot)
+    {
+        if (unit == null)
+        {
+            return 0;
+        }
+
+        return unit.ConsumeBuffStackByRule(
+            BuffNextCardPointUp,
+            ConsumeRuleSuccessfulPointCardUsed,
+            snapshot.nextCardPointStack
+        );
     }
 
     static int ConsumeDefensePointBuffs(CharacterData unit)
@@ -1927,6 +2120,40 @@ public static class BattleResolver
         }
 
         return Random.Range(min, max + 1);
+    }
+
+    static PointBuffSnapshot CapturePointBuffSnapshot(CharacterData unit)
+    {
+        PointBuffSnapshot snapshot = new PointBuffSnapshot();
+
+        if (unit == null)
+        {
+            return snapshot;
+        }
+
+        snapshot.nextCardPointStack = unit.GetBuffStack(BuffNextCardPointUp);
+        snapshot.nextCardPointModifier = GetBuffModifierFromStack(BuffNextCardPointUp, snapshot.nextCardPointStack);
+        snapshot.nextClashPointStack = unit.GetBuffStack(BuffNextClashPointUp);
+        snapshot.nextClashPointModifier = GetBuffModifierFromStack(BuffNextClashPointUp, snapshot.nextClashPointStack);
+
+        return snapshot;
+    }
+
+    static int GetBuffModifierFromStack(string buffID, int stack)
+    {
+        if (string.IsNullOrEmpty(buffID) || stack <= 0)
+        {
+            return 0;
+        }
+
+        BuffDefinitionData definition;
+
+        if (!BuffDefinitionLoader.TryGetDefinition(buffID, out definition) || definition == null)
+        {
+            return 0;
+        }
+
+        return Mathf.RoundToInt(stack * definition.valuePerStack);
     }
 
     static bool IsInvalidPointRange(int minPoint, int maxPoint)

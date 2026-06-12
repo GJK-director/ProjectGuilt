@@ -10,6 +10,13 @@ public static class BattleCalculator
     // 例如：5 点伤害 = 500 内部值
     const int VALUE_SCALE = 100;
 
+    const string StatAttackPoint = "AttackPoint";
+    const string StatClashPoint = "ClashPoint";
+    const string StatCardPoint = "CardPoint";
+    const string StatDefensePoint = "DefensePoint";
+    const string StatDamageDealt = "DamageDealt";
+    const string StatDamageTaken = "DamageTaken";
+
     // Rollpoint = 随机投点
     public static int Rollpoint(int minPoint, int maxPoint)
     {
@@ -19,60 +26,147 @@ public static class BattleCalculator
     // GetFinalClashPoint = 计算最终拼点值
     public static int GetFinalClashPoint(CharacterData unit, CardTestData card)
     {
-        
+        return GetFinalCardPoint(
+            unit,
+            card,
+            true,
+            card != null && card.isClashable,
+            true,
+            0,
+            0,
+            false,
+            false,
+            "拼点"
+        );
+    }
+
+    public static int GetFinalClashPoint(
+        CharacterData unit,
+        CardTestData card,
+        int clashPointModifier,
+        int cardPointModifier
+    )
+    {
+        return GetFinalCardPoint(
+            unit,
+            card,
+            true,
+            card != null && card.isClashable,
+            true,
+            clashPointModifier,
+            cardPointModifier,
+            true,
+            true,
+            "拼点"
+        );
+    }
+
+    // GetFinalAttackPointWithoutClash = 计算不进入正式拼点时的攻击点数
+    public static int GetFinalAttackPointWithoutClash(CharacterData unit, CardTestData card)
+    {
+        return GetFinalCardPoint(
+            unit,
+            card,
+            true,
+            false,
+            true,
+            0,
+            0,
+            false,
+            false,
+            "攻击点数"
+        );
+    }
+
+    public static int GetFinalAttackPointWithoutClash(
+        CharacterData unit,
+        CardTestData card,
+        int cardPointModifier
+    )
+    {
+        return GetFinalCardPoint(
+            unit,
+            card,
+            true,
+            false,
+            true,
+            0,
+            cardPointModifier,
+            false,
+            true,
+            "攻击点数"
+        );
+    }
+
+    static int GetFinalCardPoint(
+        CharacterData unit,
+        CardTestData card,
+        bool includeAttackPoint,
+        bool includeClashPoint,
+        bool includeCardPoint,
+        int explicitClashPointModifier,
+        int explicitCardPointModifier,
+        bool useExplicitClashPointModifier,
+        bool useExplicitCardPointModifier,
+        string pointLabel
+    )
+    {
         int basePoint = Rollpoint(card.minPoint, card.maxPoint);
 
-        int finalClashPoint = basePoint;
+        int finalPoint = basePoint;
 
-        // 攻击卡专用拼点 Buff
-        if (card.cardType == "Attack")
+        if (includeAttackPoint && card.cardType == CardType.Attack)
         {
-            int strengthStack = unit.GetBuffStack("Strength");
-            int weaknessStack = unit.GetBuffStack("Weakness");
+            int attackPointModifier = Mathf.RoundToInt(unit.GetBuffFlatModifier(StatAttackPoint));
+            finalPoint += attackPointModifier;
 
-            finalClashPoint += strengthStack;
-            finalClashPoint -= weaknessStack;
-
-            if (strengthStack > 0 && BattleDebugSettings.ShowDetailBattleLog)
+            if (attackPointModifier != 0 && BattleDebugSettings.ShowDetailBattleLog)
             {
-                Debug.Log(unit.characterName + " 受到强壮影响，攻击拼点 +" + strengthStack);
-            }
-
-            if (weaknessStack > 0 && BattleDebugSettings.ShowDetailBattleLog)
-            {
-                Debug.Log(unit.characterName + " 受到虚弱影响，攻击拼点 -" + weaknessStack);
+                Debug.Log(unit.characterName + " 攻击点数修正：" + attackPointModifier);
             }
         }
 
-        // 通用拼点 Buff
-        // NextClashPointUp = 下一次拼点点数增加
-        if (card.isClashable)
+        if (includeClashPoint)
         {
-            int nextClashPointUpStack = unit.GetBuffStack("NextClashPointUp");
+            int clashPointModifier = useExplicitClashPointModifier
+                ? explicitClashPointModifier
+                : Mathf.RoundToInt(unit.GetBuffFlatModifier(StatClashPoint));
+            finalPoint += clashPointModifier;
 
-            finalClashPoint += nextClashPointUpStack;
-
-            if (nextClashPointUpStack > 0 && BattleDebugSettings.ShowDetailBattleLog)
+            if (clashPointModifier != 0 && BattleDebugSettings.ShowDetailBattleLog)
             {
-                Debug.Log(unit.characterName + " 触发下一次拼点点数增加，拼点 +" + nextClashPointUpStack);
+                Debug.Log(unit.characterName + " 拼点点数修正：" + clashPointModifier);
             }
         }
 
-        if (finalClashPoint < 0)
+        if (includeCardPoint)
         {
-            finalClashPoint = 0;
+            int cardPointModifier = useExplicitCardPointModifier
+                ? explicitCardPointModifier
+                : Mathf.RoundToInt(unit.GetBuffFlatModifier(StatCardPoint));
+            finalPoint += cardPointModifier;
+
+            if (cardPointModifier != 0 && BattleDebugSettings.ShowDetailBattleLog)
+            {
+                Debug.Log(unit.characterName + " 卡牌点数修正：" + cardPointModifier);
+            }
+        }
+
+        if (finalPoint < 0)
+        {
+            finalPoint = 0;
         }
 
         if (BattleDebugSettings.ShowDetailBattleLog)
         {
             Debug.Log(
                 unit.characterName + " 使用 " + card.cardName +
-                "，基础拼点：" + basePoint +
-                "，最终拼点：" + finalClashPoint
+                "，基础" + pointLabel + "：" + basePoint +
+                "，最终" + pointLabel + "：" + finalPoint
             );
         }
 
-        return finalClashPoint;
+        return finalPoint;
     }
 
     // ToScaledValue = 转换成内部数值
@@ -164,19 +258,11 @@ public static class BattleCalculator
     {
         int baseDamageScaled = GetBaseDamageScaledByFormula(attacker, defender, attackCard, clashPoint);
 
-        // 100 = 1.00倍
-        int damageMultiplier = 100;
-
-        int damageUpStack = attacker.GetBuffStack("DamageUp");
-        int damageDownStack = attacker.GetBuffStack("DamageDown");
-        int vulnerableStack = defender.GetBuffStack("Vulnerable");
-        int damageReductionStack = defender.GetBuffStack("DamageReduction");
-
-        // 暂定：每层 = 10%
-        damageMultiplier += damageUpStack * 10;
-        damageMultiplier -= damageDownStack * 10;
-        damageMultiplier += vulnerableStack * 10;
-        damageMultiplier -= damageReductionStack * 10;
+        int damageMultiplier = Mathf.RoundToInt(
+            100f +
+            attacker.GetBuffPercentModifier(StatDamageDealt) +
+            defender.GetBuffPercentModifier(StatDamageTaken)
+        );
 
         if (damageMultiplier < 0)
         {
@@ -224,17 +310,37 @@ public static class BattleCalculator
     // GetFinalDefensePointScaled = 计算最终防御内部值
     public static int GetFinalDefensePointScaled(CharacterData defender, CardTestData defenseCard)
     {
+        return GetFinalDefensePointScaled(defender, defenseCard, 0, false);
+    }
+
+    public static int GetFinalDefensePointScaled(
+        CharacterData defender,
+        CardTestData defenseCard,
+        int cardPointModifier
+    )
+    {
+        return GetFinalDefensePointScaled(defender, defenseCard, cardPointModifier, true);
+    }
+
+    static int GetFinalDefensePointScaled(
+        CharacterData defender,
+        CardTestData defenseCard,
+        int explicitCardPointModifier,
+        bool useExplicitCardPointModifier
+    )
+    {
         int basePoint = Rollpoint(defenseCard.minPoint, defenseCard.maxPoint);
 
         int baseDefenseScaled = GetBaseDefenseScaledByFormula(defender, defenseCard, basePoint);
 
-        int finalDefenseScaled = baseDefenseScaled;
+        int defensePointModifier = Mathf.RoundToInt(
+            defender.GetBuffFlatModifier(StatDefensePoint) +
+            (useExplicitCardPointModifier
+                ? explicitCardPointModifier
+                : defender.GetBuffFlatModifier(StatCardPoint))
+        );
 
-        int guardUpStack = defender.GetBuffStack("GuardUp");
-        int guardDownStack = defender.GetBuffStack("GuardDown");
-
-        finalDefenseScaled += ToScaledValue(guardUpStack);
-        finalDefenseScaled -= ToScaledValue(guardDownStack);
+        int finalDefenseScaled = baseDefenseScaled + ToScaledValue(defensePointModifier);
 
         if (finalDefenseScaled < 0)
         {

@@ -102,11 +102,8 @@ public class CharacterData
     // 当前速度 = 本回合速度 + SpeedUp层数 - SpeedDown层数
     public int GetCurrentSpeed()
     {
-        int speedUpStack = GetBuffStack("SpeedUp");
-        //int speedUpStack = 获取这个角色身上名叫 "SpeedUp" 的 Buff 总层数;
-        int speedDownStack = GetBuffStack("SpeedDown");
-
-        int currentSpeed = turnSpeed + speedUpStack - speedDownStack;
+        int speedModifier = Mathf.RoundToInt(GetBuffFlatModifier("Speed"));
+        int currentSpeed = turnSpeed + speedModifier;
 
         // 最低速度为 0
         if (currentSpeed < 0)
@@ -135,6 +132,94 @@ public class CharacterData
         string expireRule
     )
     {
+        if (string.IsNullOrEmpty(buffID))
+        {
+            Debug.LogWarning(characterName + " 添加 Buff 失败：buffID 为空");
+            return;
+        }
+
+        if (stack <= 0)
+        {
+            Debug.LogWarning(characterName + " 添加 Buff 失败：" + buffID + " 层数无效：" + stack);
+            return;
+        }
+
+        BuffDefinitionData definition;
+
+        if (BuffDefinitionLoader.TryGetDefinition(buffID, out definition))
+        {
+            if (string.IsNullOrEmpty(buffName))
+            {
+                buffName = definition.buffName;
+            }
+
+            if (string.IsNullOrEmpty(buffCategory))
+            {
+                buffCategory = definition.buffCategory;
+            }
+
+            if (string.IsNullOrEmpty(checkTiming))
+            {
+                checkTiming = definition.defaultCheckTiming;
+            }
+
+            if (string.IsNullOrEmpty(expireRule))
+            {
+                expireRule = definition.defaultExpireRule;
+            }
+        }
+
+        if (string.IsNullOrEmpty(buffName))
+        {
+            buffName = buffID;
+        }
+
+        if (string.IsNullOrEmpty(buffCategory))
+        {
+            buffCategory = GuessBuffCategory(buffID);
+        }
+
+        if (string.IsNullOrEmpty(checkTiming))
+        {
+            checkTiming = GuessCheckTiming(buffID);
+        }
+
+        if (string.IsNullOrEmpty(expireRule))
+        {
+            expireRule = GuessExpireRule(buffID);
+        }
+
+        BuffData sameBatch = FindSameActiveBuffBatch(
+            buffID,
+            buffCategory,
+            duration,
+            checkTiming,
+            expireRule
+        );
+
+        if (sameBatch != null)
+        {
+            int oldStack = sameBatch.stack;
+            sameBatch.stack += stack;
+
+            // 方案2：给不同的强壮添加标签。
+            if (BattleDebugSettings.ShowBuffLog)
+            {
+                Debug.Log(
+                    "合并Buff批次：" +
+                    buffID +
+                    "，持续" +
+                    duration +
+                    "回合，层数 " +
+                    oldStack +
+                    " -> " +
+                    sameBatch.stack
+                );
+            }
+
+            return;
+        }
+
         BuffData newBuff = new BuffData(
             buffID,
             buffName,
@@ -150,13 +235,13 @@ public class CharacterData
         if (BattleDebugSettings.ShowBuffLog)
         {
             Debug.Log(
-                characterName + " 获得状态：" +
-                buffName +
-                "，类型：" + buffCategory +
-                "，层数：" + stack +
-                "，持续：" + duration +
-                "，检测阶段：" + checkTiming +
-                "，消失规则：" + expireRule
+                "新增Buff批次：" +
+                buffID +
+                "，层数" +
+                stack +
+                "，持续" +
+                duration +
+                "回合"
             );
         }
     }
@@ -177,6 +262,63 @@ public class CharacterData
         int intervalTurns
     )
     {
+        if (string.IsNullOrEmpty(buffID))
+        {
+            Debug.LogWarning(characterName + " 添加待生效 Buff 失败：buffID 为空");
+            return;
+        }
+
+        if (stack <= 0)
+        {
+            Debug.LogWarning(characterName + " 添加待生效 Buff 失败：" + buffID + " 层数无效：" + stack);
+            return;
+        }
+
+        BuffDefinitionData definition;
+
+        if (BuffDefinitionLoader.TryGetDefinition(buffID, out definition))
+        {
+            if (string.IsNullOrEmpty(buffName))
+            {
+                buffName = definition.buffName;
+            }
+
+            if (string.IsNullOrEmpty(buffCategory))
+            {
+                buffCategory = definition.buffCategory;
+            }
+
+            if (string.IsNullOrEmpty(checkTiming))
+            {
+                checkTiming = definition.defaultCheckTiming;
+            }
+
+            if (string.IsNullOrEmpty(expireRule))
+            {
+                expireRule = definition.defaultExpireRule;
+            }
+        }
+
+        if (string.IsNullOrEmpty(buffName))
+        {
+            buffName = buffID;
+        }
+
+        if (string.IsNullOrEmpty(buffCategory))
+        {
+            buffCategory = GuessBuffCategory(buffID);
+        }
+
+        if (string.IsNullOrEmpty(checkTiming))
+        {
+            checkTiming = GuessCheckTiming(buffID);
+        }
+
+        if (string.IsNullOrEmpty(expireRule))
+        {
+            expireRule = GuessExpireRule(buffID);
+        }
+
         // 防止填写错误
         if (delayTurns < 0)
         {
@@ -191,6 +333,41 @@ public class CharacterData
         if (intervalTurns <= 0)
         {
             intervalTurns = 1;
+        }
+
+        PendingBuffData sameSchedule = FindSamePendingBuffSchedule(
+            buffID,
+            buffCategory,
+            duration,
+            checkTiming,
+            expireRule,
+            delayTurns,
+            applyTimes,
+            intervalTurns
+        );
+
+        if (sameSchedule != null)
+        {
+            int oldStack = sameSchedule.stack;
+            sameSchedule.stack += stack;
+
+            if (BattleDebugSettings.ShowBuffLog)
+            {
+                Debug.Log(
+                    "合并待生效Buff排期：" +
+                    buffID +
+                    "，延迟" +
+                    delayTurns +
+                    "回合，生效次数" +
+                    applyTimes +
+                    "，层数 " +
+                    oldStack +
+                    " -> " +
+                    sameSchedule.stack
+                );
+            }
+
+            return;
         }
 
         PendingBuffData newPendingBuff = new PendingBuffData(
@@ -306,12 +483,134 @@ public class CharacterData
     // ================================
     public void AddBuff(string buffID, int stack, int duration)
     {
+        BuffDefinitionData definition;
+
+        if (BuffDefinitionLoader.TryGetDefinition(buffID, out definition))
+        {
+            AddBuff(
+                buffID,
+                definition.buffName,
+                definition.buffCategory,
+                stack,
+                duration,
+                definition.defaultCheckTiming,
+                definition.defaultExpireRule
+            );
+
+            return;
+        }
+
         string buffName = buffID;
         string buffCategory = GuessBuffCategory(buffID);
         string checkTiming = GuessCheckTiming(buffID);
         string expireRule = GuessExpireRule(buffID);
 
         AddBuff(buffID, buffName, buffCategory, stack, duration, checkTiming, expireRule);
+    }
+
+    public void AddPendingBuff(
+        string buffID,
+        int stack,
+        int duration,
+        int delayTurns,
+        int applyTimes,
+        int intervalTurns
+    )
+    {
+        BuffDefinitionData definition;
+
+        if (BuffDefinitionLoader.TryGetDefinition(buffID, out definition))
+        {
+            AddPendingBuff(
+                buffID,
+                definition.buffName,
+                definition.buffCategory,
+                stack,
+                duration,
+                definition.defaultCheckTiming,
+                definition.defaultExpireRule,
+                delayTurns,
+                applyTimes,
+                intervalTurns
+            );
+
+            return;
+        }
+
+        AddPendingBuff(
+            buffID,
+            buffID,
+            GuessBuffCategory(buffID),
+            stack,
+            duration,
+            GuessCheckTiming(buffID),
+            GuessExpireRule(buffID),
+            delayTurns,
+            applyTimes,
+            intervalTurns
+        );
+    }
+
+    BuffData FindSameActiveBuffBatch(
+        string buffID,
+        string buffCategory,
+        int duration,
+        string checkTiming,
+        string expireRule
+    )
+    {
+        foreach (BuffData buff in buffs)
+        {
+            if (buff == null)
+            {
+                continue;
+            }
+
+            if (buff.buffID == buffID &&
+                buff.buffCategory == buffCategory &&
+                buff.duration == duration &&
+                buff.checkTiming == checkTiming &&
+                buff.expireRule == expireRule)
+            {
+                return buff;
+            }
+        }
+
+        return null;
+    }
+
+    PendingBuffData FindSamePendingBuffSchedule(
+        string buffID,
+        string buffCategory,
+        int duration,
+        string checkTiming,
+        string expireRule,
+        int delayTurns,
+        int applyTimes,
+        int intervalTurns
+    )
+    {
+        foreach (PendingBuffData pendingBuff in pendingBuffs)
+        {
+            if (pendingBuff == null)
+            {
+                continue;
+            }
+
+            if (pendingBuff.buffID == buffID &&
+                pendingBuff.buffCategory == buffCategory &&
+                pendingBuff.duration == duration &&
+                pendingBuff.checkTiming == checkTiming &&
+                pendingBuff.expireRule == expireRule &&
+                pendingBuff.delayTurns == delayTurns &&
+                pendingBuff.applyTimes == applyTimes &&
+                pendingBuff.intervalTurns == intervalTurns)
+            {
+                return pendingBuff;
+            }
+        }
+
+        return null;
     }
 
     // 根据 buffID 简单猜测分类
@@ -385,6 +684,177 @@ public class CharacterData
         }
         //用于处理同名 Buff 的叠加。
         return totalStack;
+    }
+
+    public float GetBuffFlatModifier(string targetStat)
+    {
+        return GetBuffModifierByDefinition("FlatModifier", targetStat);
+    }
+
+    public float GetBuffPercentModifier(string targetStat)
+    {
+        return GetBuffModifierByDefinition("PercentModifier", targetStat);
+    }
+
+    float GetBuffModifierByDefinition(string effectType, string targetStat)
+    {
+        if (string.IsNullOrEmpty(effectType) || string.IsNullOrEmpty(targetStat))
+        {
+            return 0f;
+        }
+
+        float totalModifier = 0f;
+
+        foreach (BuffData buff in buffs)
+        {
+            if (buff == null || string.IsNullOrEmpty(buff.buffID))
+            {
+                continue;
+            }
+
+            BuffDefinitionData definition;
+
+            if (!BuffDefinitionLoader.TryGetDefinition(buff.buffID, out definition) || definition == null)
+            {
+                continue;
+            }
+
+            if (definition.effectType != effectType)
+            {
+                continue;
+            }
+
+            if (definition.targetStat != targetStat)
+            {
+                continue;
+            }
+
+            totalModifier += buff.stack * definition.valuePerStack;
+        }
+
+        return totalModifier;
+    }
+
+    public int GetExpiringBuffStackAtTurnEnd(string buffID)
+    {
+        if (string.IsNullOrEmpty(buffID))
+        {
+            return 0;
+        }
+
+        int totalStack = 0;
+
+        foreach (BuffData buff in buffs)
+        {
+            if (buff == null)
+            {
+                continue;
+            }
+
+            if (buff.buffID == buffID &&
+                buff.checkTiming == BattleTiming.TurnEnd &&
+                buff.expireRule == "DurationDown" &&
+                buff.duration == 1)
+            {
+                totalStack += buff.stack;
+            }
+        }
+
+        return totalStack;
+    }
+
+    public List<BuffData> GetActiveBuffBatches(string buffID)
+    {
+        List<BuffData> result = new List<BuffData>();
+
+        foreach (BuffData buff in buffs)
+        {
+            if (buff == null)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrEmpty(buffID) || buff.buffID == buffID)
+            {
+                result.Add(CloneBuffData(buff));
+            }
+        }
+
+        return result;
+    }
+
+    public int GetPendingBuffStackNextTurn(string buffID)
+    {
+        if (string.IsNullOrEmpty(buffID))
+        {
+            return 0;
+        }
+
+        int totalStack = 0;
+
+        foreach (PendingBuffData pendingBuff in pendingBuffs)
+        {
+            if (pendingBuff == null)
+            {
+                continue;
+            }
+
+            if (pendingBuff.buffID == buffID && pendingBuff.delayTurns <= 1)
+            {
+                totalStack += pendingBuff.stack;
+            }
+        }
+
+        return totalStack;
+    }
+
+    public List<PendingBuffData> GetPendingBuffBatches(string buffID)
+    {
+        List<PendingBuffData> result = new List<PendingBuffData>();
+
+        foreach (PendingBuffData pendingBuff in pendingBuffs)
+        {
+            if (pendingBuff == null)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrEmpty(buffID) || pendingBuff.buffID == buffID)
+            {
+                result.Add(ClonePendingBuffData(pendingBuff));
+            }
+        }
+
+        return result;
+    }
+
+    BuffData CloneBuffData(BuffData buff)
+    {
+        return new BuffData(
+            buff.buffID,
+            buff.buffName,
+            buff.buffCategory,
+            buff.stack,
+            buff.duration,
+            buff.checkTiming,
+            buff.expireRule
+        );
+    }
+
+    PendingBuffData ClonePendingBuffData(PendingBuffData pendingBuff)
+    {
+        return new PendingBuffData(
+            pendingBuff.buffID,
+            pendingBuff.buffName,
+            pendingBuff.buffCategory,
+            pendingBuff.stack,
+            pendingBuff.duration,
+            pendingBuff.checkTiming,
+            pendingBuff.expireRule,
+            pendingBuff.delayTurns,
+            pendingBuff.applyTimes,
+            pendingBuff.intervalTurns
+        );
     }
 
     // ================================
@@ -545,6 +1015,118 @@ public class CharacterData
             }
 
             buffs.RemoveAt(i);
+        }
+
+        return consumedStack;
+    }
+
+    public int ConsumeBuffsByRule(string consumeRule)
+    {
+        if (string.IsNullOrEmpty(consumeRule) || consumeRule == "None")
+        {
+            return 0;
+        }
+
+        int consumedStack = 0;
+
+        for (int i = buffs.Count - 1; i >= 0; i--)
+        {
+            BuffData buff = buffs[i];
+
+            if (buff == null || string.IsNullOrEmpty(buff.buffID))
+            {
+                continue;
+            }
+
+            BuffDefinitionData definition;
+
+            if (!BuffDefinitionLoader.TryGetDefinition(buff.buffID, out definition) || definition == null)
+            {
+                continue;
+            }
+
+            if (definition.defaultExpireRule != "ConsumeOnTrigger")
+            {
+                continue;
+            }
+
+            if (definition.consumeRule != consumeRule)
+            {
+                continue;
+            }
+
+            consumedStack += buff.stack;
+
+            if (BattleDebugSettings.ShowBuffLog)
+            {
+                Debug.Log(characterName + " 按规则消耗一次性Buff：" + buff.buffName + " x" + buff.stack + "，规则：" + consumeRule);
+            }
+
+            buffs.RemoveAt(i);
+        }
+
+        return consumedStack;
+    }
+
+    public int ConsumeBuffStackByRule(string buffID, string consumeRule, int amount)
+    {
+        if (string.IsNullOrEmpty(buffID) ||
+            string.IsNullOrEmpty(consumeRule) ||
+            consumeRule == "None" ||
+            amount <= 0)
+        {
+            return 0;
+        }
+
+        BuffDefinitionData definition;
+
+        if (!BuffDefinitionLoader.TryGetDefinition(buffID, out definition) || definition == null)
+        {
+            Debug.LogWarning(characterName + " 按数量消费Buff失败：找不到Buff定义：" + buffID);
+            return 0;
+        }
+
+        if (definition.defaultExpireRule != "ConsumeOnTrigger" ||
+            definition.consumeRule != consumeRule)
+        {
+            return 0;
+        }
+
+        int remainingAmount = amount;
+        int consumedStack = 0;
+
+        for (int i = 0; i < buffs.Count && remainingAmount > 0; i++)
+        {
+            BuffData buff = buffs[i];
+
+            if (buff == null || buff.buffID != buffID)
+            {
+                continue;
+            }
+
+            int consumeFromBatch = Mathf.Min(buff.stack, remainingAmount);
+            buff.stack -= consumeFromBatch;
+            remainingAmount -= consumeFromBatch;
+            consumedStack += consumeFromBatch;
+
+            if (BattleDebugSettings.ShowBuffLog)
+            {
+                Debug.Log(
+                    characterName +
+                    " 按数量消费一次性Buff：" +
+                    buff.buffName +
+                    " x" +
+                    consumeFromBatch +
+                    "，规则：" +
+                    consumeRule
+                );
+            }
+
+            if (buff.stack <= 0)
+            {
+                buffs.RemoveAt(i);
+                i--;
+            }
         }
 
         return consumedStack;

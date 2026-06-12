@@ -393,14 +393,30 @@ public static class BattleExecutionPlanManager
         bool allowDodge
     )
     {
+        if (actionSlots == null || enemyIntent == null || enemyIntent.actualTargetCharacter == null)
+        {
+            return new List<BattleActionSlot>();
+        }
+
+        return CollectPassiveGuardCandidatesForTarget(
+            actionSlots,
+            enemyIntent.actualTargetCharacter,
+            allowDodge
+        );
+    }
+
+    internal static List<BattleActionSlot> CollectPassiveGuardCandidatesForTarget(
+        IReadOnlyList<BattleActionSlot> actionSlots,
+        CharacterData target,
+        bool allowDodge
+    )
+    {
         List<BattleActionSlot> candidates = new List<BattleActionSlot>();
 
-        if (actionSlots == null || enemyIntent == null || enemyIntent.actualTargetCharacter == null)
+        if (actionSlots == null || target == null)
         {
             return candidates;
         }
-
-        CharacterData target = enemyIntent.actualTargetCharacter;
 
         foreach (BattleActionSlot slot in actionSlots)
         {

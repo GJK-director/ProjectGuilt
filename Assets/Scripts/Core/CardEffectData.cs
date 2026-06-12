@@ -13,6 +13,8 @@ public class CardEffectData
     // Lose = 只有拼点失败时触发
     // None = 只有非拼点生效时触发
     public string requireClashResult;
+    // buffName / buffCategory / checkTiming / expireRule are legacy compatibility fields.
+    // New ApplyBuff JSON should only need buffType, stack, duration and schedule fields.
     public string buffType;      // 状态ID，例如 Strength
     public string buffName;      // 状态中文名，例如 强壮
     public string buffCategory;  // 状态分类：UpBuff / Debuff / AbilityBuff
