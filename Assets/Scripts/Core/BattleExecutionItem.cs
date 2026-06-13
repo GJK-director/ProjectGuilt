@@ -18,6 +18,31 @@ public enum BattleExecutionItemType
     FreeAction
 }
 
+// BattleExecutionItemStatus = 战斗执行项状态
+public enum BattleExecutionItemStatus
+{
+    Pending,
+    Executed,
+    Skipped,
+    Failed
+}
+
+// BattleExecutionItemOutcomeReason = 战斗执行项结果原因
+public enum BattleExecutionItemOutcomeReason
+{
+    None,
+    ActionUnavailable,
+    ActorDead,
+    ActualTargetDead,
+    BattleEnded,
+    ResponseUnavailableFallbackToUnresponded,
+    InvalidData,
+    UnsupportedExecutionType,
+    UnsupportedResolveType,
+    ResolverFailure,
+    TieLimitReached
+}
+
 // BattleExecutionItem = 战斗执行项
 // Item = 项目 / 条目，表示执行计划中的一小步。
 public class BattleExecutionItem
@@ -48,8 +73,14 @@ public class BattleExecutionItem
     public List<BattleActionSlot> passiveGuardCandidates;
 
     // isCompleted = 是否已经完成
-    // 用来记录这个执行项是否已经被执行过。
+    // 兼容旧逻辑的完成字段；正式状态以 status / outcomeReason 为准。
     public bool isCompleted;
+
+    // status = 第一版正式执行项状态
+    public BattleExecutionItemStatus status;
+
+    // outcomeReason = 状态对应的结果原因
+    public BattleExecutionItemOutcomeReason outcomeReason;
 
     // BattleExecutionItem = 战斗执行项构造函数
     // 构造函数负责创建一个新的执行项，并把执行顺序、执行类型、敌人意图、行动槽位保存进去。
@@ -81,6 +112,34 @@ public class BattleExecutionItem
         this.passiveGuardCandidates = passiveGuardCandidates != null
             ? passiveGuardCandidates
             : new List<BattleActionSlot>();
+        status = BattleExecutionItemStatus.Pending;
+        outcomeReason = BattleExecutionItemOutcomeReason.None;
         isCompleted = false;
+    }
+
+    public void MarkExecuted(BattleExecutionItemOutcomeReason reason = BattleExecutionItemOutcomeReason.None)
+    {
+        SetStatus(BattleExecutionItemStatus.Executed, reason, true);
+    }
+
+    public void MarkSkipped(BattleExecutionItemOutcomeReason reason)
+    {
+        SetStatus(BattleExecutionItemStatus.Skipped, reason, true);
+    }
+
+    public void MarkFailed(BattleExecutionItemOutcomeReason reason)
+    {
+        SetStatus(BattleExecutionItemStatus.Failed, reason, false);
+    }
+
+    void SetStatus(
+        BattleExecutionItemStatus newStatus,
+        BattleExecutionItemOutcomeReason reason,
+        bool completed
+    )
+    {
+        status = newStatus;
+        outcomeReason = reason;
+        isCompleted = completed;
     }
 }

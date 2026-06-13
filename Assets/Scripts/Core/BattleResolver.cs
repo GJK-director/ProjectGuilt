@@ -38,6 +38,7 @@ public static class BattleResolver
     const string BuffGuardDown = "GuardDown";
     const string ConsumeRuleFormalClashResolved = "FormalClashResolved";
     const string ConsumeRuleSuccessfulPointCardUsed = "SuccessfulPointCardUsed";
+    const string ResourceTypeBuffStack = "BuffStack";
 
     struct PointBuffSnapshot
     {
@@ -45,6 +46,20 @@ public static class BattleResolver
         public int nextCardPointModifier;
         public int nextClashPointStack;
         public int nextClashPointModifier;
+    }
+
+    struct CardResourceSnapshot
+    {
+        public BattleCardState cardState;
+        public string resourceID;
+        public int capturedStack;
+        public bool hasRule;
+        public bool normalVersionEnabled;
+        public int selectedMinPoint;
+        public int selectedMaxPoint;
+        public int pointModifierFromResource;
+        public int plannedConsumeAmount;
+        public bool shouldConsumeOnSuccess;
     }
 
     // ResolveFreeAction = 正式结算自由行动
@@ -184,12 +199,26 @@ public static class BattleResolver
 
         PointBuffSnapshot userPointBuffSnapshot = CapturePointBuffSnapshot(user);
 
+        // PointBuffSnapshot 在 ActionStart 前捕获。
+        // 因此 ActionStart 新增的 NextCardPointUp / NextClashPointUp
+        // 不影响当前卡，只保留给后续卡牌或后续正式拼点。
+        // ActionStart 中对资源的修改会影响随后捕获的 ResourceSnapshot。
+        TriggerActionStart(user, target, actionSlot.cardState);
+        // 资源快照在 ActionStart 结算后、BeforeUse 之前捕获。
+        // ActionStart 中产生或减少的资源可以影响当前卡。
+        // BeforeUse 中产生或减少的资源不会回头改变当前卡资源快照，
+        // 只影响后续行动。卡牌设计应避免依赖 BeforeUse 修改自身资源计算。
+        CardResourceSnapshot userResourceSnapshot = CaptureResourceSnapshot(user, actionSlot.cardState);
+
         TriggerBattleEvent(BattleTiming.BeforeUse, user, target, actionSlot.cardState, 0, 0, false, false);
 
         int playerAttackPoint = BattleCalculator.GetFinalAttackPointWithoutClash(
             user,
             attackCard,
-            userPointBuffSnapshot.nextCardPointModifier
+            userPointBuffSnapshot.nextCardPointModifier,
+            userResourceSnapshot.selectedMinPoint,
+            userResourceSnapshot.selectedMaxPoint,
+            userResourceSnapshot.pointModifierFromResource
         );
         int damageScaled = BattleCalculator.GetFinalDamageScaled(
             user,
@@ -200,9 +229,10 @@ public static class BattleResolver
         int finalHpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
 
         ConsumeSuccessfulPointCardBuffs(user, userPointBuffSnapshot);
+        PayDefaultResourceCostOnSuccessfulUse(user, userResourceSnapshot);
 
         TriggerBattleEvent(BattleTiming.Resolved, user, target, actionSlot.cardState, playerAttackPoint, 0, false, false);
-        TriggerBattleEvent(BattleTiming.Hit, user, target, actionSlot.cardState, playerAttackPoint, finalHpDamage, finalHpDamage > 0, false);
+        TriggerBattleEvent(BattleTiming.Hit, user, target, actionSlot.cardState, playerAttackPoint, finalHpDamage, true, false);
         ApplyDamageAndTriggerEvents(user, target, actionSlot.cardState, finalHpDamage, playerAttackPoint);
 
         BattleResolveResult result = new BattleResolveResult();
@@ -565,12 +595,18 @@ public static class BattleResolver
         CharacterData target = enemyIntent.actualTargetCharacter;
         PointBuffSnapshot enemyPointBuffSnapshot = CapturePointBuffSnapshot(enemyUnit);
 
+        TriggerActionStart(enemyUnit, target, enemyIntent.enemyCardState);
+        CardResourceSnapshot enemyResourceSnapshot = CaptureResourceSnapshot(enemyUnit, enemyIntent.enemyCardState);
+
         TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, target, enemyIntent.enemyCardState, 0, 0, false, false);
 
         int enemyAttackPoint = BattleCalculator.GetFinalAttackPointWithoutClash(
             enemyUnit,
             enemyCard,
-            enemyPointBuffSnapshot.nextCardPointModifier
+            enemyPointBuffSnapshot.nextCardPointModifier,
+            enemyResourceSnapshot.selectedMinPoint,
+            enemyResourceSnapshot.selectedMaxPoint,
+            enemyResourceSnapshot.pointModifierFromResource
         );
         int damageScaled = BattleCalculator.GetFinalDamageScaled(
             enemyUnit,
@@ -581,8 +617,11 @@ public static class BattleResolver
         int finalHpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
 
         ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
+        PayDefaultResourceCostOnSuccessfulUse(enemyUnit, enemyResourceSnapshot);
 
-        target.TakeDamage(finalHpDamage);
+        TriggerBattleEvent(BattleTiming.Resolved, enemyUnit, target, enemyIntent.enemyCardState, enemyAttackPoint, 0, false, false);
+        TriggerBattleEvent(BattleTiming.Hit, enemyUnit, target, enemyIntent.enemyCardState, enemyAttackPoint, finalHpDamage, true, false);
+        ApplyDamageAndTriggerEvents(enemyUnit, target, enemyIntent.enemyCardState, finalHpDamage, enemyAttackPoint);
 
         BattleResolveResult result = new BattleResolveResult();
         result.isSuccess = true;
@@ -597,7 +636,7 @@ public static class BattleResolver
         result.enemyPoint = enemyAttackPoint;
         result.clashAttemptCount = 0;
         result.isTieLimitReached = false;
-        result.triggeredEventChain = false;
+        result.triggeredEventChain = true;
         result.message =
             "ResolveUnrespondedEnemyIntent 完成：敌人意图" +
             enemyIntent.intentOrder +
@@ -611,7 +650,7 @@ public static class BattleResolver
             enemyAttackPoint +
             "，造成伤害 " +
             finalHpDamage +
-            "。第一版不触发事件链，不处理敌人卡牌 CD / UseCount";
+            "。已触发 Resolved / Hit，并按实际伤害触发 AfterDamage / AfterKill";
 
         Debug.Log(result.message);
 
@@ -700,6 +739,12 @@ public static class BattleResolver
         PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(playerUnit);
         PointBuffSnapshot enemyPointBuffSnapshot = CapturePointBuffSnapshot(enemyUnit);
 
+        TriggerActionStart(enemyUnit, actualTarget, enemyCardState);
+        TriggerActionStart(playerUnit, enemyUnit, playerCardState);
+
+        CardResourceSnapshot playerResourceSnapshot = CaptureResourceSnapshot(playerUnit, playerCardState);
+        CardResourceSnapshot enemyResourceSnapshot = CaptureResourceSnapshot(enemyUnit, enemyCardState);
+
         TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, actualTarget, enemyCardState, 0, 0, false, false);
         TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, playerCardState, 0, 0, false, false);
 
@@ -715,13 +760,19 @@ public static class BattleResolver
                 playerUnit,
                 playerCardState.cardData,
                 playerPointBuffSnapshot.nextClashPointModifier,
-                playerPointBuffSnapshot.nextCardPointModifier
+                playerPointBuffSnapshot.nextCardPointModifier,
+                playerResourceSnapshot.selectedMinPoint,
+                playerResourceSnapshot.selectedMaxPoint,
+                playerResourceSnapshot.pointModifierFromResource
             );
             enemyPoint = BattleCalculator.GetFinalClashPoint(
                 enemyUnit,
                 enemyCardState.cardData,
                 enemyPointBuffSnapshot.nextClashPointModifier,
-                enemyPointBuffSnapshot.nextCardPointModifier
+                enemyPointBuffSnapshot.nextCardPointModifier,
+                enemyResourceSnapshot.selectedMinPoint,
+                enemyResourceSnapshot.selectedMaxPoint,
+                enemyResourceSnapshot.pointModifierFromResource
             );
 
             if (playerPoint == enemyPoint)
@@ -749,9 +800,18 @@ public static class BattleResolver
             string resultType = isPlayerWin ? "PlayerWin" : "EnemyWin";
 
             ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
-            ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
             ConsumeClashPointBuffs(enemyUnit, enemyPointBuffSnapshot);
-            ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
+
+            if (isPlayerWin)
+            {
+                ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
+                PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
+            }
+            else
+            {
+                ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
+                PayDefaultResourceCostOnSuccessfulUse(enemyUnit, enemyResourceSnapshot);
+            }
 
             TriggerBattleEvent(
                 BattleTiming.ClashWin,
@@ -789,18 +849,6 @@ public static class BattleResolver
                 ClashResult.Win
             );
 
-            TriggerBattleEvent(
-                BattleTiming.Resolved,
-                loser,
-                attacker,
-                loserCardState,
-                loserPoint,
-                0,
-                false,
-                false,
-                ClashResult.Lose
-            );
-
             if (!isPlayerWin)
             {
                 BattleResolveResult passiveGuardResult = TryResolveEnemyWinPassiveGuard(
@@ -832,7 +880,7 @@ public static class BattleResolver
                 winnerCardState,
                 winnerPoint,
                 hpDamage,
-                hpDamage > 0,
+                true,
                 false,
                 ClashResult.Win
             );
@@ -842,8 +890,8 @@ public static class BattleResolver
             BattleResolveResult result = new BattleResolveResult();
             result.isSuccess = true;
             result.shouldCompleteItem = true;
-            result.playerCardUsed = true;
-            result.enemyCardUsed = true;
+            result.playerCardUsed = isPlayerWin;
+            result.enemyCardUsed = !isPlayerWin;
             result.hasDamage = hpDamage > 0;
             result.damage = hpDamage;
             result.damagedCharacter = hpDamage > 0 ? defender : null;
@@ -966,7 +1014,7 @@ public static class BattleResolver
         BattleResolveResult result = new BattleResolveResult();
         result.isSuccess = true;
         result.shouldCompleteItem = true;
-        result.playerCardUsed = true;
+        result.playerCardUsed = false;
         result.enemyCardUsed = true;
         result.hasDamage = passiveGuardResult.hasDamage;
         result.damage = passiveGuardResult.damage;
@@ -1133,6 +1181,12 @@ public static class BattleResolver
         PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(playerUnit);
         PointBuffSnapshot enemyPointBuffSnapshot = CapturePointBuffSnapshot(enemyUnit);
 
+        TriggerActionStart(enemyUnit, actualTarget, enemyCardState);
+        TriggerActionStart(playerUnit, enemyUnit, defenseCardState);
+
+        CardResourceSnapshot playerResourceSnapshot = CaptureResourceSnapshot(playerUnit, defenseCardState);
+        CardResourceSnapshot enemyResourceSnapshot = CaptureResourceSnapshot(enemyUnit, enemyCardState);
+
         TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, actualTarget, enemyCardState, 0, 0, false, false);
         TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, defenseCardState, 0, 0, false, false);
 
@@ -1142,7 +1196,10 @@ public static class BattleResolver
         int enemyFinalAttackPoint = BattleCalculator.GetFinalAttackPointWithoutClash(
             enemyUnit,
             enemyCardState.cardData,
-            enemyPointBuffSnapshot.nextCardPointModifier
+            enemyPointBuffSnapshot.nextCardPointModifier,
+            enemyResourceSnapshot.selectedMinPoint,
+            enemyResourceSnapshot.selectedMaxPoint,
+            enemyResourceSnapshot.pointModifierFromResource
         );
 
         return ResolveDefenseVsAttackCore(
@@ -1154,7 +1211,9 @@ public static class BattleResolver
             "ResolveRespondedDefenseVsAttack",
             false,
             playerPointBuffSnapshot,
-            enemyPointBuffSnapshot
+            enemyPointBuffSnapshot,
+            playerResourceSnapshot,
+            enemyResourceSnapshot
         );
     }
 
@@ -1239,6 +1298,9 @@ public static class BattleResolver
 
         PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(defenseSlot.actor);
 
+        TriggerActionStart(defenseSlot.actor, enemyIntent.enemy, defenseSlot.cardState);
+        CardResourceSnapshot playerResourceSnapshot = CaptureResourceSnapshot(defenseSlot.actor, defenseSlot.cardState);
+
         TriggerBattleEvent(BattleTiming.BeforeUse, defenseSlot.actor, enemyIntent.enemy, defenseSlot.cardState, 0, 0, false, false);
 
         defenseSlot.actor.CheckBuffsByTiming(BattleTiming.ClashStart, false);
@@ -1254,7 +1316,9 @@ public static class BattleResolver
             "ResolveDefenseVsAttackWithKnownEnemyPoint",
             true,
             playerPointBuffSnapshot,
-            new PointBuffSnapshot()
+            new PointBuffSnapshot(),
+            playerResourceSnapshot,
+            new CardResourceSnapshot()
         );
     }
 
@@ -1267,7 +1331,9 @@ public static class BattleResolver
         string messagePrefix,
         bool isKnownPointContinuation,
         PointBuffSnapshot playerPointBuffSnapshot,
-        PointBuffSnapshot enemyPointBuffSnapshot
+        PointBuffSnapshot enemyPointBuffSnapshot,
+        CardResourceSnapshot playerResourceSnapshot,
+        CardResourceSnapshot enemyResourceSnapshot
     )
     {
         CharacterData playerUnit = defenseSlot.actor;
@@ -1281,7 +1347,10 @@ public static class BattleResolver
         int playerFinalDefensePointScaled = BattleCalculator.GetFinalDefensePointScaled(
             playerUnit,
             defenseCardState.cardData,
-            playerPointBuffSnapshot.nextCardPointModifier
+            playerPointBuffSnapshot.nextCardPointModifier,
+            playerResourceSnapshot.selectedMinPoint,
+            playerResourceSnapshot.selectedMaxPoint,
+            playerResourceSnapshot.pointModifierFromResource
         );
         int playerFinalDefensePoint = BattleCalculator.ConvertScaledDamageToHPDamage(playerFinalDefensePointScaled);
         int remainingAttackPoint = BattleCalculator.CalculateRemainingAttackPointAfterDefense(
@@ -1291,10 +1360,12 @@ public static class BattleResolver
 
         ConsumeDefensePointBuffs(playerUnit);
         ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
+        PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
 
         if (!isKnownPointContinuation)
         {
             ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
+            PayDefaultResourceCostOnSuccessfulUse(enemyUnit, enemyResourceSnapshot);
         }
 
         if (shouldTriggerEnemyResolved)
@@ -1317,13 +1388,10 @@ public static class BattleResolver
             );
 
             finalHpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
-
-            if (finalHpDamage > 0)
-            {
-                TriggerBattleEvent(BattleTiming.Hit, enemyUnit, actualTarget, enemyCardState, remainingAttackPoint, finalHpDamage, true, false);
-                ApplyDamageAndTriggerEvents(enemyUnit, actualTarget, enemyCardState, finalHpDamage, remainingAttackPoint);
-            }
         }
+
+        TriggerBattleEvent(BattleTiming.Hit, enemyUnit, actualTarget, enemyCardState, remainingAttackPoint, finalHpDamage, true, false);
+        ApplyDamageAndTriggerEvents(enemyUnit, actualTarget, enemyCardState, finalHpDamage, remainingAttackPoint);
 
         BattleResolveResult result = new BattleResolveResult();
         result.isSuccess = true;
@@ -1456,6 +1524,9 @@ public static class BattleResolver
 
         PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(playerUnit);
 
+        TriggerActionStart(playerUnit, enemyUnit, dodgeCardState);
+        CardResourceSnapshot playerResourceSnapshot = CaptureResourceSnapshot(playerUnit, dodgeCardState);
+
         TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, dodgeCardState, 0, 0, false, false);
 
         playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
@@ -1468,7 +1539,10 @@ public static class BattleResolver
                 playerUnit,
                 dodgeCardState.cardData,
                 playerPointBuffSnapshot.nextClashPointModifier,
-                playerPointBuffSnapshot.nextCardPointModifier
+                playerPointBuffSnapshot.nextCardPointModifier,
+                playerResourceSnapshot.selectedMinPoint,
+                playerResourceSnapshot.selectedMaxPoint,
+                playerResourceSnapshot.pointModifierFromResource
             );
 
             if (playerDodgePoint == fixedEnemyAttackPoint)
@@ -1490,6 +1564,7 @@ public static class BattleResolver
             {
                 ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
                 ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
+                PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
 
                 TriggerBattleEvent(BattleTiming.ClashWin, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
                 TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
@@ -1522,6 +1597,7 @@ public static class BattleResolver
 
             ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
             ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
+            PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
 
             TriggerBattleEvent(BattleTiming.ClashLose, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
             TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
@@ -1534,7 +1610,7 @@ public static class BattleResolver
             );
             int hpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
 
-            TriggerBattleEvent(BattleTiming.Hit, enemyUnit, actualTarget, enemyCardState, fixedEnemyAttackPoint, hpDamage, hpDamage > 0, false, ClashResult.Win);
+            TriggerBattleEvent(BattleTiming.Hit, enemyUnit, actualTarget, enemyCardState, fixedEnemyAttackPoint, hpDamage, true, false, ClashResult.Win);
             ApplyDamageAndTriggerEvents(enemyUnit, actualTarget, enemyCardState, hpDamage, fixedEnemyAttackPoint);
 
             BattleResolveResult failedResult = new BattleResolveResult();
@@ -1674,6 +1750,12 @@ public static class BattleResolver
         PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(playerUnit);
         PointBuffSnapshot enemyPointBuffSnapshot = CapturePointBuffSnapshot(enemyUnit);
 
+        TriggerActionStart(enemyUnit, actualTarget, enemyCardState);
+        TriggerActionStart(playerUnit, enemyUnit, dodgeCardState);
+
+        CardResourceSnapshot playerResourceSnapshot = CaptureResourceSnapshot(playerUnit, dodgeCardState);
+        CardResourceSnapshot enemyResourceSnapshot = CaptureResourceSnapshot(enemyUnit, enemyCardState);
+
         TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, actualTarget, enemyCardState, 0, 0, false, false);
         TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, dodgeCardState, 0, 0, false, false);
 
@@ -1689,13 +1771,19 @@ public static class BattleResolver
                 playerUnit,
                 dodgeCardState.cardData,
                 playerPointBuffSnapshot.nextClashPointModifier,
-                playerPointBuffSnapshot.nextCardPointModifier
+                playerPointBuffSnapshot.nextCardPointModifier,
+                playerResourceSnapshot.selectedMinPoint,
+                playerResourceSnapshot.selectedMaxPoint,
+                playerResourceSnapshot.pointModifierFromResource
             );
             enemyAttackPoint = BattleCalculator.GetFinalClashPoint(
                 enemyUnit,
                 enemyCardState.cardData,
                 enemyPointBuffSnapshot.nextClashPointModifier,
-                enemyPointBuffSnapshot.nextCardPointModifier
+                enemyPointBuffSnapshot.nextCardPointModifier,
+                enemyResourceSnapshot.selectedMinPoint,
+                enemyResourceSnapshot.selectedMaxPoint,
+                enemyResourceSnapshot.pointModifierFromResource
             );
 
             if (playerDodgePoint == enemyAttackPoint)
@@ -1718,6 +1806,8 @@ public static class BattleResolver
                 ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
                 ConsumeClashPointBuffs(enemyUnit, enemyPointBuffSnapshot);
                 ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
+                PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
+                PayDefaultResourceCostOnSuccessfulUse(enemyUnit, enemyResourceSnapshot);
 
                 TriggerBattleEvent(BattleTiming.ClashWin, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
                 TriggerBattleEvent(BattleTiming.ClashLose, enemyUnit, playerUnit, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Lose);
@@ -1754,6 +1844,8 @@ public static class BattleResolver
             ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
             ConsumeClashPointBuffs(enemyUnit, enemyPointBuffSnapshot);
             ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
+            PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
+            PayDefaultResourceCostOnSuccessfulUse(enemyUnit, enemyResourceSnapshot);
 
             TriggerBattleEvent(BattleTiming.ClashWin, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Win);
             TriggerBattleEvent(BattleTiming.ClashLose, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
@@ -1768,7 +1860,7 @@ public static class BattleResolver
             );
             int hpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
 
-            TriggerBattleEvent(BattleTiming.Hit, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, hpDamage, hpDamage > 0, false, ClashResult.Win);
+            TriggerBattleEvent(BattleTiming.Hit, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, hpDamage, true, false, ClashResult.Win);
             ApplyDamageAndTriggerEvents(enemyUnit, actualTarget, enemyCardState, hpDamage, enemyAttackPoint);
 
             BattleResolveResult failedResult = new BattleResolveResult();
@@ -2137,6 +2229,134 @@ public static class BattleResolver
         snapshot.nextClashPointModifier = GetBuffModifierFromStack(BuffNextClashPointUp, snapshot.nextClashPointStack);
 
         return snapshot;
+    }
+
+    static CardResourceSnapshot CaptureResourceSnapshot(CharacterData unit, BattleCardState cardState)
+    {
+        CardResourceSnapshot snapshot = new CardResourceSnapshot();
+        snapshot.cardState = cardState;
+
+        if (cardState == null || cardState.cardData == null)
+        {
+            return snapshot;
+        }
+
+        snapshot.selectedMinPoint = cardState.cardData.minPoint;
+        snapshot.selectedMaxPoint = cardState.cardData.maxPoint;
+
+        CardResourceRuleData rule = GetFirstResourceRule(cardState.cardData);
+
+        if (rule == null)
+        {
+            return snapshot;
+        }
+
+        if (rule.resourceType != ResourceTypeBuffStack ||
+            string.IsNullOrEmpty(rule.resourceID))
+        {
+            Debug.LogWarning(cardState.GetCardName() + " 的软资源规则暂不支持：" + rule.resourceType + " / " + rule.resourceID);
+            return snapshot;
+        }
+
+        snapshot.hasRule = true;
+        snapshot.resourceID = rule.resourceID;
+        snapshot.capturedStack = unit != null ? unit.GetBuffStack(rule.resourceID) : 0;
+        snapshot.normalVersionEnabled = snapshot.capturedStack >= Mathf.Max(0, rule.requiredStackForNormalVersion);
+
+        if (snapshot.normalVersionEnabled)
+        {
+            snapshot.selectedMinPoint = cardState.cardData.minPoint;
+            snapshot.selectedMaxPoint = cardState.cardData.maxPoint;
+        }
+        else
+        {
+            snapshot.selectedMinPoint = rule.fallbackMinPoint;
+            snapshot.selectedMaxPoint = rule.fallbackMaxPoint;
+        }
+
+        if (snapshot.selectedMaxPoint < snapshot.selectedMinPoint)
+        {
+            int temp = snapshot.selectedMinPoint;
+            snapshot.selectedMinPoint = snapshot.selectedMaxPoint;
+            snapshot.selectedMaxPoint = temp;
+        }
+
+        snapshot.pointModifierFromResource = snapshot.capturedStack * rule.pointPerStack;
+
+        if (rule.exactStackForBonus > 0 &&
+            snapshot.capturedStack == rule.exactStackForBonus)
+        {
+            snapshot.pointModifierFromResource += rule.exactStackPointBonus;
+        }
+
+        snapshot.plannedConsumeAmount = Mathf.Max(0, rule.consumeAmountOnSuccess);
+        snapshot.shouldConsumeOnSuccess = snapshot.normalVersionEnabled && snapshot.plannedConsumeAmount > 0;
+
+        return snapshot;
+    }
+
+    static CardResourceRuleData GetFirstResourceRule(CardTestData cardData)
+    {
+        if (cardData == null)
+        {
+            return null;
+        }
+
+        if (cardData.resourceRule != null)
+        {
+            return cardData.resourceRule;
+        }
+
+        if (cardData.resourceRules != null && cardData.resourceRules.Length > 0)
+        {
+            return cardData.resourceRules[0];
+        }
+
+        return null;
+    }
+
+    static void TriggerActionStart(CharacterData user, CharacterData target, BattleCardState cardState)
+    {
+        TriggerBattleEvent(BattleTiming.ActionStart, user, target, cardState, 0, 0, false, false);
+    }
+
+    static void PayDefaultResourceCostOnSuccessfulUse(CharacterData unit, CardResourceSnapshot snapshot)
+    {
+        // 默认资源成本只在本次卡牌被视为成功使用时支付。
+        // Attack拼点失败、ActionUnavailable、TieLimit和死亡跳过不会支付。
+        // 无资源降级版本即使成功使用，也不会凭空扣除资源。
+        if (unit == null || !snapshot.hasRule || !snapshot.shouldConsumeOnSuccess)
+        {
+            return;
+        }
+
+        int consumedAmount;
+        bool paid = unit.TryConsumeBuffStackAsResource(
+            snapshot.resourceID,
+            snapshot.plannedConsumeAmount,
+            out consumedAmount
+        );
+
+        if (!paid)
+        {
+            string cardName = snapshot.cardState != null
+                ? snapshot.cardState.GetCardName()
+                : "未知卡牌";
+
+            Debug.LogWarning(
+                unit.characterName +
+                " 支付卡牌资源不足：卡牌 " +
+                cardName +
+                " / resourceID " +
+                snapshot.resourceID +
+                " / 计划消耗 " +
+                snapshot.plannedConsumeAmount +
+                " / 实际消耗 " +
+                consumedAmount +
+                " / 快照层数 " +
+                snapshot.capturedStack
+            );
+        }
     }
 
     static int GetBuffModifierFromStack(string buffID, int stack)

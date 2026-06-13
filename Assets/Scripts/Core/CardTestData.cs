@@ -1,6 +1,23 @@
 // 脚本中文说明：卡牌测试数据。负责承接 CardsTest.json 里读取出来的一张卡牌模板数据。
 using System.Collections.Generic;
 
+// CardResourceRuleData = 卡牌软资源规则
+// 软资源规则不会阻止卡牌安排或执行。
+// 资源不足时选择降级基础点数，而不是返回ActionUnavailable。
+// 硬性使用条件仍由useConditions系统处理。
+public class CardResourceRuleData
+{
+    public string resourceType;
+    public string resourceID;
+    public int requiredStackForNormalVersion;
+    public int fallbackMinPoint;
+    public int fallbackMaxPoint;
+    public int pointPerStack;
+    public int exactStackForBonus;
+    public int exactStackPointBonus;
+    public int consumeAmountOnSuccess;
+}
+
 // CardTestData = 卡牌测试数据
 // 用来接收 JSON 里的单张卡牌数据
 public class CardTestData
@@ -12,6 +29,8 @@ public class CardTestData
     public bool isSinCard;      // 是否罪卡
     public bool consumeOnUse;   // 是否使用后消耗
     public CardUseConditionData[] useConditions;
+    public CardResourceRuleData resourceRule;
+    public CardResourceRuleData[] resourceRules;
     // sinCardCategory = 罪卡分类
     // Clash：拼点型罪卡
     // Ability：能力型罪卡

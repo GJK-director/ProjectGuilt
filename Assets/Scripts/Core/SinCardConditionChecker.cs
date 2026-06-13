@@ -5,6 +5,41 @@ using UnityEngine;
 // 负责判断一张罪卡当前是否满足使用前提
 public static class SinCardConditionChecker
 {
+    // EvaluateUseConditions = 通用 useConditions 解释入口。
+    // useConditions 是通用卡牌使用条件，不只属于罪卡。
+    // isSinCard 只控制罪卡 UseCount、guilt 和消耗等专属规则。
+    public static CardEligibilityResult EvaluateUseConditions(
+        CharacterData user,
+        CharacterData target,
+        CardTestData cardData
+    )
+    {
+        if (cardData == null)
+        {
+            return CardEligibilityResult.Failure(
+                CardEligibilityFailureReason.InvalidCardData,
+                "卡牌数据为空"
+            );
+        }
+
+        if (cardData.useConditions == null || cardData.useConditions.Length == 0)
+        {
+            return CardEligibilityResult.Success();
+        }
+
+        for (int i = 0; i < cardData.useConditions.Length; i++)
+        {
+            CardEligibilityResult result = EvaluateCondition(user, target, cardData.useConditions[i]);
+
+            if (!result.isEligible)
+            {
+                return result;
+            }
+        }
+
+        return CardEligibilityResult.Success();
+    }
+
     // CanUseSinCard = 判断罪卡是否可以使用
     // user = 使用者
     // target = 当前目标
@@ -18,51 +53,22 @@ public static class SinCardConditionChecker
     {
         failReason = "";
 
-        if (cardData == null)
-        {
-            failReason = "卡牌数据为空";
-            return false;
-        }
+        CardEligibilityResult result = EvaluateUseConditions(user, target, cardData);
+        failReason = result.failureMessage;
 
-        // 不是罪卡，暂时直接允许
-        // 普通卡仍然交给 BattleCardManager 的 CD / 消耗判断
-        if (!cardData.isSinCard)
-        {
-            return true;
-        }
-
-        // 没有使用条件，允许使用 这里判断是双重判断，第一个是判断json有没有这个词条 第二个是判断有这个词条但是这个词条是不是0
-        if (cardData.useConditions == null || cardData.useConditions.Length == 0)
-        {
-            return true;
-        }
-
-        for (int i = 0; i < cardData.useConditions.Length; i++)
-        {
-            CardUseConditionData condition = cardData.useConditions[i];
-
-            if (!IsConditionMet(user, target, condition, out failReason))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return result.isEligible;
     }
 
-    // IsConditionMet = 判断单个条件是否满足
-    static bool IsConditionMet(
+    // EvaluateCondition = 判断单个条件是否满足
+    static CardEligibilityResult EvaluateCondition(
         CharacterData user,
         CharacterData target,
-        CardUseConditionData condition,
-        out string failReason
+        CardUseConditionData condition
     )
     {
-        failReason = "";
-
         if (condition == null)
         {
-            return true;
+            return CardEligibilityResult.Success();
         }
 
         string conditionType = condition.conditionType;
@@ -74,7 +80,7 @@ public static class SinCardConditionChecker
 
         if (conditionType == CardUseConditionType.None)
         {
-            return true;
+            return CardEligibilityResult.Success();
         }
 
         // 先获取要检查的角色
@@ -82,8 +88,11 @@ public static class SinCardConditionChecker
 
         if (checkTarget == null)
         {
-            failReason = "使用条件检查失败：目标为空";
-            return false;
+            return CardEligibilityResult.Failure(
+                CardEligibilityFailureReason.UnsupportedCondition,
+                "使用条件检查失败：目标为空",
+                conditionType
+            );
         }
 
         // 下面这些条件先预留入口
@@ -97,18 +106,22 @@ public static class SinCardConditionChecker
 
             if (currentHpPercent < requiredPercent)
             {
-                return true;
+                return CardEligibilityResult.Success();
             }
 
-            failReason =
+            return CardEligibilityResult.Failure(
+                CardEligibilityFailureReason.UnsupportedCondition,
                 checkTarget.characterName +
                 " 当前 HP 百分比不满足条件，需要低于：" +
                 requiredPercent +
                 "%，当前：" +
                 currentHpPercent.ToString("F1") +
-                "%";
-
-            return false;
+                "%",
+                conditionType,
+                "",
+                requiredPercent,
+                (int)currentHpPercent
+            );
         }
 
         if (conditionType == CardUseConditionType.HpAbovePercent)
@@ -119,43 +132,59 @@ public static class SinCardConditionChecker
 
             if (currentHpPercent > requiredPercent)
             {
-                return true;
+                return CardEligibilityResult.Success();
             }
 
-            failReason =
+            return CardEligibilityResult.Failure(
+                CardEligibilityFailureReason.UnsupportedCondition,
                 checkTarget.characterName +
                 " 当前 HP 百分比不满足条件，需要高于：" +
                 requiredPercent +
                 "%，当前：" +
                 currentHpPercent.ToString("F1") +
-                "%";
-
-            return false;
+                "%",
+                conditionType,
+                "",
+                requiredPercent,
+                (int)currentHpPercent
+            );
         }
 
         if (conditionType == CardUseConditionType.HasBuff)
         {
             if (string.IsNullOrEmpty(condition.buffType))
             {
-                failReason = "使用条件缺少 buffType";
-                return false;
+                return CardEligibilityResult.Failure(
+                    CardEligibilityFailureReason.BuffStackRequirementNotMet,
+                    "使用条件缺少 buffType",
+                    conditionType
+                );
             }
 
             if (!HasBuff(checkTarget, condition.buffType))
             {
-                failReason = checkTarget.characterName + " 没有状态：" + condition.buffType;
-                return false;
+                return CardEligibilityResult.Failure(
+                    CardEligibilityFailureReason.BuffStackRequirementNotMet,
+                    checkTarget.characterName + " 没有状态：" + condition.buffType,
+                    conditionType,
+                    condition.buffType,
+                    1,
+                    0
+                );
             }
 
-            return true;
+            return CardEligibilityResult.Success();
         }
 
         if (conditionType == CardUseConditionType.BuffStackAtLeast)
         {
             if (string.IsNullOrEmpty(condition.buffType))
             {
-                failReason = "使用条件缺少 buffType";
-                return false;
+                return CardEligibilityResult.Failure(
+                    CardEligibilityFailureReason.BuffStackRequirementNotMet,
+                    "使用条件缺少 buffType",
+                    conditionType
+                );
             }
 
             int requiredStack = condition.value;
@@ -169,19 +198,23 @@ public static class SinCardConditionChecker
 
             if (currentStack < requiredStack)
             {
-                failReason =
+                return CardEligibilityResult.Failure(
+                    CardEligibilityFailureReason.BuffStackRequirementNotMet,
                     checkTarget.characterName +
                     " 的状态 " +
                     condition.buffType +
                     " 层数不足，需要：" +
                     requiredStack +
                     "，当前：" +
-                    currentStack;
-
-                return false;
+                    currentStack,
+                    conditionType,
+                    condition.buffType,
+                    requiredStack,
+                    currentStack
+                );
             }
 
-            return true;
+            return CardEligibilityResult.Success();
         }
 
         if (conditionType == CardUseConditionType.GuiltAtLeast)
@@ -191,17 +224,21 @@ public static class SinCardConditionChecker
 
             if (currentGuilt >= requiredGuilt)
             {
-                return true;
+                return CardEligibilityResult.Success();
             }
 
-            failReason =
+            return CardEligibilityResult.Failure(
+                CardEligibilityFailureReason.GuiltRequirementNotMet,
                 checkTarget.characterName +
                 " 当前负罪感不足，需要至少：" +
                 requiredGuilt +
                 "，当前：" +
-                currentGuilt;
-
-            return false;
+                currentGuilt,
+                conditionType,
+                "",
+                requiredGuilt,
+                currentGuilt
+            );
         }
 
         if (conditionType == CardUseConditionType.GuiltBelow)
@@ -211,21 +248,28 @@ public static class SinCardConditionChecker
 
             if (currentGuilt < requiredGuilt)
             {
-                return true;
+                return CardEligibilityResult.Success();
             }
 
-            failReason =
+            return CardEligibilityResult.Failure(
+                CardEligibilityFailureReason.GuiltRequirementNotMet,
                 checkTarget.characterName +
                 " 当前负罪感过高，需要低于：" +
                 requiredGuilt +
                 "，当前：" +
-                currentGuilt;
-
-            return false;
+                currentGuilt,
+                conditionType,
+                "",
+                requiredGuilt,
+                currentGuilt
+            );
         }
 
-        failReason = "未知使用条件类型：" + conditionType;
-        return false;
+        return CardEligibilityResult.Failure(
+            CardEligibilityFailureReason.UnsupportedCondition,
+            "未知使用条件类型：" + conditionType,
+            conditionType
+        );
     }
     // HasBuff = 是否拥有指定 Buff
     // 注意：这里检查的是 buffID，不是中文 buffName

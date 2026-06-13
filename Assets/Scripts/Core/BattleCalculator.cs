@@ -61,6 +61,34 @@ public static class BattleCalculator
         );
     }
 
+    public static int GetFinalClashPoint(
+        CharacterData unit,
+        CardTestData card,
+        int clashPointModifier,
+        int cardPointModifier,
+        int selectedMinPoint,
+        int selectedMaxPoint,
+        int resourcePointModifier
+    )
+    {
+        return GetFinalCardPoint(
+            unit,
+            card,
+            true,
+            card != null && card.isClashable,
+            true,
+            clashPointModifier,
+            cardPointModifier,
+            true,
+            true,
+            "拼点",
+            selectedMinPoint,
+            selectedMaxPoint,
+            true,
+            resourcePointModifier
+        );
+    }
+
     // GetFinalAttackPointWithoutClash = 计算不进入正式拼点时的攻击点数
     public static int GetFinalAttackPointWithoutClash(CharacterData unit, CardTestData card)
     {
@@ -98,6 +126,33 @@ public static class BattleCalculator
         );
     }
 
+    public static int GetFinalAttackPointWithoutClash(
+        CharacterData unit,
+        CardTestData card,
+        int cardPointModifier,
+        int selectedMinPoint,
+        int selectedMaxPoint,
+        int resourcePointModifier
+    )
+    {
+        return GetFinalCardPoint(
+            unit,
+            card,
+            true,
+            false,
+            true,
+            0,
+            cardPointModifier,
+            false,
+            true,
+            "攻击点数",
+            selectedMinPoint,
+            selectedMaxPoint,
+            true,
+            resourcePointModifier
+        );
+    }
+
     static int GetFinalCardPoint(
         CharacterData unit,
         CardTestData card,
@@ -111,7 +166,44 @@ public static class BattleCalculator
         string pointLabel
     )
     {
-        int basePoint = Rollpoint(card.minPoint, card.maxPoint);
+        return GetFinalCardPoint(
+            unit,
+            card,
+            includeAttackPoint,
+            includeClashPoint,
+            includeCardPoint,
+            explicitClashPointModifier,
+            explicitCardPointModifier,
+            useExplicitClashPointModifier,
+            useExplicitCardPointModifier,
+            pointLabel,
+            0,
+            0,
+            false,
+            0
+        );
+    }
+
+    static int GetFinalCardPoint(
+        CharacterData unit,
+        CardTestData card,
+        bool includeAttackPoint,
+        bool includeClashPoint,
+        bool includeCardPoint,
+        int explicitClashPointModifier,
+        int explicitCardPointModifier,
+        bool useExplicitClashPointModifier,
+        bool useExplicitCardPointModifier,
+        string pointLabel,
+        int selectedMinPoint,
+        int selectedMaxPoint,
+        bool useSelectedPointRange,
+        int resourcePointModifier
+    )
+    {
+        int minPoint = useSelectedPointRange ? selectedMinPoint : card.minPoint;
+        int maxPoint = useSelectedPointRange ? selectedMaxPoint : card.maxPoint;
+        int basePoint = Rollpoint(minPoint, maxPoint);
 
         int finalPoint = basePoint;
 
@@ -149,6 +241,16 @@ public static class BattleCalculator
             if (cardPointModifier != 0 && BattleDebugSettings.ShowDetailBattleLog)
             {
                 Debug.Log(unit.characterName + " 卡牌点数修正：" + cardPointModifier);
+            }
+        }
+
+        if (resourcePointModifier != 0)
+        {
+            finalPoint += resourcePointModifier;
+
+            if (BattleDebugSettings.ShowDetailBattleLog)
+            {
+                Debug.Log(unit.characterName + " 资源点数修正：" + resourcePointModifier);
             }
         }
 
@@ -322,6 +424,27 @@ public static class BattleCalculator
         return GetFinalDefensePointScaled(defender, defenseCard, cardPointModifier, true);
     }
 
+    public static int GetFinalDefensePointScaled(
+        CharacterData defender,
+        CardTestData defenseCard,
+        int cardPointModifier,
+        int selectedMinPoint,
+        int selectedMaxPoint,
+        int resourcePointModifier
+    )
+    {
+        return GetFinalDefensePointScaled(
+            defender,
+            defenseCard,
+            cardPointModifier,
+            true,
+            selectedMinPoint,
+            selectedMaxPoint,
+            true,
+            resourcePointModifier
+        );
+    }
+
     static int GetFinalDefensePointScaled(
         CharacterData defender,
         CardTestData defenseCard,
@@ -329,7 +452,32 @@ public static class BattleCalculator
         bool useExplicitCardPointModifier
     )
     {
-        int basePoint = Rollpoint(defenseCard.minPoint, defenseCard.maxPoint);
+        return GetFinalDefensePointScaled(
+            defender,
+            defenseCard,
+            explicitCardPointModifier,
+            useExplicitCardPointModifier,
+            0,
+            0,
+            false,
+            0
+        );
+    }
+
+    static int GetFinalDefensePointScaled(
+        CharacterData defender,
+        CardTestData defenseCard,
+        int explicitCardPointModifier,
+        bool useExplicitCardPointModifier,
+        int selectedMinPoint,
+        int selectedMaxPoint,
+        bool useSelectedPointRange,
+        int resourcePointModifier
+    )
+    {
+        int minPoint = useSelectedPointRange ? selectedMinPoint : defenseCard.minPoint;
+        int maxPoint = useSelectedPointRange ? selectedMaxPoint : defenseCard.maxPoint;
+        int basePoint = Rollpoint(minPoint, maxPoint);
 
         int baseDefenseScaled = GetBaseDefenseScaledByFormula(defender, defenseCard, basePoint);
 
@@ -339,6 +487,8 @@ public static class BattleCalculator
                 ? explicitCardPointModifier
                 : defender.GetBuffFlatModifier(StatCardPoint))
         );
+
+        defensePointModifier += resourcePointModifier;
 
         int finalDefenseScaled = baseDefenseScaled + ToScaledValue(defensePointModifier);
 

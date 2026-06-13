@@ -131,16 +131,30 @@ public static class BattleActionSlotManager
         BattleEnemyIntent enemyIntent
     )
     {
+        CardEligibilityResult result;
+        return AssignResponseToEnemyIntent(slots, slotIndex, actor, cardState, enemyIntent, out result);
+    }
+
+    public static bool AssignResponseToEnemyIntent(
+        List<BattleActionSlot> slots,
+        int slotIndex,
+        CharacterData actor,
+        BattleCardState cardState,
+        BattleEnemyIntent enemyIntent,
+        out CardEligibilityResult result
+    )
+    {
         // 先根据槽位编号找到目标槽位。
         BattleActionSlot slot = GetSlot(slots, slotIndex);
 
         if (slot == null)
         {
-            Debug.LogWarning("安排响应行动失败：找不到槽位 " + slotIndex);
+            result = CreateFailure(CardEligibilityFailureReason.InvalidSlot, "安排响应行动失败：找不到槽位 " + slotIndex);
+            Debug.LogWarning(result.failureMessage);
             return false;
         }
 
-        return AssignResponseToEnemyIntentToSlot(slots, slot, actor, cardState, enemyIntent);
+        return AssignResponseToEnemyIntentToSlot(slots, slot, actor, cardState, enemyIntent, out result);
     }
 
     // AssignResponseToEnemyIntent = owner 版本安排响应敌人意图
@@ -154,14 +168,29 @@ public static class BattleActionSlotManager
         BattleEnemyIntent enemyIntent
     )
     {
+        CardEligibilityResult result;
+        return AssignResponseToEnemyIntent(slots, owner, slotIndex, actor, cardState, enemyIntent, out result);
+    }
+
+    public static bool AssignResponseToEnemyIntent(
+        List<BattleActionSlot> slots,
+        CharacterData owner,
+        int slotIndex,
+        CharacterData actor,
+        BattleCardState cardState,
+        BattleEnemyIntent enemyIntent,
+        out CardEligibilityResult result
+    )
+    {
         BattleActionSlot slot = GetSlot(slots, owner, slotIndex);
 
         if (slot == null)
         {
+            result = CreateFailure(CardEligibilityFailureReason.InvalidSlot, "安排响应行动失败：找不到目标槽位");
             return false;
         }
 
-        return AssignResponseToEnemyIntentToSlot(slots, slot, actor, cardState, enemyIntent);
+        return AssignResponseToEnemyIntentToSlot(slots, slot, actor, cardState, enemyIntent, out result);
     }
 
     // AssignResponseToEnemyIntentToSlot = 对指定槽位安排响应敌人意图
@@ -171,12 +200,13 @@ public static class BattleActionSlotManager
         BattleActionSlot slot,
         CharacterData actor,
         BattleCardState cardState,
-        BattleEnemyIntent enemyIntent
+        BattleEnemyIntent enemyIntent,
+        out CardEligibilityResult result
     )
     {
         // 检查槽位能不能放这张卡。
         // 例如槽位不能为空、同一张卡不能重复安排。
-        if (!CanAssignCardToSlot(slots, slot, cardState))
+        if (!CanAssignCardToSlot(slots, slot, cardState, out result))
         {
             return false;
         }
@@ -184,7 +214,15 @@ public static class BattleActionSlotManager
         // 响应敌人意图必须有行动者、敌人意图、敌人和原始目标。
         if (actor == null || enemyIntent == null || enemyIntent.enemy == null || enemyIntent.originalTargetCharacter == null)
         {
-            Debug.LogWarning("安排响应行动失败：响应行动数据不完整");
+            result = CreateFailure(CardEligibilityFailureReason.InvalidEnemyIntent, "安排响应行动失败：响应行动数据不完整");
+            Debug.LogWarning(result.failureMessage);
+            return false;
+        }
+
+        result = BattleCardManager.EvaluateCardEligibility(actor, enemyIntent.enemy, cardState);
+        if (!result.isEligible)
+        {
+            Debug.Log(result.failureMessage);
             return false;
         }
 
@@ -197,9 +235,13 @@ public static class BattleActionSlotManager
 
         if (!canRewriteActualTarget && !isOriginalTargetSlot)
         {
-            Debug.Log("速度不足，且不是原目标槽位，无法响应该敌人意图");
+            result = CreateFailure(CardEligibilityFailureReason.InvalidEnemyIntent, "速度不足，且不是原目标槽位，无法响应该敌人意图");
+            Debug.Log(result.failureMessage);
             return false;
         }
+
+        // 必须在解除旧响应、写入槽位和改写 actualTarget 之前完成资格检查，
+        // 避免非法安排留下半完成状态。
 
         // 记录改写前的目标文本，方便打印“从谁改到谁”。
         string actualTargetBeforeResponse = enemyIntent.GetActualTargetSlotText();
@@ -253,6 +295,7 @@ public static class BattleActionSlotManager
             );
         }
 
+        result = CardEligibilityResult.Success();
         return true;
     }
 
@@ -266,16 +309,30 @@ public static class BattleActionSlotManager
         CharacterData target
     )
     {
+        CardEligibilityResult result;
+        return AssignFreeAction(slots, slotIndex, actor, cardState, target, out result);
+    }
+
+    public static bool AssignFreeAction(
+        List<BattleActionSlot> slots,
+        int slotIndex,
+        CharacterData actor,
+        BattleCardState cardState,
+        CharacterData target,
+        out CardEligibilityResult result
+    )
+    {
         // 先根据槽位编号找到目标槽位。
         BattleActionSlot slot = GetSlot(slots, slotIndex);
 
         if (slot == null)
         {
-            Debug.LogWarning("安排自由行动失败：找不到槽位 " + slotIndex);
+            result = CreateFailure(CardEligibilityFailureReason.InvalidSlot, "安排自由行动失败：找不到槽位 " + slotIndex);
+            Debug.LogWarning(result.failureMessage);
             return false;
         }
 
-        return AssignFreeActionToSlot(slots, slot, actor, cardState, target);
+        return AssignFreeActionToSlot(slots, slot, actor, cardState, target, out result);
     }
 
     // AssignFreeAction = owner 版本安排自由行动
@@ -289,14 +346,29 @@ public static class BattleActionSlotManager
         CharacterData target
     )
     {
+        CardEligibilityResult result;
+        return AssignFreeAction(slots, owner, slotIndex, actor, cardState, target, out result);
+    }
+
+    public static bool AssignFreeAction(
+        List<BattleActionSlot> slots,
+        CharacterData owner,
+        int slotIndex,
+        CharacterData actor,
+        BattleCardState cardState,
+        CharacterData target,
+        out CardEligibilityResult result
+    )
+    {
         BattleActionSlot slot = GetSlot(slots, owner, slotIndex);
 
         if (slot == null)
         {
+            result = CreateFailure(CardEligibilityFailureReason.InvalidSlot, "安排自由行动失败：找不到目标槽位");
             return false;
         }
 
-        return AssignFreeActionToSlot(slots, slot, actor, cardState, target);
+        return AssignFreeActionToSlot(slots, slot, actor, cardState, target, out result);
     }
 
     // AssignFreeActionToSlot = 对指定槽位安排自由行动
@@ -306,11 +378,12 @@ public static class BattleActionSlotManager
         BattleActionSlot slot,
         CharacterData actor,
         BattleCardState cardState,
-        CharacterData target
+        CharacterData target,
+        out CardEligibilityResult result
     )
     {
         // 检查槽位是否为空、卡牌是否为空、卡牌是否已经被安排过。
-        if (!CanAssignCardToSlot(slots, slot, cardState))
+        if (!CanAssignCardToSlot(slots, slot, cardState, out result))
         {
             return false;
         }
@@ -318,7 +391,15 @@ public static class BattleActionSlotManager
         // 自由行动必须有行动者。
         if (actor == null)
         {
-            Debug.LogWarning("安排自由行动失败：行动者为空");
+            result = CreateFailure(CardEligibilityFailureReason.InvalidActor, "安排自由行动失败：行动者为空");
+            Debug.LogWarning(result.failureMessage);
+            return false;
+        }
+
+        result = BattleCardManager.EvaluateCardEligibility(actor, target, cardState);
+        if (!result.isEligible)
+        {
+            Debug.Log(result.failureMessage);
             return false;
         }
 
@@ -333,6 +414,7 @@ public static class BattleActionSlotManager
             slot.GetCardName()
         );
 
+        result = CardEligibilityResult.Success();
         return true;
     }
 
@@ -346,46 +428,66 @@ public static class BattleActionSlotManager
         BattleCardState cardState
     )
     {
+        CardEligibilityResult result;
+        return AssignPassiveGuard(slots, owner, slotIndex, actor, cardState, out result);
+    }
+
+    public static bool AssignPassiveGuard(
+        List<BattleActionSlot> slots,
+        CharacterData owner,
+        int slotIndex,
+        CharacterData actor,
+        BattleCardState cardState,
+        out CardEligibilityResult result
+    )
+    {
         if (slots == null)
         {
-            Debug.LogWarning("安排被动守备失败：槽位列表为空");
+            result = CreateFailure(CardEligibilityFailureReason.InvalidSlot, "安排被动守备失败：槽位列表为空");
+            Debug.LogWarning(result.failureMessage);
             return false;
         }
 
         if (owner == null)
         {
-            Debug.LogWarning("安排被动守备失败：owner 为空");
+            result = CreateFailure(CardEligibilityFailureReason.InvalidActor, "安排被动守备失败：owner 为空");
+            Debug.LogWarning(result.failureMessage);
             return false;
         }
 
         if (actor == null)
         {
-            Debug.LogWarning("安排被动守备失败：行动者为空");
+            result = CreateFailure(CardEligibilityFailureReason.InvalidActor, "安排被动守备失败：行动者为空");
+            Debug.LogWarning(result.failureMessage);
             return false;
         }
 
         if (!object.ReferenceEquals(owner, actor))
         {
-            Debug.LogWarning("安排被动守备失败：第一版要求 owner 与 actor 相同");
+            result = CreateFailure(CardEligibilityFailureReason.InvalidActor, "安排被动守备失败：第一版要求 owner 与 actor 相同");
+            Debug.LogWarning(result.failureMessage);
             return false;
         }
 
         if (cardState == null)
         {
-            Debug.LogWarning("安排被动守备失败：卡牌状态为空");
+            result = CreateFailure(CardEligibilityFailureReason.InvalidCardState, "安排被动守备失败：卡牌状态为空");
+            Debug.LogWarning(result.failureMessage);
             return false;
         }
 
         if (cardState.cardData == null)
         {
-            Debug.LogWarning("安排被动守备失败：卡牌数据为空");
+            result = CreateFailure(CardEligibilityFailureReason.InvalidCardData, "安排被动守备失败：卡牌数据为空");
+            Debug.LogWarning(result.failureMessage);
             return false;
         }
 
         if (cardState.cardData.cardType != CardType.Defense &&
             cardState.cardData.cardType != CardType.Dodge)
         {
-            Debug.LogWarning("安排被动守备失败：当前只允许 Defense 或 Dodge，当前卡牌类型：" + cardState.cardData.cardType);
+            result = CreateFailure(CardEligibilityFailureReason.UnsupportedCondition, "安排被动守备失败：当前只允许 Defense 或 Dodge，当前卡牌类型：" + cardState.cardData.cardType);
+            Debug.LogWarning(result.failureMessage);
             return false;
         }
 
@@ -393,11 +495,19 @@ public static class BattleActionSlotManager
 
         if (slot == null)
         {
+            result = CreateFailure(CardEligibilityFailureReason.InvalidSlot, "安排被动守备失败：找不到目标槽位");
             return false;
         }
 
-        if (!CanAssignCardToSlot(slots, slot, cardState))
+        if (!CanAssignCardToSlot(slots, slot, cardState, out result))
         {
+            return false;
+        }
+
+        result = BattleCardManager.EvaluateCardEligibility(actor, actor, cardState);
+        if (!result.isEligible)
+        {
+            Debug.Log(result.failureMessage);
             return false;
         }
 
@@ -411,6 +521,7 @@ public static class BattleActionSlotManager
             slot.GetCardName()
         );
 
+        result = CardEligibilityResult.Success();
         return true;
     }
 
@@ -748,36 +859,47 @@ public static class BattleActionSlotManager
     static bool CanAssignCardToSlot(
         List<BattleActionSlot> slots,
         BattleActionSlot targetSlot,
-        BattleCardState cardState
+        BattleCardState cardState,
+        out CardEligibilityResult result
     )
     {
         if (targetSlot == null)
         {
+            result = CreateFailure(CardEligibilityFailureReason.InvalidSlot, "安排行动失败：目标槽位为空");
             return false;
         }
 
         // 目标槽位必须为空。
         if (!targetSlot.IsEmpty())
         {
-            Debug.Log(targetSlot.GetDisplaySlotName() + " 已经安排了行动");
+            result = CreateFailure(CardEligibilityFailureReason.SlotOccupied, targetSlot.GetDisplaySlotName() + " 已经安排了行动");
+            Debug.Log(result.failureMessage);
             return false;
         }
 
         // 卡牌状态不能为空。
         if (cardState == null)
         {
-            Debug.LogWarning("安排行动失败：卡牌状态为空");
+            result = CreateFailure(CardEligibilityFailureReason.InvalidCardState, "安排行动失败：卡牌状态为空");
+            Debug.LogWarning(result.failureMessage);
             return false;
         }
 
         // 同一张 BattleCardState 本回合不能重复安排到多个槽位。
         if (IsCardAlreadyAssigned(slots, cardState))
         {
-            Debug.Log("同一张卡本回合已经被安排");
+            result = CreateFailure(CardEligibilityFailureReason.CardAlreadyAssigned, "同一张卡本回合已经被安排");
+            Debug.Log(result.failureMessage);
             return false;
         }
 
+        result = CardEligibilityResult.Success();
         return true;
+    }
+
+    static CardEligibilityResult CreateFailure(CardEligibilityFailureReason reason, string message)
+    {
+        return CardEligibilityResult.Failure(reason, message);
     }
 
     // IsCardAlreadyAssigned = 判断同一张卡是否已经被安排过

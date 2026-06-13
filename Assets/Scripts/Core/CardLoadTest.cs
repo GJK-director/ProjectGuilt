@@ -33,7 +33,12 @@ public enum BattleTestMode
     BuffTriggerConsumeOrderBasic = 47,
     BuffDefinitionDataLayerBasic = 48,
     BuffLifecycleBattleIntegrationBasic = 49,
-    BuffBeforeUseActionUnavailableBasic = 50
+    BuffBeforeUseActionUnavailableBasic = 50,
+    ExecutionItemStatusBasic = 51,
+    CardResolvedHitContractBasic = 52,
+    CardResourceSnapshotAndConsumeBasic = 53,
+    CardAssignmentEligibilityBasic = 54,
+    RealCardResourceMigrationBasic = 55
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -179,6 +184,36 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BuffBeforeUseActionUnavailableBasic)
         {
             RunBuffBeforeUseActionUnavailableBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.ExecutionItemStatusBasic)
+        {
+            RunExecutionItemStatusBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.CardResolvedHitContractBasic)
+        {
+            RunCardResolvedHitContractBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.CardResourceSnapshotAndConsumeBasic)
+        {
+            RunCardResourceSnapshotAndConsumeBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.CardAssignmentEligibilityBasic)
+        {
+            RunCardAssignmentEligibilityBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.RealCardResourceMigrationBasic)
+        {
+            RunRealCardResourceMigrationBasicTestSequence();
             return;
         }
 
@@ -925,7 +960,7 @@ public class CardLoadTest : MonoBehaviour
         );
     }
 
-    // RunBattleResolverRespondedPlayerWinBothCardsResolvedBasicTestSequence = 玩家胜利后双方攻击卡都完成使用
+    // RunBattleResolverRespondedPlayerWinBothCardsResolvedBasicTestSequence = 保留旧入口名，验证玩家胜利时仅胜方Attack完成使用
     void RunBattleResolverRespondedPlayerWinBothCardsResolvedBasicTestSequence()
     {
         RunRespondedAttackBothCardsResolvedExecutionSubTest(
@@ -939,7 +974,7 @@ public class CardLoadTest : MonoBehaviour
         );
     }
 
-    // RunBattleResolverRespondedEnemyWinBothCardsResolvedBasicTestSequence = 敌人胜利后双方攻击卡都完成使用
+    // RunBattleResolverRespondedEnemyWinBothCardsResolvedBasicTestSequence = 保留旧入口名，验证敌人胜利时仅胜方Attack完成使用
     void RunBattleResolverRespondedEnemyWinBothCardsResolvedBasicTestSequence()
     {
         RunRespondedAttackBothCardsResolvedExecutionSubTest(
@@ -953,7 +988,7 @@ public class CardLoadTest : MonoBehaviour
         );
     }
 
-    // RunBattleResolverRespondedClashSinLoseResolvedBasicTestSequence = 拼点罪卡失败后也完成 Resolved 使用状态
+    // RunBattleResolverRespondedClashSinLoseResolvedBasicTestSequence = 保留旧入口名，验证拼点罪卡失败后不触发 Resolved
     void RunBattleResolverRespondedClashSinLoseResolvedBasicTestSequence()
     {
         RunRespondedAttackBothCardsResolvedExecutionSubTest(
@@ -1100,7 +1135,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期 shouldCompleteItem：True，实际是否符合：" + (result != null && result.shouldCompleteItem));
         Debug.Log("预期 playerCardUsed：False，实际是否符合：" + (result != null && !result.playerCardUsed));
         Debug.Log("预期 enemyCardUsed：True，实际是否符合：" + (result != null && result.enemyCardUsed));
-        Debug.Log("预期 triggeredEventChain：False，实际是否符合：" + (result != null && !result.triggeredEventChain));
+        Debug.Log("预期 triggeredEventChain：True，实际是否符合：" + (result != null && result.triggeredEventChain));
         Debug.Log("预期 damagedCharacter 为 allyB，实际是否符合：" + (result != null && object.ReferenceEquals(result.damagedCharacter, allyB)));
         Debug.Log("allyB HP 是否下降：" + (allyB.currentHP < allyBHPBefore));
         Debug.Log("allyA HP 是否保持不变：" + (allyA.currentHP == allyAHPBefore));
@@ -1747,7 +1782,7 @@ public class CardLoadTest : MonoBehaviour
         int expectedDamageToEnemy
     )
     {
-        Debug.Log("===== " + title + " 双方攻击卡 Resolved 测试开始 =====");
+        Debug.Log("===== " + title + " Attack胜方Resolved / 败方不Resolved 测试开始 =====");
 
         StartTurn();
 
@@ -1824,7 +1859,6 @@ public class CardLoadTest : MonoBehaviour
             actionSlots,
             intentQueue
         );
-
         BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
         BattleExecutionPlanExecutor.PrintExecutionPlanStepPreview(executionPlan);
         BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
@@ -1839,16 +1873,26 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("执行后 敌人卡 isConsumed：" + enemyAttack.isConsumed);
         Debug.Log("执行后 敌人 guilt：" + enemy.currentGuilt);
 
-        int expectedPlayerCooldown = playerAttackIsSinCard ? 0 : playerAttack.cardData.cooldown;
-        int expectedPlayerUseCount = playerAttackIsSinCard ? playerUseCountBefore + 1 : playerUseCountBefore;
-        int expectedPlayerGuilt = playerAttackIsSinCard ? playerGuiltBefore + playerAttack.cardData.guiltGain : playerGuiltBefore;
-        int expectedEnemyCooldown = enemyAttack.cardData.cooldown;
+        bool expectPlayerCardResolved = expectedResultType == "PlayerWin";
+        bool expectEnemyCardResolved = expectedResultType == "EnemyWin";
+        int expectedPlayerCooldown = expectPlayerCardResolved && !playerAttackIsSinCard
+            ? playerAttack.cardData.cooldown
+            : playerCooldownBefore;
+        int expectedPlayerUseCount = expectPlayerCardResolved && playerAttackIsSinCard
+            ? playerUseCountBefore + 1
+            : playerUseCountBefore;
+        int expectedPlayerGuilt = expectPlayerCardResolved && playerAttackIsSinCard
+            ? playerGuiltBefore + playerAttack.cardData.guiltGain
+            : playerGuiltBefore;
+        int expectedEnemyCooldown = expectEnemyCardResolved
+            ? enemyAttack.cardData.cooldown
+            : enemyCooldownBefore;
 
         Debug.Log("预期 resultType：" + expectedResultType + "，实际可从 Executor Resolver 日志确认");
         Debug.Log("预期玩家 HP 变化：" + expectedDamageToPlayer + "，实际是否符合：" + (allyB.currentHP == playerHPBefore - expectedDamageToPlayer));
         Debug.Log("预期敌人 HP 变化：" + expectedDamageToEnemy + "，实际是否符合：" + (enemy.currentHP == enemyHPBefore - expectedDamageToEnemy));
-        Debug.Log("预期玩家卡 CD：" + expectedPlayerCooldown + "，实际是否符合：" + (playerAttack.currentCooldown == expectedPlayerCooldown));
-        Debug.Log("预期敌人卡 CD：" + expectedEnemyCooldown + "，实际是否符合：" + (enemyAttack.currentCooldown == expectedEnemyCooldown));
+        Debug.Log("预期玩家卡是否Resolved：" + expectPlayerCardResolved + "，CD是否符合：" + (playerAttack.currentCooldown == expectedPlayerCooldown));
+        Debug.Log("预期敌人卡是否Resolved：" + expectEnemyCardResolved + "，CD是否符合：" + (enemyAttack.currentCooldown == expectedEnemyCooldown));
         Debug.Log("预期玩家卡 UseCount：" + expectedPlayerUseCount + "，实际是否符合：" + (playerAttack.currentUseCount == expectedPlayerUseCount));
         Debug.Log("预期敌人卡 UseCount 不变：" + (enemyAttack.currentUseCount == enemyUseCountBefore));
         Debug.Log("预期玩家卡 isConsumed 保持未消耗：" + (!playerAttack.isConsumed));
@@ -1858,11 +1902,15 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期主响应槽位 MarkUsed：" + (responseSlot != null && responseSlot.isUsed));
         Debug.Log("预期 ExecutionPlan 完成：" + executionPlan.isCompleted);
 
-        if (playerAttackIsSinCard)
+        if (playerAttackIsSinCard && expectPlayerCardResolved)
         {
             Debug.Log("预期 guiltGain 增加一次：" + (allyB.currentGuilt == playerGuiltBefore + playerAttack.cardData.guiltGain));
             Debug.Log("预期 UseCount 增加一次：" + (playerAttack.currentUseCount == playerUseCountBefore + 1));
             Debug.Log("预期 guiltGain / UseCount 不重复增加：" + (allyB.currentGuilt == playerGuiltBefore + playerAttack.cardData.guiltGain && playerAttack.currentUseCount == playerUseCountBefore + 1));
+        }
+        else if (playerAttackIsSinCard)
+        {
+            Debug.Log("预期失败罪卡不增加 guilt / UseCount：" + (allyB.currentGuilt == playerGuiltBefore && playerAttack.currentUseCount == playerUseCountBefore));
         }
     }
 
@@ -2626,7 +2674,6 @@ public class CardLoadTest : MonoBehaviour
             actionSlots,
             intentQueue
         );
-
         BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
         PrintCharacterCardStates(allyA);
     }
@@ -2913,7 +2960,6 @@ public class CardLoadTest : MonoBehaviour
             actionSlots,
             intentQueue
         );
-
         BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
         PrintCharacterCardStates(allyA);
     }
@@ -3483,6 +3529,7 @@ public class CardLoadTest : MonoBehaviour
         BattleCardState responseDodge = CreateFixedDodgeCardForCharacter(allyB, title + "_b_response_dodge", 8, 2);
         BattleCardState passiveDodge = CreateFixedDodgeCardForCharacter(allyB, title + "_b_passive_dodge", 12, 2);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(enemy, title + "_enemy_attack", 5, 2);
+        int responseCooldownBefore = responseDodge.currentCooldown;
         int passiveCooldownBefore = passiveDodge.currentCooldown;
 
         BattleEnemyIntent intent1 = new BattleEnemyIntent(title + "_intent_001", enemy, enemyAttack, allyB, 1, 1);
@@ -3499,11 +3546,13 @@ public class CardLoadTest : MonoBehaviour
 
         BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
 
+        BattleActionSlot responseSlot = BattleActionSlotManager.GetSlot(actionSlots, allyB, 1);
         BattleActionSlot passiveSlot = BattleActionSlotManager.GetSlot(actionSlots, allyB, 2);
 
         Debug.Log("预期计划生成RespondedEnemyIntent：" + (item != null && item.executionType == BattleExecutionItemType.RespondedEnemyIntent));
         Debug.Log("预期不生成Unresponded被动Dodge接管：" + (unrespondedCount == 0));
         Debug.Log("预期Responded item候选数为0：" + (candidateCount == 0));
+        Debug.Log("预期主响应Dodge正常执行：" + (responseSlot != null && responseSlot.isUsed && responseDodge.currentCooldown == responseDodge.cardData.cooldown && responseDodge.currentCooldown != responseCooldownBefore));
         Debug.Log("预期被动Dodge不触发：" + (passiveSlot != null && !passiveSlot.isUsed));
         Debug.Log("预期被动Dodge CD不变化：" + (passiveDodge.currentCooldown == passiveCooldownBefore));
         Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
@@ -3646,10 +3695,11 @@ public class CardLoadTest : MonoBehaviour
 
         Debug.Log("预期主拼点为 EnemyWin，后续比较固定敌人点数 " + enemyAttackPoint + "：" + (candidateCount == 2));
         Debug.Log("预期目标 HP 变化为 " + expectedDamage + "：" + (allyB.currentHP == hpBefore - expectedDamage));
-        Debug.Log("预期主Attack槽位 isUsed：" + (responseSlot != null && responseSlot.isUsed));
+        bool expectResponseSlotUsed = expectedResultType != "TieLimit";
+        Debug.Log("预期主Attack槽位 isUsed = " + expectResponseSlotUsed + "：" + (responseSlot != null && responseSlot.isUsed == expectResponseSlotUsed));
         Debug.Log("预期Dodge槽位 isUsed = " + expectDodgeUsed + "：" + (dodgeSlot != null && dodgeSlot.isUsed == expectDodgeUsed));
         Debug.Log("预期Defense槽位未使用：" + (defenseSlot != null && !defenseSlot.isUsed));
-        Debug.Log("预期主Attack已使用：" + (responseAttack.currentCooldown == responseAttack.cardData.cooldown && responseAttack.currentCooldown != responseAttackCooldownBefore));
+        Debug.Log("预期主Attack失败后不Resolved：" + (responseAttack.currentCooldown == responseAttackCooldownBefore));
         Debug.Log("预期Enemy Attack已使用：" + (enemyAttack.currentCooldown == enemyAttack.cardData.cooldown && enemyAttack.currentCooldown != enemyAttackCooldownBefore));
         Debug.Log("预期Dodge使用状态符合分支：" + (expectDodgeUsed ? passiveDodge.currentCooldown == passiveDodge.cardData.cooldown : passiveDodge.currentCooldown == dodgeCooldownBefore));
         Debug.Log("预期Defense CD / UseCount不变：" + (followDefense.currentCooldown == defenseCooldownBefore && followDefense.currentUseCount == defenseUseCountBefore));
@@ -3661,7 +3711,7 @@ public class CardLoadTest : MonoBehaviour
 
         if (expectedResultType == "TieLimit")
         {
-            Debug.Log("TieLimit 额外验证：主Attack已使用：" + (responseSlot != null && responseSlot.isUsed && responseAttack.currentCooldown == responseAttack.cardData.cooldown));
+            Debug.Log("TieLimit 额外验证：主Attack槽位不MarkUsed且卡不Resolved：" + (responseSlot != null && !responseSlot.isUsed && responseAttack.currentCooldown == responseAttackCooldownBefore));
             Debug.Log("TieLimit 额外验证：Enemy Attack已使用：" + (enemyAttack.currentCooldown == enemyAttack.cardData.cooldown));
             Debug.Log("TieLimit 额外验证：Dodge未使用：" + (passiveDodge.currentCooldown == dodgeCooldownBefore && passiveDodge.currentUseCount == dodgeUseCountBefore && passiveDodge.isConsumed == dodgeConsumedBefore));
             Debug.Log("TieLimit 额外验证：Dodge槽位未MarkUsed：" + (dodgeSlot != null && !dodgeSlot.isUsed));
@@ -4339,6 +4389,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("执行后 我方角色A HP：" + allyA.currentHP + " / " + allyA.maxHP);
         Debug.Log("执行后 我方角色B HP：" + allyB.currentHP + " / " + allyB.maxHP);
         Debug.Log("执行后 敌人 HP：" + enemy.currentHP + " / " + enemy.maxHP);
+        BattleExecutionItem tieItem = GetFirstExecutionItem(executionPlan);
         Debug.Log("执行后 玩家平局 Attack CD：" + tiePlayerAttackCardState.currentCooldown);
         Debug.Log("执行后 玩家平局 Attack UseCount：" + tiePlayerAttackCardState.currentUseCount + " / " + tiePlayerAttackCardState.maxUseCount);
         Debug.Log("执行后 玩家平局 Attack isConsumed：" + tiePlayerAttackCardState.isConsumed);
@@ -4349,7 +4400,10 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("执行后 敌人 guilt：" + enemy.currentGuilt);
         Debug.Log("预期 TieLimit 玩家卡状态不变：" + (tiePlayerAttackCardState.currentCooldown == playerCooldownBefore && tiePlayerAttackCardState.currentUseCount == playerUseCountBefore && tiePlayerAttackCardState.isConsumed == playerConsumedBefore && allyA.currentGuilt == playerGuiltBefore));
         Debug.Log("预期 TieLimit 敌人卡状态不变：" + (tieEnemyAttackCardState.currentCooldown == enemyCooldownBefore && tieEnemyAttackCardState.currentUseCount == enemyUseCountBefore && tieEnemyAttackCardState.isConsumed == enemyConsumedBefore && enemy.currentGuilt == enemyGuiltBefore));
-        Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
+        Debug.Log("预期 TieLimit item为Failed：" + (tieItem != null && tieItem.status == BattleExecutionItemStatus.Failed));
+        Debug.Log("预期 TieLimit reason为TieLimitReached：" + (tieItem != null && tieItem.outcomeReason == BattleExecutionItemOutcomeReason.TieLimitReached));
+        Debug.Log("预期 TieLimit item.isCompleted为False：" + (tieItem != null && !tieItem.isCompleted));
+        Debug.Log("预期 TieLimit plan.isCompleted为False：" + !executionPlan.isCompleted);
     }
 
     // RunActionSlotExecutionPlanExecuteMixedBasicTestSequence = 执行已响应 + 未响应混合计划基础测试
@@ -4445,6 +4499,1743 @@ public class CardLoadTest : MonoBehaviour
         RunFreeActionNormalRegressionSubTest();
         RunFreeActionUnsupportedNotSwallowedSubTest();
         RunFreeActionBattleEndedRegressionSubTest();
+    }
+
+    void RunExecutionItemStatusBasicTestSequence()
+    {
+        Debug.Log("===== ExecutionItemStatusBasic 聚合测试开始 =====");
+
+        RunExecutionItemStatusNormalFreeActionSubTest();
+        RunExecutionItemStatusActionUnavailableFreeActionSubTest();
+        RunExecutionItemStatusDeadFreeActionSubTest();
+        RunExecutionItemStatusDeadActualTargetSubTest();
+        RunExecutionItemStatusRespondedUnavailableFallbackSubTest();
+        RunExecutionItemStatusFallbackDeadOriginalTargetSubTest();
+        RunExecutionItemStatusBattleEndedRemainingSubTest();
+        RunExecutionItemStatusInvalidDataSubTest();
+        RunExecutionItemStatusUnsupportedResolveSubTest();
+        RunExecutionItemStatusUnsupportedExecutionTypeSubTest();
+        RunExecutionItemStatusNullItemSubTest();
+        RunExecutionItemStatusTieLimitSubTest();
+        RunExecutionItemStatusAllExecutedOrSkippedSubTest();
+        RunExecutionItemStatusCompatibilitySubTest();
+    }
+
+    void RunExecutionItemStatusNormalFreeActionSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_a", 30, 30, 50, 10, 3, 8);
+        BattleCardState attack = CreateFixedAttackCardForCharacter(context.allyA, "item_status_a_attack", 3);
+        BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
+        slot.AssignFreeAction(context.allyA, attack, context.enemy);
+        BattleExecutionPlan plan = CreateManualFreeActionPlan(slot);
+        BattleExecutionItem item = GetFirstExecutionItem(plan);
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        Debug.Log("模式51 A 正常FreeAction为Executed：" + IsExecutionItemState(item, BattleExecutionItemStatus.Executed, BattleExecutionItemOutcomeReason.None, true));
+    }
+
+    void RunExecutionItemStatusActionUnavailableFreeActionSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_b", 30, 30, 50, 10, 3, 8);
+        BattleCardState unavailableAttack = CreateBulletLockedFreeAttackCard(context.allyB, "item_status_b_attack", 5, 3);
+        BattleActionSlot slot = new BattleActionSlot(context.allyB, 1);
+        slot.AssignFreeAction(context.allyB, unavailableAttack, context.enemy);
+        BattleExecutionPlan plan = CreateManualFreeActionPlan(slot);
+        BattleExecutionItem item = GetFirstExecutionItem(plan);
+        int useCountBefore = unavailableAttack.currentUseCount;
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        Debug.Log("模式51 B ActionUnavailable FreeAction为Skipped：" + IsExecutionItemState(item, BattleExecutionItemStatus.Skipped, BattleExecutionItemOutcomeReason.ActionUnavailable, true));
+        Debug.Log("模式51 B 卡牌不使用且槽位不MarkUsed：" + (unavailableAttack.currentUseCount == useCountBefore && !slot.isUsed));
+    }
+
+    void RunExecutionItemStatusDeadFreeActionSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_c", 30, 0, 50, 10, 3, 8);
+        BattleCardState attack = CreateFixedAttackCardForCharacter(context.allyB, "item_status_c_attack", 3);
+        BattleActionSlot slot = new BattleActionSlot(context.allyB, 1);
+        slot.AssignFreeAction(context.allyB, attack, context.enemy);
+        BattleExecutionPlan plan = CreateManualFreeActionPlan(slot);
+        BattleExecutionItem item = GetFirstExecutionItem(plan);
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        Debug.Log("模式51 C 死亡FreeAction为Skipped ActorDead：" + IsExecutionItemState(item, BattleExecutionItemStatus.Skipped, BattleExecutionItemOutcomeReason.ActorDead, true));
+    }
+
+    void RunExecutionItemStatusDeadActualTargetSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_d", 30, 0, 50, 10, 3, 8);
+        BattleCardState enemyAttack = CreateBeforeUseBuffAttackCard(context.enemy, "item_status_d_enemy", 5, "Strength", 1, 1);
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("item_status_d_intent", context.enemy, enemyAttack, context.allyB, 1);
+        BattleExecutionItem item = new BattleExecutionItem(1, BattleExecutionItemType.UnrespondedEnemyIntent, intent, null);
+        BattleExecutionPlan plan = CreateManualExecutionPlan(item);
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        Debug.Log("模式51 D actualTarget死亡为Skipped ActualTargetDead：" + IsExecutionItemState(item, BattleExecutionItemStatus.Skipped, BattleExecutionItemOutcomeReason.ActualTargetDead, true));
+        Debug.Log("模式51 D 敌人不Roll点不触发BeforeUse：" + (CountBuffStack(context.enemy, "Strength") == 0));
+    }
+
+    void RunExecutionItemStatusRespondedUnavailableFallbackSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_e", 30, 30, 50, 20, 3, 8);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
+        BattleCardState responseAttack = CreateBulletLockedBeforeUseAttackCard(context.allyA, "item_status_e_response", 5, 3, "Strength", 1, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "item_status_e_enemy", 5, 0);
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("item_status_e_intent", context.enemy, enemyAttack, context.allyB, 1);
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(intentQueue);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, context.allyA, 1, context.allyA, responseAttack, intent);
+        BattleActionSlot responseSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+        int bHPBefore = context.allyB.currentHP;
+        BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(plan);
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        Debug.Log("模式51 E Responded资源不足回落为Executed：" + IsExecutionItemState(item, BattleExecutionItemStatus.Executed, BattleExecutionItemOutcomeReason.ResponseUnavailableFallbackToUnresponded, true));
+        Debug.Log("模式51 E 响应槽位不MarkUsed且敌人只攻击一次：" + (responseSlot != null && !responseSlot.isUsed && context.allyB.currentHP == bHPBefore - 5));
+    }
+
+    void RunExecutionItemStatusFallbackDeadOriginalTargetSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_f", 30, 0, 50, 20, 3, 8);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
+        BattleCardState responseAttack = CreateBulletLockedBeforeUseAttackCard(context.allyA, "item_status_f_response", 5, 3, "Strength", 1, 1);
+        BattleCardState enemyAttack = CreateBeforeUseBuffAttackCard(context.enemy, "item_status_f_enemy", 5, "Strength", 1, 1);
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("item_status_f_intent", context.enemy, enemyAttack, context.allyB, 1);
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(intentQueue);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, context.allyA, 1, context.allyA, responseAttack, intent);
+        BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(plan);
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        Debug.Log("模式51 F 回落后originalTarget死亡为Skipped：" + IsExecutionItemState(item, BattleExecutionItemStatus.Skipped, BattleExecutionItemOutcomeReason.ActualTargetDead, true));
+        Debug.Log("模式51 F 敌人不攻击不触发BeforeUse：" + (context.allyA.currentHP == context.allyA.maxHP && CountBuffStack(context.enemy, "Strength") == 0));
+    }
+
+    void RunExecutionItemStatusBattleEndedRemainingSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_g", 30, 30, 5, 20, 3, 8);
+        BattleCardState killAttack = CreateBattleEndedKillAttackCard(context.allyA, "item_status_g_kill", 6);
+        BattleCardState followAbility = CreateBattleEndedAbilityCard(context.allyA, "item_status_g_follow", "ItemStatusGFollow");
+        BattleActionSlot killSlot = new BattleActionSlot(context.allyA, 1);
+        killSlot.AssignFreeAction(context.allyA, killAttack, context.enemy);
+        BattleActionSlot followSlot = new BattleActionSlot(context.allyA, 2);
+        followSlot.AssignFreeAction(context.allyA, followAbility, context.allyA);
+        BattleExecutionPlan plan = CreateManualFreeActionPlan(killSlot, followSlot);
+        BattleExecutionItem firstItem = plan.executionItems[0];
+        BattleExecutionItem secondItem = plan.executionItems[1];
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        Debug.Log("模式51 G 击杀item为Executed：" + IsExecutionItemState(firstItem, BattleExecutionItemStatus.Executed, BattleExecutionItemOutcomeReason.None, true));
+        Debug.Log("模式51 G BattleEnded剩余item为Skipped：" + IsExecutionItemState(secondItem, BattleExecutionItemStatus.Skipped, BattleExecutionItemOutcomeReason.BattleEnded, true));
+        Debug.Log("模式51 G plan完成：" + plan.isCompleted);
+    }
+
+    void RunExecutionItemStatusInvalidDataSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_h", 30, 30, 50, 10, 3, 8);
+        BattleCardState attack = CreateFixedAttackCardForCharacter(context.allyA, "item_status_h_attack", 3);
+        BattleActionSlot invalidSlot = new BattleActionSlot(context.allyA, 1);
+        invalidSlot.AssignFreeAction(null, attack, context.enemy);
+        BattleActionSlot followSlot = new BattleActionSlot(context.allyA, 2);
+        followSlot.AssignFreeAction(context.allyA, CreateBattleEndedAbilityCard(context.allyA, "item_status_h_follow", "ItemStatusHFollow"), context.allyA);
+        BattleExecutionPlan plan = CreateManualFreeActionPlan(invalidSlot, followSlot);
+        BattleExecutionItem firstItem = plan.executionItems[0];
+        BattleExecutionItem secondItem = plan.executionItems[1];
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        Debug.Log("模式51 H Invalid数据为Failed：" + IsExecutionItemState(firstItem, BattleExecutionItemStatus.Failed, BattleExecutionItemOutcomeReason.InvalidData, false));
+        Debug.Log("模式51 H 后续item保持Pending且未执行：" + IsExecutionItemState(secondItem, BattleExecutionItemStatus.Pending, BattleExecutionItemOutcomeReason.None, false));
+        Debug.Log("模式51 H plan不完成：" + !plan.isCompleted);
+    }
+
+    void RunExecutionItemStatusUnsupportedResolveSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_i", 30, 30, 50, 10, 3, 8);
+        BattleCardState defense = CreateTestDefenseCardForCharacter(context.allyA, "item_status_i_defense", 4, 1);
+        BattleActionSlot unsupportedSlot = new BattleActionSlot(context.allyA, 1);
+        unsupportedSlot.AssignFreeAction(context.allyA, defense, context.enemy);
+        BattleActionSlot followSlot = new BattleActionSlot(context.allyA, 2);
+        followSlot.AssignFreeAction(context.allyA, CreateBattleEndedAbilityCard(context.allyA, "item_status_i_follow", "ItemStatusIFollow"), context.allyA);
+        BattleExecutionPlan plan = CreateManualFreeActionPlan(unsupportedSlot, followSlot);
+        BattleExecutionItem firstItem = plan.executionItems[0];
+        BattleExecutionItem secondItem = plan.executionItems[1];
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        Debug.Log("模式51 I Unsupported Resolver为Failed：" + IsExecutionItemState(firstItem, BattleExecutionItemStatus.Failed, BattleExecutionItemOutcomeReason.UnsupportedResolveType, false));
+        Debug.Log("模式51 I 后续item保持Pending：" + IsExecutionItemState(secondItem, BattleExecutionItemStatus.Pending, BattleExecutionItemOutcomeReason.None, false));
+    }
+
+    void RunExecutionItemStatusUnsupportedExecutionTypeSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_j", 30, 30, 50, 10, 3, 8);
+        BattleExecutionItem invalidTypeItem = new BattleExecutionItem(1, (BattleExecutionItemType)999, null, null);
+        BattleActionSlot followSlot = new BattleActionSlot(context.allyA, 1);
+        followSlot.AssignFreeAction(context.allyA, CreateBattleEndedAbilityCard(context.allyA, "item_status_j_follow", "ItemStatusJFollow"), context.allyA);
+        BattleExecutionItem followItem = new BattleExecutionItem(2, BattleExecutionItemType.FreeAction, null, followSlot);
+        BattleExecutionPlan plan = CreateManualExecutionPlan(invalidTypeItem, followItem);
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        Debug.Log("模式51 J 非法executionType为Failed：" + IsExecutionItemState(invalidTypeItem, BattleExecutionItemStatus.Failed, BattleExecutionItemOutcomeReason.UnsupportedExecutionType, false));
+        Debug.Log("模式51 J 后续item保持Pending：" + IsExecutionItemState(followItem, BattleExecutionItemStatus.Pending, BattleExecutionItemOutcomeReason.None, false));
+    }
+
+    void RunExecutionItemStatusNullItemSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_k", 30, 30, 50, 10, 3, 8);
+        BattleActionSlot followSlot = new BattleActionSlot(context.allyA, 1);
+        followSlot.AssignFreeAction(context.allyA, CreateBattleEndedAbilityCard(context.allyA, "item_status_k_follow", "ItemStatusKFollow"), context.allyA);
+        BattleExecutionItem followItem = new BattleExecutionItem(2, BattleExecutionItemType.FreeAction, null, followSlot);
+        BattleExecutionPlan plan = new BattleExecutionPlan();
+        plan.executionItems.Add(null);
+        plan.executionItems.Add(followItem);
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        Debug.Log("模式51 K null item不抛异常且plan不完成：" + !plan.isCompleted);
+        Debug.Log("模式51 K 后续item保持Pending：" + IsExecutionItemState(followItem, BattleExecutionItemStatus.Pending, BattleExecutionItemOutcomeReason.None, false));
+        Debug.Log("模式51 K 后续行动未执行：" + !followSlot.isUsed);
+    }
+
+    void RunExecutionItemStatusTieLimitSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_l", 30, 30, 50, 10, 3, 8);
+        BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "item_status_l_player", 5);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "item_status_l_enemy", 5, 0);
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("item_status_l_intent", context.enemy, enemyAttack, context.allyA, 1);
+        BattleActionSlot responseSlot = new BattleActionSlot(context.allyA, 1);
+        responseSlot.AssignResponse(context.allyA, playerAttack, intent, false);
+        BattleExecutionItem tieItem = new BattleExecutionItem(1, BattleExecutionItemType.RespondedEnemyIntent, intent, responseSlot);
+        BattleActionSlot followSlot = new BattleActionSlot(context.allyA, 2);
+        followSlot.AssignFreeAction(context.allyA, CreateBattleEndedAbilityCard(context.allyA, "item_status_l_follow", "ItemStatusLFollow"), context.allyA);
+        BattleExecutionItem followItem = new BattleExecutionItem(2, BattleExecutionItemType.FreeAction, null, followSlot);
+        BattleExecutionPlan plan = CreateManualExecutionPlan(tieItem, followItem);
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        Debug.Log("模式51 L TieLimit为Failed：" + IsExecutionItemState(tieItem, BattleExecutionItemStatus.Failed, BattleExecutionItemOutcomeReason.TieLimitReached, false));
+        Debug.Log("模式51 L plan不完成：" + !plan.isCompleted);
+        Debug.Log("模式51 L 后续item保持Pending且未执行：" + (IsExecutionItemState(followItem, BattleExecutionItemStatus.Pending, BattleExecutionItemOutcomeReason.None, false) && !followSlot.isUsed));
+    }
+
+    void RunExecutionItemStatusAllExecutedOrSkippedSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_m", 30, 0, 50, 10, 3, 8);
+        BattleActionSlot normalSlot = new BattleActionSlot(context.allyA, 1);
+        normalSlot.AssignFreeAction(context.allyA, CreateFixedAttackCardForCharacter(context.allyA, "item_status_m_attack", 3), context.enemy);
+        BattleActionSlot deadSlot = new BattleActionSlot(context.allyB, 1);
+        deadSlot.AssignFreeAction(context.allyB, CreateFixedAttackCardForCharacter(context.allyB, "item_status_m_dead", 3), context.enemy);
+        BattleExecutionPlan plan = CreateManualFreeActionPlan(normalSlot, deadSlot);
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        Debug.Log("模式51 M Executed与Skipped混合时plan完成：" + (plan.isCompleted && plan.executionItems[0].status == BattleExecutionItemStatus.Executed && plan.executionItems[1].status == BattleExecutionItemStatus.Skipped));
+    }
+
+    void RunExecutionItemStatusCompatibilitySubTest()
+    {
+        BattleExecutionItem pendingItem = new BattleExecutionItem(1, BattleExecutionItemType.FreeAction, null, null);
+        BattleExecutionItem executedItem = new BattleExecutionItem(2, BattleExecutionItemType.FreeAction, null, null);
+        BattleExecutionItem skippedItem = new BattleExecutionItem(3, BattleExecutionItemType.FreeAction, null, null);
+        BattleExecutionItem failedItem = new BattleExecutionItem(4, BattleExecutionItemType.FreeAction, null, null);
+
+        executedItem.MarkExecuted();
+        skippedItem.MarkSkipped(BattleExecutionItemOutcomeReason.ActionUnavailable);
+        failedItem.MarkFailed(BattleExecutionItemOutcomeReason.ResolverFailure);
+
+        bool compatibility =
+            pendingItem.status == BattleExecutionItemStatus.Pending &&
+            !pendingItem.isCompleted &&
+            executedItem.status == BattleExecutionItemStatus.Executed &&
+            executedItem.isCompleted &&
+            skippedItem.status == BattleExecutionItemStatus.Skipped &&
+            skippedItem.isCompleted &&
+            failedItem.status == BattleExecutionItemStatus.Failed &&
+            !failedItem.isCompleted;
+
+        Debug.Log("模式51 N status与isCompleted兼容：" + compatibility);
+    }
+
+    void RunCardResolvedHitContractBasicTestSequence()
+    {
+        Debug.Log("===== CardResolvedHitContractBasic 聚合测试开始 =====");
+
+        RunContractAttackVsAttackPlayerWinSubTest();
+        RunContractAttackVsAttackPlayerLoseSubTest();
+        RunContractLoserBeforeUseAndClashLoseSubTest();
+        RunContractAttackLoseSlotCommittedSubTest();
+        RunContractEnemyWinPassiveGuardSubTest();
+        RunContractDefenseFullBlockHitSubTest();
+        RunContractDefenseReducedDamageZeroHitSubTest();
+        RunContractDodgeSuccessSubTest();
+        RunContractDodgeFailedZeroDamageHitSubTest();
+        RunContractFreeAttackZeroDamageHitSubTest();
+        RunContractUnrespondedZeroDamageHitSubTest();
+        RunContractUnrespondedDamageAndKillSubTest();
+        RunContractActionUnavailableRegressionSubTest();
+        RunContractTieLimitRegressionSubTest();
+    }
+
+    void RunContractAttackVsAttackPlayerWinSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("contract_a", 30, 30, 50, 10, 3, 8);
+        BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "contract_a_player", 8);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_a_enemy", 5, 2);
+        playerAttack.cardData.cooldown = 2;
+        AddProbeEffect(playerAttack, BattleTiming.Resolved, "ContractAPlayerResolved", ClashResult.Win);
+        AddProbeEffect(playerAttack, BattleTiming.Hit, "ContractAPlayerHit", ClashResult.Win);
+        AddProbeEffect(enemyAttack, BattleTiming.ClashLose, "ContractAEnemyClashLose", ClashResult.Lose);
+        AddProbeEffect(enemyAttack, BattleTiming.Resolved, "ContractAEnemyResolved", ClashResult.Lose);
+        context.allyA.AddBuff("NextClashPointUp", 1, 1);
+        context.allyA.AddBuff("NextCardPointUp", 2, 1);
+        context.enemy.AddBuff("NextClashPointUp", 1, 1);
+        context.enemy.AddBuff("NextCardPointUp", 2, 1);
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, playerAttack),
+            CreateEnemyAttackIntent("contract_a_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool resolvedRule =
+            result != null &&
+            result.resultType == "PlayerWin" &&
+            result.playerCardUsed &&
+            !result.enemyCardUsed &&
+            CountBuffStack(context.allyA, "ContractAPlayerResolved") == 1 &&
+            CountBuffStack(context.enemy, "ContractAEnemyClashLose") == 1 &&
+            CountBuffStack(context.enemy, "ContractAEnemyResolved") == 0;
+        bool stateRule =
+            playerAttack.currentCooldown == playerAttack.cardData.cooldown &&
+            enemyAttack.currentCooldown == 0;
+        bool buffRule =
+            CountBuffStack(context.allyA, "NextClashPointUp") == 0 &&
+            CountBuffStack(context.allyA, "NextCardPointUp") == 0 &&
+            CountBuffStack(context.enemy, "NextClashPointUp") == 0 &&
+            CountBuffStack(context.enemy, "NextCardPointUp") == 2;
+        bool hitRule = CountBuffStack(context.allyA, "ContractAPlayerHit") == 1;
+
+        Debug.Log("模式52 A 玩家胜方Resolved且敌人败方不Resolved：" + resolvedRule);
+        Debug.Log("模式52 A CD / cardUsed符合新规则：" + stateRule);
+        Debug.Log("模式52 A 胜方NextCard消费、败方NextCard保留、双方NextClash消费：" + buffRule);
+        Debug.Log("模式52 A 胜方Attack触发Hit：" + hitRule);
+    }
+
+    void RunContractAttackVsAttackPlayerLoseSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("contract_b", 30, 30, 50, 10, 3, 8);
+        BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "contract_b_player", 5);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_b_enemy", 8, 2);
+        playerAttack.cardData.cooldown = 2;
+        AddProbeEffect(playerAttack, BattleTiming.ClashLose, "ContractBPlayerClashLose", ClashResult.Lose);
+        AddProbeEffect(playerAttack, BattleTiming.Resolved, "ContractBPlayerResolved", ClashResult.Lose);
+        AddProbeEffect(enemyAttack, BattleTiming.Resolved, "ContractBEnemyResolved", ClashResult.Win);
+        context.allyA.AddBuff("NextClashPointUp", 1, 1);
+        context.allyA.AddBuff("NextCardPointUp", 2, 1);
+        context.enemy.AddBuff("NextClashPointUp", 1, 1);
+        context.enemy.AddBuff("NextCardPointUp", 2, 1);
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, playerAttack),
+            CreateEnemyAttackIntent("contract_b_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool resolvedRule =
+            result != null &&
+            result.resultType == "EnemyWin" &&
+            !result.playerCardUsed &&
+            result.enemyCardUsed &&
+            CountBuffStack(context.allyA, "ContractBPlayerClashLose") == 1 &&
+            CountBuffStack(context.allyA, "ContractBPlayerResolved") == 0 &&
+            CountBuffStack(context.enemy, "ContractBEnemyResolved") == 1;
+        bool stateRule = playerAttack.currentCooldown == 0 && enemyAttack.currentCooldown == enemyAttack.cardData.cooldown;
+        bool buffRule =
+            CountBuffStack(context.allyA, "NextClashPointUp") == 0 &&
+            CountBuffStack(context.allyA, "NextCardPointUp") == 2 &&
+            CountBuffStack(context.enemy, "NextClashPointUp") == 0 &&
+            CountBuffStack(context.enemy, "NextCardPointUp") == 0;
+
+        Debug.Log("模式52 B 玩家败方只ClashLose且不Resolved：" + resolvedRule);
+        Debug.Log("模式52 B 玩家败方不进CD，敌人胜方进CD：" + stateRule);
+        Debug.Log("模式52 B 败方NextCard保留，双方NextClash消费：" + buffRule);
+    }
+
+    void RunContractLoserBeforeUseAndClashLoseSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("contract_c", 30, 30, 50, 10, 3, 8);
+        BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "contract_c_player", 4);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_c_enemy", 9, 0);
+        AddProbeEffect(playerAttack, BattleTiming.BeforeUse, "ContractCBeforeUse");
+        AddProbeEffect(playerAttack, BattleTiming.ClashLose, "ContractCClashLose", ClashResult.Lose);
+        AddProbeEffect(playerAttack, BattleTiming.Resolved, "ContractCResolved", ClashResult.Lose);
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, playerAttack),
+            CreateEnemyAttackIntent("contract_c_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.resultType == "EnemyWin" &&
+            CountBuffStack(context.allyA, "ContractCBeforeUse") == 1 &&
+            CountBuffStack(context.allyA, "ContractCClashLose") == 1 &&
+            CountBuffStack(context.allyA, "ContractCResolved") == 0;
+
+        Debug.Log("模式52 C 败方BeforeUse保留、ClashLose执行、Resolved不执行：" + worked);
+    }
+
+    void RunContractAttackLoseSlotCommittedSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("contract_d", 30, 30, 50, 10, 3, 8);
+        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(context.allyA, "contract_d_player", 4);
+        responseAttack.cardData.cooldown = 2;
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_d_enemy", 8, 0);
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("contract_d_intent", context.enemy, enemyAttack, context.allyA, 1);
+        BattleActionSlot responseSlot = new BattleActionSlot(context.allyA, 1);
+        responseSlot.AssignResponse(context.allyA, responseAttack, intent, false);
+        BattleExecutionItem item = new BattleExecutionItem(1, BattleExecutionItemType.RespondedEnemyIntent, intent, responseSlot);
+        BattleExecutionPlan plan = CreateManualExecutionPlan(item);
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        bool worked =
+            responseAttack.currentCooldown == 0 &&
+            responseSlot.isUsed &&
+            IsExecutionItemState(item, BattleExecutionItemStatus.Executed, BattleExecutionItemOutcomeReason.None, true) &&
+            plan.isCompleted;
+
+        Debug.Log("模式52 D Attack失败卡不Resolved但Responded槽位MarkUsed：" + worked);
+    }
+
+    void RunContractEnemyWinPassiveGuardSubTest()
+    {
+        BattleEndedTestContext directContext = CreateBattleEndedTestContext("contract_e_direct", 30, 30, 50, 10, 3, 8);
+        BattleCardState directResponse = CreateFixedAttackCardForCharacter(directContext.allyB, "contract_e_direct_response", 4);
+        BattleCardState directEnemy = CreateFixedEnemyAttackCardForDodgeTest(directContext.enemy, "contract_e_direct_enemy", 8, 2);
+        BattleCardState directGuard = CreateTestDefenseCardForCharacter(directContext.allyB, "contract_e_direct_guard", 12, 1);
+        AddProbeEffect(directResponse, BattleTiming.Resolved, "ContractEDirectResponseResolved", ClashResult.Lose);
+        AddProbeEffect(directEnemy, BattleTiming.BeforeUse, "ContractEDirectEnemyBefore");
+        AddProbeEffect(directEnemy, BattleTiming.Resolved, "ContractEDirectEnemyResolved", ClashResult.Win);
+        AddProbeEffect(directGuard, BattleTiming.Resolved, "ContractEDirectGuardResolved");
+        directContext.enemy.AddBuff("NextClashPointUp", 1, 1);
+        directContext.enemy.AddBuff("NextCardPointUp", 1, 1);
+        BattleEnemyIntent directIntent = CreateEnemyAttackIntent("contract_e_direct_intent", directContext.enemy, directEnemy, directContext.allyB, 1);
+        BattleActionSlot directResponseSlot = CreateRespondedSlot(directContext.allyB, directResponse);
+        BattleActionSlot directGuardSlot = new BattleActionSlot(directContext.allyB, 2);
+        directGuardSlot.AssignPassiveGuard(directContext.allyB, directGuard);
+        BattleResolveResult directResult = BattleResolver.ResolveRespondedEnemyIntent(
+            directResponseSlot,
+            directIntent,
+            new List<BattleActionSlot> { directGuardSlot }
+        );
+
+        bool directRule =
+            directResult != null &&
+            !directResult.playerCardUsed &&
+            directResult.enemyCardUsed &&
+            object.ReferenceEquals(directResult.triggeredPassiveGuardSlot, directGuardSlot) &&
+            CountBuffStack(directContext.allyB, "ContractEDirectResponseResolved") == 0 &&
+            CountBuffStack(directContext.enemy, "ContractEDirectEnemyBefore") == 1 &&
+            CountBuffStack(directContext.enemy, "ContractEDirectEnemyResolved") == 1 &&
+            CountBuffStack(directContext.allyB, "ContractEDirectGuardResolved") == 1 &&
+            CountBuffStack(directContext.enemy, "NextClashPointUp") == 0 &&
+            CountBuffStack(directContext.enemy, "NextCardPointUp") == 0;
+
+        BattleEndedTestContext execContext = CreateBattleEndedTestContext("contract_e_exec", 30, 30, 50, 10, 3, 8);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(execContext.allyA, execContext.allyB, 2);
+        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(execContext.allyB, "contract_e_exec_response", 4);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(execContext.enemy, "contract_e_exec_enemy", 8, 2);
+        BattleCardState passiveGuard = CreateTestDefenseCardForCharacter(execContext.allyB, "contract_e_exec_guard", 12, 1);
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("contract_e_exec_intent", execContext.enemy, enemyAttack, execContext.allyB, 1);
+        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, execContext.allyB, 1, execContext.allyB, responseAttack, intent);
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, execContext.allyB, 2, execContext.allyB, passiveGuard);
+        BattleExecutionPlan plan = BattleExecutionPlanManager.CreateBasicExecutionPlan(actionSlots, BattleEnemyIntentManager.CreateIntentQueue(intent));
+        ExecutePlanWithRuntimeStateAndCompleteTurn(execContext.runtimeState, plan);
+        BattleActionSlot responseSlot = BattleActionSlotManager.GetSlot(actionSlots, execContext.allyB, 1);
+        BattleActionSlot guardSlot = BattleActionSlotManager.GetSlot(actionSlots, execContext.allyB, 2);
+
+        bool slotRule = responseSlot != null && responseSlot.isUsed && guardSlot != null && guardSlot.isUsed && responseAttack.currentCooldown == 0;
+
+        Debug.Log("模式52 E EnemyWin+PassiveGuard result字段与事件隔离正确：" + directRule);
+        Debug.Log("模式52 E 原响应槽位与PassiveGuard槽位MarkUsed正确：" + slotRule);
+    }
+
+    void RunContractDefenseFullBlockHitSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("contract_f", 30, 30, 50, 10, 3, 8);
+        BattleCardState defense = CreateTestDefenseCardForCharacter(context.allyA, "contract_f_defense", 9, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_f_enemy", 4, 2);
+        AddProbeEffect(enemyAttack, BattleTiming.Hit, "ContractFHit");
+        AddProbeEffect(enemyAttack, BattleTiming.AfterDamage, "ContractFAfterDamage");
+        int hpBefore = context.allyA.currentHP;
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, defense),
+            CreateEnemyAttackIntent("contract_f_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.resultType == "DefenseFullBlock" &&
+            result.playerCardUsed &&
+            result.enemyCardUsed &&
+            context.allyA.currentHP == hpBefore &&
+            CountBuffStack(context.enemy, "ContractFHit") == 1 &&
+            CountBuffStack(context.enemy, "ContractFAfterDamage") == 0;
+
+        Debug.Log("模式52 F DefenseFullBlock双方Resolved且0伤害仍Hit无AfterDamage：" + worked);
+    }
+
+    void RunContractDefenseReducedDamageZeroHitSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("contract_g", 30, 30, 50, 10, 3, 8);
+        BattleCardState defense = CreateTestDefenseCardForCharacter(context.allyA, "contract_g_defense", 1, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_g_enemy", 5, 2);
+        AddProbeEffect(enemyAttack, BattleTiming.Hit, "ContractGHit");
+        AddProbeEffect(enemyAttack, BattleTiming.AfterDamage, "ContractGAfterDamage");
+        context.allyA.AddBuff("DamageReduction", 10, 1);
+        int hpBefore = context.allyA.currentHP;
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, defense),
+            CreateEnemyAttackIntent("contract_g_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.resultType == "DefenseReducedDamage" &&
+            context.allyA.currentHP == hpBefore &&
+            CountBuffStack(context.enemy, "ContractGHit") == 1 &&
+            CountBuffStack(context.enemy, "ContractGAfterDamage") == 0;
+
+        Debug.Log("模式52 G DefenseReducedDamage最终0伤害仍Hit无AfterDamage：" + worked);
+    }
+
+    void RunContractDodgeSuccessSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("contract_h", 30, 30, 50, 10, 3, 8);
+        BattleCardState dodge = CreateFixedDodgeCardForCharacter(context.allyA, "contract_h_dodge", 9, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_h_enemy", 5, 2);
+        AddProbeEffect(dodge, BattleTiming.ClashWin, "ContractHDodgeClashWin", ClashResult.Win);
+        AddProbeEffect(dodge, BattleTiming.Resolved, "ContractHDodgeResolved", ClashResult.Win);
+        AddProbeEffect(enemyAttack, BattleTiming.ClashLose, "ContractHEnemyClashLose", ClashResult.Lose);
+        AddProbeEffect(enemyAttack, BattleTiming.Resolved, "ContractHEnemyResolved", ClashResult.Lose);
+        AddProbeEffect(enemyAttack, BattleTiming.Hit, "ContractHEnemyHit");
+        int hpBefore = context.allyA.currentHP;
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, dodge),
+            CreateEnemyAttackIntent("contract_h_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.resultType == "DodgeSuccess" &&
+            result.playerCardUsed &&
+            result.enemyCardUsed &&
+            context.allyA.currentHP == hpBefore &&
+            CountBuffStack(context.allyA, "ContractHDodgeClashWin") == 1 &&
+            CountBuffStack(context.allyA, "ContractHDodgeResolved") == 1 &&
+            CountBuffStack(context.enemy, "ContractHEnemyClashLose") == 1 &&
+            CountBuffStack(context.enemy, "ContractHEnemyResolved") == 1 &&
+            CountBuffStack(context.enemy, "ContractHEnemyHit") == 0;
+
+        Debug.Log("模式52 H Dodge成功双方Resolved且不Hit不伤害：" + worked);
+    }
+
+    void RunContractDodgeFailedZeroDamageHitSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("contract_i", 30, 30, 50, 10, 3, 8);
+        BattleCardState dodge = CreateFixedDodgeCardForCharacter(context.allyA, "contract_i_dodge", 3, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_i_enemy", 8, 2);
+        AddProbeEffect(dodge, BattleTiming.ClashLose, "ContractIDodgeClashLose", ClashResult.Lose);
+        AddProbeEffect(dodge, BattleTiming.Resolved, "ContractIDodgeResolved", ClashResult.Lose);
+        AddProbeEffect(enemyAttack, BattleTiming.Hit, "ContractIEnemyHit");
+        AddProbeEffect(enemyAttack, BattleTiming.AfterDamage, "ContractIEnemyAfterDamage");
+        context.allyA.AddBuff("DamageReduction", 10, 1);
+        int hpBefore = context.allyA.currentHP;
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, dodge),
+            CreateEnemyAttackIntent("contract_i_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.resultType == "DodgeFailed" &&
+            result.playerCardUsed &&
+            result.enemyCardUsed &&
+            context.allyA.currentHP == hpBefore &&
+            CountBuffStack(context.allyA, "ContractIDodgeClashLose") == 1 &&
+            CountBuffStack(context.allyA, "ContractIDodgeResolved") == 1 &&
+            CountBuffStack(context.enemy, "ContractIEnemyHit") == 1 &&
+            CountBuffStack(context.enemy, "ContractIEnemyAfterDamage") == 0;
+
+        Debug.Log("模式52 I Dodge失败最终0伤害仍Hit无AfterDamage：" + worked);
+    }
+
+    void RunContractFreeAttackZeroDamageHitSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("contract_j", 30, 30, 50, 10, 3, 8);
+        BattleCardState freeAttack = CreateFixedAttackCardForCharacter(context.allyA, "contract_j_attack", 0);
+        AddProbeEffect(freeAttack, BattleTiming.Resolved, "ContractJResolved");
+        AddProbeEffect(freeAttack, BattleTiming.Hit, "ContractJHit");
+        AddProbeEffect(freeAttack, BattleTiming.AfterDamage, "ContractJAfterDamage");
+        BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
+        slot.AssignFreeAction(context.allyA, freeAttack, context.enemy);
+        int enemyHPBefore = context.enemy.currentHP;
+
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+
+        bool worked =
+            result != null &&
+            result.resultType == "FreeAttack" &&
+            result.playerCardUsed &&
+            context.enemy.currentHP == enemyHPBefore &&
+            CountBuffStack(context.allyA, "ContractJResolved") == 1 &&
+            CountBuffStack(context.allyA, "ContractJHit") == 1 &&
+            CountBuffStack(context.allyA, "ContractJAfterDamage") == 0;
+
+        Debug.Log("模式52 J FreeAttack最终0伤害Resolved且Hit无AfterDamage：" + worked);
+    }
+
+    void RunContractUnrespondedZeroDamageHitSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("contract_k", 30, 30, 50, 10, 3, 8);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_k_enemy", 0, 2);
+        AddProbeEffect(enemyAttack, BattleTiming.Resolved, "ContractKResolved");
+        AddProbeEffect(enemyAttack, BattleTiming.Hit, "ContractKHit");
+        AddProbeEffect(enemyAttack, BattleTiming.AfterDamage, "ContractKAfterDamage");
+        int hpBefore = context.allyA.currentHP;
+
+        BattleResolveResult result = BattleResolver.ResolveUnrespondedEnemyIntent(
+            CreateEnemyAttackIntent("contract_k_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.resultType == "UnrespondedEnemyAttack" &&
+            result.enemyCardUsed &&
+            result.triggeredEventChain &&
+            context.allyA.currentHP == hpBefore &&
+            CountBuffStack(context.enemy, "ContractKResolved") == 1 &&
+            CountBuffStack(context.enemy, "ContractKHit") == 1 &&
+            CountBuffStack(context.enemy, "ContractKAfterDamage") == 0;
+
+        Debug.Log("模式52 K Unresponded最终0伤害Resolved且Hit无AfterDamage：" + worked);
+    }
+
+    void RunContractUnrespondedDamageAndKillSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("contract_l", 30, 3, 50, 10, 3, 8);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_l_enemy", 5, 2);
+        AddProbeEffect(enemyAttack, BattleTiming.AfterDamage, "ContractLAfterDamage");
+        AddProbeEffect(enemyAttack, BattleTiming.AfterKill, "ContractLAfterKill");
+
+        BattleResolveResult result = BattleResolver.ResolveUnrespondedEnemyIntent(
+            CreateEnemyAttackIntent("contract_l_intent", context.enemy, enemyAttack, context.allyB, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.enemyCardUsed &&
+            context.allyB.IsDead() &&
+            CountBuffStack(context.enemy, "ContractLAfterDamage") == 1 &&
+            CountBuffStack(context.enemy, "ContractLAfterKill") == 1;
+
+        Debug.Log("模式52 L Unresponded造成伤害和击杀时AfterDamage / AfterKill触发：" + worked);
+    }
+
+    void RunContractActionUnavailableRegressionSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("contract_m", 30, 30, 50, 20, 3, 8);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
+        BattleCardState responseAttack = CreateBulletLockedBeforeUseAttackCard(context.allyA, "contract_m_response", 5, 3, "ContractMBeforeUse", 1, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_m_enemy", 5, 0);
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("contract_m_intent", context.enemy, enemyAttack, context.allyB, 1);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        CardEligibilityResult assignResult;
+        bool assignSuccess = BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            context.allyA,
+            1,
+            context.allyA,
+            responseAttack,
+            intent,
+            out assignResult
+        );
+        BattleActionSlot responseSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+        BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, BattleEnemyIntentManager.CreateIntentQueue(intent));
+        BattleExecutionItem item = GetFirstExecutionItem(plan);
+        int hpBefore = context.allyB.currentHP;
+        int enemyUseCountBefore = enemyAttack.currentUseCount;
+        bool prepared =
+            CountBuffStack(context.allyA, "Bullet") >= 3 &&
+            assignSuccess &&
+            responseSlot != null &&
+            object.ReferenceEquals(responseSlot.actor, context.allyA) &&
+            object.ReferenceEquals(responseSlot.cardState, responseAttack) &&
+            intent.isResponded &&
+            object.ReferenceEquals(intent.actualTargetCharacter, context.allyA);
+        bool itemCreatedAsResponded =
+            plan != null &&
+            plan.executionItems != null &&
+            plan.executionItems.Count == 1 &&
+            item != null &&
+            item.executionType == BattleExecutionItemType.RespondedEnemyIntent;
+
+        RemoveAllBuffs(context.allyA, "Bullet");
+        bool bulletRemovedBeforeExecute = CountBuffStack(context.allyA, "Bullet") == 0;
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        bool worked =
+            item != null &&
+            item.status == BattleExecutionItemStatus.Executed &&
+            item.outcomeReason == BattleExecutionItemOutcomeReason.ResponseUnavailableFallbackToUnresponded &&
+            responseSlot != null &&
+            !responseSlot.isUsed &&
+            object.ReferenceEquals(intent.actualTargetCharacter, context.allyB) &&
+            enemyAttack.currentUseCount == enemyUseCountBefore &&
+            CountBuffStack(context.allyA, "ContractMBeforeUse") == 0 &&
+            responseAttack.currentCooldown == 0 &&
+            context.allyB.currentHP == hpBefore - 5;
+
+        Debug.Log("模式52 M 准备阶段条件满足并成功安排：" + prepared);
+        Debug.Log("模式52 M ExecutionPlan item为RespondedEnemyIntent：" + itemCreatedAsResponded);
+        Debug.Log("模式52 M 执行前Bullet已移除：" + bulletRemovedBeforeExecute);
+        Debug.Log("模式52 M outcome为ResponseUnavailableFallbackToUnresponded：" + IsExecutionItemState(item, BattleExecutionItemStatus.Executed, BattleExecutionItemOutcomeReason.ResponseUnavailableFallbackToUnresponded, true));
+        Debug.Log("模式52 M ActionUnavailable不BeforeUse不Resolved不MarkUsed且正常回落：" + worked);
+    }
+
+    void RunContractTieLimitRegressionSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("contract_n", 30, 30, 50, 10, 3, 8);
+        BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "contract_n_player", 5);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_n_enemy", 5, 0);
+        context.allyA.AddBuff("NextClashPointUp", 1, 1);
+        context.allyA.AddBuff("NextCardPointUp", 1, 1);
+        context.enemy.AddBuff("NextClashPointUp", 1, 1);
+        context.enemy.AddBuff("NextCardPointUp", 1, 1);
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("contract_n_intent", context.enemy, enemyAttack, context.allyA, 1);
+        BattleActionSlot responseSlot = new BattleActionSlot(context.allyA, 1);
+        responseSlot.AssignResponse(context.allyA, playerAttack, intent, false);
+        BattleExecutionItem tieItem = new BattleExecutionItem(1, BattleExecutionItemType.RespondedEnemyIntent, intent, responseSlot);
+        BattleActionSlot followSlot = new BattleActionSlot(context.allyA, 2);
+        followSlot.AssignFreeAction(context.allyA, CreateBattleEndedAbilityCard(context.allyA, "contract_n_follow", "ContractNFollow"), context.allyA);
+        BattleExecutionItem followItem = new BattleExecutionItem(2, BattleExecutionItemType.FreeAction, null, followSlot);
+        BattleExecutionPlan plan = CreateManualExecutionPlan(tieItem, followItem);
+
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        bool worked =
+            IsExecutionItemState(tieItem, BattleExecutionItemStatus.Failed, BattleExecutionItemOutcomeReason.TieLimitReached, false) &&
+            IsExecutionItemState(followItem, BattleExecutionItemStatus.Pending, BattleExecutionItemOutcomeReason.None, false) &&
+            !responseSlot.isUsed &&
+            CountBuffStack(context.allyA, "NextClashPointUp") == 1 &&
+            CountBuffStack(context.allyA, "NextCardPointUp") == 1 &&
+            CountBuffStack(context.enemy, "NextClashPointUp") == 1 &&
+            CountBuffStack(context.enemy, "NextCardPointUp") == 1;
+
+        Debug.Log("模式52 N TieLimit不Resolved不消费Buff不MarkUsed且后续Pending：" + worked);
+    }
+
+    void RunCardResourceSnapshotAndConsumeBasicTestSequence()
+    {
+        Debug.Log("===== CardResourceSnapshotAndConsumeBasic 聚合测试开始 =====");
+
+        RunCardResourceFallbackBasePointSubTest();
+        RunCardResourceActionStartAffectsCurrentSnapshotSubTest();
+        RunCardResourceBeforeUseDoesNotAffectCurrentSnapshotSubTest();
+        RunCardResourcePointPerStackSubTest();
+        RunCardResourceExactStackBonusSubTest();
+        RunCardResourceAttackWinConsumeSubTest();
+        RunCardResourceAttackLoseNoConsumeSubTest();
+        RunCardResourceDodgeVsAttackConsumeSubTest();
+        RunCardResourceDefenseConsumeSubTest();
+        RunCardResourceFreeAttackConsumeSubTest();
+        RunCardResourceUnrespondedEnemyAttackConsumeSubTest();
+        RunCardResourceActionUnavailableNoActionStartSubTest();
+        RunCardResourceTieRetrySnapshotSubTest();
+        RunCardResourceTieLimitNoConsumeSubTest();
+        RunCardResourceKnownPointPassiveGuardSubTest();
+        RunCardResourceActionStartOneShotAndAbilityIsolationSubTest();
+    }
+
+    void RunCardAssignmentEligibilityBasicTestSequence()
+    {
+        Debug.Log("===== CardAssignmentEligibilityBasic 聚合测试开始 =====");
+
+        RunCardAssignmentEligibilityGuiltInsufficientSubTest();
+        RunCardAssignmentEligibilityGuiltExactSubTest();
+        RunCardAssignmentEligibilityGuiltAboveSubTest();
+        RunCardAssignmentEligibilityBuffInsufficientSubTest();
+        RunCardAssignmentEligibilityBuffExactSubTest();
+        RunCardAssignmentEligibilityMultipleConditionsSubTest();
+        RunCardAssignmentEligibilityPendingBuffIgnoredSubTest();
+        RunCardAssignmentEligibilityPermanentBuffSubTest();
+        RunCardAssignmentEligibilitySoftResourceNotLockedSubTest();
+        RunCardAssignmentEligibilityExplicitBulletConditionSubTest();
+        RunCardAssignmentEligibilityCooldownConsumedSubTest();
+        RunCardAssignmentEligibilityDeadActorSubTest();
+        RunCardAssignmentEligibilityStateSafetySubTest();
+        RunCardAssignmentEligibilityPureReadSubTest();
+        RunCardAssignmentEligibilityExecutionRecheckSubTest();
+        RunCardAssignmentEligibilityNoPredictionSubTest();
+    }
+
+    void RunRealCardResourceMigrationBasicTestSequence()
+    {
+        Debug.Log("===== RealCardResourceMigrationBasic 聚合测试开始 =====");
+
+        RunRealCardResourceJsonFoundSubTest();
+        RunRealCardResourceRuleDeserializedSubTest();
+        RunRealCardResourceAssignWithNoBulletSubTest();
+        RunRealCardResourceFallbackZeroPointSubTest();
+        RunRealCardResourceNextCardStillStacksSubTest();
+        RunRealCardResourceOneBulletNormalVersionSubTest();
+        RunRealCardResourceExactThreeBulletBonusSubTest();
+        RunRealCardResourceWinConsumesOneBulletSubTest();
+        RunRealCardResourceLoseConsumesNoBulletSubTest();
+        RunRealCardResourcePreviousSlotReloadSubTest();
+
+        Debug.Log("===== RealCardResourceMigrationBasic 聚合测试结束 =====");
+    }
+
+    void RunRealCardResourceJsonFoundSubTest()
+    {
+        List<CardTestData> cards = CardDataLoader.LoadCardData();
+        CardTestData card = FindRealBulletAttackCard(cards);
+
+        bool found =
+            cards != null &&
+            CountCardsByID(cards, "atk_bullet_001") == 1 &&
+            card != null &&
+            card.cardID == "atk_bullet_001" &&
+            card.cardName == "基础射击" &&
+            card.cardType == CardType.Attack &&
+            !card.isSinCard &&
+            card.isClashable &&
+            card.minPoint == 1 &&
+            card.maxPoint == 10;
+
+        Debug.Log("模式55 A 找到真实JSON卡atk_bullet_001：" + found);
+        Debug.Log("模式55 A cardID唯一：" + (cards != null && CountCardsByID(cards, "atk_bullet_001") == 1));
+    }
+
+    void RunRealCardResourceRuleDeserializedSubTest()
+    {
+        CardTestData card = LoadRealBulletAttackCard();
+        CardResourceRuleData rule = card != null ? card.resourceRule : null;
+
+        bool ruleCorrect =
+            rule != null &&
+            rule.resourceType == "BuffStack" &&
+            rule.resourceID == "Bullet" &&
+            rule.requiredStackForNormalVersion == 1 &&
+            rule.fallbackMinPoint == 0 &&
+            rule.fallbackMaxPoint == 0 &&
+            rule.pointPerStack == 1 &&
+            rule.exactStackForBonus == 3 &&
+            rule.exactStackPointBonus == 3 &&
+            rule.consumeAmountOnSuccess == 1;
+
+        bool noBulletHardCondition = !HasBulletHardUseCondition(card);
+        bool noDuplicateResourceRules =
+            card != null &&
+            (card.resourceRules == null || CountResourceRulesByID(card.resourceRules, "Bullet") <= 1);
+
+        Debug.Log("模式55 B resourceRule字段完整正确：" + ruleCorrect);
+        Debug.Log("模式55 B 不存在BuffStackAtLeast Bullet硬条件：" + noBulletHardCondition);
+        Debug.Log("模式55 B resourceID大小写准确且无重复资源规则：" + (ruleCorrect && noDuplicateResourceRules));
+    }
+
+    void RunRealCardResourceAssignWithNoBulletSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("real55_c", 30, 30, 50, 10, 3, 8);
+        BattleCardState attack = CreateRealBulletAttackCardState(context.allyA, "real55_c_attack");
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        CardEligibilityResult result;
+        bool assigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, attack, context.enemy, out result);
+        BattleActionSlot slot = BattleActionSlotManager.GetSlot(slots, context.allyA, 1);
+
+        bool worked =
+            attack != null &&
+            assigned &&
+            result.isEligible &&
+            slot != null &&
+            object.ReferenceEquals(slot.cardState, attack) &&
+            CountBuffStack(context.allyA, "Bullet") == 0;
+
+        Debug.Log("模式55 C Bullet为0仍允许安排：" + worked);
+    }
+
+    void RunRealCardResourceFallbackZeroPointSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("real55_d", 30, 30, 50, 10, 3, 8);
+        BattleCardState attack = CreateRealBulletAttackCardState(context.allyA, "real55_d_attack");
+        BattleActionSlot slot = AssignRealBulletAttackFreeAction(context, attack, 1);
+        int enemyHPBefore = context.enemy.currentHP;
+
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+
+        bool worked =
+            result != null &&
+            result.resultType == "FreeAttack" &&
+            result.isSuccess &&
+            result.shouldCompleteItem &&
+            result.playerPoint == 0 &&
+            result.damage == 0 &&
+            context.enemy.currentHP == enemyHPBefore &&
+            CountBuffStack(context.allyA, "Bullet") == 0;
+
+        Debug.Log("模式55 D Bullet为0执行0点降级版本：" + worked);
+    }
+
+    void RunRealCardResourceNextCardStillStacksSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("real55_e", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("NextCardPointUp", 1, 1);
+        BattleCardState attack = CreateRealBulletAttackCardState(context.allyA, "real55_e_attack");
+        BattleActionSlot slot = AssignRealBulletAttackFreeAction(context, attack, 1);
+
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+
+        bool worked =
+            result != null &&
+            result.resultType == "FreeAttack" &&
+            result.playerPoint == 1 &&
+            CountBuffStack(context.allyA, "NextCardPointUp") == 0 &&
+            CountBuffStack(context.allyA, "Bullet") == 0;
+
+        Debug.Log("模式55 E 无弹时NextCard仍然叠加：" + worked);
+    }
+
+    void RunRealCardResourceOneBulletNormalVersionSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("real55_f", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 1, -1);
+        BattleCardState attack = CreateRealBulletAttackCardState(context.allyA, "real55_f_attack");
+        BattleActionSlot slot = AssignRealBulletAttackFreeAction(context, attack, 1);
+
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+
+        bool worked =
+            result != null &&
+            result.resultType == "FreeAttack" &&
+            result.playerPoint >= 2 &&
+            result.playerPoint <= 11 &&
+            CountBuffStack(context.allyA, "Bullet") == 0;
+
+        Debug.Log("模式55 F 1层Bullet启用正常版本范围：" + worked);
+    }
+
+    void RunRealCardResourceExactThreeBulletBonusSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("real55_g", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        BattleCardState attack = CreateRealBulletAttackCardState(context.allyA, "real55_g_attack");
+        BattleActionSlot slot = AssignRealBulletAttackFreeAction(context, attack, 1);
+
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+
+        bool worked =
+            result != null &&
+            result.resultType == "FreeAttack" &&
+            result.playerPoint >= 7 &&
+            result.playerPoint <= 16 &&
+            CountBuffStack(context.allyA, "Bullet") == 2;
+
+        Debug.Log("模式55 G 正好3层Bullet资源修正为+6：" + worked);
+    }
+
+    void RunRealCardResourceWinConsumesOneBulletSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("real55_h", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        BattleCardState attack = CreateRealBulletAttackCardState(context.allyA, "real55_h_attack");
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "real55_h_enemy", 1, 0);
+        int guiltBefore = context.allyA.currentGuilt;
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, attack),
+            CreateEnemyAttackIntent("real55_h_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.resultType == "PlayerWin" &&
+            result.playerCardUsed &&
+            CountBuffStack(context.allyA, "Bullet") == 2 &&
+            attack != null &&
+            !attack.cardData.isSinCard &&
+            context.allyA.currentGuilt == guiltBefore &&
+            attack.currentUseCount == 0 &&
+            !attack.isConsumed;
+
+        Debug.Log("模式55 H 成功使用后只消耗1层Bullet且非罪卡：" + worked);
+    }
+
+    void RunRealCardResourceLoseConsumesNoBulletSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("real55_i", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        BattleCardState attack = CreateRealBulletAttackCardState(context.allyA, "real55_i_attack");
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "real55_i_enemy", 30, 0);
+        int guiltBefore = context.allyA.currentGuilt;
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, attack),
+            CreateEnemyAttackIntent("real55_i_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.resultType == "EnemyWin" &&
+            !result.playerCardUsed &&
+            CountBuffStack(context.allyA, "Bullet") == 3 &&
+            context.allyA.currentGuilt == guiltBefore &&
+            attack.currentUseCount == 0 &&
+            !attack.isConsumed;
+
+        Debug.Log("模式55 I Attack失败不消耗Bullet且不走罪卡逻辑：" + worked);
+    }
+
+    void RunRealCardResourcePreviousSlotReloadSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("real55_j", 30, 30, 50, 20, 3, 8);
+        BattleCardState reloadAbility = CreateBattleEndedAbilityCard(context.allyA, "real55_j_reload", "Bullet");
+        BattleCardState attack = CreateRealBulletAttackCardState(context.allyA, "real55_j_attack");
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        CardEligibilityResult reloadResult;
+        bool reloadAssigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, reloadAbility, context.allyA, out reloadResult);
+        CardEligibilityResult attackResult;
+        bool attackAssigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 2, context.allyA, attack, context.enemy, out attackResult);
+        bool attackArrangedBeforeBullet = attackAssigned && CountBuffStack(context.allyA, "Bullet") == 0;
+
+        BattleActionSlot reloadSlot = BattleActionSlotManager.GetSlot(slots, context.allyA, 1);
+        BattleActionSlot attackSlot = BattleActionSlotManager.GetSlot(slots, context.allyA, 2);
+        BattleExecutionPlan plan = CreateManualFreeActionPlan(reloadSlot, attackSlot);
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        bool worked =
+            reloadAssigned &&
+            reloadResult.isEligible &&
+            attackArrangedBeforeBullet &&
+            attackResult.isEligible &&
+            reloadSlot != null &&
+            attackSlot != null &&
+            reloadSlot.isUsed &&
+            attackSlot.isUsed &&
+            context.enemy.currentHP <= 48 &&
+            CountBuffStack(context.allyA, "Bullet") == 0 &&
+            plan.isCompleted;
+
+        Debug.Log("模式55 J 前序装填后后续真实射击读取实际Bullet：" + worked);
+    }
+
+    void RunCardAssignmentEligibilityGuiltInsufficientSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_a", 30, 30, 50, 10, 3, 8);
+        context.allyA.currentGuilt = 15;
+        BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_a_card", CreateGuiltAtLeastCondition(20));
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        CardEligibilityResult result;
+        bool assigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, card, context.enemy, out result);
+        BattleActionSlot slot = BattleActionSlotManager.GetSlot(slots, context.allyA, 1);
+
+        Debug.Log("模式54 A Guilt不足拒绝安排：" + (!assigned && result.failureReason == CardEligibilityFailureReason.GuiltRequirementNotMet));
+        Debug.Log("模式54 A 失败原因与数值正确：" + (result.requiredValue == 20 && result.currentValue == 15));
+        Debug.Log("模式54 A 槽位保持空：" + IsSlotEmpty(slot));
+    }
+
+    void RunCardAssignmentEligibilityGuiltExactSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_b", 30, 30, 50, 10, 3, 8);
+        context.allyA.currentGuilt = 20;
+        BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_b_card", CreateGuiltAtLeastCondition(20));
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        CardEligibilityResult result;
+        bool assigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, card, context.enemy, out result);
+        BattleActionSlot slot = BattleActionSlotManager.GetSlot(slots, context.allyA, 1);
+
+        Debug.Log("模式54 B Guilt刚好满足允许安排：" + (assigned && result.isEligible && slot != null && object.ReferenceEquals(slot.cardState, card)));
+    }
+
+    void RunCardAssignmentEligibilityGuiltAboveSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_c", 30, 30, 50, 10, 3, 8);
+        context.allyA.currentGuilt = 25;
+        BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_c_card", CreateGuiltAtLeastCondition(20));
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        CardEligibilityResult result;
+        bool assigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, card, context.enemy, out result);
+
+        Debug.Log("模式54 C Guilt超过要求允许安排：" + (assigned && result.isEligible));
+    }
+
+    void RunCardAssignmentEligibilityBuffInsufficientSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_d", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Strength", 1, 2);
+        BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_d_card", CreateBuffStackAtLeastCondition("Strength", 2));
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        CardEligibilityResult result;
+        bool assigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, card, context.enemy, out result);
+        BattleActionSlot slot = BattleActionSlotManager.GetSlot(slots, context.allyA, 1);
+
+        Debug.Log("模式54 D Buff不足拒绝安排：" + (!assigned && result.failureReason == CardEligibilityFailureReason.BuffStackRequirementNotMet));
+        Debug.Log("模式54 D Buff原因与数值正确：" + (result.buffID == "Strength" && result.requiredValue == 2 && result.currentValue == 1));
+        Debug.Log("模式54 D 槽位保持空：" + IsSlotEmpty(slot));
+    }
+
+    void RunCardAssignmentEligibilityBuffExactSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_e", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Strength", 2, 2);
+        BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_e_card", CreateBuffStackAtLeastCondition("Strength", 2));
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        CardEligibilityResult result;
+        bool assigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, card, context.enemy, out result);
+
+        Debug.Log("模式54 E Buff刚好满足允许安排：" + (assigned && result.isEligible));
+    }
+
+    void RunCardAssignmentEligibilityMultipleConditionsSubTest()
+    {
+        BattleEndedTestContext guiltOkContext = CreateBattleEndedTestContext("elig54_f_guilt_ok", 30, 30, 50, 10, 3, 8);
+        guiltOkContext.allyA.currentGuilt = 20;
+        guiltOkContext.allyA.AddBuff("Strength", 1, 2);
+        BattleCardState guiltOkCard = CreateEligibilityAttackCard(guiltOkContext.allyA, "elig54_f_guilt_ok_card", CreateGuiltAtLeastCondition(20), CreateBuffStackAtLeastCondition("Strength", 2));
+        List<BattleActionSlot> guiltOkSlots = BattleActionSlotManager.CreatePartyActionSlots(guiltOkContext.allyA, guiltOkContext.allyB, 2);
+        CardEligibilityResult guiltOkResult;
+        bool guiltOkAssigned = BattleActionSlotManager.AssignFreeAction(guiltOkSlots, guiltOkContext.allyA, 1, guiltOkContext.allyA, guiltOkCard, guiltOkContext.enemy, out guiltOkResult);
+
+        BattleEndedTestContext buffOkContext = CreateBattleEndedTestContext("elig54_f_buff_ok", 30, 30, 50, 10, 3, 8);
+        buffOkContext.allyA.currentGuilt = 15;
+        buffOkContext.allyA.AddBuff("Strength", 2, 2);
+        BattleCardState buffOkCard = CreateEligibilityAttackCard(buffOkContext.allyA, "elig54_f_buff_ok_card", CreateGuiltAtLeastCondition(20), CreateBuffStackAtLeastCondition("Strength", 2));
+        List<BattleActionSlot> buffOkSlots = BattleActionSlotManager.CreatePartyActionSlots(buffOkContext.allyA, buffOkContext.allyB, 2);
+        CardEligibilityResult buffOkResult;
+        bool buffOkAssigned = BattleActionSlotManager.AssignFreeAction(buffOkSlots, buffOkContext.allyA, 1, buffOkContext.allyA, buffOkCard, buffOkContext.enemy, out buffOkResult);
+
+        BattleEndedTestContext bothOkContext = CreateBattleEndedTestContext("elig54_f_both_ok", 30, 30, 50, 10, 3, 8);
+        bothOkContext.allyA.currentGuilt = 20;
+        bothOkContext.allyA.AddBuff("Strength", 2, 2);
+        BattleCardState bothOkCard = CreateEligibilityAttackCard(bothOkContext.allyA, "elig54_f_both_ok_card", CreateGuiltAtLeastCondition(20), CreateBuffStackAtLeastCondition("Strength", 2));
+        List<BattleActionSlot> bothOkSlots = BattleActionSlotManager.CreatePartyActionSlots(bothOkContext.allyA, bothOkContext.allyB, 2);
+        CardEligibilityResult bothOkResult;
+        bool bothOkAssigned = BattleActionSlotManager.AssignFreeAction(bothOkSlots, bothOkContext.allyA, 1, bothOkContext.allyA, bothOkCard, bothOkContext.enemy, out bothOkResult);
+
+        Debug.Log("模式54 F 多条件Guilt满足但Buff不足拒绝：" + (!guiltOkAssigned && guiltOkResult.failureReason == CardEligibilityFailureReason.BuffStackRequirementNotMet));
+        Debug.Log("模式54 F 多条件Buff满足但Guilt不足拒绝：" + (!buffOkAssigned && buffOkResult.failureReason == CardEligibilityFailureReason.GuiltRequirementNotMet));
+        Debug.Log("模式54 F 多条件全部满足允许：" + (bothOkAssigned && bothOkResult.isEligible));
+    }
+
+    void RunCardAssignmentEligibilityPendingBuffIgnoredSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_g", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddPendingBuff("Strength", 2, 1, 1, 1, 1);
+        BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_g_card", CreateBuffStackAtLeastCondition("Strength", 1));
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        CardEligibilityResult result;
+        bool assigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, card, context.enemy, out result);
+
+        Debug.Log("模式54 G Pending Buff不计入资格：" + (!assigned && result.currentValue == 0 && context.allyA.pendingBuffs.Count == 1));
+    }
+
+    void RunCardAssignmentEligibilityPermanentBuffSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_h", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Strength", 2, -1);
+        BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_h_card", CreateBuffStackAtLeastCondition("Strength", 2));
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        CardEligibilityResult result;
+        bool assigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, card, context.enemy, out result);
+
+        Debug.Log("模式54 H Permanent Buff计入资格：" + (assigned && CountBuffStack(context.allyA, "Strength") == 2));
+    }
+
+    void RunCardAssignmentEligibilitySoftResourceNotLockedSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_i", 30, 30, 50, 10, 3, 8);
+        BattleCardState card = CreateResourceAttackCard(context.allyA, "elig54_i_card", 5, 5, 1, 2, 2, 0, 0, 0, 1);
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        CardEligibilityResult result;
+        bool assigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, card, context.enemy, out result);
+
+        Debug.Log("模式54 I 软资源Bullet不足不锁卡：" + (assigned && result.isEligible && CountBuffStack(context.allyA, "Bullet") == 0));
+    }
+
+    void RunCardAssignmentEligibilityExplicitBulletConditionSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_j", 30, 30, 50, 10, 3, 8);
+        BattleCardState card = CreateResourceAttackCard(context.allyA, "elig54_j_card", 5, 5, 1, 2, 2, 0, 0, 0, 1);
+        card.cardData.useConditions = new CardUseConditionData[] { CreateBuffStackAtLeastCondition("Bullet", 1) };
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        CardEligibilityResult result;
+        bool assigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, card, context.enemy, out result);
+
+        Debug.Log("模式54 J 显式Bullet硬条件锁卡：" + (!assigned && result.failureReason == CardEligibilityFailureReason.BuffStackRequirementNotMet && result.buffID == "Bullet"));
+    }
+
+    void RunCardAssignmentEligibilityCooldownConsumedSubTest()
+    {
+        BattleEndedTestContext cooldownContext = CreateBattleEndedTestContext("elig54_k_cd", 30, 30, 50, 10, 3, 8);
+        BattleCardState cooldownCard = CreateEligibilityAttackCard(cooldownContext.allyA, "elig54_k_cd_card");
+        cooldownCard.currentCooldown = 2;
+        List<BattleActionSlot> cooldownSlots = BattleActionSlotManager.CreatePartyActionSlots(cooldownContext.allyA, cooldownContext.allyB, 2);
+        CardEligibilityResult cooldownResult;
+        bool cooldownAssigned = BattleActionSlotManager.AssignFreeAction(cooldownSlots, cooldownContext.allyA, 1, cooldownContext.allyA, cooldownCard, cooldownContext.enemy, out cooldownResult);
+
+        BattleEndedTestContext consumedContext = CreateBattleEndedTestContext("elig54_k_consumed", 30, 30, 50, 10, 3, 8);
+        BattleCardState consumedCard = CreateEligibilityAttackCard(consumedContext.allyA, "elig54_k_consumed_card");
+        consumedCard.isConsumed = true;
+        List<BattleActionSlot> consumedSlots = BattleActionSlotManager.CreatePartyActionSlots(consumedContext.allyA, consumedContext.allyB, 2);
+        CardEligibilityResult consumedResult;
+        bool consumedAssigned = BattleActionSlotManager.AssignFreeAction(consumedSlots, consumedContext.allyA, 1, consumedContext.allyA, consumedCard, consumedContext.enemy, out consumedResult);
+
+        Debug.Log("模式54 K CD中拒绝且原因明确：" + (!cooldownAssigned && cooldownResult.failureReason == CardEligibilityFailureReason.CardOnCooldown && IsSlotEmpty(BattleActionSlotManager.GetSlot(cooldownSlots, cooldownContext.allyA, 1))));
+        Debug.Log("模式54 K 已消耗拒绝且原因明确：" + (!consumedAssigned && consumedResult.failureReason == CardEligibilityFailureReason.CardConsumed && IsSlotEmpty(BattleActionSlotManager.GetSlot(consumedSlots, consumedContext.allyA, 1))));
+    }
+
+    void RunCardAssignmentEligibilityDeadActorSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_l", 30, 0, 50, 10, 3, 8);
+        BattleCardState card = CreateEligibilityAttackCard(context.allyB, "elig54_l_card");
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        CardEligibilityResult result;
+        bool assigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyB, 1, context.allyB, card, context.enemy, out result);
+
+        Debug.Log("模式54 L 死亡角色拒绝安排：" + (!assigned && result.failureReason == CardEligibilityFailureReason.ActorDead && IsSlotEmpty(BattleActionSlotManager.GetSlot(slots, context.allyB, 1))));
+    }
+
+    void RunCardAssignmentEligibilityStateSafetySubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_m", 30, 30, 50, 20, 20, 8);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "elig54_m_enemy", 5, 0);
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("elig54_m_intent", context.enemy, enemyAttack, context.allyA, 1);
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        BattleCardState oldResponse = CreateEligibilityAttackCard(context.allyA, "elig54_m_old");
+        CardEligibilityResult oldResult;
+        BattleActionSlotManager.AssignResponseToEnemyIntent(slots, context.allyA, 1, context.allyA, oldResponse, intent, out oldResult);
+
+        BattleActionSlot oldSlot = BattleActionSlotManager.GetSlot(slots, context.allyA, 1);
+        BattleActionSlot newSlot = BattleActionSlotManager.GetSlot(slots, context.allyB, 1);
+        BattleCardState oldCardBefore = oldSlot.cardState;
+        BattleEnemyIntent oldIntentBefore = oldSlot.enemyIntent;
+        CharacterData actualTargetBefore = intent.actualTargetCharacter;
+        int actualSlotBefore = intent.actualTargetSlotIndex;
+        bool respondedBefore = intent.isResponded;
+        CharacterData originalTargetBefore = intent.originalTargetCharacter;
+
+        context.allyB.currentGuilt = 0;
+        BattleCardState invalidNew = CreateEligibilityAttackCard(context.allyB, "elig54_m_invalid", CreateGuiltAtLeastCondition(20));
+        CardEligibilityResult invalidResult;
+        bool invalidAssigned = BattleActionSlotManager.AssignResponseToEnemyIntent(slots, context.allyB, 1, context.allyB, invalidNew, intent, out invalidResult);
+
+        BattleCardState occupiedCard = CreateEligibilityAttackCard(context.allyA, "elig54_m_occupied");
+        CardEligibilityResult occupiedResult;
+        bool occupiedAssigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, occupiedCard, context.enemy, out occupiedResult);
+
+        bool responseStateSafe =
+            !invalidAssigned &&
+            object.ReferenceEquals(oldSlot.cardState, oldCardBefore) &&
+            object.ReferenceEquals(oldSlot.enemyIntent, oldIntentBefore) &&
+            object.ReferenceEquals(intent.actualTargetCharacter, actualTargetBefore) &&
+            intent.actualTargetSlotIndex == actualSlotBefore &&
+            intent.isResponded == respondedBefore &&
+            object.ReferenceEquals(intent.originalTargetCharacter, originalTargetBefore) &&
+            IsSlotEmpty(newSlot);
+
+        bool occupiedSafe = !occupiedAssigned &&
+            occupiedResult.failureReason == CardEligibilityFailureReason.SlotOccupied &&
+            object.ReferenceEquals(oldSlot.cardState, oldCardBefore);
+
+        Debug.Log("模式54 M 响应失败不污染槽位和敌人意图：" + responseStateSafe);
+        Debug.Log("模式54 M 已占用槽位拒绝且原卡保留：" + occupiedSafe);
+    }
+
+    void RunCardAssignmentEligibilityPureReadSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_n", 30, 30, 50, 10, 3, 8);
+        context.allyA.currentGuilt = 15;
+        context.allyA.AddBuff("Strength", 1, 2);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddPendingBuff("Strength", 2, 1, 1, 1, 1);
+        BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_n_card", CreateGuiltAtLeastCondition(20), CreateBuffStackAtLeastCondition("Strength", 2));
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+
+        int guiltBefore = context.allyA.currentGuilt;
+        int strengthBefore = CountBuffStack(context.allyA, "Strength");
+        int bulletBefore = CountBuffStack(context.allyA, "Bullet");
+        int pendingBefore = context.allyA.pendingBuffs.Count;
+        int cooldownBefore = card.currentCooldown;
+        int useCountBefore = card.currentUseCount;
+        bool consumedBefore = card.isConsumed;
+
+        CardEligibilityResult query = BattleCardManager.EvaluateCardEligibility(context.allyA, context.enemy, card);
+        CardEligibilityResult assignResult;
+        bool assigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, card, context.enemy, out assignResult);
+
+        bool pure =
+            !query.isEligible &&
+            !assigned &&
+            context.allyA.currentGuilt == guiltBefore &&
+            CountBuffStack(context.allyA, "Strength") == strengthBefore &&
+            CountBuffStack(context.allyA, "Bullet") == bulletBefore &&
+            context.allyA.pendingBuffs.Count == pendingBefore &&
+            card.currentCooldown == cooldownBefore &&
+            card.currentUseCount == useCountBefore &&
+            card.isConsumed == consumedBefore &&
+            IsSlotEmpty(BattleActionSlotManager.GetSlot(slots, context.allyA, 1));
+
+        Debug.Log("模式54 N 准备期资格检查纯读取：" + pure);
+    }
+
+    void RunCardAssignmentEligibilityExecutionRecheckSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_o", 30, 30, 50, 20, 3, 8);
+        context.allyA.AddBuff("Strength", 1, 2);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_o_card", CreateBuffStackAtLeastCondition("Strength", 1));
+        card.cardData.resourceRule = CreateBuffStackResourceRule("Bullet", 1, 1, 1, 0, 0, 0, 1);
+        AddProbeEffect(card, BattleTiming.ActionStart, "Elig54OActionStart");
+        AddProbeEffect(card, BattleTiming.BeforeUse, "Elig54OBeforeUse");
+        AddProbeEffect(card, BattleTiming.Resolved, "Elig54OResolved");
+
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        CardEligibilityResult assignResult;
+        bool assigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, card, context.enemy, out assignResult);
+        BattleActionSlot slot = BattleActionSlotManager.GetSlot(slots, context.allyA, 1);
+
+        RemoveAllBuffs(context.allyA, "Strength");
+        BattleExecutionPlan plan = CreateManualFreeActionPlan(slot);
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+        BattleExecutionItem item = plan.executionItems.Count > 0 ? plan.executionItems[0] : null;
+
+        bool rechecked =
+            assigned &&
+            IsExecutionItemState(item, BattleExecutionItemStatus.Skipped, BattleExecutionItemOutcomeReason.ActionUnavailable, true) &&
+            plan.isCompleted &&
+            !slot.isUsed &&
+            card.currentCooldown == 0 &&
+            card.currentUseCount == 0 &&
+            CountBuffStack(context.allyA, "Bullet") == 3 &&
+            CountBuffStack(context.allyA, "Elig54OActionStart") == 0 &&
+            CountBuffStack(context.allyA, "Elig54OBeforeUse") == 0 &&
+            CountBuffStack(context.allyA, "Elig54OResolved") == 0;
+
+        Debug.Log("模式54 O 执行阶段复检ActionUnavailable保护：" + rechecked);
+    }
+
+    void RunCardAssignmentEligibilityNoPredictionSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_p", 30, 30, 50, 20, 3, 8);
+        context.allyA.currentGuilt = 15;
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        BattleCardState guiltGainCard = CreateEligibilityAttackCard(context.allyA, "elig54_p_gain");
+        guiltGainCard.cardData.isSinCard = true;
+        guiltGainCard.cardData.guiltGain = 10;
+        guiltGainCard.cardData.sinCardUseRule = SinCardUseRule.UseCount;
+        guiltGainCard.cardData.maxUseCount = 3;
+        CardEligibilityResult firstResult;
+        BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 1, context.allyA, guiltGainCard, context.enemy, out firstResult);
+
+        BattleCardState requiredCard = CreateEligibilityAttackCard(context.allyA, "elig54_p_required", CreateGuiltAtLeastCondition(20));
+        CardEligibilityResult secondResult;
+        bool secondAssigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 2, context.allyA, requiredCard, context.enemy, out secondResult);
+
+        Debug.Log("模式54 P 不预测牌序结果仍按当前Guilt拒绝：" + (!secondAssigned && secondResult.failureReason == CardEligibilityFailureReason.GuiltRequirementNotMet && secondResult.currentValue == 15));
+    }
+
+    void RunCardResourceFallbackBasePointSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_a", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("NextCardPointUp", 1, 1);
+        BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_a_attack", 1, 10, 3, 0, 0, 0, 0, 0, 1);
+
+        BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
+        slot.AssignFreeAction(context.allyA, attack, context.enemy);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+
+        bool worked =
+            result != null &&
+            result.resultType == "FreeAttack" &&
+            result.playerPoint == 1 &&
+            CountBuffStack(context.allyA, "Bullet") == 0;
+
+        Debug.Log("模式53 A 无弹降级只替换基础点数且不ActionUnavailable：" + worked);
+    }
+
+    void RunCardResourceActionStartAffectsCurrentSnapshotSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_b", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 2, -1);
+        BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_b_attack", 1, 1, 3, 0, 0, 1, 3, 3, 0);
+        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Bullet", 1, -1));
+
+        BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
+        slot.AssignFreeAction(context.allyA, attack, context.enemy);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+
+        bool worked =
+            result != null &&
+            result.playerPoint == 7 &&
+            CountBuffStack(context.allyA, "Bullet") == 3;
+
+        Debug.Log("模式53 B ActionStart获得Bullet影响当前ResourceSnapshot：" + worked);
+    }
+
+    void RunCardResourceBeforeUseDoesNotAffectCurrentSnapshotSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_c", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 2, -1);
+        BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_c_attack", 1, 1, 3, 0, 0, 1, 3, 3, 0);
+        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.BeforeUse, "Bullet", 1, -1));
+
+        BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
+        slot.AssignFreeAction(context.allyA, attack, context.enemy);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+
+        bool worked =
+            result != null &&
+            result.playerPoint == 2 &&
+            CountBuffStack(context.allyA, "Bullet") == 3;
+
+        Debug.Log("模式53 C BeforeUse获得Bullet不回改当前ResourceSnapshot：" + worked);
+    }
+
+    void RunCardResourcePointPerStackSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_d", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 2, -1);
+        BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_d_attack", 1, 1, 1, 0, 0, 1, 0, 0, 0);
+
+        BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
+        slot.AssignFreeAction(context.allyA, attack, context.enemy);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+
+        Debug.Log("模式53 D 每层资源点数加成：" + (result != null && result.playerPoint == 3));
+    }
+
+    void RunCardResourceExactStackBonusSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_e", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_e_attack", 1, 1, 1, 0, 0, 1, 3, 3, 0);
+
+        BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
+        slot.AssignFreeAction(context.allyA, attack, context.enemy);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+
+        Debug.Log("模式53 E 精确3层额外奖励：" + (result != null && result.playerPoint == 7));
+    }
+
+    void RunCardResourceAttackWinConsumeSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_f", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_f_attack", 8, 8, 3, 0, 0, 0, 0, 0, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "resource53_f_enemy", 5, 0);
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, attack),
+            CreateEnemyAttackIntent("resource53_f_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.resultType == "PlayerWin" &&
+            result.playerCardUsed &&
+            CountBuffStack(context.allyA, "Bullet") == 2;
+
+        Debug.Log("模式53 F Attack胜利后消耗资源：" + worked);
+    }
+
+    void RunCardResourceAttackLoseNoConsumeSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_g", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_g_attack", 4, 4, 3, 0, 0, 0, 0, 0, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "resource53_g_enemy", 8, 0);
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, attack),
+            CreateEnemyAttackIntent("resource53_g_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.resultType == "EnemyWin" &&
+            !result.playerCardUsed &&
+            CountBuffStack(context.allyA, "Bullet") == 3;
+
+        Debug.Log("模式53 G Attack失败不消耗默认资源：" + worked);
+    }
+
+    void RunCardResourceDodgeVsAttackConsumeSubTest()
+    {
+        BattleEndedTestContext successContext = CreateBattleEndedTestContext("resource53_h_success", 30, 30, 50, 10, 3, 8);
+        successContext.allyA.AddBuff("Bullet", 3, -1);
+        successContext.enemy.AddBuff("Bullet", 3, -1);
+        BattleCardState successDodge = CreateResourceDodgeCard(successContext.allyA, "resource53_h_success_dodge", 9, 9, 3, 0, 0, 0, 0, 0, 1);
+        BattleCardState successEnemy = CreateResourceAttackCard(successContext.enemy, "resource53_h_success_enemy", 5, 5, 3, 0, 0, 0, 0, 0, 1);
+
+        BattleResolveResult successResult = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(successContext.allyA, successDodge),
+            CreateEnemyAttackIntent("resource53_h_success_intent", successContext.enemy, successEnemy, successContext.allyA, 1)
+        );
+
+        bool dodgeSuccessConsumed =
+            successResult != null &&
+            successResult.resultType == "DodgeSuccess" &&
+            CountBuffStack(successContext.allyA, "Bullet") == 2 &&
+            CountBuffStack(successContext.enemy, "Bullet") == 2;
+
+        BattleEndedTestContext failedContext = CreateBattleEndedTestContext("resource53_h_failed", 30, 30, 50, 10, 3, 8);
+        failedContext.allyA.AddBuff("Bullet", 3, -1);
+        failedContext.enemy.AddBuff("Bullet", 3, -1);
+        BattleCardState failedDodge = CreateResourceDodgeCard(failedContext.allyA, "resource53_h_failed_dodge", 4, 4, 3, 0, 0, 0, 0, 0, 1);
+        BattleCardState failedEnemy = CreateResourceAttackCard(failedContext.enemy, "resource53_h_failed_enemy", 8, 8, 3, 0, 0, 0, 0, 0, 1);
+
+        BattleResolveResult failedResult = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(failedContext.allyA, failedDodge),
+            CreateEnemyAttackIntent("resource53_h_failed_intent", failedContext.enemy, failedEnemy, failedContext.allyA, 1)
+        );
+
+        bool dodgeFailedConsumed =
+            failedResult != null &&
+            failedResult.resultType == "DodgeFailed" &&
+            CountBuffStack(failedContext.allyA, "Bullet") == 2 &&
+            CountBuffStack(failedContext.enemy, "Bullet") == 2;
+
+        Debug.Log("模式53 H DodgeSuccess时Dodge与Attack均消耗资源：" + dodgeSuccessConsumed);
+        Debug.Log("模式53 H DodgeFailed时Dodge与Attack均消耗资源：" + dodgeFailedConsumed);
+    }
+
+    void RunCardResourceDefenseConsumeSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_i", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        context.enemy.AddBuff("Bullet", 3, -1);
+        BattleCardState defense = CreateResourceDefenseCard(context.allyA, "resource53_i_defense", 7, 7, 3, 0, 0, 0, 0, 0, 1);
+        BattleCardState enemyAttack = CreateResourceAttackCard(context.enemy, "resource53_i_enemy", 5, 5, 3, 0, 0, 0, 0, 0, 1);
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, defense),
+            CreateEnemyAttackIntent("resource53_i_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.resultType == "DefenseFullBlock" &&
+            CountBuffStack(context.allyA, "Bullet") == 2 &&
+            CountBuffStack(context.enemy, "Bullet") == 2;
+
+        Debug.Log("模式53 I Defense正常结算后消耗资源：" + worked);
+    }
+
+    void RunCardResourceFreeAttackConsumeSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_j", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_j_attack", 5, 5, 3, 0, 0, 0, 0, 0, 1);
+
+        BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
+        slot.AssignFreeAction(context.allyA, attack, context.enemy);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+
+        Debug.Log("模式53 J FreeAttack成功后消耗资源：" + (result != null && result.resultType == "FreeAttack" && CountBuffStack(context.allyA, "Bullet") == 2));
+    }
+
+    void RunCardResourceUnrespondedEnemyAttackConsumeSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_k", 30, 30, 50, 10, 3, 8);
+        context.enemy.AddBuff("Bullet", 3, -1);
+        BattleCardState enemyAttack = CreateResourceAttackCard(context.enemy, "resource53_k_enemy", 5, 5, 3, 0, 0, 0, 0, 0, 1);
+
+        BattleResolveResult result = BattleResolver.ResolveUnrespondedEnemyIntent(
+            CreateEnemyAttackIntent("resource53_k_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        int enemyBulletAfter = CountBuffStack(context.enemy, "Bullet");
+        bool worked =
+            result != null &&
+            result.resultType == "UnrespondedEnemyAttack" &&
+            result.isSuccess &&
+            result.shouldCompleteItem &&
+            !result.playerCardUsed &&
+            result.enemyCardUsed &&
+            enemyBulletAfter == 2;
+
+        Debug.Log(
+            "模式53 K resultType / enemyCardUsed / Bullet剩余：" +
+            (result != null ? result.resultType : "null") +
+            " / " +
+            (result != null && result.enemyCardUsed) +
+            " / " +
+            enemyBulletAfter
+        );
+        Debug.Log("模式53 K Unresponded敌人Attack成功后消耗资源：" + worked);
+    }
+
+    void RunCardResourceActionUnavailableNoActionStartSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_l", 30, 30, 50, 10, 3, 8);
+        BattleCardState attack = CreateResourceAttackCard(context.allyB, "resource53_l_attack", 5, 5, 1, 0, 0, 0, 0, 0, 1);
+        AddBulletCondition(attack.cardData, 3);
+        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Resource53LActionStart", 1, 1));
+
+        BattleActionSlot slot = new BattleActionSlot(context.allyB, 1);
+        slot.AssignFreeAction(context.allyB, attack, context.enemy);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+
+        bool worked =
+            result != null &&
+            result.resultType == "ActionUnavailable" &&
+            CountBuffStack(context.allyB, "Resource53LActionStart") == 0 &&
+            CountBuffStack(context.allyB, "Bullet") == 0;
+
+        Debug.Log("模式53 L ActionUnavailable不触发ActionStart不捕获资源不消耗：" + worked);
+    }
+
+    void RunCardResourceTieRetrySnapshotSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_m", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 2, -1);
+        context.enemy.AddBuff("Bullet", 2, -1);
+        BattleCardState playerAttack = CreateResourceAttackCard(context.allyA, "resource53_m_player", 5, 5, 1, 0, 0, 0, 0, 0, 1);
+        BattleCardState enemyAttack = CreateResourceAttackCard(context.enemy, "resource53_m_enemy", 5, 5, 1, 0, 0, 0, 0, 0, 1);
+        playerAttack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Bullet", 1, -1));
+        enemyAttack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Bullet", 1, -1));
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, playerAttack),
+            CreateEnemyAttackIntent("resource53_m_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.resultType == "TieLimit" &&
+            CountBuffStack(context.allyA, "Bullet") == 3 &&
+            CountBuffStack(context.enemy, "Bullet") == 3;
+
+        Debug.Log("模式53 M Tie重投不重复触发ActionStart且复用ResourceSnapshot：" + worked);
+    }
+
+    void RunCardResourceTieLimitNoConsumeSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_n", 30, 30, 50, 10, 3, 8);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        context.enemy.AddBuff("Bullet", 3, -1);
+        BattleCardState playerAttack = CreateResourceAttackCard(context.allyA, "resource53_n_player", 5, 5, 3, 0, 0, 0, 0, 0, 1);
+        BattleCardState enemyAttack = CreateResourceAttackCard(context.enemy, "resource53_n_enemy", 5, 5, 3, 0, 0, 0, 0, 0, 1);
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(context.allyA, playerAttack),
+            CreateEnemyAttackIntent("resource53_n_intent", context.enemy, enemyAttack, context.allyA, 1)
+        );
+
+        bool worked =
+            result != null &&
+            result.resultType == "TieLimit" &&
+            result.isTieLimitReached &&
+            CountBuffStack(context.allyA, "Bullet") == 3 &&
+            CountBuffStack(context.enemy, "Bullet") == 3;
+
+        Debug.Log("模式53 N TieLimit不消耗资源：" + worked);
+    }
+
+    void RunCardResourceKnownPointPassiveGuardSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_o", 30, 30, 50, 10, 3, 8);
+        List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        context.allyB.AddBuff("Bullet", 3, -1);
+        context.enemy.AddBuff("Bullet", 3, -1);
+        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(context.allyB, "resource53_o_response", 4);
+        BattleCardState passiveDefense = CreateResourceDefenseCard(context.allyB, "resource53_o_passive", 10, 10, 3, 0, 0, 0, 0, 0, 1);
+        BattleCardState enemyAttack = CreateResourceAttackCard(context.enemy, "resource53_o_enemy", 8, 8, 3, 0, 0, 0, 0, 0, 1);
+        enemyAttack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Resource53OEnemyActionStart", 1, 1));
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("resource53_o_intent", context.enemy, enemyAttack, context.allyB, 1);
+        List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(intentQueue);
+
+        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, context.allyB, 1, context.allyB, responseAttack, intent);
+        BattleActionSlotManager.AssignPassiveGuard(actionSlots, context.allyB, 2, context.allyB, passiveDefense);
+        BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, intentQueue);
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+
+        bool worked =
+            CountBuffStack(context.enemy, "Resource53OEnemyActionStart") == 1 &&
+            CountBuffStack(context.enemy, "Bullet") == 2 &&
+            CountBuffStack(context.allyB, "Bullet") == 2 &&
+            plan.isCompleted;
+
+        Debug.Log("模式53 O known-point PassiveGuard使用自身资源且敌人不重复处理：" + worked);
+    }
+
+    void RunCardResourceActionStartOneShotAndAbilityIsolationSubTest()
+    {
+        BattleEndedTestContext pointContext = CreateBattleEndedTestContext("resource53_p_point", 30, 30, 50, 10, 3, 8);
+        BattleCardState attack = CreateResourceAttackCard(pointContext.allyA, "resource53_p_attack", 5, 5, 0, 0, 0, 0, 0, 0, 0);
+        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "NextCardPointUp", 2, 1));
+        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "NextClashPointUp", 3, 1));
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(pointContext.enemy, "resource53_p_enemy", 1, 0);
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(pointContext.allyA, attack),
+            CreateEnemyAttackIntent("resource53_p_intent", pointContext.enemy, enemyAttack, pointContext.allyA, 1)
+        );
+
+        bool actionStartPointBuffKept =
+            result != null &&
+            result.playerPoint == 5 &&
+            CountBuffStack(pointContext.allyA, "NextCardPointUp") == 2 &&
+            CountBuffStack(pointContext.allyA, "NextClashPointUp") == 3;
+
+        BattleEndedTestContext abilityContext = CreateBattleEndedTestContext("resource53_p_ability", 30, 30, 50, 10, 3, 8);
+        BattleCardState ability = CreateBattleEndedAbilityCard(abilityContext.allyA, "resource53_p_ability_card", "Resource53PAbilityOnPlay");
+        ability.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Resource53PAbilityActionStart", 1, 1));
+        BattleActionSlot abilitySlot = new BattleActionSlot(abilityContext.allyA, 1);
+        abilitySlot.AssignFreeAction(abilityContext.allyA, ability, abilityContext.allyA);
+
+        BattleResolveResult abilityResult = BattleResolver.ResolveFreeAction(abilitySlot);
+        bool abilityIsolated =
+            abilityResult != null &&
+            abilityResult.resultType == "FreeAbility" &&
+            CountBuffStack(abilityContext.allyA, "Resource53PAbilityActionStart") == 0 &&
+            CountBuffStack(abilityContext.allyA, "Resource53PAbilityOnPlay") == 1;
+
+        Debug.Log("模式53 P ActionStart新增一次性点数Buff不影响当前卡：" + actionStartPointBuffKept);
+        Debug.Log("模式53 P Ability仍保持OnPlay到Resolved且不触发ActionStart：" + abilityIsolated);
     }
 
     void RunBuffBeforeUseActionUnavailableBasicTestSequence()
@@ -4659,13 +6450,35 @@ public class CardLoadTest : MonoBehaviour
         context.runtimeState.SetActionSlots(actionSlots);
         context.runtimeState.SetIntentQueue(intentQueue);
 
-        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, context.allyA, 1, context.allyA, responseAttack, intent);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        CardEligibilityResult assignResult;
+        bool assignSuccess = BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            context.allyA,
+            1,
+            context.allyA,
+            responseAttack,
+            intent,
+            out assignResult
+        );
         BattleActionSlot responseSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
         int aHPBefore = context.allyA.currentHP;
         int bHPBefore = context.allyB.currentHP;
         int enemyUseBefore = enemyAttack.currentUseCount;
 
         BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(plan);
+        bool itemCreatedAsResponded = item != null && item.executionType == BattleExecutionItemType.RespondedEnemyIntent;
+        bool prepared =
+            assignSuccess &&
+            responseSlot != null &&
+            object.ReferenceEquals(responseSlot.cardState, responseAttack) &&
+            intent.isResponded &&
+            object.ReferenceEquals(intent.actualTargetCharacter, context.allyA) &&
+            CountBuffStack(context.allyA, "Bullet") >= 3;
+
+        RemoveAllBuffs(context.allyA, "Bullet");
+        bool bulletRemovedBeforeExecute = CountBuffStack(context.allyA, "Bullet") == 0;
         ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
 
         bool targetRestored = object.ReferenceEquals(intent.actualTargetCharacter, context.allyB);
@@ -4673,6 +6486,10 @@ public class CardLoadTest : MonoBehaviour
         bool responseNotUsed = responseSlot != null && !responseSlot.isUsed && CountBuffStack(context.allyA, "Strength") == 0;
         bool enemyOnce = enemyAttack.currentUseCount == enemyUseBefore;
 
+        Debug.Log("模式50 I 准备阶段Responded Attack成功安排：" + prepared);
+        Debug.Log("模式50 I 执行前Bullet已移除：" + bulletRemovedBeforeExecute);
+        Debug.Log("模式50 I 执行项创建为RespondedEnemyIntent：" + itemCreatedAsResponded);
+        Debug.Log("模式50 I outcome为ResponseUnavailableFallbackToUnresponded：" + IsExecutionItemState(item, BattleExecutionItemStatus.Executed, BattleExecutionItemOutcomeReason.ResponseUnavailableFallbackToUnresponded, true));
         Debug.Log("Responded空卡撤销目标改写：" + targetRestored);
         Debug.Log("Responded空卡恢复originalTarget：" + targetRestored);
         Debug.Log("Responded空卡转Unresponded：" + becameUnresponded);
@@ -4692,13 +6509,45 @@ public class CardLoadTest : MonoBehaviour
         context.runtimeState.SetActionSlots(actionSlots);
         context.runtimeState.SetIntentQueue(intentQueue);
 
-        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, context.allyA, 1, context.allyA, responseDefense, intent);
-        BattleActionSlotManager.AssignPassiveGuard(actionSlots, context.allyB, 2, context.allyB, passiveDefense);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        CardEligibilityResult responseAssignResult;
+        bool responseAssignSuccess = BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            context.allyA,
+            1,
+            context.allyA,
+            responseDefense,
+            intent,
+            out responseAssignResult
+        );
+        CardEligibilityResult passiveAssignResult;
+        bool passiveAssignSuccess = BattleActionSlotManager.AssignPassiveGuard(
+            actionSlots,
+            context.allyB,
+            2,
+            context.allyB,
+            passiveDefense,
+            out passiveAssignResult
+        );
         BattleActionSlot responseSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
         BattleActionSlot passiveSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyB, 2);
         int bHPBefore = context.allyB.currentHP;
 
         BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(plan);
+        bool itemCreatedAsResponded = item != null && item.executionType == BattleExecutionItemType.RespondedEnemyIntent;
+        int candidateCountBeforeExecute = item != null && item.passiveGuardCandidates != null
+            ? item.passiveGuardCandidates.Count
+            : -1;
+        bool prepared =
+            responseAssignSuccess &&
+            passiveAssignSuccess &&
+            responseSlot != null &&
+            object.ReferenceEquals(responseSlot.cardState, responseDefense) &&
+            CountBuffStack(context.allyA, "Bullet") >= 3;
+
+        RemoveAllBuffs(context.allyA, "Bullet");
+        bool bulletRemovedBeforeExecute = CountBuffStack(context.allyA, "Bullet") == 0;
         ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
 
         bool passiveRecollected =
@@ -4709,6 +6558,9 @@ public class CardLoadTest : MonoBehaviour
             responseSlot != null &&
             !responseSlot.isUsed;
 
+        Debug.Log("模式50 J Responded Defense成功安排且预存候选为0：" + (prepared && itemCreatedAsResponded && candidateCountBeforeExecute == 0));
+        Debug.Log("模式50 J 执行前Bullet已移除：" + bulletRemovedBeforeExecute);
+        Debug.Log("模式50 J 回落后现场收集PassiveGuard：" + (passiveSlot != null && passiveSlot.isUsed));
         Debug.Log("原目标PassiveGuard重新收集并接管：" + passiveRecollected);
     }
 
@@ -4722,11 +6574,32 @@ public class CardLoadTest : MonoBehaviour
         List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
         context.runtimeState.SetActionSlots(actionSlots);
         context.runtimeState.SetIntentQueue(intentQueue);
-        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, context.allyA, 1, context.allyA, responseDodge, intent);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        CardEligibilityResult assignResult;
+        bool assignSuccess = BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            context.allyA,
+            1,
+            context.allyA,
+            responseDodge,
+            intent,
+            out assignResult
+        );
         BattleActionSlot responseSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
         int bHPBefore = context.allyB.currentHP;
 
         BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(plan);
+        bool itemCreatedAsResponded = item != null && item.executionType == BattleExecutionItemType.RespondedEnemyIntent;
+        bool prepared =
+            assignSuccess &&
+            responseSlot != null &&
+            object.ReferenceEquals(responseSlot.cardState, responseDodge) &&
+            intent.isResponded &&
+            CountBuffStack(context.allyA, "Bullet") >= 3;
+
+        RemoveAllBuffs(context.allyA, "Bullet");
+        bool bulletRemovedBeforeExecute = CountBuffStack(context.allyA, "Bullet") == 0;
         ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
 
         bool fallbackHit =
@@ -4736,6 +6609,9 @@ public class CardLoadTest : MonoBehaviour
             !responseSlot.isUsed &&
             CountBuffStack(context.allyA, "Strength") == 0;
 
+        Debug.Log("模式50 K Responded Dodge成功安排：" + prepared);
+        Debug.Log("模式50 K 执行前Bullet已移除：" + bulletRemovedBeforeExecute);
+        Debug.Log("模式50 K 执行项创建为RespondedEnemyIntent：" + itemCreatedAsResponded);
         Debug.Log("Responded Dodge空卡无守备时转Unresponded：" + fallbackHit);
     }
 
@@ -4749,9 +6625,23 @@ public class CardLoadTest : MonoBehaviour
         List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
         context.runtimeState.SetActionSlots(actionSlots);
         context.runtimeState.SetIntentQueue(intentQueue);
-        BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, context.allyA, 1, context.allyA, responseAttack, intent);
+        context.allyA.AddBuff("Bullet", 3, -1);
+        CardEligibilityResult assignResult;
+        bool assignSuccess = BattleActionSlotManager.AssignResponseToEnemyIntent(
+            actionSlots,
+            context.allyA,
+            1,
+            context.allyA,
+            responseAttack,
+            intent,
+            out assignResult
+        );
 
         BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(plan);
+        bool itemCreatedAsResponded = item != null && item.executionType == BattleExecutionItemType.RespondedEnemyIntent;
+        RemoveAllBuffs(context.allyA, "Bullet");
+        bool bulletRemovedBeforeExecute = CountBuffStack(context.allyA, "Bullet") == 0;
         ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
 
         bool deadTargetSkipped =
@@ -4760,6 +6650,9 @@ public class CardLoadTest : MonoBehaviour
             CountBuffStack(context.enemy, "Strength") == 0 &&
             plan.isCompleted;
 
+        Debug.Log("模式50 L Responded卡成功安排：" + (assignSuccess && itemCreatedAsResponded));
+        Debug.Log("模式50 L 执行前响应卡失效且originalTarget死亡：" + (bulletRemovedBeforeExecute && context.allyB.IsDead()));
+        Debug.Log("模式50 L item为Skipped / ActualTargetDead：" + IsExecutionItemState(item, BattleExecutionItemStatus.Skipped, BattleExecutionItemOutcomeReason.ActualTargetDead, true));
         Debug.Log("死亡originalTarget不自动转火：" + deadTargetSkipped);
     }
 
@@ -4857,13 +6750,47 @@ public class CardLoadTest : MonoBehaviour
         context.runtimeState.SetActionSlots(actionSlots);
         context.runtimeState.SetIntentQueue(intentQueue);
 
-        BattleActionSlotManager.AssignPassiveGuard(actionSlots, context.allyB, 1, context.allyB, unavailableDefense);
-        BattleActionSlotManager.AssignPassiveGuard(actionSlots, context.allyB, 2, context.allyB, validDefense);
+        context.allyB.AddBuff("Bullet", 3, -1);
+        CardEligibilityResult firstAssignResult;
+        bool firstAssignSuccess = BattleActionSlotManager.AssignPassiveGuard(
+            actionSlots,
+            context.allyB,
+            1,
+            context.allyB,
+            unavailableDefense,
+            out firstAssignResult
+        );
+        CardEligibilityResult secondAssignResult;
+        bool secondAssignSuccess = BattleActionSlotManager.AssignPassiveGuard(
+            actionSlots,
+            context.allyB,
+            2,
+            context.allyB,
+            validDefense,
+            out secondAssignResult
+        );
         BattleActionSlot firstSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyB, 1);
         BattleActionSlot secondSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyB, 2);
         int bHPBefore = context.allyB.currentHP;
 
         BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(actionSlots, intentQueue);
+        BattleExecutionItem item = GetFirstExecutionItem(plan);
+        int candidateCount = item != null && item.passiveGuardCandidates != null
+            ? item.passiveGuardCandidates.Count
+            : 0;
+        bool candidateOrder =
+            candidateCount == 2 &&
+            object.ReferenceEquals(item.passiveGuardCandidates[0], firstSlot) &&
+            object.ReferenceEquals(item.passiveGuardCandidates[1], secondSlot);
+        bool bothAssigned =
+            firstAssignSuccess &&
+            secondAssignSuccess &&
+            firstSlot != null &&
+            secondSlot != null &&
+            object.ReferenceEquals(firstSlot.cardState, unavailableDefense) &&
+            object.ReferenceEquals(secondSlot.cardState, validDefense);
+        RemoveAllBuffs(context.allyB, "Bullet");
+        bool firstCandidateUnavailableBeforeExecute = CountBuffStack(context.allyB, "Bullet") == 0;
         ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
 
         bool firstSkipped =
@@ -4876,6 +6803,10 @@ public class CardLoadTest : MonoBehaviour
             context.allyB.currentHP == bHPBefore &&
             plan.isCompleted;
 
+        Debug.Log("模式50 P 两个PassiveGuard均成功安排：" + bothAssigned);
+        Debug.Log("模式50 P ExecutionPlan包含两个候选：" + (candidateCount == 2));
+        Debug.Log("模式50 P 候选顺序正确：" + candidateOrder);
+        Debug.Log("模式50 P 第一候选执行前变为不可用：" + firstCandidateUnavailableBeforeExecute);
         Debug.Log("资源不足PassiveGuard候选被跳过：" + firstSkipped);
         Debug.Log("第二有效PassiveGuard候选正常接管：" + secondUsed);
     }
@@ -5767,30 +7698,43 @@ public class CardLoadTest : MonoBehaviour
 
     void RunBuffAttackLoseConsumeSubTest()
     {
-        Debug.Log("===== 模式47 子测试B：Attack失败方也消费 =====");
+        Debug.Log("===== 模式47 子测试B：Attack失败方NextCard保留，双方NextClash消费 =====");
 
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff_b", 30, 30, 50, 10, 3, 8);
         BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "buff_b_player_attack", 5);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_b_enemy_attack", 9, 0);
-        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 1);
+        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 1, 1);
+        context.allyA.AddBuff("NextCardPointUp", 1, 1);
+        AddClashStartOneShotBuff(context.enemy, "NextClashPointUp", 1, 1);
+        context.enemy.AddBuff("NextCardPointUp", 2, 1);
 
-        int stackBefore = CountBuffStack(context.allyA, "NextClashPointUp");
-        int instanceBefore = CountBuffInstances(context.allyA, "NextClashPointUp");
+        int playerClashStackBefore = CountBuffStack(context.allyA, "NextClashPointUp");
+        int playerCardStackBefore = CountBuffStack(context.allyA, "NextCardPointUp");
+        int enemyClashStackBefore = CountBuffStack(context.enemy, "NextClashPointUp");
+        int enemyCardStackBefore = CountBuffStack(context.enemy, "NextCardPointUp");
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             CreateRespondedSlot(context.allyA, playerAttack),
             CreateEnemyAttackIntent("buff_b_intent", context.enemy, enemyAttack, context.allyA, 1)
         );
 
-        int stackAfter = CountBuffStack(context.allyA, "NextClashPointUp");
-        int instanceAfter = CountBuffInstances(context.allyA, "NextClashPointUp");
-        bool pointApplied = result != null && result.playerPoint == 8;
-        bool consumed = stackBefore == 3 && stackAfter == 0 && instanceBefore == 1 && instanceAfter == 0;
+        bool pointApplied = result != null && result.playerPoint == 7 && result.enemyPoint == 12;
+        bool loserNextClashConsumed =
+            playerClashStackBefore == 1 &&
+            CountBuffStack(context.allyA, "NextClashPointUp") == 0;
+        bool loserNextCardKept =
+            playerCardStackBefore == 1 &&
+            CountBuffStack(context.allyA, "NextCardPointUp") == 1;
+        bool winnerBuffsConsumed =
+            enemyClashStackBefore == 1 &&
+            enemyCardStackBefore == 2 &&
+            CountBuffStack(context.enemy, "NextClashPointUp") == 0 &&
+            CountBuffStack(context.enemy, "NextCardPointUp") == 0;
 
         Debug.Log("点数加成是否实际生效：" + pointApplied);
-        Debug.Log("Buff消费前stack：" + stackBefore);
-        Debug.Log("Buff消费后stack：" + stackAfter);
-        Debug.Log("Buff实例数量前后：" + instanceBefore + " -> " + instanceAfter);
-        Debug.Log("失败方Buff正常消费：" + (pointApplied && consumed && result != null && result.resultType == "EnemyWin"));
+        Debug.Log("失败方NextClash消费：" + loserNextClashConsumed);
+        Debug.Log("失败方NextCard保留：" + loserNextCardKept);
+        Debug.Log("胜方NextClash与NextCard消费：" + winnerBuffsConsumed);
+        Debug.Log("Attack失败方消费规则符合新契约：" + (pointApplied && loserNextClashConsumed && loserNextCardKept && winnerBuffsConsumed && result != null && result.resultType == "EnemyWin"));
     }
 
     void RunBuffClashRerollKeepUntilConsumeSubTest()
@@ -6089,9 +8033,30 @@ public class CardLoadTest : MonoBehaviour
         context.runtimeState.SetIntentQueue(emptyIntentQueue);
 
         BattleCardState bulletAttack = CreateBulletLockedFreeAttackCard(context.allyB, "invalid_action_a_bullet_attack", 3, 5);
-        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyB, 1, context.allyB, bulletAttack, context.enemy);
+        context.allyB.AddBuff("Bullet", 5, -1);
+
+        CardEligibilityResult assignResult;
+        bool assignSuccess = BattleActionSlotManager.AssignFreeAction(
+            actionSlots,
+            context.allyB,
+            1,
+            context.allyB,
+            bulletAttack,
+            context.enemy,
+            out assignResult
+        );
 
         BattleActionSlot actionSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyB, 1);
+        bool preparedWithCondition =
+            CountBuffStack(context.allyB, "Bullet") >= 5 &&
+            assignSuccess &&
+            actionSlot != null &&
+            object.ReferenceEquals(actionSlot.actor, context.allyB) &&
+            object.ReferenceEquals(actionSlot.cardState, bulletAttack);
+
+        RemoveAllBuffs(context.allyB, "Bullet");
+        bool bulletRemovedBeforeExecute = CountBuffStack(context.allyB, "Bullet") == 0;
+
         int enemyHPBefore = context.enemy.currentHP;
         int cooldownBefore = bulletAttack.currentCooldown;
         int useCountBefore = bulletAttack.currentUseCount;
@@ -6102,9 +8067,12 @@ public class CardLoadTest : MonoBehaviour
         BattleExecutionItem item = GetFirstExecutionItem(executionPlan);
         ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
 
+        Debug.Log("模式45 A 准备阶段条件满足并成功安排：" + preparedWithCondition);
+        Debug.Log("模式45 A 执行前Bullet已移除：" + bulletRemovedBeforeExecute);
         Debug.Log("resultType是否为ActionUnavailable：" + (directResult != null && directResult.resultType == "ActionUnavailable"));
         Debug.Log("isSuccess是否为False：" + (directResult != null && !directResult.isSuccess));
         Debug.Log("shouldCompleteItem是否为True：" + (directResult != null && directResult.shouldCompleteItem));
+        Debug.Log("playerCardUsed是否为False：" + (directResult != null && !directResult.playerCardUsed));
         Debug.Log("不造成伤害：" + (context.enemy.currentHP == enemyHPBefore));
         Debug.Log("CD不变：" + (bulletAttack.currentCooldown == cooldownBefore));
         Debug.Log("UseCount不变：" + (bulletAttack.currentUseCount == useCountBefore));
@@ -6112,6 +8080,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("行动未使用卡牌：" + (bulletAttack.currentUseCount == useCountBefore && context.allyB.currentGuilt == guiltBefore && bulletAttack.currentCooldown == cooldownBefore));
         Debug.Log("槽位未MarkUsed：" + (actionSlot != null && !actionSlot.isUsed));
         Debug.Log("item按跳过完成：" + (item != null && item.isCompleted));
+        Debug.Log("item为Skipped / ActionUnavailable：" + IsExecutionItemState(item, BattleExecutionItemStatus.Skipped, BattleExecutionItemOutcomeReason.ActionUnavailable, true));
         Debug.Log("plan最终完成：" + executionPlan.isCompleted);
         Debug.Log("phase可进入Completed：" + (context.runtimeState.currentPhase == "Completed"));
     }
@@ -6138,25 +8107,66 @@ public class CardLoadTest : MonoBehaviour
         BattleCardState unavailableAttack = CreateBulletLockedFreeAttackCard(context.allyB, "invalid_action_b_bullet_attack", 3, 5);
         BattleCardState followAbility = CreateBattleEndedAbilityCard(context.allyA, "invalid_action_b_follow_ability", "InvalidActionFollowBuff");
 
-        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyB, 1, context.allyB, unavailableAttack, context.enemy);
-        BattleActionSlotManager.AssignFreeAction(actionSlots, context.allyA, 1, context.allyA, followAbility, context.allyA);
+        context.allyB.AddBuff("Bullet", 5, -1);
+
+        CardEligibilityResult firstAssignResult;
+        bool firstAssignSuccess = BattleActionSlotManager.AssignFreeAction(
+            actionSlots,
+            context.allyB,
+            1,
+            context.allyB,
+            unavailableAttack,
+            context.enemy,
+            out firstAssignResult
+        );
+
+        CardEligibilityResult secondAssignResult;
+        bool secondAssignSuccess = BattleActionSlotManager.AssignFreeAction(
+            actionSlots,
+            context.allyA,
+            1,
+            context.allyA,
+            followAbility,
+            context.allyA,
+            out secondAssignResult
+        );
 
         BattleActionSlot firstSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyB, 1);
         BattleActionSlot secondSlot = BattleActionSlotManager.GetSlot(actionSlots, context.allyA, 1);
+        bool firstPrepared =
+            CountBuffStack(context.allyB, "Bullet") >= 5 &&
+            firstAssignSuccess &&
+            firstSlot != null &&
+            object.ReferenceEquals(firstSlot.actor, context.allyB) &&
+            object.ReferenceEquals(firstSlot.cardState, unavailableAttack);
+        bool secondPrepared =
+            secondAssignSuccess &&
+            secondSlot != null &&
+            object.ReferenceEquals(secondSlot.actor, context.allyA) &&
+            object.ReferenceEquals(secondSlot.cardState, followAbility);
 
         int firstUseCountBefore = unavailableAttack.currentUseCount;
         int secondUseCountBefore = followAbility.currentUseCount;
         int secondGuiltBefore = context.allyA.currentGuilt;
+
+        RemoveAllBuffs(context.allyB, "Bullet");
+        bool firstBulletRemovedBeforeExecute = CountBuffStack(context.allyB, "Bullet") == 0;
+        bool secondCardStillAvailable = BattleCardManager.EvaluateCardEligibility(context.allyA, context.allyA, followAbility).isEligible;
 
         BattleExecutionPlan executionPlan = CreateManualFreeActionPlan(firstSlot, secondSlot);
         BattleExecutionItem firstItem = executionPlan.executionItems[0];
         BattleExecutionItem secondItem = executionPlan.executionItems[1];
         ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
 
+        Debug.Log("模式45 B 第一张卡准备阶段成功安排：" + firstPrepared);
+        Debug.Log("模式45 B 执行前第一角色Bullet已移除：" + firstBulletRemovedBeforeExecute);
+        Debug.Log("模式45 B 第二张卡保持可用：" + (secondPrepared && secondCardStillAvailable));
         Debug.Log("第一个item是否完成：" + (firstItem != null && firstItem.isCompleted));
+        Debug.Log("第一个item为Skipped / ActionUnavailable：" + IsExecutionItemState(firstItem, BattleExecutionItemStatus.Skipped, BattleExecutionItemOutcomeReason.ActionUnavailable, true));
         Debug.Log("第一个槽位未MarkUsed：" + (firstSlot != null && !firstSlot.isUsed));
         Debug.Log("第一个卡牌UseCount不变：" + (unavailableAttack.currentUseCount == firstUseCountBefore));
         Debug.Log("第二个item是否完成：" + (secondItem != null && secondItem.isCompleted));
+        Debug.Log("第二个item为Executed：" + IsExecutionItemState(secondItem, BattleExecutionItemStatus.Executed, BattleExecutionItemOutcomeReason.None, true));
         Debug.Log("第二个槽位正常MarkUsed：" + (secondSlot != null && secondSlot.isUsed));
         Debug.Log("第二张卡正常使用：" + (followAbility.currentUseCount == secondUseCountBefore + 1 && context.allyA.currentGuilt > secondGuiltBefore));
         Debug.Log("后续item继续执行：" + (secondItem != null && secondItem.isCompleted && secondSlot != null && secondSlot.isUsed));
@@ -6443,7 +8453,8 @@ public class CardLoadTest : MonoBehaviour
         ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
 
         Debug.Log("A主动响应失效且不使用：" + (activeDefense.currentUseCount == activeUseCountBefore && activeSlot != null && !activeSlot.isUsed));
-        Debug.Log("Responded item提前携带B的PassiveGuard候选：" + (candidateCount > 0));
+        Debug.Log("Responded Defense item创建时候选数为0：" + (candidateCount == 0));
+        Debug.Log("Executor现场重收集后B的PassiveGuard候选接管：" + (candidateCount == 0 && passiveSlot != null && passiveSlot.isUsed));
         Debug.Log("回落Unresponded后B的PassiveGuard正常接管：" + (passiveDefense.currentUseCount == passiveUseCountBefore && passiveSlot != null && passiveSlot.isUsed));
         Debug.Log("B HP前后：" + bHPBefore + " -> " + context.allyB.currentHP);
         Debug.Log("敌人不重复执行：" + (bHPBefore - context.allyB.currentHP == 3));
@@ -7114,6 +9125,7 @@ public class CardLoadTest : MonoBehaviour
             enemyAttackCard,
             title + "_enemy_attack_copy_0"
         );
+        int enemyAttackUseCountBefore = enemyAttack.currentUseCount;
 
         BattleEnemyIntent intent1 = new BattleEnemyIntent(
             title + "_intent_001",
@@ -7231,7 +9243,11 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("执行后 玩家 guilt：" + allyB.currentGuilt);
         Debug.Log("预期 B HP 变化：" + expectedDamageToAllyB + "，实际是否符合：" + (allyB.currentHP == allyBHPBefore - expectedDamageToAllyB));
         Debug.Log("预期主响应 B槽位1 MarkUsed：" + (responseSlot != null && responseSlot.isUsed));
-        Debug.Log("预期玩家响应 Attack CD 正常变化一次：" + (responseAttack.currentCooldown == responseAttack.cardData.cooldown));
+        bool expectResponseAttackResolved = playerAttackPoint > enemyAttackPoint;
+        int expectedResponseAttackCooldown = expectResponseAttackResolved
+            ? responseAttack.cardData.cooldown
+            : responseAttackCooldownBefore;
+        Debug.Log("预期玩家响应 Attack 是否Resolved：" + expectResponseAttackResolved + "，CD是否符合：" + (responseAttack.currentCooldown == expectedResponseAttackCooldown));
         Debug.Log("预期玩家响应 Attack UseCount 不重复变化：" + (responseAttack.currentUseCount == responseAttackUseCountBefore));
         Debug.Log("预期玩家响应 Attack isConsumed 不变：" + (responseAttack.isConsumed == responseAttackConsumedBefore));
         Debug.Log("预期玩家 guilt 不变：" + (allyB.currentGuilt == responseAttackGuiltBefore));
@@ -7245,12 +9261,12 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期 PassiveGuard 结果：" + expectPassiveGuardResult + "，实际可从 resultType 日志确认：" + expectedResultTypeInLog);
         bool expectPlayerWin = playerAttackPoint > enemyAttackPoint;
         bool expectPassiveGuardTriggered = expectPassiveGuardResult;
-        int expectedEnemyUseCount = 1;
+        int expectedEnemyUseCount = expectPlayerWin ? enemyAttackUseCountBefore : enemyAttackUseCountBefore + 1;
         Debug.Log("预期敌人 UseCount：" + expectedEnemyUseCount + "，实际是否符合：" + (enemyAttack.currentUseCount == expectedEnemyUseCount));
 
         if (expectPlayerWin)
         {
-            Debug.Log("PlayerWin 分支：敌人失败 Attack 也完成一次使用：" + (enemyAttack.currentUseCount == expectedEnemyUseCount));
+            Debug.Log("PlayerWin 分支：敌人失败 Attack 不完成使用：" + (enemyAttack.currentUseCount == enemyAttackUseCountBefore));
         }
         else if (expectPassiveGuardTriggered)
         {
@@ -7387,6 +9403,65 @@ public class CardLoadTest : MonoBehaviour
         }
 
         return executionPlan;
+    }
+
+    BattleCardState CreateEligibilityAttackCard(
+        CharacterData owner,
+        string instanceID,
+        params CardUseConditionData[] useConditions
+    )
+    {
+        CardTestData cardData = CreateFixedAttackCardData(instanceID + "_data", "资格测试攻击", 5);
+        cardData.cooldown = 0;
+        cardData.isSinCard = false;
+        cardData.useConditions = useConditions;
+        cardData.effects = new List<CardEffectData>();
+
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
+    }
+
+    CardUseConditionData CreateGuiltAtLeastCondition(int value)
+    {
+        return new CardUseConditionData
+        {
+            conditionType = CardUseConditionType.GuiltAtLeast,
+            target = CardTargetType.Self,
+            value = value
+        };
+    }
+
+    CardUseConditionData CreateBuffStackAtLeastCondition(string buffID, int stack)
+    {
+        return new CardUseConditionData
+        {
+            conditionType = CardUseConditionType.BuffStackAtLeast,
+            target = CardTargetType.Self,
+            buffType = buffID,
+            value = stack
+        };
+    }
+
+    bool IsSlotEmpty(BattleActionSlot slot)
+    {
+        return slot != null && slot.IsEmpty();
+    }
+
+    void RemoveAllBuffs(CharacterData character, string buffID)
+    {
+        if (character == null || character.buffs == null || string.IsNullOrEmpty(buffID))
+        {
+            return;
+        }
+
+        for (int i = character.buffs.Count - 1; i >= 0; i--)
+        {
+            BuffData buff = character.buffs[i];
+
+            if (buff != null && buff.buffID == buffID)
+            {
+                character.buffs.RemoveAt(i);
+            }
+        }
     }
 
     bool HasOwnerSlotInList(List<BattleActionSlot> slots, CharacterData owner, int slotIndex)
@@ -7530,6 +9605,11 @@ public class CardLoadTest : MonoBehaviour
 
     CardEffectData CreateApplyBuffEffect(string trigger, string buffID, int stack, int duration)
     {
+        return CreateApplyBuffEffect(trigger, buffID, stack, duration, null);
+    }
+
+    CardEffectData CreateApplyBuffEffect(string trigger, string buffID, int stack, int duration, string requireClashResult)
+    {
         CardEffectData effect = new CardEffectData
         {
             trigger = trigger,
@@ -7537,7 +9617,8 @@ public class CardLoadTest : MonoBehaviour
             target = CardTargetType.Self,
             buffType = buffID,
             stack = stack,
-            duration = duration
+            duration = duration,
+            requireClashResult = requireClashResult
         };
 
         BuffDefinitionData definition;
@@ -7555,6 +9636,28 @@ public class CardLoadTest : MonoBehaviour
         return effect;
     }
 
+    void AddProbeEffect(BattleCardState cardState, string trigger, string buffID)
+    {
+        AddProbeEffect(cardState, trigger, buffID, null);
+    }
+
+    void AddProbeEffect(BattleCardState cardState, string trigger, string buffID, string requireClashResult)
+    {
+        if (cardState == null || cardState.cardData == null)
+        {
+            return;
+        }
+
+        if (cardState.cardData.effects == null)
+        {
+            cardState.cardData.effects = new List<CardEffectData>();
+        }
+
+        cardState.cardData.effects.Add(
+            CreateApplyBuffEffect(trigger, buffID, 1, 1, requireClashResult)
+        );
+    }
+
     BattleCardState CreateBeforeUseBuffAttackCard(
         CharacterData owner,
         string instanceID,
@@ -7568,6 +9671,249 @@ public class CardLoadTest : MonoBehaviour
         cardData.effects = new List<CardEffectData>
         {
             CreateApplyBuffEffect(BattleTiming.BeforeUse, buffID, stack, duration)
+        };
+
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
+    }
+
+    CardTestData LoadRealBulletAttackCard()
+    {
+        List<CardTestData> cards = CardDataLoader.LoadCardData();
+        return FindRealBulletAttackCard(cards);
+    }
+
+    CardTestData FindRealBulletAttackCard(List<CardTestData> cards)
+    {
+        if (cards == null)
+        {
+            return null;
+        }
+
+        return CardDataLoader.FindCardByID(cards, "atk_bullet_001");
+    }
+
+    BattleCardState CreateRealBulletAttackCardState(CharacterData owner, string instanceID)
+    {
+        CardTestData cardData = LoadRealBulletAttackCard();
+
+        if (cardData == null)
+        {
+            Debug.LogError("模式55 失败：未找到真实JSON卡 atk_bullet_001");
+            return null;
+        }
+
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
+    }
+
+    BattleActionSlot AssignRealBulletAttackFreeAction(
+        BattleEndedTestContext context,
+        BattleCardState attack,
+        int slotIndex
+    )
+    {
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        CardEligibilityResult result;
+        BattleActionSlotManager.AssignFreeAction(slots, context.allyA, slotIndex, context.allyA, attack, context.enemy, out result);
+        return BattleActionSlotManager.GetSlot(slots, context.allyA, slotIndex);
+    }
+
+    int CountCardsByID(List<CardTestData> cards, string cardID)
+    {
+        if (cards == null)
+        {
+            return 0;
+        }
+
+        int count = 0;
+
+        foreach (CardTestData card in cards)
+        {
+            if (card != null && card.cardID == cardID)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    bool HasBulletHardUseCondition(CardTestData card)
+    {
+        if (card == null || card.useConditions == null)
+        {
+            return false;
+        }
+
+        foreach (CardUseConditionData condition in card.useConditions)
+        {
+            if (condition == null)
+            {
+                continue;
+            }
+
+            if (condition.conditionType == CardUseConditionType.BuffStackAtLeast &&
+                condition.buffType == "Bullet")
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    int CountResourceRulesByID(CardResourceRuleData[] rules, string resourceID)
+    {
+        if (rules == null)
+        {
+            return 0;
+        }
+
+        int count = 0;
+
+        foreach (CardResourceRuleData rule in rules)
+        {
+            if (rule != null && rule.resourceID == resourceID)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    CardResourceRuleData CreateBuffStackResourceRule(
+        string resourceID,
+        int requiredStackForNormalVersion,
+        int fallbackMinPoint,
+        int fallbackMaxPoint,
+        int pointPerStack,
+        int exactStackForBonus,
+        int exactStackPointBonus,
+        int consumeAmountOnSuccess
+    )
+    {
+        return new CardResourceRuleData
+        {
+            resourceType = "BuffStack",
+            resourceID = resourceID,
+            requiredStackForNormalVersion = requiredStackForNormalVersion,
+            fallbackMinPoint = fallbackMinPoint,
+            fallbackMaxPoint = fallbackMaxPoint,
+            pointPerStack = pointPerStack,
+            exactStackForBonus = exactStackForBonus,
+            exactStackPointBonus = exactStackPointBonus,
+            consumeAmountOnSuccess = consumeAmountOnSuccess
+        };
+    }
+
+    BattleCardState CreateResourceAttackCard(
+        CharacterData owner,
+        string instanceID,
+        int minPoint,
+        int maxPoint,
+        int requiredStackForNormalVersion,
+        int fallbackMinPoint,
+        int fallbackMaxPoint,
+        int pointPerStack,
+        int exactStackForBonus,
+        int exactStackPointBonus,
+        int consumeAmountOnSuccess
+    )
+    {
+        CardTestData cardData = CreateFixedAttackCardData(instanceID + "_data", "资源测试攻击", minPoint);
+        cardData.minPoint = minPoint;
+        cardData.maxPoint = maxPoint;
+        cardData.cooldown = 0;
+        cardData.resourceRule = CreateBuffStackResourceRule(
+            "Bullet",
+            requiredStackForNormalVersion,
+            fallbackMinPoint,
+            fallbackMaxPoint,
+            pointPerStack,
+            exactStackForBonus,
+            exactStackPointBonus,
+            consumeAmountOnSuccess
+        );
+        cardData.effects = new List<CardEffectData>();
+
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
+    }
+
+    BattleCardState CreateResourceDodgeCard(
+        CharacterData owner,
+        string instanceID,
+        int minPoint,
+        int maxPoint,
+        int requiredStackForNormalVersion,
+        int fallbackMinPoint,
+        int fallbackMaxPoint,
+        int pointPerStack,
+        int exactStackForBonus,
+        int exactStackPointBonus,
+        int consumeAmountOnSuccess
+    )
+    {
+        CardTestData cardData = new CardTestData
+        {
+            cardID = instanceID + "_data",
+            cardName = "资源测试闪避",
+            cardType = CardType.Dodge,
+            isClashable = true,
+            minPoint = minPoint,
+            maxPoint = maxPoint,
+            cooldown = 0,
+            isSinCard = false,
+            resourceRule = CreateBuffStackResourceRule(
+                "Bullet",
+                requiredStackForNormalVersion,
+                fallbackMinPoint,
+                fallbackMaxPoint,
+                pointPerStack,
+                exactStackForBonus,
+                exactStackPointBonus,
+                consumeAmountOnSuccess
+            ),
+            effects = new List<CardEffectData>()
+        };
+
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
+    }
+
+    BattleCardState CreateResourceDefenseCard(
+        CharacterData owner,
+        string instanceID,
+        int minPoint,
+        int maxPoint,
+        int requiredStackForNormalVersion,
+        int fallbackMinPoint,
+        int fallbackMaxPoint,
+        int pointPerStack,
+        int exactStackForBonus,
+        int exactStackPointBonus,
+        int consumeAmountOnSuccess
+    )
+    {
+        CardTestData cardData = new CardTestData
+        {
+            cardID = instanceID + "_data",
+            cardName = "资源测试防御",
+            cardType = CardType.Defense,
+            isClashable = false,
+            minPoint = minPoint,
+            maxPoint = maxPoint,
+            cooldown = 0,
+            defenseFormula = "PointAsDefense",
+            resourceRule = CreateBuffStackResourceRule(
+                "Bullet",
+                requiredStackForNormalVersion,
+                fallbackMinPoint,
+                fallbackMaxPoint,
+                pointPerStack,
+                exactStackForBonus,
+                exactStackPointBonus,
+                consumeAmountOnSuccess
+            ),
+            effects = new List<CardEffectData>()
         };
 
         return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
@@ -8019,6 +10365,19 @@ public class CardLoadTest : MonoBehaviour
         }
 
         return executionPlan.executionItems[0];
+    }
+
+    bool IsExecutionItemState(
+        BattleExecutionItem item,
+        BattleExecutionItemStatus expectedStatus,
+        BattleExecutionItemOutcomeReason expectedReason,
+        bool expectedCompleted
+    )
+    {
+        return item != null &&
+            item.status == expectedStatus &&
+            item.outcomeReason == expectedReason &&
+            item.isCompleted == expectedCompleted;
     }
 
     int CountExecutionItemsOfType(BattleExecutionPlan executionPlan, BattleExecutionItemType executionType)

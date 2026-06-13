@@ -23,6 +23,11 @@ public static class BattleTiming
     // BeforeUse = 卡牌使用前
     // 旧名字 OnPlay 等同于 BeforeUse
     // 以后新 JSON 统一写 BeforeUse
+    // ActionStart：当前执行项确认开始处理该卡后触发。
+    // 晚于回合开始与硬性使用条件检查，
+    // 早于资源快照、BeforeUse和正式点数结算。
+    public const string ActionStart = "ActionStart";
+
     public const string BeforeUse = "BeforeUse";
 
     // OnPlay = 旧版字段

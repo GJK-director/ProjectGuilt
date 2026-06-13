@@ -345,9 +345,9 @@ public static class BattleExecutionPlanManager
         return CollectPassiveGuardCandidates(actionSlots, enemyIntent, true);
     }
 
-    // ShouldCollectPassiveGuardForRespondedItem = 支持的响应类型提前携带被动守备候选
-    // 正常 Responded Resolver 只会在 Attack vs Attack EnemyWin 中使用这些候选。
-    // 如果响应者执行前死亡，Executor 会回落 Unresponded，此时也复用这些候选。
+    // ShouldCollectPassiveGuardForRespondedItem = 判断 Responded item 是否需要提前携带被动守备候选
+    // 当前只有 Attack vs Attack EnemyWin 分支会在正常 Responded 结算中使用这些候选。
+    // Defense / Dodge 响应者死亡或不可用时，由 Executor 在回落 Unresponded 前按运行时状态重新收集候选。
     static bool ShouldCollectPassiveGuardForRespondedItem(
         BattleEnemyIntent enemyIntent,
         BattleActionSlot responseSlot
@@ -380,9 +380,7 @@ public static class BattleExecutionPlanManager
 
         string playerCardType = responseSlot.cardState.cardData.cardType;
 
-        return playerCardType == CardType.Attack ||
-            playerCardType == CardType.Defense ||
-            playerCardType == CardType.Dodge;
+        return playerCardType == CardType.Attack;
     }
 
     // CollectPassiveGuardCandidates = 为敌人意图收集被动守备候选

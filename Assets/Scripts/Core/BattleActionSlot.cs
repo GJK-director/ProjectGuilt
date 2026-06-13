@@ -51,8 +51,9 @@ public class BattleActionSlot
     // 只有响应敌人意图时，这里才应该有值。
     public BattleEnemyIntent enemyIntent;
 
-    // isUsed = 槽位是否已经实际执行过
-    // 注意：卡牌放入槽位不等于已经使用，只有执行成功后才应该标记为 true。
+    // isUsed = 槽位本回合的正式行动是否已经完成一次提交
+    // 注意：卡牌是否 Resolved 与槽位是否完成行动不是同一个概念。
+    // 例如 Attack vs Attack 失败方卡牌不算成功使用，但响应槽位已经正式参与拼点。
     public bool isUsed;
 
     // BattleActionSlot = 行动槽位构造函数
@@ -84,6 +85,8 @@ public class BattleActionSlot
     // actor = 使用这个槽位行动的角色。
     // cardState = 放入槽位的卡牌状态。
     // enemyIntent = 这个槽位要响应的敌人意图。
+    // 该方法是受信任的底层槽位写入入口，不负责完整资格检查。
+    // 正式准备阶段安排应通过 BattleActionSlotManager 执行。
     public void AssignResponse(
         CharacterData actor,
         BattleCardState cardState,
@@ -117,6 +120,8 @@ public class BattleActionSlot
 
     // AssignFreeAction = 安排自由行动
     // 自由行动不绑定敌人意图，通常用于 Ability 罪卡或未来的普通主动行动。
+    // 该方法是受信任的底层槽位写入入口，不负责完整资格检查。
+    // 正式准备阶段安排应通过 BattleActionSlotManager 执行。
     public void AssignFreeAction(
         CharacterData actor,
         BattleCardState cardState,
@@ -133,6 +138,8 @@ public class BattleActionSlot
 
     // AssignPassiveGuard = 安排被动守备
     // 被动守备不绑定具体敌人意图，不主动进入执行队列，实际触发时才算使用。
+    // 该方法是受信任的底层槽位写入入口，不负责完整资格检查。
+    // 正式准备阶段安排应通过 BattleActionSlotManager 执行。
     public void AssignPassiveGuard(
         CharacterData actor,
         BattleCardState cardState
@@ -146,8 +153,8 @@ public class BattleActionSlot
         isUsed = false;
     }
 
-    // MarkUsed = 标记槽位已使用
-    // 只有槽位中的行动真正执行成功后才调用。
+    // MarkUsed = 标记槽位行动已提交
+    // 表示这个槽位本回合已经完成正式行动；不等同于卡牌一定触发 Resolved。
     public void MarkUsed()
     {
         isUsed = true;

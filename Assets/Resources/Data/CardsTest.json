@@ -124,5 +124,30 @@
     "cooldown": 1,
     "guiltCost": 0,
     "defenseFormula": "PointAsDefense"
+  },
+  {
+    "cardID": "atk_bullet_001",
+    "cardName": "基础射击",
+    "rarity": "White",
+    "cardType": "Attack",
+    "isClashable": true,
+    "isSinCard": false,
+    "minPoint": 1,
+    "maxPoint": 10,
+    "cooldown": 0,
+    "guiltCost": 0,
+    "damageFormula": "PointAsDamage",
+    "resourceRule": {
+      "resourceType": "BuffStack",
+      "resourceID": "Bullet",
+      "requiredStackForNormalVersion": 1,
+      "fallbackMinPoint": 0,
+      "fallbackMaxPoint": 0,
+      "pointPerStack": 1,
+      "exactStackForBonus": 3,
+      "exactStackPointBonus": 3,
+      "consumeAmountOnSuccess": 1
+    },
+    "effects": []
   }
 ]

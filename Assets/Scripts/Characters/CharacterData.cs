@@ -1132,6 +1132,53 @@ public class CharacterData
         return consumedStack;
     }
 
+    public bool TryConsumeBuffStackAsResource(string buffID, int amount, out int consumedAmount)
+    {
+        consumedAmount = 0;
+
+        if (string.IsNullOrEmpty(buffID))
+        {
+            return false;
+        }
+
+        if (amount <= 0)
+        {
+            return true;
+        }
+
+        int remainingAmount = amount;
+
+        // 第一版按当前活动批次保存顺序消费资源。
+        // 多批次资源的优先级以后可以按正式资源系统单独迭代。
+        for (int i = 0; i < buffs.Count && remainingAmount > 0; i++)
+        {
+            BuffData buff = buffs[i];
+
+            if (buff == null || buff.buffID != buffID || buff.stack <= 0)
+            {
+                continue;
+            }
+
+            int consumeFromBatch = Mathf.Min(buff.stack, remainingAmount);
+            buff.stack -= consumeFromBatch;
+            remainingAmount -= consumeFromBatch;
+            consumedAmount += consumeFromBatch;
+
+            if (BattleDebugSettings.ShowBuffLog)
+            {
+                Debug.Log(characterName + " 支付资源：" + buffID + " x" + consumeFromBatch);
+            }
+
+            if (buff.stack <= 0)
+            {
+                buffs.RemoveAt(i);
+                i--;
+            }
+        }
+
+        return consumedAmount == amount;
+    }
+
     bool IsBuffIDInList(string buffID, string[] buffIDs)
     {
         if (string.IsNullOrEmpty(buffID) || buffIDs == null)

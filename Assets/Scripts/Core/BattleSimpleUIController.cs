@@ -862,18 +862,20 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        CardEligibilityResult assignResult;
         bool result = BattleActionSlotManager.AssignFreeAction(
             runtimeState.actionSlots,
             selectedActor,
             selectedSlotIndex,
             selectedActor,
             selectedCardState,
-            target
+            target,
+            out assignResult
         );
 
         lastLog = result
             ? GetSelectedActorLabel() + " slot " + selectedSlotIndex + " assigned FreeAction: " + selectedCardState.GetCardName()
-            : "Assign failed: " + GetSelectedActorLabel() + " slot " + selectedSlotIndex + " cannot assign FreeAction";
+            : "Assign failed: " + assignResult.failureMessage;
 
         RefreshView();
     }
@@ -949,17 +951,19 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        CardEligibilityResult assignResult;
         bool result = BattleActionSlotManager.AssignPassiveGuard(
             runtimeState.actionSlots,
             selectedActor,
             selectedSlotIndex,
             selectedActor,
-            selectedCardState
+            selectedCardState,
+            out assignResult
         );
 
         lastLog = result
             ? GetSelectedActorLabel() + " slot " + selectedSlotIndex + " assigned PassiveGuard: " + selectedCardState.GetCardName()
-            : "Assign failed: " + GetSelectedActorLabel() + " slot " + selectedSlotIndex + " cannot assign PassiveGuard";
+            : "Assign failed: " + assignResult.failureMessage;
 
         RefreshView();
     }
@@ -995,18 +999,20 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        CardEligibilityResult assignResult;
         bool result = BattleActionSlotManager.AssignResponseToEnemyIntent(
             runtimeState.actionSlots,
             selectedActor,
             selectedSlotIndex,
             selectedActor,
             selectedCardState,
-            intent
+            intent,
+            out assignResult
         );
 
         lastLog = result
             ? GetSelectedActorLabel() + " slot " + selectedSlotIndex + " assigned RespondIntent1: " + selectedCardState.GetCardName()
-            : "Assign failed: " + GetSelectedActorLabel() + " slot " + selectedSlotIndex + " cannot respond intent 1";
+            : "Assign failed: " + assignResult.failureMessage;
 
         RefreshView();
     }
@@ -1548,13 +1554,15 @@ public class BattleSimpleUIController : MonoBehaviour
 
     bool CanAssignSelectedCard(CharacterData target)
     {
-        bool canUseCard = IsSelectedAbilityCard()
-            ? BattleCardManager.CanUseCard(selectedActor, target, selectedCardState)
-            : BattleCardManager.CanUseCard(selectedCardState);
+        CardEligibilityResult result = BattleCardManager.EvaluateCardEligibility(
+            selectedActor,
+            target,
+            selectedCardState
+        );
 
-        if (!canUseCard)
+        if (!result.isEligible)
         {
-            lastLog = "Assign failed: current card cannot be used";
+            lastLog = "Assign failed: " + result.failureMessage;
             return false;
         }
 

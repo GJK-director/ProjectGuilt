@@ -1,6 +1,67 @@
 ﻿// 脚本中文说明：战斗卡牌管理器。负责创建战斗卡牌状态、判断卡牌能否使用、处理 CD、使用次数和消耗。
 using UnityEngine;
 
+public enum CardEligibilityFailureReason
+{
+    None,
+    InvalidActor,
+    ActorDead,
+    InvalidCardState,
+    InvalidCardData,
+    CardOnCooldown,
+    CardConsumed,
+    UseCountUnavailable,
+    GuiltRequirementNotMet,
+    BuffStackRequirementNotMet,
+    UnsupportedCondition,
+    InvalidSlot,
+    SlotOccupied,
+    CardAlreadyAssigned,
+    InvalidEnemyIntent
+}
+
+public sealed class CardEligibilityResult
+{
+    public bool isEligible;
+    public CardEligibilityFailureReason failureReason;
+    public string failureMessage;
+    public string failedConditionType;
+    public string buffID;
+    public int requiredValue;
+    public int currentValue;
+
+    public static CardEligibilityResult Success()
+    {
+        return new CardEligibilityResult
+        {
+            isEligible = true,
+            failureReason = CardEligibilityFailureReason.None,
+            failureMessage = ""
+        };
+    }
+
+    public static CardEligibilityResult Failure(
+        CardEligibilityFailureReason failureReason,
+        string failureMessage,
+        string failedConditionType = "",
+        string buffID = "",
+        int requiredValue = 0,
+        int currentValue = 0
+    )
+    {
+        return new CardEligibilityResult
+        {
+            isEligible = false,
+            failureReason = failureReason,
+            failureMessage = failureMessage,
+            failedConditionType = failedConditionType,
+            buffID = buffID,
+            requiredValue = requiredValue,
+            currentValue = currentValue
+        };
+    }
+}
+
 // BattleCardManager = 战斗卡牌管理器
 // 负责处理战斗中卡牌的 CD、消耗、可用性判断
 public static class BattleCardManager
@@ -103,49 +164,58 @@ public static class BattleCardManager
     // CanUseCard = 判断这张卡当前能不能使用
     // Can = 可以，Use = 使用，Card = 卡牌。
     // 这个版本只检查卡牌状态本身：是否为空、是否已消耗、是否还在 CD。
+    // 注意：该重载不包含角色、死亡、useConditions 等完整资格检查。
     public static bool CanUseCard(BattleCardState cardState)
     {
-        if (cardState == null)
+        CardEligibilityResult result = EvaluateCardStateOnly(cardState);
+
+        if (!result.isEligible)
         {
-            Debug.LogWarning("卡牌不能使用：卡牌状态为空");
-            return false;
-        }
-
-        if (cardState.cardData == null)
-        {
-            Debug.LogWarning("卡牌不能使用：cardData 为空。实例ID：" + cardState.instanceID);
-            return false;
-        }
-
-        if (cardState.isConsumed)
-        {
-            // isConsumed = 已消耗。
-            // 达到最大使用次数后，本场战斗不能再用。
-            Debug.Log(
-                cardState.GetCardName() +
-                " 已经被消耗，本场战斗不能再次使用"
-            );
-
-            return false;
-        }
-
-        if (cardState.currentCooldown > 0)
-        {
-            // currentCooldown > 0 表示卡牌还在冷却中。
-            Debug.Log(
-                cardState.GetCardName() +
-                " 还在冷却中，剩余 CD：" +
-                cardState.currentCooldown
-            );
-
+            Debug.Log(result.failureMessage);
             return false;
         }
 
         return true;
     }
 
+    // EvaluateCardEligibility = 统一卡牌资格检查。
+    // 卡牌资格检查必须是纯读取。
+    // 准备阶段安排与执行阶段复检共享同一套 useConditions 解释，
+    // 但准备阶段不得触发事件、消耗 Buff 或修改卡牌状态。
+    public static CardEligibilityResult EvaluateCardEligibility(
+        CharacterData user,
+        CharacterData target,
+        BattleCardState cardState
+    )
+    {
+        if (user == null)
+        {
+            return CardEligibilityResult.Failure(
+                CardEligibilityFailureReason.InvalidActor,
+                "卡牌不能使用：行动者为空"
+            );
+        }
+
+        if (user.IsDead())
+        {
+            return CardEligibilityResult.Failure(
+                CardEligibilityFailureReason.ActorDead,
+                user.characterName + " 已死亡，不能安排或使用卡牌"
+            );
+        }
+
+        CardEligibilityResult baseResult = EvaluateCardStateOnly(cardState);
+
+        if (!baseResult.isEligible)
+        {
+            return baseResult;
+        }
+
+        return SinCardConditionChecker.EvaluateUseConditions(user, target, cardState.cardData);
+    }
+
     // CanUseCard = 判断这张卡当前能不能使用
-    // 这个版本会额外检查罪卡使用条件
+    // 这个版本会额外检查角色、死亡状态和通用 useConditions。
     // user = 使用者，target = 目标，cardState = 要检查的卡牌状态。
     public static bool CanUseCard(
         CharacterData user,
@@ -153,43 +223,56 @@ public static class BattleCardManager
         BattleCardState cardState
     )
     {
-        // 先走原本的 CD / 消耗检查
-        if (!CanUseCard(cardState))
+        CardEligibilityResult result = EvaluateCardEligibility(user, target, cardState);
+
+        if (!result.isEligible)
         {
+            Debug.Log(GetCardNameForLog(cardState) + " 不能使用，原因：" + result.failureMessage);
             return false;
-        }
-
-        if (cardState == null || cardState.cardData == null)
-        {
-            return false;
-        }
-
-        // 如果是罪卡，再检查罪卡使用条件
-        // 例如是否拥有某个 Buff、负罪感是否满足、生命值是否满足等。
-        if (cardState.cardData.isSinCard)
-        {
-            string failReason;
-
-            bool canUseSinCard = SinCardConditionChecker.CanUseSinCard(
-                user,
-                target,
-                cardState.cardData,
-                out failReason
-            );
-
-            if (!canUseSinCard)
-            {
-                Debug.Log(
-                    cardState.GetCardName() +
-                    " 不能使用，原因：" +
-                    failReason
-                );
-
-                return false;
-            }
         }
 
         return true;
+    }
+
+    static CardEligibilityResult EvaluateCardStateOnly(BattleCardState cardState)
+    {
+        if (cardState == null)
+        {
+            return CardEligibilityResult.Failure(
+                CardEligibilityFailureReason.InvalidCardState,
+                "卡牌不能使用：卡牌状态为空"
+            );
+        }
+
+        if (cardState.cardData == null)
+        {
+            return CardEligibilityResult.Failure(
+                CardEligibilityFailureReason.InvalidCardData,
+                "卡牌不能使用：cardData 为空。实例ID：" + cardState.instanceID
+            );
+        }
+
+        if (cardState.isConsumed)
+        {
+            return CardEligibilityResult.Failure(
+                CardEligibilityFailureReason.CardConsumed,
+                cardState.GetCardName() + " 已经被消耗，本场战斗不能再次使用"
+            );
+        }
+
+        if (cardState.currentCooldown > 0)
+        {
+            return CardEligibilityResult.Failure(
+                CardEligibilityFailureReason.CardOnCooldown,
+                cardState.GetCardName() + " 还在冷却中，剩余 CD：" + cardState.currentCooldown,
+                "",
+                "",
+                0,
+                cardState.currentCooldown
+            );
+        }
+
+        return CardEligibilityResult.Success();
     }
 
     // ApplyCooldownOnResolved = 卡牌生效后处理 CD / 消耗
@@ -618,5 +701,15 @@ public static class BattleCardManager
         }
 
         return character.characterName;
+    }
+
+    static string GetCardNameForLog(BattleCardState cardState)
+    {
+        if (cardState == null)
+        {
+            return "卡牌";
+        }
+
+        return cardState.GetCardName();
     }
 }
