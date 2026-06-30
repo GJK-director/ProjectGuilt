@@ -1,0 +1,22 @@
+[
+  {
+    "encounterID": "encounter_test_001",
+    "encounterName": "Bootstrap Test Encounter",
+    "allyCharacterIDs": [
+      "ally_001",
+      "ally_002"
+    ],
+    "enemyID": "enemy_001",
+    "intentPattern": [
+      {
+        "enemyCardIndex": 1,
+        "targetRule": "FixedCharacterSlot",
+        "targetCharacterID": "ally_002",
+        "targetSlotIndex": 1
+      }
+    ],
+    "repeatIntentPattern": true,
+    "battleBackgroundKey": "test_background",
+    "battleMusicKey": "test_music"
+  }
+]

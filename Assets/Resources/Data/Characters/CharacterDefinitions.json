@@ -1,0 +1,38 @@
+[
+  {
+    "characterID": "ally_001",
+    "characterName": "Ally A",
+    "maxHP": 30,
+    "minSpeed": 4,
+    "maxSpeed": 8,
+    "actionSlotCount": 2,
+    "startingCardIDs": [
+      "atk_bullet_001",
+      "atk_bullet_001"
+    ],
+    "initialBuffs": [
+      {
+        "buffID": "Bullet",
+        "stack": 3,
+        "duration": -1
+      }
+    ],
+    "prefabKey": "ally_a_test_prefab",
+    "portraitKey": "ally_a_test_portrait"
+  },
+  {
+    "characterID": "ally_002",
+    "characterName": "Ally B",
+    "maxHP": 30,
+    "minSpeed": 3,
+    "maxSpeed": 7,
+    "actionSlotCount": 2,
+    "startingCardIDs": [
+      "def_001",
+      "dodge_001"
+    ],
+    "initialBuffs": [],
+    "prefabKey": "ally_b_test_prefab",
+    "portraitKey": "ally_b_test_portrait"
+  }
+]

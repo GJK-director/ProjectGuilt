@@ -1,0 +1,16 @@
+[
+  {
+    "enemyID": "enemy_001",
+    "enemyName": "Test Enemy",
+    "maxHP": 50,
+    "minSpeed": 2,
+    "maxSpeed": 6,
+    "cardIDs": [
+      "enemy_atk_001",
+      "enemy_atk_001"
+    ],
+    "initialBuffs": [],
+    "prefabKey": "enemy_test_prefab",
+    "portraitKey": "enemy_test_portrait"
+  }
+]

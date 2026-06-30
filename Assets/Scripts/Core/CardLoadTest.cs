@@ -38,7 +38,8 @@ public enum BattleTestMode
     CardResolvedHitContractBasic = 52,
     CardResourceSnapshotAndConsumeBasic = 53,
     CardAssignmentEligibilityBasic = 54,
-    RealCardResourceMigrationBasic = 55
+    RealCardResourceMigrationBasic = 55,
+    BattleDefinitionDataBootstrapBasic = 56
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -214,6 +215,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.RealCardResourceMigrationBasic)
         {
             RunRealCardResourceMigrationBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleDefinitionDataBootstrapBasic)
+        {
+            RunBattleDefinitionDataBootstrapBasicTestSequence();
             return;
         }
 
@@ -5314,6 +5321,774 @@ public class CardLoadTest : MonoBehaviour
         RunRealCardResourcePreviousSlotReloadSubTest();
 
         Debug.Log("===== RealCardResourceMigrationBasic 聚合测试结束 =====");
+    }
+
+    void RunBattleDefinitionDataBootstrapBasicTestSequence()
+    {
+        Debug.Log("===== BattleDefinitionDataBootstrapBasic 聚合测试开始 =====");
+
+        RunBattleDefinitionDataJsonLoadSubTest();
+        RunBattleDefinitionDataReferenceSubTest();
+        RunBattleDefinitionDataPlayerCreationSubTest();
+        RunBattleDefinitionDataEnemyCreationSubTest();
+        RunBattleDefinitionDataRuntimeBaseStateSubTest();
+        RunBattleDefinitionDataPlayerCardsSubTest();
+        RunBattleDefinitionDataDuplicatePlayerCardsSubTest();
+        RunBattleDefinitionDataInitialBuffSubTest();
+        RunBattleDefinitionDataEnemyCardsSubTest();
+        RunBattleDefinitionDataActionSlotsSubTest();
+        RunBattleDefinitionDataEnemyIntentsSubTest();
+        RunBattleDefinitionDataTargetMappingSubTest();
+        RunBattleDefinitionDataRuntimeStateSubTest();
+        RunBattleDefinitionDataDeadFixedTargetFallbackSubTest();
+        RunBattleDefinitionDataEnemyCardCooldownSkipSubTest();
+        RunBattleDefinitionDataDuplicateEnemyCardIndexFailSubTest();
+        RunBattleDefinitionDataMissingCardFailSubTest();
+        RunBattleDefinitionDataMissingBuffFailSubTest();
+        RunBattleDefinitionDataMissingCrossReferenceFailSubTest();
+
+        Debug.Log("===== BattleDefinitionDataBootstrapBasic 聚合测试结束 =====");
+    }
+
+    void RunBattleDefinitionDataJsonLoadSubTest()
+    {
+        List<CharacterDefinitionData> characterDefinitions = CharacterDefinitionLoader.LoadDefinitions();
+        List<EnemyDefinitionData> enemyDefinitions = EnemyDefinitionLoader.LoadDefinitions();
+        List<EncounterDefinitionData> encounterDefinitions = EncounterDefinitionLoader.LoadDefinitions();
+
+        bool loaded =
+            characterDefinitions != null &&
+            enemyDefinitions != null &&
+            encounterDefinitions != null &&
+            characterDefinitions.Count >= 2 &&
+            enemyDefinitions.Count >= 1 &&
+            encounterDefinitions.Count >= 1;
+
+        bool noDuplicate =
+            HasNoDuplicateCharacterDefinitionIDs(characterDefinitions) &&
+            HasNoDuplicateEnemyDefinitionIDs(enemyDefinitions) &&
+            HasNoDuplicateEncounterDefinitionIDs(encounterDefinitions);
+
+        Debug.Log("模式56 A 三份JSON读取成功：" + loaded);
+        Debug.Log("模式56 A 定义ID没有重复：" + noDuplicate);
+    }
+
+    void RunBattleDefinitionDataReferenceSubTest()
+    {
+        List<CardTestData> cards = CardDataLoader.LoadCardData();
+        List<CharacterDefinitionData> characterDefinitions = CharacterDefinitionLoader.LoadDefinitions();
+        List<EnemyDefinitionData> enemyDefinitions = EnemyDefinitionLoader.LoadDefinitions();
+        List<EncounterDefinitionData> encounterDefinitions = EncounterDefinitionLoader.LoadDefinitions();
+
+        EncounterDefinitionData encounter = EncounterDefinitionLoader.FindByID(encounterDefinitions, "encounter_test_001");
+        CharacterDefinitionData allyA = encounter != null ? CharacterDefinitionLoader.FindByID(characterDefinitions, encounter.allyCharacterIDs[0]) : null;
+        CharacterDefinitionData allyB = encounter != null ? CharacterDefinitionLoader.FindByID(characterDefinitions, encounter.allyCharacterIDs[1]) : null;
+        EnemyDefinitionData enemyDefinition = encounter != null ? EnemyDefinitionLoader.FindByID(enemyDefinitions, encounter.enemyID) : null;
+
+        bool encounterRefs =
+            encounter != null &&
+            allyA != null &&
+            allyB != null &&
+            enemyDefinition != null &&
+            encounter.intentPattern != null &&
+            encounter.intentPattern.Length == 1 &&
+            encounter.intentPattern[0].enemyCardIndex == 1 &&
+            CardDataLoader.FindCardByID(cards, enemyDefinition.cardIDs[0]) != null &&
+            CharacterDefinitionLoader.FindByID(characterDefinitions, encounter.intentPattern[0].targetCharacterID) != null;
+
+        bool artKeysStored =
+            encounter != null &&
+            !string.IsNullOrEmpty(allyA.prefabKey) &&
+            !string.IsNullOrEmpty(allyA.portraitKey) &&
+            !string.IsNullOrEmpty(enemyDefinition.prefabKey) &&
+            !string.IsNullOrEmpty(enemyDefinition.portraitKey) &&
+            !string.IsNullOrEmpty(encounter.battleBackgroundKey) &&
+            !string.IsNullOrEmpty(encounter.battleMusicKey);
+
+        Debug.Log("模式56 B encounter_test_001跨文件引用合法：" + encounterRefs);
+        Debug.Log("模式56 B 美术键仅保存字符串且非空：" + artKeysStored);
+    }
+
+    void RunBattleDefinitionDataPlayerCreationSubTest()
+    {
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+
+        bool playersCreated =
+            result != null &&
+            result.isSuccess &&
+            result.runtimeState != null &&
+            result.runtimeState.allyA != null &&
+            result.runtimeState.allyB != null &&
+            !object.ReferenceEquals(result.runtimeState.allyA, result.runtimeState.allyB) &&
+            result.runtimeState.allyA.characterName == result.allyADefinition.characterName &&
+            result.runtimeState.allyB.characterName == result.allyBDefinition.characterName;
+
+        Debug.Log("模式56 C 两名玩家由真实bootstrap创建且实例独立：" + playersCreated);
+    }
+
+    void RunBattleDefinitionDataEnemyCreationSubTest()
+    {
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        CharacterData enemyUnit = result != null && result.runtimeState != null ? result.runtimeState.enemy : null;
+
+        bool enemyCreated =
+            result != null &&
+            result.isSuccess &&
+            enemyUnit != null &&
+            enemyUnit.characterName == result.enemyDefinition.enemyName &&
+            enemyUnit.maxHP == result.enemyDefinition.maxHP &&
+            enemyUnit.minSpeed == result.enemyDefinition.minSpeed &&
+            enemyUnit.maxSpeed == result.enemyDefinition.maxSpeed;
+
+        Debug.Log("模式56 D 敌人按JSON名称HP速度创建：" + enemyCreated);
+    }
+
+    void RunBattleDefinitionDataRuntimeBaseStateSubTest()
+    {
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        CharacterData allyAUnit = result != null && result.runtimeState != null ? result.runtimeState.allyA : null;
+        CharacterData allyBUnit = result != null && result.runtimeState != null ? result.runtimeState.allyB : null;
+        CharacterData enemyUnit = result != null && result.runtimeState != null ? result.runtimeState.enemy : null;
+
+        bool baseState =
+            result != null &&
+            result.isSuccess &&
+            IsRuntimeBaseState(allyAUnit) &&
+            IsRuntimeBaseState(allyBUnit) &&
+            IsRuntimeBaseState(enemyUnit);
+
+        Debug.Log("模式56 E 角色运行时HP负罪感速度初始状态正确：" + baseState);
+    }
+
+    void RunBattleDefinitionDataPlayerCardsSubTest()
+    {
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        CharacterData allyAUnit = result != null && result.runtimeState != null ? result.runtimeState.allyA : null;
+
+        bool playerCards =
+            result != null &&
+            result.isSuccess &&
+            allyAUnit != null &&
+            allyAUnit.battleCards != null &&
+            allyAUnit.battleCards.Count == result.allyADefinition.startingCardIDs.Length &&
+            IsCardStateFromDefinition(allyAUnit.battleCards[0], allyAUnit, result.allyADefinition.startingCardIDs[0], "ally_001_atk_bullet_001_copy_0") &&
+            IsCardStateFromDefinition(allyAUnit.battleCards[1], allyAUnit, result.allyADefinition.startingCardIDs[1], "ally_001_atk_bullet_001_copy_1");
+
+        Debug.Log("模式56 F 玩家卡牌实例顺序、owner和初始状态正确：" + playerCards);
+    }
+
+    void RunBattleDefinitionDataDuplicatePlayerCardsSubTest()
+    {
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        CharacterData allyAUnit = result != null && result.runtimeState != null ? result.runtimeState.allyA : null;
+
+        BattleCardState copy0 = allyAUnit != null && allyAUnit.battleCards.Count > 0 ? allyAUnit.battleCards[0] : null;
+        BattleCardState copy1 = allyAUnit != null && allyAUnit.battleCards.Count > 1 ? allyAUnit.battleCards[1] : null;
+
+        if (copy0 != null)
+        {
+            copy0.currentCooldown = 2;
+        }
+
+        bool duplicateIndependent =
+            copy0 != null &&
+            copy1 != null &&
+            !object.ReferenceEquals(copy0, copy1) &&
+            copy0.cardData == copy1.cardData &&
+            copy0.instanceID == "ally_001_atk_bullet_001_copy_0" &&
+            copy1.instanceID == "ally_001_atk_bullet_001_copy_1" &&
+            copy1.currentCooldown == 0;
+
+        if (copy0 != null)
+        {
+            copy0.currentCooldown = 0;
+        }
+
+        Debug.Log("模式56 G 重复cardID创建独立BattleCardState：" + duplicateIndependent);
+    }
+
+    void RunBattleDefinitionDataInitialBuffSubTest()
+    {
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        CharacterData allyAUnit = result != null && result.runtimeState != null ? result.runtimeState.allyA : null;
+        BuffData bullet = GetFirstBuffBatch(allyAUnit, "Bullet");
+        BuffDefinitionData bulletDefinition;
+        bool definitionFound = BuffDefinitionLoader.TryGetDefinition("Bullet", out bulletDefinition);
+
+        bool initialBuff =
+            result != null &&
+            result.isSuccess &&
+            bullet != null &&
+            bullet.stack == 3 &&
+            bullet.duration == -1 &&
+            definitionFound &&
+            bullet.buffName == bulletDefinition.buffName &&
+            bullet.buffCategory == bulletDefinition.buffCategory &&
+            bullet.checkTiming == bulletDefinition.defaultCheckTiming &&
+            bullet.expireRule == bulletDefinition.defaultExpireRule;
+
+        Debug.Log("模式56 H 初始Buff来自BuffDefinitions且没有GuessBuff回落：" + initialBuff);
+    }
+
+    void RunBattleDefinitionDataEnemyCardsSubTest()
+    {
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        CharacterData enemyUnit = result != null && result.runtimeState != null ? result.runtimeState.enemy : null;
+
+        bool enemyCards =
+            result != null &&
+            result.isSuccess &&
+            enemyUnit != null &&
+            enemyUnit.battleCards != null &&
+            enemyUnit.battleCards.Count == 2 &&
+            !object.ReferenceEquals(enemyUnit.battleCards[0], enemyUnit.battleCards[1]) &&
+            enemyUnit.battleCards[0].cardData == enemyUnit.battleCards[1].cardData &&
+            enemyUnit.battleCards[0].instanceID == "enemy_001_enemy_atk_001_copy_0" &&
+            enemyUnit.battleCards[1].instanceID == "enemy_001_enemy_atk_001_copy_1" &&
+            enemyUnit.battleCards[0].owner == enemyUnit &&
+            enemyUnit.battleCards[1].owner == enemyUnit;
+
+        Debug.Log("模式56 I 敌人重复卡牌按实例列表创建且互相独立：" + enemyCards);
+    }
+
+    void RunBattleDefinitionDataActionSlotsSubTest()
+    {
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        BattleRuntimeState runtimeState = result != null ? result.runtimeState : null;
+
+        bool actionSlots =
+            runtimeState != null &&
+            runtimeState.actionSlots != null &&
+            runtimeState.actionSlots.Count == 4 &&
+            HasEmptySlot(runtimeState.actionSlots, runtimeState.allyA, 1) &&
+            HasEmptySlot(runtimeState.actionSlots, runtimeState.allyA, 2) &&
+            HasEmptySlot(runtimeState.actionSlots, runtimeState.allyB, 1) &&
+            HasEmptySlot(runtimeState.actionSlots, runtimeState.allyB, 2);
+
+        Debug.Log("模式56 J A/B各2个空行动槽位创建成功：" + actionSlots);
+    }
+
+    void RunBattleDefinitionDataEnemyIntentsSubTest()
+    {
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        BattleRuntimeState runtimeState = result != null ? result.runtimeState : null;
+        BattleEnemyIntent intent = runtimeState != null && runtimeState.intentQueue != null && runtimeState.intentQueue.Count > 0
+            ? runtimeState.intentQueue[0]
+            : null;
+
+        bool intents =
+            runtimeState != null &&
+            runtimeState.intentQueue != null &&
+            runtimeState.intentQueue.Count == result.encounterDefinition.intentPattern.Length &&
+            intent != null &&
+            intent.intentOrder == 1 &&
+            intent.enemy == runtimeState.enemy &&
+            intent.enemyCardState == runtimeState.enemy.battleCards[0] &&
+            !intent.isResponded;
+
+        Debug.Log("模式56 K 敌人意图从真实pattern生成且intentOrder连续：" + intents);
+    }
+
+    void RunBattleDefinitionDataTargetMappingSubTest()
+    {
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        BattleRuntimeState runtimeState = result != null ? result.runtimeState : null;
+        BattleEnemyIntent intent = runtimeState != null && runtimeState.intentQueue != null && runtimeState.intentQueue.Count > 0
+            ? runtimeState.intentQueue[0]
+            : null;
+
+        bool targetMapping =
+            intent != null &&
+            intent.originalTargetCharacter == runtimeState.allyB &&
+            intent.actualTargetCharacter == runtimeState.allyB &&
+            intent.originalTargetSlotIndex == 1 &&
+            intent.actualTargetSlotIndex == 1 &&
+            !intent.isResponded;
+
+        Debug.Log("模式56 L FixedCharacterSlot目标映射到ally_002槽位1：" + targetMapping);
+    }
+
+    void RunBattleDefinitionDataRuntimeStateSubTest()
+    {
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        BattleRuntimeState runtimeState = result != null ? result.runtimeState : null;
+
+        bool runtime =
+            runtimeState != null &&
+            runtimeState.battleUnits != null &&
+            runtimeState.battleUnits.Count == 3 &&
+            runtimeState.actionSlots != null &&
+            runtimeState.actionSlots.Count == 4 &&
+            runtimeState.intentQueue != null &&
+            runtimeState.intentQueue.Count == 1 &&
+            runtimeState.currentExecutionPlan == null &&
+            runtimeState.currentTurn == 1 &&
+            runtimeState.battleResult == BattleResult.None &&
+            runtimeState.currentPhase == "Prepare";
+
+        Debug.Log("模式56 M BattleRuntimeState基础字段进入Prepare：" + runtime);
+    }
+
+    void RunBattleDefinitionDataDeadFixedTargetFallbackSubTest()
+    {
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+
+        if (result != null && result.runtimeState != null && result.runtimeState.allyB != null)
+        {
+            result.runtimeState.allyB.currentHP = 0;
+        }
+
+        BattleDefinitionIntentQueueResult intentResult = BattleDefinitionBootstrap.CreateIntentQueueForTurn(
+            result.runtimeState,
+            result.encounterDefinition,
+            result.enemyDefinition,
+            result.allyByID,
+            result.runtimeState.currentTurn
+        );
+
+        BattleEnemyIntent intent = intentResult != null && intentResult.intentQueue != null && intentResult.intentQueue.Count > 0
+            ? intentResult.intentQueue[0]
+            : null;
+
+        bool fallback =
+            intentResult != null &&
+            intentResult.isSuccess &&
+            intent != null &&
+            intent.originalTargetCharacter == result.runtimeState.allyA &&
+            intent.actualTargetCharacter == result.runtimeState.allyA &&
+            intent.originalTargetSlotIndex == 1 &&
+            intent.actualTargetSlotIndex == 1;
+
+        Debug.Log("模式56 N 固定死亡目标在意图创建时回落到第一存活角色：" + fallback);
+    }
+
+    void RunBattleDefinitionDataEnemyCardCooldownSkipSubTest()
+    {
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        BattleCardState enemyCard = result != null && result.runtimeState != null ? result.runtimeState.enemy.battleCards[0] : null;
+
+        if (enemyCard != null)
+        {
+            enemyCard.currentCooldown = 2;
+        }
+
+        BattleDefinitionIntentQueueResult intentResult = BattleDefinitionBootstrap.CreateIntentQueueForTurn(
+            result.runtimeState,
+            result.encounterDefinition,
+            result.enemyDefinition,
+            result.allyByID,
+            result.runtimeState.currentTurn
+        );
+
+        bool skipped =
+            intentResult != null &&
+            intentResult.isSuccess &&
+            intentResult.intentQueue != null &&
+            intentResult.intentQueue.Count == 0 &&
+            intentResult.warningMessages != null &&
+            intentResult.warningMessages.Count > 0 &&
+            enemyCard != null &&
+            enemyCard.currentCooldown == 2 &&
+            enemyCard.currentUseCount == 0 &&
+            !enemyCard.isConsumed;
+
+        Debug.Log("模式56 O 敌人卡CD阻止意图创建且不改卡状态：" + skipped);
+    }
+
+    void RunBattleDefinitionDataDuplicateEnemyCardIndexFailSubTest()
+    {
+        List<CardTestData> cards = CardDataLoader.LoadCardData();
+        List<CharacterDefinitionData> characterDefinitions = CharacterDefinitionLoader.LoadDefinitions();
+        List<EnemyDefinitionData> enemyDefinitions = EnemyDefinitionLoader.LoadDefinitions();
+        List<EncounterDefinitionData> encounterDefinitions = CloneEncounterDefinitions(EncounterDefinitionLoader.LoadDefinitions());
+        EncounterDefinitionData encounter = EncounterDefinitionLoader.FindByID(encounterDefinitions, "encounter_test_001");
+
+        if (encounter != null)
+        {
+            encounter.intentPattern = new EnemyIntentDefinitionData[]
+            {
+                CloneEnemyIntentDefinition(encounter.intentPattern[0]),
+                CloneEnemyIntentDefinition(encounter.intentPattern[0])
+            };
+        }
+
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeStateFromDefinitions(
+            "encounter_test_001",
+            cards,
+            characterDefinitions,
+            enemyDefinitions,
+            encounterDefinitions
+        );
+
+        bool failedSafely =
+            result != null &&
+            !result.isSuccess &&
+            result.runtimeState == null &&
+            !string.IsNullOrEmpty(result.errorMessage);
+
+        Debug.Log("模式56 P 重复enemyCardIndex安全失败且不创建Runtime：" + failedSafely);
+    }
+
+    void RunBattleDefinitionDataMissingCardFailSubTest()
+    {
+        List<CardTestData> cards = CardDataLoader.LoadCardData();
+        CharacterDefinitionData definition = CloneCharacterDefinition(
+            CharacterDefinitionLoader.FindByID(CharacterDefinitionLoader.LoadDefinitions(), "ally_001")
+        );
+
+        if (definition != null && definition.startingCardIDs != null && definition.startingCardIDs.Length > 0)
+        {
+            definition.startingCardIDs[0] = "missing_card_for_mode56";
+        }
+
+        BattleUnitFactoryResult result = BattleUnitFactory.CreatePlayer(definition, cards);
+
+        bool failedSafely =
+            result != null &&
+            !result.isSuccess &&
+            result.unit == null &&
+            !string.IsNullOrEmpty(result.errorMessage);
+
+        Debug.Log("模式56 Q 缺失cardID时Factory安全失败且没有半完成角色：" + failedSafely);
+    }
+
+    void RunBattleDefinitionDataMissingBuffFailSubTest()
+    {
+        List<CardTestData> cards = CardDataLoader.LoadCardData();
+        CharacterDefinitionData definition = CloneCharacterDefinition(
+            CharacterDefinitionLoader.FindByID(CharacterDefinitionLoader.LoadDefinitions(), "ally_001")
+        );
+
+        if (definition != null)
+        {
+            definition.initialBuffs = new InitialBuffDefinitionData[]
+            {
+                new InitialBuffDefinitionData
+                {
+                    buffID = "MissingBuffForMode56",
+                    stack = 1,
+                    duration = -1
+                }
+            };
+        }
+
+        BattleUnitFactoryResult result = BattleUnitFactory.CreatePlayer(definition, cards);
+
+        bool failedSafely =
+            result != null &&
+            !result.isSuccess &&
+            result.unit == null &&
+            !string.IsNullOrEmpty(result.errorMessage);
+
+        Debug.Log("模式56 R 缺失buffID时Factory安全失败且不走GuessBuff：" + failedSafely);
+    }
+
+    void RunBattleDefinitionDataMissingCrossReferenceFailSubTest()
+    {
+        List<CardTestData> cards = CardDataLoader.LoadCardData();
+        List<CharacterDefinitionData> characterDefinitions = CharacterDefinitionLoader.LoadDefinitions();
+        List<EnemyDefinitionData> enemyDefinitions = EnemyDefinitionLoader.LoadDefinitions();
+        List<EncounterDefinitionData> encounterDefinitions = CloneEncounterDefinitions(EncounterDefinitionLoader.LoadDefinitions());
+        EncounterDefinitionData encounter = EncounterDefinitionLoader.FindByID(encounterDefinitions, "encounter_test_001");
+
+        if (encounter != null && encounter.allyCharacterIDs != null && encounter.allyCharacterIDs.Length > 0)
+        {
+            encounter.allyCharacterIDs[0] = "missing_ally_for_mode56";
+        }
+
+        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeStateFromDefinitions(
+            "encounter_test_001",
+            cards,
+            characterDefinitions,
+            enemyDefinitions,
+            encounterDefinitions
+        );
+
+        bool failedSafely =
+            result != null &&
+            !result.isSuccess &&
+            result.runtimeState == null &&
+            !string.IsNullOrEmpty(result.errorMessage);
+
+        Debug.Log("模式56 S 缺失跨文件角色引用时bootstrap安全失败：" + failedSafely);
+    }
+
+    bool HasNoDuplicateCharacterDefinitionIDs(List<CharacterDefinitionData> definitions)
+    {
+        if (definitions == null)
+        {
+            return false;
+        }
+
+        HashSet<string> ids = new HashSet<string>();
+
+        foreach (CharacterDefinitionData definition in definitions)
+        {
+            if (definition == null || string.IsNullOrEmpty(definition.characterID))
+            {
+                return false;
+            }
+
+            if (ids.Contains(definition.characterID))
+            {
+                return false;
+            }
+
+            ids.Add(definition.characterID);
+        }
+
+        return true;
+    }
+
+    bool HasNoDuplicateEnemyDefinitionIDs(List<EnemyDefinitionData> definitions)
+    {
+        if (definitions == null)
+        {
+            return false;
+        }
+
+        HashSet<string> ids = new HashSet<string>();
+
+        foreach (EnemyDefinitionData definition in definitions)
+        {
+            if (definition == null || string.IsNullOrEmpty(definition.enemyID))
+            {
+                return false;
+            }
+
+            if (ids.Contains(definition.enemyID))
+            {
+                return false;
+            }
+
+            ids.Add(definition.enemyID);
+        }
+
+        return true;
+    }
+
+    bool HasNoDuplicateEncounterDefinitionIDs(List<EncounterDefinitionData> definitions)
+    {
+        if (definitions == null)
+        {
+            return false;
+        }
+
+        HashSet<string> ids = new HashSet<string>();
+
+        foreach (EncounterDefinitionData definition in definitions)
+        {
+            if (definition == null || string.IsNullOrEmpty(definition.encounterID))
+            {
+                return false;
+            }
+
+            if (ids.Contains(definition.encounterID))
+            {
+                return false;
+            }
+
+            ids.Add(definition.encounterID);
+        }
+
+        return true;
+    }
+
+    bool IsRuntimeBaseState(CharacterData unit)
+    {
+        return unit != null &&
+            unit.currentHP == unit.maxHP &&
+            unit.currentGuilt == 0 &&
+            unit.turnSpeed == unit.minSpeed;
+    }
+
+    bool IsCardStateFromDefinition(
+        BattleCardState cardState,
+        CharacterData owner,
+        string expectedCardID,
+        string expectedInstanceID
+    )
+    {
+        return cardState != null &&
+            cardState.owner == owner &&
+            cardState.cardData != null &&
+            cardState.cardData.cardID == expectedCardID &&
+            cardState.instanceID == expectedInstanceID &&
+            cardState.currentCooldown == 0 &&
+            cardState.currentUseCount == 0 &&
+            !cardState.isConsumed;
+    }
+
+    bool HasEmptySlot(List<BattleActionSlot> slots, CharacterData owner, int slotIndex)
+    {
+        if (slots == null || owner == null)
+        {
+            return false;
+        }
+
+        foreach (BattleActionSlot slot in slots)
+        {
+            if (slot != null &&
+                slot.owner == owner &&
+                slot.slotIndex == slotIndex &&
+                slot.actor == null &&
+                slot.cardState == null &&
+                slot.target == null &&
+                slot.enemyIntent == null &&
+                !slot.isUsed)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    BuffData GetFirstBuffBatch(CharacterData character, string buffID)
+    {
+        if (character == null || character.buffs == null)
+        {
+            return null;
+        }
+
+        foreach (BuffData buff in character.buffs)
+        {
+            if (buff != null && buff.buffID == buffID)
+            {
+                return buff;
+            }
+        }
+
+        return null;
+    }
+
+    List<EncounterDefinitionData> CloneEncounterDefinitions(List<EncounterDefinitionData> definitions)
+    {
+        List<EncounterDefinitionData> clones = new List<EncounterDefinitionData>();
+
+        if (definitions == null)
+        {
+            return clones;
+        }
+
+        foreach (EncounterDefinitionData definition in definitions)
+        {
+            clones.Add(CloneEncounterDefinition(definition));
+        }
+
+        return clones;
+    }
+
+    EncounterDefinitionData CloneEncounterDefinition(EncounterDefinitionData definition)
+    {
+        if (definition == null)
+        {
+            return null;
+        }
+
+        EncounterDefinitionData clone = new EncounterDefinitionData
+        {
+            encounterID = definition.encounterID,
+            encounterName = definition.encounterName,
+            allyCharacterIDs = CloneStringArray(definition.allyCharacterIDs),
+            enemyID = definition.enemyID,
+            repeatIntentPattern = definition.repeatIntentPattern,
+            battleBackgroundKey = definition.battleBackgroundKey,
+            battleMusicKey = definition.battleMusicKey
+        };
+
+        if (definition.intentPattern != null)
+        {
+            clone.intentPattern = new EnemyIntentDefinitionData[definition.intentPattern.Length];
+
+            for (int i = 0; i < definition.intentPattern.Length; i++)
+            {
+                clone.intentPattern[i] = CloneEnemyIntentDefinition(definition.intentPattern[i]);
+            }
+        }
+
+        return clone;
+    }
+
+    CharacterDefinitionData CloneCharacterDefinition(CharacterDefinitionData definition)
+    {
+        if (definition == null)
+        {
+            return null;
+        }
+
+        CharacterDefinitionData clone = new CharacterDefinitionData
+        {
+            characterID = definition.characterID,
+            characterName = definition.characterName,
+            maxHP = definition.maxHP,
+            minSpeed = definition.minSpeed,
+            maxSpeed = definition.maxSpeed,
+            actionSlotCount = definition.actionSlotCount,
+            startingCardIDs = CloneStringArray(definition.startingCardIDs),
+            prefabKey = definition.prefabKey,
+            portraitKey = definition.portraitKey
+        };
+
+        if (definition.initialBuffs != null)
+        {
+            clone.initialBuffs = new InitialBuffDefinitionData[definition.initialBuffs.Length];
+
+            for (int i = 0; i < definition.initialBuffs.Length; i++)
+            {
+                clone.initialBuffs[i] = CloneInitialBuffDefinition(definition.initialBuffs[i]);
+            }
+        }
+
+        return clone;
+    }
+
+    EnemyIntentDefinitionData CloneEnemyIntentDefinition(EnemyIntentDefinitionData definition)
+    {
+        if (definition == null)
+        {
+            return null;
+        }
+
+        return new EnemyIntentDefinitionData
+        {
+            enemyCardIndex = definition.enemyCardIndex,
+            targetRule = definition.targetRule,
+            targetCharacterID = definition.targetCharacterID,
+            targetSlotIndex = definition.targetSlotIndex
+        };
+    }
+
+    InitialBuffDefinitionData CloneInitialBuffDefinition(InitialBuffDefinitionData definition)
+    {
+        if (definition == null)
+        {
+            return null;
+        }
+
+        return new InitialBuffDefinitionData
+        {
+            buffID = definition.buffID,
+            stack = definition.stack,
+            duration = definition.duration
+        };
+    }
+
+    string[] CloneStringArray(string[] source)
+    {
+        if (source == null)
+        {
+            return null;
+        }
+
+        string[] clone = new string[source.Length];
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            clone[i] = source[i];
+        }
+
+        return clone;
     }
 
     void RunRealCardResourceJsonFoundSubTest()
