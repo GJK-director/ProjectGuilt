@@ -24,6 +24,7 @@ public class CardTestData
 {
     public string cardID;       // 卡牌ID
     public string cardName;     // 卡牌名称
+    public string description;  // 一级卡面描述，由策划手写
     public string rarity;       // 稀有度
     public string cardType;     // 卡牌类型
     public bool isSinCard;      // 是否罪卡
@@ -58,4 +59,5 @@ public class CardTestData
     public int guiltGain;
 
     public List<CardEffectData> effects; // 卡牌效果列表
+    public CardKeywordData[] keywords;   // 本卡描述中涉及的词条说明，由策划手写
 }

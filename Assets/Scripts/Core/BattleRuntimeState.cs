@@ -33,6 +33,9 @@ public class BattleRuntimeState
     // currentTurn = 当前回合数，第一版从 1 开始。
     public int currentTurn;
 
+    // currentGuilt = 当前战斗中玩家队伍共享的公共负罪感。
+    public int currentGuilt;
+
     // currentPhase = 当前阶段文本，第一版先用字符串，不急着做 enum。
     public string currentPhase;
 
@@ -50,6 +53,7 @@ public class BattleRuntimeState
         intentQueue = new List<BattleEnemyIntent>();
         currentExecutionPlan = null;
         currentTurn = 1;
+        currentGuilt = 0;
         currentPhase = "Init";
         battleResult = BattleResult.None;
     }
@@ -57,15 +61,31 @@ public class BattleRuntimeState
     // SetCharacters = 设置当前战斗主要角色，并重建 battleUnits。
     public void SetCharacters(CharacterData allyA, CharacterData allyB, CharacterData enemy)
     {
+        UnbindSharedGuiltFromCurrentAllies();
+
         this.allyA = allyA;
         this.allyB = allyB;
         this.enemy = enemy;
+
+        BindSharedGuiltToAlly(allyA);
+        BindSharedGuiltToAlly(allyB);
 
         battleUnits.Clear();
 
         AddUnitIfNotNull(allyA);
         AddUnitIfNotNull(allyB);
         AddUnitIfNotNull(enemy);
+    }
+
+    // AddGuilt = 增加本场战斗的公共负罪感。
+    public void AddGuilt(int amount)
+    {
+        if (amount <= 0)
+        {
+            return;
+        }
+
+        currentGuilt += amount;
     }
 
     // SetActionSlots = 保存当前行动槽位。传入 null 时使用空列表，避免 UI 读取时空引用。
@@ -314,6 +334,7 @@ public class BattleRuntimeState
     {
         Debug.Log("===== BattleRuntimeState 当前状态 =====");
         Debug.Log("当前回合：" + currentTurn);
+        Debug.Log("当前公共负罪感：" + currentGuilt);
         Debug.Log("当前阶段：" + currentPhase);
         Debug.Log("战斗结果：" + battleResult);
         Debug.Log("allyA：" + GetCharacterSummary(allyA));
@@ -340,6 +361,27 @@ public class BattleRuntimeState
         if (unit != null)
         {
             battleUnits.Add(unit);
+        }
+    }
+
+    void BindSharedGuiltToAlly(CharacterData ally)
+    {
+        if (ally != null)
+        {
+            ally.BindSharedGuiltRuntimeState(this);
+        }
+    }
+
+    void UnbindSharedGuiltFromCurrentAllies()
+    {
+        if (allyA != null)
+        {
+            allyA.UnbindSharedGuiltRuntimeState(this);
+        }
+
+        if (allyB != null && !object.ReferenceEquals(allyB, allyA))
+        {
+            allyB.UnbindSharedGuiltRuntimeState(this);
         }
     }
 

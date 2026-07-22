@@ -20,6 +20,14 @@ public class BattleSimpleUIController : MonoBehaviour
     [SerializeField] private TMP_Text actionSlotB2Text;
     [SerializeField] private TMP_Text selectionInfoText;
     [SerializeField] private TMP_Text logText;
+    [SerializeField] private BattleCardUIView testCardView;
+    [SerializeField] private BattleCardHandUIView testCardHandView;
+    [SerializeField] private BattleCharacterStatusUIView ally01StatusView;
+    [SerializeField] private BattleCharacterStatusUIView ally02StatusView;
+    [SerializeField] private BattleCharacterStatusUIView enemy01StatusView;
+    [SerializeField] private BattleCharacterStatusUIView enemy02StatusView;
+    [SerializeField] private BattleRoundUIView roundView;
+    [SerializeField] private BattleGuiltUIView guiltView;
 
     [SerializeField] private Button assignA1FreeAttackButton;
     [SerializeField] private Button assignA1AbilityButton;
@@ -44,18 +52,22 @@ public class BattleSimpleUIController : MonoBehaviour
     [SerializeField] private Button endTurnButton;
     [SerializeField] private Button prepareNextTurnButton;
     [SerializeField] private Button refreshViewButton;
+    [SerializeField] private Button qiehuanButton;
 
     private BattleRuntimeState runtimeState;
 
-    private CharacterData allyA;
-    private CharacterData allyB;
-    private CharacterData enemy;
+    private CharacterData ally01;
+    private CharacterData ally02;
+    private CharacterData enemy01;
+    private CharacterData enemy02;
 
     private BattleCardState allyAAttackCardState;
+    private BattleCardState allyABulletAttackCardState;
     private BattleCardState allyADefenseCardState;
     private BattleCardState allyADodgeCardState;
     private BattleCardState allyAAbilityCardState;
     private BattleCardState allyAClashSinCardState;
+    private BattleCardState allyASinAttackCardState;
 
     private BattleCardState allyBAttackCardState;
     private BattleCardState allyBDefenseCardState;
@@ -73,6 +85,21 @@ public class BattleSimpleUIController : MonoBehaviour
     private int selectedSlotIndex = 1;
     private BattleCardState selectedCardState;
     private string selectedActionMode;
+    private bool showingSinCards = false;
+
+    private readonly string[] normalTestHandCardIDs =
+    {
+        "atk_001",
+        "def_001",
+        "dodge_001",
+        "atk_bullet_001"
+    };
+
+    private readonly string[] sinTestHandCardIDs =
+    {
+        "sin_ability_001",
+        "sin_attack_test_001"
+    };
 
     private string lastLog = "等待初始化";
 
@@ -104,8 +131,8 @@ public class BattleSimpleUIController : MonoBehaviour
         CreateTestBattleCards(cards);
 
         runtimeState = new BattleRuntimeState();
-        runtimeState.SetCharacters(allyA, allyB, enemy);
-        List<BattleActionSlot> initialActionSlots = BattleActionSlotManager.CreatePartyActionSlots(allyA, allyB, 2);
+        runtimeState.SetCharacters(ally01, ally02, enemy01);
+        List<BattleActionSlot> initialActionSlots = BattleActionSlotManager.CreatePartyActionSlots(ally01, ally02, 2);
         runtimeState.SetActionSlots(initialActionSlots);
         runtimeState.SetIntentQueue(CreateFixedEnemyIntentQueue(initialActionSlots));
         runtimeState.SetPhase("Prepare");
@@ -115,19 +142,20 @@ public class BattleSimpleUIController : MonoBehaviour
 
     void CreateTestCharacters()
     {
-        allyA = new CharacterData("我方角色A", 30, 20, 20);
-        allyB = new CharacterData("我方角色B", 30, 3, 5);
-        enemy = new CharacterData("敌人", 50, 5, 8);
+        ally01 = new CharacterData("我方角色A", 30, 20, 20);
+        ally02 = new CharacterData("我方角色B", 30, 3, 5);
+        enemy01 = new CharacterData("敌人", 50, 5, 8);
+        enemy02 = new CharacterData("敌人2", 50, 5, 8);
     }
 
     void AddTestBuffs()
     {
-        if (allyA == null)
+        if (ally01 == null)
         {
             return;
         }
 
-        allyA.AddBuff("Bullet", "子弹", "AbilityBuff", 6, -1, "None", "Permanent");
+        ally01.AddBuff("Bullet", "子弹", "AbilityBuff", 6, -1, "None", "Permanent");
     }
 
     void CreateTestBattleCards(List<CardTestData> cards)
@@ -137,70 +165,98 @@ public class BattleSimpleUIController : MonoBehaviour
         CardTestData defenseCard = CardDataLoader.FindCardByID(cards, "def_001");
         CardTestData dodgeCard = CardDataLoader.FindCardByID(cards, "dodge_001");
         CardTestData allyAAbilityCard = CardDataLoader.FindCardByID(cards, "sin_ability_001");
+        CardTestData allyASinAttackCard = CardDataLoader.FindCardByID(cards, "sin_attack_test_001");
+        CardTestData bulletAttackCard = CardDataLoader.FindCardByID(cards, "atk_bullet_001");
 
         enemyAttackCardState = BattleCardManager.CreateBattleCard(
-            enemy,
+            enemy01,
             enemyCard,
             "ui_enemy_atk_001_copy_0"
         );
 
         allyAAttackCardState = BattleCardManager.CreateBattleCard(
-            allyA,
+            ally01,
             allyAAttackCard,
             "ui_allyA_atk_001_copy_0"
         );
 
+        if (bulletAttackCard != null)
+        {
+            allyABulletAttackCardState = BattleCardManager.CreateBattleCard(
+                ally01,
+                bulletAttackCard,
+                "ui_allyA_atk_bullet_001_copy_0"
+            );
+        }
+        else
+        {
+            Debug.LogWarning("创建测试卡牌UI预览失败：找不到 atk_bullet_001");
+        }
+
         allyADefenseCardState = BattleCardManager.CreateBattleCard(
-            allyA,
+            ally01,
             defenseCard,
             "ui_allyA_def_001_copy_0"
         );
 
         allyADodgeCardState = BattleCardManager.CreateBattleCard(
-            allyA,
+            ally01,
             dodgeCard,
             "ui_allyA_dodge_001_copy_0"
         );
 
         allyAAbilityCardState = BattleCardManager.CreateBattleCard(
-            allyA,
+            ally01,
             allyAAbilityCard,
             "ui_allyA_sin_ability_001_copy_0"
         );
 
+        if (allyASinAttackCard != null)
+        {
+            allyASinAttackCardState = BattleCardManager.CreateBattleCard(
+                ally01,
+                allyASinAttackCard,
+                "ui_allyA_sin_attack_test_001_copy_0"
+            );
+        }
+        else
+        {
+            Debug.LogWarning("创建测试罪卡手牌失败：找不到 sin_attack_test_001");
+        }
+
         // Temporary: atk_001 is reused as clash sin card data until JSON splits normal attack and clash sin cards.
         allyAClashSinCardState = BattleCardManager.CreateBattleCard(
-            allyA,
+            ally01,
             allyAAttackCard,
             "ui_allyA_clash_sin_atk_001_copy_0"
         );
 
         allyBAttackCardState = BattleCardManager.CreateBattleCard(
-            allyB,
+            ally02,
             allyAAttackCard,
             "ui_allyB_atk_001_copy_0"
         );
 
         allyBDefenseCardState = BattleCardManager.CreateBattleCard(
-            allyB,
+            ally02,
             defenseCard,
             "ui_allyB_def_001_copy_0"
         );
 
         allyBDodgeCardState = BattleCardManager.CreateBattleCard(
-            allyB,
+            ally02,
             dodgeCard,
             "ui_allyB_dodge_001_copy_0"
         );
 
         allyBAbilityCardState = BattleCardManager.CreateBattleCard(
-            allyB,
+            ally02,
             allyAAbilityCard,
             "ui_allyB_sin_ability_001_copy_0"
         );
 
         allyBClashSinCardState = BattleCardManager.CreateBattleCard(
-            allyB,
+            ally02,
             allyAAttackCard,
             "ui_allyB_clash_sin_atk_001_copy_0"
         );
@@ -208,14 +264,14 @@ public class BattleSimpleUIController : MonoBehaviour
 
     List<BattleEnemyIntent> CreateFixedEnemyIntentQueue(List<BattleActionSlot> actionSlots)
     {
-        if (enemy == null || enemyAttackCardState == null)
+        if (enemy01 == null || enemyAttackCardState == null)
         {
             Debug.LogWarning("创建固定敌人意图失败：敌人 / 敌人卡牌数据不完整");
             return new List<BattleEnemyIntent>();
         }
 
         int targetSlotIndex;
-        CharacterData target = SelectFixedEnemyIntentTarget(allyA, allyB, actionSlots, out targetSlotIndex);
+        CharacterData target = SelectFixedEnemyIntentTarget(ally01, ally02, actionSlots, out targetSlotIndex);
 
         if (target == null)
         {
@@ -225,7 +281,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
         BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
             "ui_fixed_enemy_intent_001",
-            enemy,
+            enemy01,
             enemyAttackCardState,
             target,
             targetSlotIndex,
@@ -238,25 +294,25 @@ public class BattleSimpleUIController : MonoBehaviour
     }
 
     internal static CharacterData SelectFixedEnemyIntentTarget(
-        CharacterData allyA,
-        CharacterData allyB,
+        CharacterData ally01,
+        CharacterData ally02,
         List<BattleActionSlot> actionSlots,
         out int targetSlotIndex
     )
     {
         targetSlotIndex = 1;
 
-        if (allyB != null && !allyB.IsDead())
+        if (ally02 != null && !ally02.IsDead())
         {
-            return HasOwnerSlot(actionSlots, allyB, targetSlotIndex)
-                ? allyB
+            return HasOwnerSlot(actionSlots, ally02, targetSlotIndex)
+                ? ally02
                 : null;
         }
 
-        if (allyA != null && !allyA.IsDead())
+        if (ally01 != null && !ally01.IsDead())
         {
-            return HasOwnerSlot(actionSlots, allyA, targetSlotIndex)
-                ? allyA
+            return HasOwnerSlot(actionSlots, ally01, targetSlotIndex)
+                ? ally01
                 : null;
         }
 
@@ -398,6 +454,11 @@ public class BattleSimpleUIController : MonoBehaviour
         {
             refreshViewButton.onClick.AddListener(RefreshView);
         }
+
+        if (qiehuanButton != null)
+        {
+            qiehuanButton.onClick.AddListener(ToggleCardGroup);
+        }
     }
 
     void UnbindButtonEvents()
@@ -516,6 +577,17 @@ public class BattleSimpleUIController : MonoBehaviour
         {
             refreshViewButton.onClick.RemoveListener(RefreshView);
         }
+
+        if (qiehuanButton != null)
+        {
+            qiehuanButton.onClick.RemoveListener(ToggleCardGroup);
+        }
+    }
+
+    private void ToggleCardGroup()
+    {
+        showingSinCards = !showingSinCards;
+        RefreshView();
     }
 
     private void OnClickAssignA1FreeAttack()
@@ -534,11 +606,11 @@ public class BattleSimpleUIController : MonoBehaviour
 
         bool result = BattleActionSlotManager.AssignFreeAction(
             runtimeState.actionSlots,
-            allyA,
+            ally01,
             1,
-            allyA,
+            ally01,
             allyAAttackCardState,
-            enemy
+            enemy01
         );
 
         lastLog = result
@@ -564,11 +636,11 @@ public class BattleSimpleUIController : MonoBehaviour
 
         bool result = BattleActionSlotManager.AssignFreeAction(
             runtimeState.actionSlots,
-            allyA,
+            ally01,
             1,
-            allyA,
+            ally01,
             allyAAbilityCardState,
-            allyA
+            ally01
         );
 
         lastLog = result
@@ -605,9 +677,9 @@ public class BattleSimpleUIController : MonoBehaviour
 
         bool result = BattleActionSlotManager.AssignResponseToEnemyIntent(
             runtimeState.actionSlots,
-            allyB,
+            ally02,
             1,
-            allyB,
+            ally02,
             allyBAttackCardState,
             intent
         );
@@ -621,12 +693,12 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void OnClickSelectActorA()
     {
-        TrySelectActor(allyA, "A");
+        TrySelectActor(ally01, "A");
     }
 
     private void OnClickSelectActorB()
     {
-        TrySelectActor(allyB, "B");
+        TrySelectActor(ally02, "B");
     }
 
     void TrySelectActor(CharacterData actor, string actorLabel)
@@ -701,11 +773,11 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        if (object.ReferenceEquals(selectedActor, allyA))
+        if (object.ReferenceEquals(selectedActor, ally01))
         {
             selectedCardState = allyACardState;
         }
-        else if (object.ReferenceEquals(selectedActor, allyB))
+        else if (object.ReferenceEquals(selectedActor, ally02))
         {
             selectedCardState = allyBCardState;
         }
@@ -854,7 +926,7 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         CharacterData target = IsSelectedAbilityCard()
             ? selectedActor
-            : enemy;
+            : enemy01;
 
         if (!CanAssignSelectedCard(target))
         {
@@ -1271,7 +1343,7 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        List<BattleActionSlot> newActionSlots = BattleActionSlotManager.CreateLivingPartyActionSlots(allyA, allyB, 2);
+        List<BattleActionSlot> newActionSlots = BattleActionSlotManager.CreateLivingPartyActionSlots(ally01, ally02, 2);
 
         if (newActionSlots == null || newActionSlots.Count == 0)
         {
@@ -1317,6 +1389,158 @@ public class BattleSimpleUIController : MonoBehaviour
         RefreshActionSlotTexts(viewData);
         RefreshSelectionInfo();
         SetText(logText, lastLog);
+        RefreshFixedStatusViews();
+        RefreshCharacterStatusViews();
+        RefreshTestCardView();
+        RefreshTestCardHandView();
+    }
+
+    private void RefreshFixedStatusViews()
+    {
+        if (roundView != null)
+        {
+            if (runtimeState != null)
+            {
+                roundView.SetRound(runtimeState.currentTurn);
+            }
+            else
+            {
+                roundView.Clear();
+            }
+        }
+
+        if (guiltView != null)
+        {
+            int guilt = runtimeState != null ? runtimeState.currentGuilt : 0;
+            guiltView.SetGuilt(guilt);
+        }
+    }
+
+    private void RefreshCharacterStatusViews()
+    {
+        if (ally01StatusView != null)
+        {
+            ally01StatusView.SetCharacter(ally01);
+        }
+
+        if (ally02StatusView != null)
+        {
+            ally02StatusView.SetCharacter(ally02);
+        }
+
+        if (enemy01StatusView != null)
+        {
+            enemy01StatusView.SetCharacter(enemy01);
+        }
+
+        if (enemy02StatusView != null)
+        {
+            enemy02StatusView.SetCharacter(enemy02);
+        }
+    }
+
+    void RefreshTestCardView()
+    {
+        if (testCardView == null)
+        {
+            return;
+        }
+
+        if (allyABulletAttackCardState == null)
+        {
+            testCardView.SetEmpty();
+            return;
+        }
+
+        BattleCardUIPreviewData previewData = BattleCardUIPreviewBuilder.Build(
+            ally01,
+            enemy01,
+            allyABulletAttackCardState
+        );
+
+        testCardView.SetCard(previewData);
+    }
+
+    void RefreshTestCardHandView()
+    {
+        if (testCardHandView == null)
+        {
+            return;
+        }
+
+        if (ally01 == null || ally01.battleCards == null)
+        {
+            testCardHandView.ClearCards();
+            return;
+        }
+
+        string[] targetCardIDs = showingSinCards
+            ? sinTestHandCardIDs
+            : normalTestHandCardIDs;
+
+        List<BattleCardState> cards = FindTestHandCardsByID(targetCardIDs);
+
+        testCardHandView.SetCards(
+            ally01,
+            enemy01,
+            cards
+        );
+    }
+
+    private List<BattleCardState> FindTestHandCardsByID(string[] cardIDs)
+    {
+        List<BattleCardState> cards = new List<BattleCardState>();
+
+        if (cardIDs == null || ally01 == null || ally01.battleCards == null)
+        {
+            return cards;
+        }
+
+        for (int i = 0; i < cardIDs.Length; i++)
+        {
+            string cardID = cardIDs[i];
+            BattleCardState cardState = FindAlly01CardStateByID(cardID);
+
+            if (cardState == null)
+            {
+                Debug.LogWarning("测试手牌缺少卡牌：" + cardID);
+                continue;
+            }
+
+            cards.Add(cardState);
+        }
+
+        return cards;
+    }
+
+    private BattleCardState FindAlly01CardStateByID(string cardID)
+    {
+        if (string.IsNullOrEmpty(cardID) || ally01 == null || ally01.battleCards == null)
+        {
+            return null;
+        }
+
+        if (cardID == "sin_attack_test_001" && allyASinAttackCardState != null)
+        {
+            return allyASinAttackCardState;
+        }
+
+        for (int i = 0; i < ally01.battleCards.Count; i++)
+        {
+            BattleCardState cardState = ally01.battleCards[i];
+
+            if (cardState == null || cardState.cardData == null)
+            {
+                continue;
+            }
+
+            if (cardState.cardData.cardID == cardID)
+            {
+                return cardState;
+            }
+        }
+
+        return null;
     }
 
     private bool IsPhase(string phaseName)
@@ -1450,12 +1674,12 @@ public class BattleSimpleUIController : MonoBehaviour
 
     string GetSelectedActorLabel()
     {
-        if (object.ReferenceEquals(selectedActor, allyA))
+        if (object.ReferenceEquals(selectedActor, ally01))
         {
             return "A";
         }
 
-        if (object.ReferenceEquals(selectedActor, allyB))
+        if (object.ReferenceEquals(selectedActor, ally02))
         {
             return "B";
         }
@@ -1573,15 +1797,15 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         if (HasNewActionSlotTextBindings())
         {
-            SetText(actionSlotA1Text, FormatOwnerActionSlot(viewData, allyA, 1, "A槽位1"));
-            SetText(actionSlotA2Text, FormatOwnerActionSlot(viewData, allyA, 2, "A槽位2"));
-            SetText(actionSlotB1Text, FormatOwnerActionSlot(viewData, allyB, 1, "B槽位1"));
-            SetText(actionSlotB2Text, FormatOwnerActionSlot(viewData, allyB, 2, "B槽位2"));
+            SetText(actionSlotA1Text, FormatOwnerActionSlot(viewData, ally01, 1, "A槽位1"));
+            SetText(actionSlotA2Text, FormatOwnerActionSlot(viewData, ally01, 2, "A槽位2"));
+            SetText(actionSlotB1Text, FormatOwnerActionSlot(viewData, ally02, 1, "B槽位1"));
+            SetText(actionSlotB2Text, FormatOwnerActionSlot(viewData, ally02, 2, "B槽位2"));
             return;
         }
 
-        SetText(actionSlot1Text, FormatOwnerActionSlotWithFallback(viewData, allyA, 1, "A槽位1", 1));
-        SetText(actionSlot2Text, FormatOwnerActionSlotWithFallback(viewData, allyB, 1, "B槽位1", 2));
+        SetText(actionSlot1Text, FormatOwnerActionSlotWithFallback(viewData, ally01, 1, "A槽位1", 1));
+        SetText(actionSlot2Text, FormatOwnerActionSlotWithFallback(viewData, ally02, 1, "B槽位1", 2));
     }
 
     bool HasNewActionSlotTextBindings()

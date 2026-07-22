@@ -21,6 +21,10 @@ public static class CardDataLoader
 
         string jsonText = Encoding.UTF8.GetString(jsonFile.bytes);
 
+        // 去掉 UTF-8 BOM，避免 Newtonsoft.Json 在文件开头遇到 \uFEFF 时报错。
+        // 有些编辑器保存 JSON 时会在文件开头加入不可见 BOM。
+        jsonText = jsonText.TrimStart('\uFEFF');
+
         List<CardTestData> cards = JsonConvert.DeserializeObject<List<CardTestData>>(jsonText);
 
         if (cards == null)

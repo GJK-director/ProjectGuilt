@@ -1,7 +1,9 @@
-[
+﻿[
   {
     "cardID": "atk_001",
     "cardName": "基础攻击",
+    "description": "",
+    "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
     "isClashable": true,
@@ -53,6 +55,8 @@
   {
     "cardID": "sin_ability_001",
     "cardName": "罪卡测试：能力强化",
+    "description": "",
+    "keywords": [],
     "rarity": "Sin",
     "cardType": "Ability",
     "isClashable": false,
@@ -92,6 +96,8 @@
   {
     "cardID": "dodge_001",
     "cardName": "基础闪避",
+    "description": "",
+    "keywords": [],
     "rarity": "White",
     "cardType": "Dodge",
     "isClashable": true,
@@ -103,6 +109,8 @@
   {
     "cardID": "enemy_atk_001",
     "cardName": "敌人爪击",
+    "description": "",
+    "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
     "isClashable": true,
@@ -116,6 +124,8 @@
   {
     "cardID": "def_001",
     "cardName": "基础防御",
+    "description": "",
+    "keywords": [],
     "rarity": "White",
     "cardType": "Defense",
     "isClashable": false,
@@ -128,6 +138,8 @@
   {
     "cardID": "atk_bullet_001",
     "cardName": "基础射击",
+    "description": "消耗1枚子弹，根据当前子弹数量提高点数。",
+    "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
     "isClashable": true,
@@ -148,6 +160,27 @@
       "exactStackPointBonus": 3,
       "consumeAmountOnSuccess": 1
     },
+    "effects": []
+  },
+  {
+    "cardID": "sin_attack_test_001",
+    "cardName": "罪卡测试：攻击",
+    "description": "",
+    "keywords": [],
+    "rarity": "White",
+    "cardType": "Attack",
+    "isClashable": true,
+    "isSinCard": true,
+    "consumeOnUse": true,
+    "maxUseCount": 3,
+    "sinCardUseRule": "UseCount",
+    "sinCardCategory": "Clash",
+    "minPoint": 2,
+    "maxPoint": 8,
+    "cooldown": 0,
+    "guiltCost": 0,
+    "guiltGain": 2,
+    "damageFormula": "PointAsDamage",
     "effects": []
   }
 ]

@@ -268,7 +268,7 @@ public class BattleStateViewData
 
     static int GetCurrentGuilt(CharacterData character)
     {
-        return character != null ? character.currentGuilt : 0;
+        return GuiltManager.GetCurrentGuilt(character);
     }
 }
 

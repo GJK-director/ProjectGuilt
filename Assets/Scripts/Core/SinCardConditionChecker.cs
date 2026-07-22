@@ -220,7 +220,7 @@ public static class SinCardConditionChecker
         if (conditionType == CardUseConditionType.GuiltAtLeast)
         {
             int requiredGuilt = condition.value;
-            int currentGuilt = checkTarget.currentGuilt;
+            int currentGuilt = GuiltManager.GetCurrentGuilt(checkTarget);
 
             if (currentGuilt >= requiredGuilt)
             {
@@ -244,7 +244,7 @@ public static class SinCardConditionChecker
         if (conditionType == CardUseConditionType.GuiltBelow)
         {
             int requiredGuilt = condition.value;
-            int currentGuilt = checkTarget.currentGuilt;
+            int currentGuilt = GuiltManager.GetCurrentGuilt(checkTarget);
 
             if (currentGuilt < requiredGuilt)
             {

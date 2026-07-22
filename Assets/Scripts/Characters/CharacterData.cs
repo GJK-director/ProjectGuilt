@@ -13,9 +13,30 @@ public class CharacterData
     public int maxHP;
     //currentHP当前hp
     public int currentHP;
-    // currentGuilt = 当前负罪感
-    // 负罪感从 0 开始累计增加，不是消耗资源
-    public int currentGuilt = 0;
+    // 旧测试仍通过 currentGuilt 读写负罪感。
+    // 正式战斗绑定 RuntimeState 后，该兼容属性会转读写战斗公共负罪感。
+    private int legacyCurrentGuilt = 0;
+    private BattleRuntimeState sharedGuiltRuntimeState;
+
+    public int currentGuilt
+    {
+        get
+        {
+            return sharedGuiltRuntimeState != null
+                ? sharedGuiltRuntimeState.currentGuilt
+                : legacyCurrentGuilt;
+        }
+        set
+        {
+            if (sharedGuiltRuntimeState != null)
+            {
+                sharedGuiltRuntimeState.currentGuilt = Mathf.Max(0, value);
+                return;
+            }
+
+            legacyCurrentGuilt = Mathf.Max(0, value);
+        }
+    }
 
     // minSpeed = 最低速度
     public int minSpeed;
@@ -60,6 +81,24 @@ public class CharacterData
         // 初始先给一个最低速度
         // 真正战斗时会在回合开始 RollTurnSpeed  这是一个安全措施
         turnSpeed = minSpeed;
+    }
+
+    internal BattleRuntimeState GetSharedGuiltRuntimeState()
+    {
+        return sharedGuiltRuntimeState;
+    }
+
+    internal void BindSharedGuiltRuntimeState(BattleRuntimeState runtimeState)
+    {
+        sharedGuiltRuntimeState = runtimeState;
+    }
+
+    internal void UnbindSharedGuiltRuntimeState(BattleRuntimeState runtimeState)
+    {
+        if (object.ReferenceEquals(sharedGuiltRuntimeState, runtimeState))
+        {
+            sharedGuiltRuntimeState = null;
+        }
     }
 
     // 受到伤害
