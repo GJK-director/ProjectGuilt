@@ -51,6 +51,13 @@ public class BattleExecutionItem
     // 数字越小，越先处理。
     public int order;
 
+    // 以下字段保存计划生成时使用的稳定排序键，便于日志和测试直接核对顺序。
+    public int effectiveSpeed;
+    public int responsePriority;
+    public int actionSlotOrder;
+    public int actorPositionOrder;
+    public int stableOrder;
+
     // executionType = 执行项类型
     // 使用 BattleExecutionItemType 枚举，决定这一项属于哪种处理类型。
     public BattleExecutionItemType executionType;
@@ -66,8 +73,8 @@ public class BattleExecutionItem
     public BattleActionSlot actionSlot;
 
     // passiveGuardCandidates = 被动守备候选槽位
-    // 由 PlanManager 收集并按槽位序号升序保存，只保存槽位引用，不复制槽位。
-    // 当前同时服务 UnrespondedEnemyIntent，以及 RespondedEnemyIntent 中的 Attack vs Attack 敌人胜利分支。
+    // 由 PlanManager 为 UnrespondedEnemyIntent 保存指定守备与被动守备槽位引用，不复制槽位。
+    // RespondedEnemyIntent 不再携带后备守备候选。
     // 执行或结算时会再次验证候选是否仍有效；一张敌人卡最多触发一张守备。
     // 未触发的候选不会 MarkUsed，也不会进入 CD。
     public List<BattleActionSlot> passiveGuardCandidates;
@@ -106,6 +113,11 @@ public class BattleExecutionItem
     )
     {
         this.order = order;
+        effectiveSpeed = 0;
+        responsePriority = 1;
+        actionSlotOrder = int.MaxValue;
+        actorPositionOrder = int.MaxValue;
+        stableOrder = order;
         this.executionType = executionType;
         this.enemyIntent = enemyIntent;
         this.actionSlot = actionSlot;

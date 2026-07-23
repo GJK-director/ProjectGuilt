@@ -775,6 +775,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 67682063}
+  - component: {fileID: 67682064}
   m_Layer: 5
   m_Name: Buff_1
   m_TagString: Untagged
@@ -804,6 +805,21 @@ RectTransform:
   m_AnchoredPosition: {x: 158, y: -50}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &67682064
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 67682062}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d78adb24f85485341b46354894d7967c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleBuffIconUIView
+  iconImage: {fileID: 1877747361}
+  stackText: {fileID: 22367926}
+  decayText: {fileID: 2039270217}
 --- !u!1 &100698012
 GameObject:
   m_ObjectHideFlags: 0
@@ -989,6 +1005,8 @@ MonoBehaviour:
   ally02StatusView: {fileID: 124996449}
   enemy01StatusView: {fileID: 211195461}
   enemy02StatusView: {fileID: 1350306089}
+  roundView: {fileID: 1440611887}
+  guiltView: {fileID: 957474500}
   assignA1FreeAttackButton: {fileID: 0}
   assignA1AbilityButton: {fileID: 0}
   assignB1RespondIntent1Button: {fileID: 0}
@@ -1006,7 +1024,7 @@ MonoBehaviour:
   selectPassiveGuardModeButton: {fileID: 0}
   confirmAssignSelectedActionButton: {fileID: 0}
   clearSelectionButton: {fileID: 0}
-  battleStartButton: {fileID: 0}
+  battleStartButton: {fileID: 2137249494}
   createExecutionPlanButton: {fileID: 0}
   executePlanButton: {fileID: 0}
   endTurnButton: {fileID: 0}
@@ -1282,8 +1300,8 @@ MonoBehaviour:
   speedText: {fileID: 1597045785}
   slot01View: {fileID: 1680973946}
   slot02View: {fileID: 863888061}
-  hpView: {fileID: 0}
-  buffGroupView: {fileID: 0}
+  hpView: {fileID: 778318742}
+  buffGroupView: {fileID: 428574205}
   isEnemy: 0
 --- !u!1 &128017591
 GameObject:
@@ -1986,8 +2004,8 @@ MonoBehaviour:
   speedText: {fileID: 51903430}
   slot01View: {fileID: 239349694}
   slot02View: {fileID: 240047820}
-  hpView: {fileID: 0}
-  buffGroupView: {fileID: 0}
+  hpView: {fileID: 1791191465}
+  buffGroupView: {fileID: 449926648}
   isEnemy: 1
 --- !u!1 &213311371
 GameObject:
@@ -2219,7 +2237,8 @@ MonoBehaviour:
   slotAllyActionSetSprite: {fileID: 0}
   slotAllyTargetedNoActionSprite: {fileID: 0}
   slotEnemyEmptySprite: {fileID: 21300000, guid: fd5f14e3443f42044a37a5b7666c6b2b, type: 3}
-  slotEnemyActionSetSprite: {fileID: 0}
+  slotEnemyActionSetSprite: {fileID: 21300000, guid: 1babd5a239a2c504d997bf14b467ddb4, type: 3}
+  slotSelectedSprite: {fileID: 0}
   defaultState: 3
 --- !u!1 &240047816
 GameObject:
@@ -2315,6 +2334,7 @@ MonoBehaviour:
   slotAllyTargetedNoActionSprite: {fileID: 0}
   slotEnemyEmptySprite: {fileID: 21300000, guid: fd5f14e3443f42044a37a5b7666c6b2b, type: 3}
   slotEnemyActionSetSprite: {fileID: 0}
+  slotSelectedSprite: {fileID: 21300000, guid: ba9700f2800314240b5a5643b5c38ff4, type: 3}
   defaultState: 3
 --- !u!1 &310020662
 GameObject:
@@ -3518,6 +3538,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 428574204}
+  - component: {fileID: 428574205}
   m_Layer: 5
   m_Name: BuffGroup
   m_TagString: Untagged
@@ -3546,6 +3567,27 @@ RectTransform:
   m_AnchoredPosition: {x: -80, y: -80}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &428574205
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 428574203}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e80febca9df02bc46aff4de9a401abf2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleBuffGroupUIView
+  buffBindings:
+  - buffID: Strength
+    displayName: "\u5F3A\u58EE"
+    iconSprite: {fileID: 21300000, guid: 5d89509ad7d3b05498f86255a116eb2f, type: 3}
+    iconView: {fileID: 1241546909}
+  - buffID: GuardUp
+    displayName: "\u9632\u62A4"
+    iconSprite: {fileID: 21300000, guid: 220a6f9688df72940b96f5ab4a495627, type: 3}
+    iconView: {fileID: 1949763821}
 --- !u!1 &449926646
 GameObject:
   m_ObjectHideFlags: 0
@@ -3555,6 +3597,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 449926647}
+  - component: {fileID: 449926648}
   m_Layer: 5
   m_Name: BuffGroup
   m_TagString: Untagged
@@ -3583,6 +3626,27 @@ RectTransform:
   m_AnchoredPosition: {x: -80, y: -80}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &449926648
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 449926646}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e80febca9df02bc46aff4de9a401abf2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleBuffGroupUIView
+  buffBindings:
+  - buffID: Strength
+    displayName: "\u5F3A\u58EE"
+    iconSprite: {fileID: 21300000, guid: 5d89509ad7d3b05498f86255a116eb2f, type: 3}
+    iconView: {fileID: 1241546909}
+  - buffID: GuardUp
+    displayName: "\u9632\u62A4"
+    iconSprite: {fileID: 21300000, guid: 220a6f9688df72940b96f5ab4a495627, type: 3}
+    iconView: {fileID: 1949763821}
 --- !u!1 &451224691
 GameObject:
   m_ObjectHideFlags: 0
@@ -4185,6 +4249,143 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 561006039}
   m_CullTransparentMesh: 1
+--- !u!1 &591600799
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 591600800}
+  - component: {fileID: 591600802}
+  - component: {fileID: 591600801}
+  m_Layer: 5
+  m_Name: shuzhi
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &591600800
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 591600799}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 957474499}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 200, y: 50}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &591600801
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 591600799}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4688fdb7df04437aeb418b961361dc5, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Unity.TextMeshPro::TMPro.TextMeshProUGUI
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 1}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_text: New Text
+  m_isRightToLeft: 0
+  m_fontAsset: {fileID: 11400000, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_sharedMaterial: {fileID: 2180264, guid: 8f586378b4e144a9851e7b34d9b748ee, type: 2}
+  m_fontSharedMaterials: []
+  m_fontMaterial: {fileID: 0}
+  m_fontMaterials: []
+  m_fontColor32:
+    serializedVersion: 2
+    rgba: 4278190080
+  m_fontColor: {r: 0, g: 0, b: 0, a: 1}
+  m_enableVertexGradient: 0
+  m_colorMode: 3
+  m_fontColorGradient:
+    topLeft: {r: 1, g: 1, b: 1, a: 1}
+    topRight: {r: 1, g: 1, b: 1, a: 1}
+    bottomLeft: {r: 1, g: 1, b: 1, a: 1}
+    bottomRight: {r: 1, g: 1, b: 1, a: 1}
+  m_fontColorGradientPreset: {fileID: 0}
+  m_spriteAsset: {fileID: 0}
+  m_tintAllSprites: 0
+  m_StyleSheet: {fileID: 0}
+  m_TextStyleHashCode: -1183493901
+  m_overrideHtmlColors: 0
+  m_faceColor:
+    serializedVersion: 2
+    rgba: 4294967295
+  m_fontSize: 60
+  m_fontSizeBase: 60
+  m_fontWeight: 400
+  m_enableAutoSizing: 0
+  m_fontSizeMin: 18
+  m_fontSizeMax: 72
+  m_fontStyle: 0
+  m_HorizontalAlignment: 1
+  m_VerticalAlignment: 256
+  m_textAlignment: 65535
+  m_characterSpacing: 0
+  m_characterHorizontalScale: 1
+  m_wordSpacing: 0
+  m_lineSpacing: 0
+  m_lineSpacingMax: 0
+  m_paragraphSpacing: 0
+  m_charWidthMaxAdj: 0
+  m_TextWrappingMode: 1
+  m_wordWrappingRatios: 0.4
+  m_overflowMode: 0
+  m_linkedTextComponent: {fileID: 0}
+  parentLinkedComponent: {fileID: 0}
+  m_enableKerning: 0
+  m_ActiveFontFeatures: 6e72656b
+  m_enableExtraPadding: 0
+  checkPaddingRequired: 0
+  m_isRichText: 1
+  m_EmojiFallbackSupport: 1
+  m_parseCtrlCharacters: 1
+  m_isOrthographic: 1
+  m_isCullingEnabled: 0
+  m_horizontalMapping: 0
+  m_verticalMapping: 0
+  m_uvLineOffset: 0
+  m_geometrySortingOrder: 0
+  m_IsTextObjectScaleStatic: 0
+  m_VertexBufferAutoSizeReduction: 0
+  m_useMaxVisibleDescender: 1
+  m_pageToDisplay: 1
+  m_margin: {x: -177.15007, y: -24.593626, z: -123.369415, w: 0}
+  m_isUsingLegacyAnimationComponent: 0
+  m_isVolumetricText: 0
+  m_hasFontAssetChanged: 0
+  m_baseMaterial: {fileID: 0}
+  m_maskOffset: {x: 0, y: 0, z: 0, w: 0}
+--- !u!222 &591600802
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 591600799}
+  m_CullTransparentMesh: 1
 --- !u!1 &594361580
 GameObject:
   m_ObjectHideFlags: 0
@@ -4310,6 +4511,7 @@ MonoBehaviour:
   slotAllyTargetedNoActionSprite: {fileID: 0}
   slotEnemyEmptySprite: {fileID: 21300000, guid: fd5f14e3443f42044a37a5b7666c6b2b, type: 3}
   slotEnemyActionSetSprite: {fileID: 21300000, guid: fd5f14e3443f42044a37a5b7666c6b2b, type: 3}
+  slotSelectedSprite: {fileID: 0}
   defaultState: 3
 --- !u!1 &614553427
 GameObject:
@@ -4810,6 +5012,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 711671789}
+  - component: {fileID: 711671790}
   m_Layer: 5
   m_Name: Buff_1
   m_TagString: Untagged
@@ -4839,6 +5042,21 @@ RectTransform:
   m_AnchoredPosition: {x: 50, y: -50}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &711671790
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 711671788}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d78adb24f85485341b46354894d7967c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleBuffIconUIView
+  iconImage: {fileID: 1958050125}
+  stackText: {fileID: 670498724}
+  decayText: {fileID: 2072440366}
 --- !u!1 &712140862
 GameObject:
   m_ObjectHideFlags: 0
@@ -5166,8 +5384,8 @@ MonoBehaviour:
   speedText: {fileID: 178505279}
   slot01View: {fileID: 1634498291}
   slot02View: {fileID: 867342239}
-  hpView: {fileID: 0}
-  buffGroupView: {fileID: 0}
+  hpView: {fileID: 1511736116}
+  buffGroupView: {fileID: 1342317937}
   isEnemy: 0
 --- !u!1 &772755879
 GameObject:
@@ -5216,6 +5434,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 778318741}
+  - component: {fileID: 778318742}
   m_Layer: 5
   m_Name: FootStatusGroup
   m_TagString: Untagged
@@ -5245,6 +5464,22 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: -80.00006}
   m_SizeDelta: {x: 180, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &778318742
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 778318740}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9a7a94af8ac7b64e8948fce70c4c750, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleHpUIView
+  hpFillCurrentImage: {fileID: 860211235}
+  hpBackLostImage: {fileID: 1990473713}
+  hpText: {fileID: 712140864}
+  showMaxHp: 0
 --- !u!1 &793876056
 GameObject:
   m_ObjectHideFlags: 0
@@ -5712,6 +5947,7 @@ MonoBehaviour:
   slotAllyTargetedNoActionSprite: {fileID: 0}
   slotEnemyEmptySprite: {fileID: 0}
   slotEnemyActionSetSprite: {fileID: 0}
+  slotSelectedSprite: {fileID: 21300000, guid: ba9700f2800314240b5a5643b5c38ff4, type: 3}
   defaultState: 0
 --- !u!1 &867342235
 GameObject:
@@ -5807,6 +6043,7 @@ MonoBehaviour:
   slotAllyTargetedNoActionSprite: {fileID: 0}
   slotEnemyEmptySprite: {fileID: 0}
   slotEnemyActionSetSprite: {fileID: 0}
+  slotSelectedSprite: {fileID: 21300000, guid: ba9700f2800314240b5a5643b5c38ff4, type: 3}
   defaultState: 0
 --- !u!1 &889041721
 GameObject:
@@ -5817,6 +6054,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 889041722}
+  - component: {fileID: 889041723}
   m_Layer: 5
   m_Name: FootStatusGroup
   m_TagString: Untagged
@@ -5846,6 +6084,22 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: -80.00012}
   m_SizeDelta: {x: 180, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &889041723
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 889041721}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9a7a94af8ac7b64e8948fce70c4c750, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleHpUIView
+  hpFillCurrentImage: {fileID: 114357040}
+  hpBackLostImage: {fileID: 1913422416}
+  hpText: {fileID: 20710189}
+  showMaxHp: 0
 --- !u!1 &889566728
 GameObject:
   m_ObjectHideFlags: 0
@@ -6214,6 +6468,7 @@ MonoBehaviour:
   slotAllyTargetedNoActionSprite: {fileID: 0}
   slotEnemyEmptySprite: {fileID: 21300000, guid: fd5f14e3443f42044a37a5b7666c6b2b, type: 3}
   slotEnemyActionSetSprite: {fileID: 0}
+  slotSelectedSprite: {fileID: 0}
   defaultState: 3
 --- !u!1 &910648125
 GameObject:
@@ -6474,6 +6729,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 957474499}
+  - component: {fileID: 957474500}
   m_Layer: 5
   m_Name: fzg
   m_TagString: Untagged
@@ -6495,6 +6751,7 @@ RectTransform:
   m_Children:
   - {fileID: 1963780404}
   - {fileID: 1723028861}
+  - {fileID: 591600800}
   m_Father: {fileID: 1488813076}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -6502,6 +6759,19 @@ RectTransform:
   m_AnchoredPosition: {x: -609, y: 487}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &957474500
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 957474498}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3e48d31c2e670424699ef776cff7a511, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleGuiltUIView
+  guiltValueText: {fileID: 591600801}
 --- !u!1 &960555781
 GameObject:
   m_ObjectHideFlags: 0
@@ -7540,6 +7810,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1107525754}
+  - component: {fileID: 1107525755}
   m_Layer: 5
   m_Name: Buff_2
   m_TagString: Untagged
@@ -7569,6 +7840,21 @@ RectTransform:
   m_AnchoredPosition: {x: 158, y: -50}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1107525755
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1107525753}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d78adb24f85485341b46354894d7967c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleBuffIconUIView
+  iconImage: {fileID: 1455467031}
+  stackText: {fileID: 171623134}
+  decayText: {fileID: 1747596001}
 --- !u!1 &1112653840
 GameObject:
   m_ObjectHideFlags: 0
@@ -8211,6 +8497,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1241546908}
+  - component: {fileID: 1241546909}
   m_Layer: 5
   m_Name: Buff_1
   m_TagString: Untagged
@@ -8240,6 +8527,21 @@ RectTransform:
   m_AnchoredPosition: {x: 158, y: -50}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1241546909
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1241546907}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d78adb24f85485341b46354894d7967c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleBuffIconUIView
+  iconImage: {fileID: 941970482}
+  stackText: {fileID: 1184233142}
+  decayText: {fileID: 1403719773}
 --- !u!1 &1267938297
 GameObject:
   m_ObjectHideFlags: 0
@@ -8461,6 +8763,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1311195620}
+  - component: {fileID: 1311195621}
   m_Layer: 5
   m_Name: BuffGroup
   m_TagString: Untagged
@@ -8489,6 +8792,27 @@ RectTransform:
   m_AnchoredPosition: {x: -80, y: -80}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1311195621
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1311195619}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e80febca9df02bc46aff4de9a401abf2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleBuffGroupUIView
+  buffBindings:
+  - buffID: Strength
+    displayName: "\u5F3A\u58EE"
+    iconSprite: {fileID: 21300000, guid: 5d89509ad7d3b05498f86255a116eb2f, type: 3}
+    iconView: {fileID: 1241546909}
+  - buffID: GuardUp
+    displayName: "\u9632\u62A4"
+    iconSprite: {fileID: 21300000, guid: 220a6f9688df72940b96f5ab4a495627, type: 3}
+    iconView: {fileID: 1949763821}
 --- !u!1 &1316989237
 GameObject:
   m_ObjectHideFlags: 0
@@ -8810,6 +9134,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1342317936}
+  - component: {fileID: 1342317937}
   m_Layer: 5
   m_Name: BuffGroup
   m_TagString: Untagged
@@ -8838,6 +9163,27 @@ RectTransform:
   m_AnchoredPosition: {x: -80, y: -80}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1342317937
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1342317935}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e80febca9df02bc46aff4de9a401abf2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleBuffGroupUIView
+  buffBindings:
+  - buffID: Strength
+    displayName: "\u5F3A\u58EE"
+    iconSprite: {fileID: 21300000, guid: 5d89509ad7d3b05498f86255a116eb2f, type: 3}
+    iconView: {fileID: 1241546909}
+  - buffID: GuardUp
+    displayName: "\u9632\u62A4"
+    iconSprite: {fileID: 21300000, guid: 220a6f9688df72940b96f5ab4a495627, type: 3}
+    iconView: {fileID: 1949763821}
 --- !u!1 &1343308138
 GameObject:
   m_ObjectHideFlags: 0
@@ -9066,8 +9412,8 @@ MonoBehaviour:
   speedText: {fileID: 1999785989}
   slot01View: {fileID: 599622933}
   slot02View: {fileID: 892694287}
-  hpView: {fileID: 0}
-  buffGroupView: {fileID: 0}
+  hpView: {fileID: 889041723}
+  buffGroupView: {fileID: 1311195621}
   isEnemy: 1
 --- !u!1 &1357235926
 GameObject:
@@ -9385,6 +9731,7 @@ GameObject:
   - component: {fileID: 1440611884}
   - component: {fileID: 1440611886}
   - component: {fileID: 1440611885}
+  - component: {fileID: 1440611887}
   m_Layer: 5
   m_Name: time
   m_TagString: Untagged
@@ -9451,6 +9798,19 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1440611883}
   m_CullTransparentMesh: 1
+--- !u!114 &1440611887
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1440611883}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d8348ac7655de204690501489d802f0f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleRoundUIView
+  roundNumberText: {fileID: 960555783}
 --- !u!1 &1441849493
 GameObject:
   m_ObjectHideFlags: 0
@@ -9707,6 +10067,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1480754580}
+  - component: {fileID: 1480754581}
   m_Layer: 5
   m_Name: Buff_2
   m_TagString: Untagged
@@ -9736,6 +10097,21 @@ RectTransform:
   m_AnchoredPosition: {x: 50, y: -50}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1480754581
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1480754579}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d78adb24f85485341b46354894d7967c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleBuffIconUIView
+  iconImage: {fileID: 1666766126}
+  stackText: {fileID: 354199165}
+  decayText: {fileID: 1050721714}
 --- !u!1 &1488813072
 GameObject:
   m_ObjectHideFlags: 0
@@ -9853,6 +10229,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1511736115}
+  - component: {fileID: 1511736116}
   m_Layer: 5
   m_Name: FootStatusGroup
   m_TagString: Untagged
@@ -9882,6 +10259,22 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: -80}
   m_SizeDelta: {x: 180, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1511736116
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1511736114}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9a7a94af8ac7b64e8948fce70c4c750, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleHpUIView
+  hpFillCurrentImage: {fileID: 629552430}
+  hpBackLostImage: {fileID: 1825954014}
+  hpText: {fileID: 1267938299}
+  showMaxHp: 0
 --- !u!1 &1519138217
 GameObject:
   m_ObjectHideFlags: 0
@@ -9891,6 +10284,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1519138218}
+  - component: {fileID: 1519138219}
   m_Layer: 5
   m_Name: Buff_1
   m_TagString: Untagged
@@ -9920,6 +10314,21 @@ RectTransform:
   m_AnchoredPosition: {x: 158, y: -50}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1519138219
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1519138217}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d78adb24f85485341b46354894d7967c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleBuffIconUIView
+  iconImage: {fileID: 703327017}
+  stackText: {fileID: 1984674694}
+  decayText: {fileID: 1716540165}
 --- !u!1 &1525951322
 GameObject:
   m_ObjectHideFlags: 0
@@ -10375,6 +10784,7 @@ MonoBehaviour:
   slotAllyTargetedNoActionSprite: {fileID: 0}
   slotEnemyEmptySprite: {fileID: 0}
   slotEnemyActionSetSprite: {fileID: 0}
+  slotSelectedSprite: {fileID: 21300000, guid: ba9700f2800314240b5a5643b5c38ff4, type: 3}
   defaultState: 0
 --- !u!1 &1653631838
 GameObject:
@@ -10841,9 +11251,10 @@ MonoBehaviour:
   slotImage: {fileID: 1680973944}
   slotEmptySprite: {fileID: 21300000, guid: eed3ad91692f0c94494b18ed52c23658, type: 3}
   slotAllyActionSetSprite: {fileID: 0}
-  slotAllyTargetedNoActionSprite: {fileID: 0}
+  slotAllyTargetedNoActionSprite: {fileID: 21300000, guid: aa9268bf39cf30649b1c027d89108a19, type: 3}
   slotEnemyEmptySprite: {fileID: 0}
   slotEnemyActionSetSprite: {fileID: 0}
+  slotSelectedSprite: {fileID: 21300000, guid: ba9700f2800314240b5a5643b5c38ff4, type: 3}
   defaultState: 0
 --- !u!1 &1716540163
 GameObject:
@@ -11453,6 +11864,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1791191464}
+  - component: {fileID: 1791191465}
   m_Layer: 5
   m_Name: FootStatusGroup
   m_TagString: Untagged
@@ -11482,6 +11894,22 @@ RectTransform:
   m_AnchoredPosition: {x: 0, y: -80.00012}
   m_SizeDelta: {x: 180, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1791191465
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1791191463}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c9a7a94af8ac7b64e8948fce70c4c750, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleHpUIView
+  hpFillCurrentImage: {fileID: 1429613566}
+  hpBackLostImage: {fileID: 1171831371}
+  hpText: {fileID: 1317518692}
+  showMaxHp: 0
 --- !u!1 &1816324287
 GameObject:
   m_ObjectHideFlags: 0
@@ -12527,6 +12955,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1949763820}
+  - component: {fileID: 1949763821}
   m_Layer: 5
   m_Name: Buff_2
   m_TagString: Untagged
@@ -12556,6 +12985,21 @@ RectTransform:
   m_AnchoredPosition: {x: 50, y: -50}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &1949763821
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1949763819}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d78adb24f85485341b46354894d7967c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleBuffIconUIView
+  iconImage: {fileID: 989676409}
+  stackText: {fileID: 686495376}
+  decayText: {fileID: 1092778058}
 --- !u!1 &1958050123
 GameObject:
   m_ObjectHideFlags: 0
@@ -14048,6 +14492,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 2133688148}
+  - component: {fileID: 2133688149}
   m_Layer: 5
   m_Name: Buff_2
   m_TagString: Untagged
@@ -14077,6 +14522,21 @@ RectTransform:
   m_AnchoredPosition: {x: 50, y: -50}
   m_SizeDelta: {x: 100, y: 100}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &2133688149
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2133688147}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: d78adb24f85485341b46354894d7967c, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleBuffIconUIView
+  iconImage: {fileID: 1042044755}
+  stackText: {fileID: 818562827}
+  decayText: {fileID: 457280061}
 --- !u!1 &2137249492
 GameObject:
   m_ObjectHideFlags: 0
@@ -14090,7 +14550,7 @@ GameObject:
   - component: {fileID: 2137249495}
   - component: {fileID: 2137249494}
   m_Layer: 5
-  m_Name: Button
+  m_Name: start
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

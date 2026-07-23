@@ -2,6 +2,18 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+// BattleActionAssignmentResult = 正式准备阶段安排结果
+// UI 可以直接读取结构化结果，不需要解析日志文本。
+public sealed class BattleActionAssignmentResult
+{
+    public bool isSuccess;
+    public bool wasAutoDowngraded;
+    public string message;
+    public BattleActionPlacementType placementType;
+    public BattleActionSlotType effectiveSlotType;
+    public CardEligibilityResult eligibilityResult;
+}
+
 // BattleActionSlotManager = 行动槽位管理器
 // 第一版只负责创建、安排、去重和打印，不执行真正战斗结算
 public static class BattleActionSlotManager
@@ -115,6 +127,232 @@ public static class BattleActionSlotManager
         }
 
         slots.AddRange(CreateCharacterActionSlots(character, slotCountPerCharacter));
+    }
+
+    // TryAssignToEnemyIntent = 把卡牌放到敌人已有意图
+    // 无法精确响应时不会拒绝，而是自动降级为针对该敌人的单方面行动。
+    public static bool TryAssignToEnemyIntent(
+        BattleRuntimeState runtimeState,
+        CharacterData owner,
+        int slotIndex,
+        BattleCardState cardState,
+        BattleEnemyIntent enemyIntent,
+        out BattleActionAssignmentResult result
+    )
+    {
+        BattleActionSlot slot;
+        CardEligibilityResult eligibility;
+
+        if (!ValidateEnemyIntentTarget(runtimeState, enemyIntent, out result))
+        {
+            return false;
+        }
+
+        if (!ValidatePreparedAssignment(
+                runtimeState,
+                owner,
+                slotIndex,
+                cardState,
+                enemyIntent.enemy,
+                out slot,
+                out eligibility,
+                out result))
+        {
+            return false;
+        }
+
+        if (!IsAllowedForEnemyPlacement(cardState))
+        {
+            result = CreateAssignmentFailure(
+                "安排到敌人意图失败：只允许 Attack、Defense 或 Dodge",
+                CardEligibilityFailureReason.UnsupportedCondition
+            );
+            return false;
+        }
+
+        bool canRespond = CanRespondToEnemyIntent(slot, owner, enemyIntent);
+        BattleActionPlacementType placementType = canRespond
+            ? BattleActionPlacementType.ExactEnemyIntent
+            : BattleActionPlacementType.SpecificEnemy;
+
+        CommitPreparedAssignment(
+            runtimeState,
+            slot,
+            owner,
+            cardState,
+            placementType,
+            canRespond ? enemyIntent : null,
+            enemyIntent.enemy
+        );
+
+        string message = canRespond
+            ? "已精确安排到敌人意图"
+            : "速度不足或不是原目标槽位，已按针对该敌人的单方面行动安排。";
+
+        result = CreateAssignmentSuccess(
+            slot,
+            eligibility,
+            message,
+            !canRespond
+        );
+        return true;
+    }
+
+    // TryAssignToEnemy = 把卡牌放到指定敌人的空槽语义
+    public static bool TryAssignToEnemy(
+        BattleRuntimeState runtimeState,
+        CharacterData owner,
+        int slotIndex,
+        BattleCardState cardState,
+        CharacterData enemy,
+        out BattleActionAssignmentResult result
+    )
+    {
+        BattleActionSlot slot;
+        CardEligibilityResult eligibility;
+
+        if (!ValidateEnemyTarget(runtimeState, enemy, out result))
+        {
+            return false;
+        }
+
+        if (!ValidatePreparedAssignment(
+                runtimeState,
+                owner,
+                slotIndex,
+                cardState,
+                enemy,
+                out slot,
+                out eligibility,
+                out result))
+        {
+            return false;
+        }
+
+        if (!IsAllowedForEnemyPlacement(cardState))
+        {
+            result = CreateAssignmentFailure(
+                "安排到指定敌人失败：只允许 Attack、Defense 或 Dodge",
+                CardEligibilityFailureReason.UnsupportedCondition
+            );
+            return false;
+        }
+
+        CommitPreparedAssignment(
+            runtimeState,
+            slot,
+            owner,
+            cardState,
+            BattleActionPlacementType.SpecificEnemy,
+            null,
+            enemy
+        );
+
+        result = CreateAssignmentSuccess(slot, eligibility, "已安排到指定敌人", false);
+        return true;
+    }
+
+    // TryAssignToSelf = 把卡牌放到角色自己的通用判定区域
+    public static bool TryAssignToSelf(
+        BattleRuntimeState runtimeState,
+        CharacterData owner,
+        int slotIndex,
+        BattleCardState cardState,
+        out BattleActionAssignmentResult result
+    )
+    {
+        BattleActionSlot slot;
+        CardEligibilityResult eligibility;
+
+        if (!ValidatePreparedAssignment(
+                runtimeState,
+                owner,
+                slotIndex,
+                cardState,
+                owner,
+                out slot,
+                out eligibility,
+                out result))
+        {
+            return false;
+        }
+
+        if (!IsAllowedForSelfPlacement(cardState))
+        {
+            result = CreateAssignmentFailure(
+                "安排到自身失败：只允许 Defense、Dodge 或 Ability",
+                CardEligibilityFailureReason.UnsupportedCondition
+            );
+            return false;
+        }
+
+        CommitPreparedAssignment(
+            runtimeState,
+            slot,
+            owner,
+            cardState,
+            BattleActionPlacementType.Self,
+            null,
+            null
+        );
+
+        result = CreateAssignmentSuccess(slot, eligibility, "已安排到自身", false);
+        return true;
+    }
+
+    // TryCancelAssignment = 取消一个 owner + slotIndex 对应的完整准备阶段安排
+    public static bool TryCancelAssignment(
+        BattleRuntimeState runtimeState,
+        CharacterData owner,
+        int slotIndex,
+        out BattleActionAssignmentResult result
+    )
+    {
+        BattleActionSlot slot;
+
+        if (!ValidatePreparedRuntime(runtimeState, owner, slotIndex, out slot, out result))
+        {
+            return false;
+        }
+
+        if (slot.IsEmpty())
+        {
+            result = new BattleActionAssignmentResult
+            {
+                isSuccess = true,
+                wasAutoDowngraded = false,
+                message = "目标槽位本来就是空槽位，无需取消",
+                placementType = BattleActionPlacementType.None,
+                effectiveSlotType = slot.slotType,
+                eligibilityResult = CardEligibilityResult.Success()
+            };
+            return true;
+        }
+
+        slot.Clear();
+        RebuildPreparedActionRoles(runtimeState);
+
+        result = new BattleActionAssignmentResult
+        {
+            isSuccess = true,
+            wasAutoDowngraded = false,
+            message = "已取消行动安排",
+            placementType = BattleActionPlacementType.None,
+            effectiveSlotType = slot.slotType,
+            eligibilityResult = CardEligibilityResult.Success()
+        };
+        return true;
+    }
+
+    // RebuildPreparedActionRoles = 从原始放置关系统一重建当前生效槽位类型与主要响应者
+    public static void RebuildPreparedActionRoles(BattleRuntimeState runtimeState)
+    {
+        if (runtimeState == null)
+        {
+            return;
+        }
+
+        RebuildPreparedActionRoles(runtimeState.actionSlots, runtimeState.intentQueue);
     }
 
     // AssignResponseToEnemyIntent = 安排一个槽位响应敌人意图
@@ -246,28 +484,13 @@ public static class BattleActionSlotManager
         // 记录改写前的目标文本，方便打印“从谁改到谁”。
         string actualTargetBeforeResponse = enemyIntent.GetActualTargetSlotText();
 
-        // 同一个敌人意图只能有一个主要响应槽位。
-        // 先找旧绑定槽位，后面解除旧绑定。
-        List<BattleActionSlot> oldBoundSlots = FindSlotsByEnemyIntent(slots, enemyIntent);
+        long nextSequence = GetNextAssignmentSequence(slots);
 
-        foreach (BattleActionSlot oldSlot in oldBoundSlots)
-        {
-            // 如果旧槽位就是当前槽位，不需要解除自己。
-            if (object.ReferenceEquals(oldSlot, slot))
-            {
-                continue;
-            }
-
-            // 解除其他槽位对同一个敌人意图的绑定。
-            oldSlot.UnbindEnemyIntent();
-            Debug.Log(oldSlot.GetDisplaySlotName() + " 已解除对敌人意图" + enemyIntent.intentOrder + "的响应绑定");
-        }
-
-        // 真正把角色、卡牌、敌人意图写入槽位。
+        // 写入原始精确放置关系，再统一选择最后放置的主要响应者。
+        // 更早的合格响应不会被删除，而是保留为该敌人的单方面行动。
         slot.AssignResponse(actor, cardState, enemyIntent, canRewriteActualTarget);
-
-        // 敌人意图标记为已响应。
-        enemyIntent.MarkResponded();
+        slot.assignmentSequence = nextSequence;
+        RebuildLegacyPreparedActionRoles(slots, enemyIntent);
 
         Debug.Log(
             slot.GetDisplaySlotName() +
@@ -403,8 +626,11 @@ public static class BattleActionSlotManager
             return false;
         }
 
+        long nextSequence = GetNextAssignmentSequence(slots);
+
         // 把自由行动写入槽位，不绑定敌人意图。
         slot.AssignFreeAction(actor, cardState, target);
+        slot.assignmentSequence = nextSequence;
 
         Debug.Log(
             slot.GetDisplaySlotName() +
@@ -511,7 +737,9 @@ public static class BattleActionSlotManager
             return false;
         }
 
+        long nextSequence = GetNextAssignmentSequence(slots);
         slot.AssignPassiveGuard(actor, cardState);
+        slot.assignmentSequence = nextSequence;
 
         Debug.Log(
             slot.GetDisplaySlotName() +
@@ -579,7 +807,13 @@ public static class BattleActionSlotManager
                 slot.GetDisplaySlotName() +
                 " / owner：" + slot.GetOwnerName() +
                 " / slotIndex：" + slot.slotIndex +
-                " / 类型：" + slot.slotType +
+                " / 原始放置：" + slot.placementType +
+                " / 安排序号：" + slot.assignmentSequence +
+                " / 指定敌人：" + GetCharacterName(slot.requestedEnemy) +
+                " / 原始意图：" + GetIntentName(slot.requestedEnemyIntent) +
+                " / 当前类型：" + slot.slotType +
+                " / 当前意图：" + GetIntentName(slot.enemyIntent) +
+                " / 主要响应：" + (slot.slotType == BattleActionSlotType.RespondToEnemyIntent && slot.enemyIntent != null) +
                 " / 行动者：" + slot.GetActorName() +
                 " / 卡牌：" + slot.GetCardName() +
                 " / 目标：" + slot.GetTargetName() +
@@ -851,6 +1085,705 @@ public static class BattleActionSlotManager
         }
 
         return null;
+    }
+
+    static bool ValidatePreparedAssignment(
+        BattleRuntimeState runtimeState,
+        CharacterData owner,
+        int slotIndex,
+        BattleCardState cardState,
+        CharacterData eligibilityTarget,
+        out BattleActionSlot slot,
+        out CardEligibilityResult eligibility,
+        out BattleActionAssignmentResult result
+    )
+    {
+        eligibility = null;
+
+        if (!ValidatePreparedRuntime(runtimeState, owner, slotIndex, out slot, out result))
+        {
+            return false;
+        }
+
+        if (cardState == null)
+        {
+            result = CreateAssignmentFailure(
+                "准备阶段安排失败：卡牌状态为空",
+                CardEligibilityFailureReason.InvalidCardState
+            );
+            return false;
+        }
+
+        if (cardState.cardData == null)
+        {
+            result = CreateAssignmentFailure(
+                "准备阶段安排失败：卡牌数据为空",
+                CardEligibilityFailureReason.InvalidCardData
+            );
+            return false;
+        }
+
+        if (!object.ReferenceEquals(cardState.owner, owner))
+        {
+            result = CreateAssignmentFailure(
+                "准备阶段安排失败：卡牌不属于目标槽位 owner",
+                CardEligibilityFailureReason.InvalidActor
+            );
+            return false;
+        }
+
+        if (IsCardAssignedToOtherSlot(runtimeState.actionSlots, slot, cardState))
+        {
+            result = CreateAssignmentFailure(
+                "准备阶段安排失败：同一张卡已经安排在其他槽位",
+                CardEligibilityFailureReason.CardAlreadyAssigned
+            );
+            return false;
+        }
+
+        eligibility = BattleCardManager.EvaluateCardEligibility(owner, eligibilityTarget, cardState);
+
+        if (!eligibility.isEligible)
+        {
+            result = CreateAssignmentFailure(eligibility.failureMessage, eligibility);
+            return false;
+        }
+
+        return true;
+    }
+
+    static bool ValidatePreparedRuntime(
+        BattleRuntimeState runtimeState,
+        CharacterData owner,
+        int slotIndex,
+        out BattleActionSlot slot,
+        out BattleActionAssignmentResult result
+    )
+    {
+        slot = null;
+
+        if (runtimeState == null)
+        {
+            result = CreateAssignmentFailure(
+                "准备阶段安排失败：BattleRuntimeState为空",
+                CardEligibilityFailureReason.InvalidSlot
+            );
+            return false;
+        }
+
+        if (runtimeState.IsBattleEnded)
+        {
+            result = CreateAssignmentFailure(
+                "准备阶段安排失败：战斗已经结束",
+                CardEligibilityFailureReason.UnsupportedCondition
+            );
+            return false;
+        }
+
+        if (runtimeState.currentPhase != "Prepare")
+        {
+            result = CreateAssignmentFailure(
+                "准备阶段安排失败：当前阶段不是Prepare",
+                CardEligibilityFailureReason.UnsupportedCondition
+            );
+            return false;
+        }
+
+        if (runtimeState.currentExecutionPlan != null)
+        {
+            result = CreateAssignmentFailure(
+                "准备阶段安排失败：当前已经存在ExecutionPlan",
+                CardEligibilityFailureReason.UnsupportedCondition
+            );
+            return false;
+        }
+
+        if (owner == null)
+        {
+            result = CreateAssignmentFailure(
+                "准备阶段安排失败：owner为空",
+                CardEligibilityFailureReason.InvalidActor
+            );
+            return false;
+        }
+
+        if (owner.IsDead())
+        {
+            result = CreateAssignmentFailure(
+                "准备阶段安排失败：owner已经死亡",
+                CardEligibilityFailureReason.ActorDead
+            );
+            return false;
+        }
+
+        if (!IsCharacterInBattle(runtimeState, owner))
+        {
+            result = CreateAssignmentFailure(
+                "准备阶段安排失败：owner不属于当前战斗",
+                CardEligibilityFailureReason.InvalidActor
+            );
+            return false;
+        }
+
+        slot = GetSlot(runtimeState.actionSlots, owner, slotIndex);
+
+        if (slot == null)
+        {
+            result = CreateAssignmentFailure(
+                "准备阶段安排失败：找不到owner对应槽位",
+                CardEligibilityFailureReason.InvalidSlot
+            );
+            return false;
+        }
+
+        result = null;
+        return true;
+    }
+
+    static bool ValidateEnemyIntentTarget(
+        BattleRuntimeState runtimeState,
+        BattleEnemyIntent enemyIntent,
+        out BattleActionAssignmentResult result
+    )
+    {
+        if (runtimeState == null)
+        {
+            result = CreateAssignmentFailure(
+                "安排敌人意图失败：BattleRuntimeState为空",
+                CardEligibilityFailureReason.InvalidEnemyIntent
+            );
+            return false;
+        }
+
+        if (enemyIntent == null ||
+            runtimeState.intentQueue == null ||
+            !ContainsIntentReference(runtimeState.intentQueue, enemyIntent))
+        {
+            result = CreateAssignmentFailure(
+                "安排敌人意图失败：意图不属于当前战斗",
+                CardEligibilityFailureReason.InvalidEnemyIntent
+            );
+            return false;
+        }
+
+        if (!ValidateEnemyTarget(runtimeState, enemyIntent.enemy, out result))
+        {
+            return false;
+        }
+
+        if (enemyIntent.originalTargetCharacter == null ||
+            !IsCharacterInBattle(runtimeState, enemyIntent.originalTargetCharacter) ||
+            enemyIntent.originalTargetCharacter.IsDead())
+        {
+            result = CreateAssignmentFailure(
+                "安排敌人意图失败：原始目标无效或已经死亡",
+                CardEligibilityFailureReason.InvalidEnemyIntent
+            );
+            return false;
+        }
+
+        return true;
+    }
+
+    static bool ValidateEnemyTarget(
+        BattleRuntimeState runtimeState,
+        CharacterData enemy,
+        out BattleActionAssignmentResult result
+    )
+    {
+        if (runtimeState == null)
+        {
+            result = CreateAssignmentFailure(
+                "安排指定敌人失败：BattleRuntimeState为空",
+                CardEligibilityFailureReason.InvalidActor
+            );
+            return false;
+        }
+
+        if (enemy == null || !IsEnemyInBattle(runtimeState, enemy))
+        {
+            result = CreateAssignmentFailure(
+                "安排指定敌人失败：目标不属于当前战斗敌人",
+                CardEligibilityFailureReason.InvalidActor
+            );
+            return false;
+        }
+
+        if (enemy.IsDead())
+        {
+            result = CreateAssignmentFailure(
+                "安排指定敌人失败：目标敌人已经死亡",
+                CardEligibilityFailureReason.ActorDead
+            );
+            return false;
+        }
+
+        result = null;
+        return true;
+    }
+
+    static void CommitPreparedAssignment(
+        BattleRuntimeState runtimeState,
+        BattleActionSlot slot,
+        CharacterData owner,
+        BattleCardState cardState,
+        BattleActionPlacementType placementType,
+        BattleEnemyIntent requestedEnemyIntent,
+        CharacterData requestedEnemy
+    )
+    {
+        long nextSequence = GetNextAssignmentSequence(runtimeState.actionSlots);
+
+        slot.actor = owner;
+        slot.cardState = cardState;
+        slot.placementType = placementType;
+        slot.requestedEnemyIntent = requestedEnemyIntent;
+        slot.requestedEnemy = requestedEnemy;
+        slot.assignmentSequence = nextSequence;
+        slot.target = null;
+        slot.enemyIntent = null;
+        slot.isUsed = false;
+
+        RebuildPreparedActionRoles(runtimeState);
+    }
+
+    static void RebuildPreparedActionRoles(
+        List<BattleActionSlot> actionSlots,
+        List<BattleEnemyIntent> intentQueue
+    )
+    {
+        if (intentQueue != null)
+        {
+            foreach (BattleEnemyIntent intent in intentQueue)
+            {
+                if (intent != null)
+                {
+                    intent.ResetResponseState();
+                }
+            }
+        }
+
+        if (actionSlots != null)
+        {
+            foreach (BattleActionSlot slot in actionSlots)
+            {
+                if (slot == null || slot.IsEmpty())
+                {
+                    continue;
+                }
+
+                EnsureLegacyPlacementMetadata(slot);
+                ApplyBasePreparedRole(slot);
+            }
+        }
+
+        if (intentQueue == null || actionSlots == null)
+        {
+            return;
+        }
+
+        foreach (BattleEnemyIntent intent in intentQueue)
+        {
+            if (intent == null)
+            {
+                continue;
+            }
+
+            BattleActionSlot winner = null;
+
+            foreach (BattleActionSlot slot in actionSlots)
+            {
+                if (!IsExactResponseCandidate(slot, intent))
+                {
+                    continue;
+                }
+
+                if (winner == null || slot.assignmentSequence > winner.assignmentSequence)
+                {
+                    winner = slot;
+                }
+            }
+
+            if (winner == null)
+            {
+                continue;
+            }
+
+            winner.slotType = BattleActionSlotType.RespondToEnemyIntent;
+            winner.enemyIntent = intent;
+            winner.target = intent.enemy;
+            intent.MarkResponded();
+
+            if (winner.actor.GetCurrentSpeed() > intent.enemy.GetCurrentSpeed())
+            {
+                intent.SetActualTarget(winner.actor, winner.slotIndex);
+            }
+        }
+    }
+
+    static void ApplyBasePreparedRole(BattleActionSlot slot)
+    {
+        slot.enemyIntent = null;
+        slot.isUsed = false;
+
+        if (slot.placementType == BattleActionPlacementType.Self)
+        {
+            slot.target = slot.owner;
+            slot.slotType = IsDefenseOrDodge(slot.cardState)
+                ? BattleActionSlotType.PassiveGuard
+                : BattleActionSlotType.FreeAction;
+            return;
+        }
+
+        if (slot.placementType == BattleActionPlacementType.ExactEnemyIntent &&
+            slot.requestedEnemy == null &&
+            slot.requestedEnemyIntent != null)
+        {
+            slot.requestedEnemy = slot.requestedEnemyIntent.enemy;
+        }
+
+        slot.target = slot.requestedEnemy;
+        slot.slotType = IsDefenseOrDodge(slot.cardState)
+            ? BattleActionSlotType.EnemySpecificGuard
+            : BattleActionSlotType.FreeAction;
+    }
+
+    static bool IsExactResponseCandidate(BattleActionSlot slot, BattleEnemyIntent intent)
+    {
+        if (slot == null ||
+            slot.IsEmpty() ||
+            slot.placementType != BattleActionPlacementType.ExactEnemyIntent ||
+            !object.ReferenceEquals(slot.requestedEnemyIntent, intent) ||
+            slot.assignmentSequence <= 0 ||
+            slot.owner == null ||
+            slot.actor == null ||
+            !object.ReferenceEquals(slot.owner, slot.actor) ||
+            slot.owner.IsDead() ||
+            slot.cardState == null ||
+            slot.cardState.cardData == null ||
+            !object.ReferenceEquals(slot.cardState.owner, slot.owner) ||
+            !IsAllowedForEnemyPlacement(slot.cardState) ||
+            intent.enemy == null ||
+            intent.enemy.IsDead() ||
+            !CanRespondToEnemyIntent(slot, slot.owner, intent))
+        {
+            return false;
+        }
+
+        CardEligibilityResult eligibility = BattleCardManager.EvaluateCardEligibility(
+            slot.owner,
+            intent.enemy,
+            slot.cardState
+        );
+        return eligibility.isEligible;
+    }
+
+    static bool CanRespondToEnemyIntent(
+        BattleActionSlot slot,
+        CharacterData owner,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        if (slot == null || owner == null || enemyIntent == null || enemyIntent.enemy == null)
+        {
+            return false;
+        }
+
+        return owner.GetCurrentSpeed() > enemyIntent.enemy.GetCurrentSpeed() ||
+            (
+                object.ReferenceEquals(owner, enemyIntent.originalTargetCharacter) &&
+                slot.slotIndex == enemyIntent.originalTargetSlotIndex
+            );
+    }
+
+    static bool IsAllowedForEnemyPlacement(BattleCardState cardState)
+    {
+        if (cardState == null || cardState.cardData == null || IsAbilityCard(cardState))
+        {
+            return false;
+        }
+
+        string cardType = cardState.cardData.cardType;
+        return cardType == CardType.Attack ||
+            cardType == CardType.Defense ||
+            cardType == CardType.Dodge;
+    }
+
+    static bool IsAllowedForSelfPlacement(BattleCardState cardState)
+    {
+        if (cardState == null || cardState.cardData == null)
+        {
+            return false;
+        }
+
+        return cardState.cardData.cardType == CardType.Defense ||
+            cardState.cardData.cardType == CardType.Dodge ||
+            IsAbilityCard(cardState);
+    }
+
+    static bool IsAbilityCard(BattleCardState cardState)
+    {
+        return cardState != null &&
+            cardState.cardData != null &&
+            (cardState.cardData.cardType == "Ability" || cardState.IsAbilitySinCard());
+    }
+
+    static bool IsDefenseOrDodge(BattleCardState cardState)
+    {
+        return cardState != null &&
+            cardState.cardData != null &&
+            (cardState.cardData.cardType == CardType.Defense ||
+             cardState.cardData.cardType == CardType.Dodge);
+    }
+
+    static bool IsCharacterInBattle(BattleRuntimeState runtimeState, CharacterData character)
+    {
+        if (runtimeState == null || character == null)
+        {
+            return false;
+        }
+
+        if (object.ReferenceEquals(runtimeState.allyA, character) ||
+            object.ReferenceEquals(runtimeState.allyB, character) ||
+            object.ReferenceEquals(runtimeState.enemy, character))
+        {
+            return true;
+        }
+
+        if (runtimeState.battleUnits == null)
+        {
+            return false;
+        }
+
+        foreach (CharacterData unit in runtimeState.battleUnits)
+        {
+            if (object.ReferenceEquals(unit, character))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static bool IsEnemyInBattle(BattleRuntimeState runtimeState, CharacterData enemy)
+    {
+        if (!IsCharacterInBattle(runtimeState, enemy))
+        {
+            return false;
+        }
+
+        if (object.ReferenceEquals(runtimeState.allyA, enemy) ||
+            object.ReferenceEquals(runtimeState.allyB, enemy))
+        {
+            return false;
+        }
+
+        return object.ReferenceEquals(runtimeState.enemy, enemy) ||
+            (runtimeState.battleUnits != null && ContainsCharacterReference(runtimeState.battleUnits, enemy));
+    }
+
+    static bool ContainsCharacterReference(List<CharacterData> characters, CharacterData target)
+    {
+        if (characters == null || target == null)
+        {
+            return false;
+        }
+
+        foreach (CharacterData character in characters)
+        {
+            if (object.ReferenceEquals(character, target))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static bool ContainsIntentReference(List<BattleEnemyIntent> intents, BattleEnemyIntent target)
+    {
+        if (intents == null || target == null)
+        {
+            return false;
+        }
+
+        foreach (BattleEnemyIntent intent in intents)
+        {
+            if (object.ReferenceEquals(intent, target))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static bool IsCardAssignedToOtherSlot(
+        List<BattleActionSlot> slots,
+        BattleActionSlot targetSlot,
+        BattleCardState cardState
+    )
+    {
+        if (slots == null || cardState == null)
+        {
+            return false;
+        }
+
+        foreach (BattleActionSlot slot in slots)
+        {
+            if (slot == null || object.ReferenceEquals(slot, targetSlot))
+            {
+                continue;
+            }
+
+            if (object.ReferenceEquals(slot.cardState, cardState))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    static long GetNextAssignmentSequence(List<BattleActionSlot> slots)
+    {
+        long maxSequence = 0;
+
+        if (slots != null)
+        {
+            foreach (BattleActionSlot slot in slots)
+            {
+                if (slot != null && slot.assignmentSequence > maxSequence)
+                {
+                    maxSequence = slot.assignmentSequence;
+                }
+            }
+        }
+
+        return maxSequence + 1;
+    }
+
+    static void EnsureLegacyPlacementMetadata(BattleActionSlot slot)
+    {
+        if (slot == null || slot.IsEmpty() || slot.placementType != BattleActionPlacementType.None)
+        {
+            return;
+        }
+
+        if (slot.enemyIntent != null || slot.slotType == BattleActionSlotType.RespondToEnemyIntent)
+        {
+            slot.placementType = BattleActionPlacementType.ExactEnemyIntent;
+            slot.requestedEnemyIntent = slot.enemyIntent;
+            slot.requestedEnemy = slot.enemyIntent != null ? slot.enemyIntent.enemy : slot.target;
+        }
+        else if (slot.slotType == BattleActionSlotType.PassiveGuard ||
+                 object.ReferenceEquals(slot.actor, slot.target))
+        {
+            slot.placementType = BattleActionPlacementType.Self;
+            slot.requestedEnemyIntent = null;
+            slot.requestedEnemy = null;
+        }
+        else
+        {
+            slot.placementType = BattleActionPlacementType.SpecificEnemy;
+            slot.requestedEnemyIntent = null;
+            slot.requestedEnemy = slot.target;
+        }
+
+        if (slot.assignmentSequence <= 0)
+        {
+            slot.assignmentSequence = 1;
+        }
+    }
+
+    static void RebuildLegacyPreparedActionRoles(
+        List<BattleActionSlot> slots,
+        BattleEnemyIntent extraIntent
+    )
+    {
+        List<BattleEnemyIntent> intents = new List<BattleEnemyIntent>();
+
+        AddIntentReferenceIfMissing(intents, extraIntent);
+
+        if (slots != null)
+        {
+            foreach (BattleActionSlot slot in slots)
+            {
+                if (slot == null)
+                {
+                    continue;
+                }
+
+                AddIntentReferenceIfMissing(intents, slot.requestedEnemyIntent);
+                AddIntentReferenceIfMissing(intents, slot.enemyIntent);
+            }
+        }
+
+        RebuildPreparedActionRoles(slots, intents);
+    }
+
+    static void AddIntentReferenceIfMissing(
+        List<BattleEnemyIntent> intents,
+        BattleEnemyIntent intent
+    )
+    {
+        if (intents != null && intent != null && !ContainsIntentReference(intents, intent))
+        {
+            intents.Add(intent);
+        }
+    }
+
+    static BattleActionAssignmentResult CreateAssignmentSuccess(
+        BattleActionSlot slot,
+        CardEligibilityResult eligibility,
+        string message,
+        bool wasAutoDowngraded
+    )
+    {
+        return new BattleActionAssignmentResult
+        {
+            isSuccess = true,
+            wasAutoDowngraded = wasAutoDowngraded,
+            message = message,
+            placementType = slot != null ? slot.placementType : BattleActionPlacementType.None,
+            effectiveSlotType = slot != null ? slot.slotType : BattleActionSlotType.FreeAction,
+            eligibilityResult = eligibility ?? CardEligibilityResult.Success()
+        };
+    }
+
+    static BattleActionAssignmentResult CreateAssignmentFailure(
+        string message,
+        CardEligibilityFailureReason reason
+    )
+    {
+        return CreateAssignmentFailure(message, CardEligibilityResult.Failure(reason, message));
+    }
+
+    static BattleActionAssignmentResult CreateAssignmentFailure(
+        string message,
+        CardEligibilityResult eligibility
+    )
+    {
+        return new BattleActionAssignmentResult
+        {
+            isSuccess = false,
+            wasAutoDowngraded = false,
+            message = message,
+            placementType = BattleActionPlacementType.None,
+            effectiveSlotType = BattleActionSlotType.FreeAction,
+            eligibilityResult = eligibility
+        };
+    }
+
+    static string GetCharacterName(CharacterData character)
+    {
+        return character != null ? character.characterName : "无";
+    }
+
+    static string GetIntentName(BattleEnemyIntent intent)
+    {
+        return intent != null ? "意图" + intent.intentOrder : "无";
     }
 
     // CanAssignCardToSlot = 判断一张卡能不能安排到目标槽位

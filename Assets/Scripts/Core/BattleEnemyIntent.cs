@@ -11,6 +11,9 @@ public class BattleEnemyIntent
     // 第一版从 1 开始，例如敌人意图 1、敌人意图 2。
     public int intentOrder;
 
+    // enemySlotIndex = 该意图属于敌人的第几个行动槽，编号从1开始
+    public int enemySlotIndex;
+
     // enemy = 发出这个意图的敌人
     // CharacterData = 角色数据，这里也临时用于敌人数据。
     public CharacterData enemy;
@@ -60,16 +63,37 @@ public class BattleEnemyIntent
         // intentOrder = 敌人意图顺序，默认是 1。
         int intentOrder = 1
     )
+        : this(
+            intentID,
+            enemy,
+            enemyCardState,
+            originalTargetCharacter,
+            originalTargetSlotIndex,
+            intentOrder,
+            intentOrder
+        )
+    {
+    }
+
+    // 新构造函数显式接收敌人槽位编号；旧构造函数继续按 intentOrder 兼容。
+    public BattleEnemyIntent(
+        string intentID,
+        CharacterData enemy,
+        BattleCardState enemyCardState,
+        CharacterData originalTargetCharacter,
+        int originalTargetSlotIndex,
+        int intentOrder,
+        int enemySlotIndex
+    )
     {
         this.intentID = intentID;
         this.intentOrder = intentOrder;
+        this.enemySlotIndex = enemySlotIndex;
         this.enemy = enemy;
         this.enemyCardState = enemyCardState;
         this.originalTargetCharacter = originalTargetCharacter;
         this.originalTargetSlotIndex = originalTargetSlotIndex;
-        actualTargetCharacter = originalTargetCharacter;
-        actualTargetSlotIndex = originalTargetSlotIndex;
-        isResponded = false;
+        ResetResponseState();
     }
 
     // SetActualTarget = 设置实际目标
@@ -85,6 +109,14 @@ public class BattleEnemyIntent
     public void MarkResponded()
     {
         isResponded = true;
+    }
+
+    // ResetResponseState = 清除派生响应状态，并恢复最初目标
+    public void ResetResponseState()
+    {
+        isResponded = false;
+        actualTargetCharacter = originalTargetCharacter;
+        actualTargetSlotIndex = originalTargetSlotIndex;
     }
 
     // GetEnemyName = 获取敌人名字

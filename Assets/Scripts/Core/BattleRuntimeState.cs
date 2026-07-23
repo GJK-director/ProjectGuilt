@@ -88,6 +88,26 @@ public class BattleRuntimeState
         currentGuilt += amount;
     }
 
+    // GetBattlePositionIndex = 获取角色在 battleUnits 中的1-based战斗位置。
+    // 未登记角色返回 int.MaxValue，由执行计划的稳定顺序继续兜底。
+    public int GetBattlePositionIndex(CharacterData character)
+    {
+        if (character == null || battleUnits == null)
+        {
+            return int.MaxValue;
+        }
+
+        for (int index = 0; index < battleUnits.Count; index++)
+        {
+            if (object.ReferenceEquals(battleUnits[index], character))
+            {
+                return index + 1;
+            }
+        }
+
+        return int.MaxValue;
+    }
+
     // SetActionSlots = 保存当前行动槽位。传入 null 时使用空列表，避免 UI 读取时空引用。
     public void SetActionSlots(List<BattleActionSlot> slots)
     {
@@ -150,6 +170,8 @@ public class BattleRuntimeState
             return;
         }
 
+        // 连续闪避必须先正式结算，再进入现有 TurnEnd CD Tick，保持与本回合失败卡一致。
+        BattleContinuousDodgeManager.FinalizeActiveDodges(this, "TurnEnd");
         BattleTurnProcessor.EndTurn(GetLivingTurnParticipants());
         ClearCurrentTurnRuntimeObjects();
         SetPhase("TurnEnded");
@@ -325,6 +347,7 @@ public class BattleRuntimeState
     void SetBattleEnded(BattleResult result)
     {
         battleResult = result;
+        BattleContinuousDodgeManager.FinalizeActiveDodges(this, "BattleEnded");
         SetPhase("BattleEnded");
         Debug.Log("检测到战斗结束：" + battleResult);
     }

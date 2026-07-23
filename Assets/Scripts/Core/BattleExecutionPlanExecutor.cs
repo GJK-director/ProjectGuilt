@@ -70,7 +70,7 @@ public static class BattleExecutionPlanExecutor
             // 无人响应敌人意图：敌人攻击按 actualTarget 直接处理。
             if (item.executionType == BattleExecutionItemType.UnrespondedEnemyIntent)
             {
-                isCompleted = ExecuteUnrespondedEnemyIntent(item);
+                isCompleted = ExecuteUnrespondedEnemyIntent(item, runtimeState);
             }
             else if (item.executionType == BattleExecutionItemType.RespondedEnemyIntent)
             {
@@ -203,14 +203,9 @@ public static class BattleExecutionPlanExecutor
 
     // ExecuteUnrespondedEnemyIntent = 执行无人响应的敌人意图
     // Executor 只负责分派和完成状态，正式结算交给 BattleResolver。
-    static bool ExecuteUnrespondedEnemyIntent(BattleExecutionItem item)
-    {
-        return ExecuteUnrespondedEnemyIntent(item, item != null ? item.passiveGuardCandidates : null);
-    }
-
     static bool ExecuteUnrespondedEnemyIntent(
         BattleExecutionItem item,
-        System.Collections.Generic.List<BattleActionSlot> passiveGuardCandidates
+        BattleRuntimeState runtimeState
     )
     {
         if (item == null)
@@ -224,42 +219,53 @@ public static class BattleExecutionPlanExecutor
             return true;
         }
 
-        BattleActionSlot passiveGuardSlot = FindFirstValidPassiveGuardSlot(
-            passiveGuardCandidates,
+        System.Collections.Generic.IReadOnlyList<BattleActionSlot> guardSlots =
+            runtimeState != null
+                ? runtimeState.actionSlots
+                : item.passiveGuardCandidates;
+        BattleGuardSelectionResult guardSelection =
+            BattleGuardSelectionManager.SelectHandlingCardForEnemyIntent(
+            guardSlots,
             item.enemyIntent
         );
+        BattleActionSlot passiveGuardSlot = guardSelection.slot;
         BattleResolveResult result = null;
 
         if (passiveGuardSlot != null)
         {
             Debug.Log(
                 item.order +
-                ". UnrespondedEnemyIntent：被动守备接管，使用 " +
+                ". UnrespondedEnemyIntent：守备接管，使用 " +
                 passiveGuardSlot.GetDisplaySlotName() +
                 " / " +
                 passiveGuardSlot.GetCardName()
             );
 
-            result = BattleResolver.ResolveRespondedEnemyIntent(passiveGuardSlot, item.enemyIntent);
+            result = guardSelection.selectionType == BattleGuardSelectionType.ContinuousDodge
+                ? BattleResolver.ResolveContinuousDodgeVsAttack(passiveGuardSlot, item.enemyIntent)
+                : BattleResolver.ResolveRespondedEnemyIntent(passiveGuardSlot, item.enemyIntent);
 
-            LogResolveResult(item.order, "PassiveGuard Resolver 结算结果", result);
+            LogResolveResult(item.order, "Guard Resolver 结算结果", result);
 
             if (TryMarkResolveFailure(item, result, false))
             {
                 Debug.LogWarning(
                     item.order +
-                    ". UnrespondedEnemyIntent 被动守备失败，ExecutionPlan 停止"
+                    ". UnrespondedEnemyIntent 守备失败，ExecutionPlan 停止"
                 );
 
                 return false;
             }
 
-            if (result.playerCardUsed)
-            {
-                passiveGuardSlot.MarkUsed();
-                Debug.Log(item.order + ". UnrespondedEnemyIntent：被动守备槽位已标记为已使用");
-            }
+            HandlePlayerCardDisposition(
+                passiveGuardSlot,
+                result,
+                GetContinuousDodgeSource(guardSelection.selectionType),
+                item.enemyIntent,
+                item.order + ". UnrespondedEnemyIntent"
+            );
 
+            // 一张敌人卡只处理选中的这一张卡；成功或失败都不继续寻找第二张守备。
             item.MarkExecuted();
             return true;
         }
@@ -282,89 +288,6 @@ public static class BattleExecutionPlanExecutor
         return true;
     }
 
-    // FindFirstValidPassiveGuardSlot = 执行时选择第一张仍然有效的被动守备
-    static BattleActionSlot FindFirstValidPassiveGuardSlot(
-        System.Collections.Generic.IReadOnlyList<BattleActionSlot> passiveGuardCandidates,
-        BattleEnemyIntent enemyIntent
-    )
-    {
-        if (passiveGuardCandidates == null || passiveGuardCandidates.Count == 0)
-        {
-            return null;
-        }
-
-        foreach (BattleActionSlot slot in passiveGuardCandidates)
-        {
-            if (!IsPassiveGuardSlotStillValid(slot, enemyIntent))
-            {
-                continue;
-            }
-
-            return slot;
-        }
-
-        return null;
-    }
-
-    // IsPassiveGuardSlotStillValid = 判断候选守备在执行时是否仍然可用
-    static bool IsPassiveGuardSlotStillValid(BattleActionSlot slot, BattleEnemyIntent enemyIntent)
-    {
-        if (slot == null || enemyIntent == null || enemyIntent.actualTargetCharacter == null)
-        {
-            return false;
-        }
-
-        if (enemyIntent.actualTargetCharacter.IsDead())
-        {
-            return false;
-        }
-
-        if (slot.IsEmpty())
-        {
-            return false;
-        }
-
-        if (slot.slotType != BattleActionSlotType.PassiveGuard)
-        {
-            return false;
-        }
-
-        if (slot.isUsed)
-        {
-            return false;
-        }
-
-        if (slot.owner == null || slot.actor == null || slot.target == null)
-        {
-            return false;
-        }
-
-        if (slot.owner.IsDead() || slot.actor.IsDead() || slot.target.IsDead())
-        {
-            return false;
-        }
-
-        if (slot.cardState == null || slot.cardState.cardData == null)
-        {
-            return false;
-        }
-
-        if (slot.cardState.cardData.cardType != CardType.Defense &&
-            slot.cardState.cardData.cardType != CardType.Dodge)
-        {
-            return false;
-        }
-
-        if (!object.ReferenceEquals(slot.owner, enemyIntent.actualTargetCharacter) ||
-            !object.ReferenceEquals(slot.actor, enemyIntent.actualTargetCharacter) ||
-            !object.ReferenceEquals(slot.target, enemyIntent.actualTargetCharacter))
-        {
-            return false;
-        }
-
-        return BattleCardManager.CanUseCard(slot.actor, enemyIntent.enemy, slot.cardState);
-    }
-
     // LogResolveResult = 打印 Resolver 返回结果
     static void LogResolveResult(int order, string title, BattleResolveResult result)
     {
@@ -377,6 +300,9 @@ public static class BattleExecutionPlanExecutor
             "   isSuccess：" + (result != null && result.isSuccess) + "\n" +
             "   shouldCompleteItem：" + (result != null && result.shouldCompleteItem) + "\n" +
             "   playerCardUsed：" + (result != null && result.playerCardUsed) + "\n" +
+            "   playerCardParticipated：" + (result != null && result.playerCardParticipated) + "\n" +
+            "   playerCardUseDisposition：" +
+                (result != null ? result.playerCardUseDisposition.ToString() : "None") + "\n" +
             "   enemyCardUsed：" + (result != null && result.enemyCardUsed) + "\n" +
             "   hasDamage：" + (result != null && result.hasDamage) + "\n" +
             "   damage：" + (result != null ? result.damage : 0) + "\n" +
@@ -471,6 +397,7 @@ public static class BattleExecutionPlanExecutor
             "   槽位：槽位" + item.actionSlot.slotIndex + "\n" +
             "   卡牌：" + item.actionSlot.GetCardName() + "\n" +
             "   目标：" + item.actionSlot.GetTargetName() + "\n" +
+            GetSortMetadataPreviewText(item) +
             "   当前只预览执行方式，不执行 item，不修改状态"
         );
     }
@@ -483,6 +410,19 @@ public static class BattleExecutionPlanExecutor
         {
             Debug.LogWarning("执行 RespondedEnemyIntent 失败：item 为空");
             return false;
+        }
+
+        if (item.actionSlot == null ||
+            item.actionSlot.actor == null ||
+            item.actionSlot.cardState == null ||
+            item.actionSlot.cardState.cardData == null)
+        {
+            return ExecuteRespondedFallbackToUnresponded(
+                item,
+                runtimeState,
+                item.order + ". 精确响应槽位或卡牌在进入Resolver前已失效，恢复原目标并转为Unresponded处理",
+                BattleExecutionItemOutcomeReason.None
+            );
         }
 
         if (item.actionSlot != null &&
@@ -504,8 +444,7 @@ public static class BattleExecutionPlanExecutor
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             item.actionSlot,
-            item.enemyIntent,
-            item.passiveGuardCandidates
+            item.enemyIntent
         );
 
         if (TryMarkResolveFailure(item, result, true))
@@ -521,6 +460,8 @@ public static class BattleExecutionPlanExecutor
             "   isSuccess：" + result.isSuccess + "\n" +
             "   shouldCompleteItem：" + result.shouldCompleteItem + "\n" +
             "   playerCardUsed：" + result.playerCardUsed + "\n" +
+            "   playerCardParticipated：" + result.playerCardParticipated + "\n" +
+            "   playerCardUseDisposition：" + result.playerCardUseDisposition + "\n" +
             "   enemyCardUsed：" + result.enemyCardUsed + "\n" +
             "   hasDamage：" + result.hasDamage + "\n" +
             "   damage：" + result.damage + "\n" +
@@ -544,26 +485,67 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
-        if (item.actionSlot != null)
-        {
-            item.actionSlot.MarkUsed();
-            Debug.Log(item.order + ". RespondedEnemyIntent：响应行动槽位已正式提交，标记为已使用");
-        }
-
-        if (result.triggeredPassiveGuardSlot != null &&
-            !object.ReferenceEquals(result.triggeredPassiveGuardSlot, item.actionSlot) &&
-            !result.triggeredPassiveGuardSlot.isUsed)
-        {
-            result.triggeredPassiveGuardSlot.MarkUsed();
-            Debug.Log(
-                item.order +
-                ". RespondedEnemyIntent：触发的 PassiveGuard 槽位已标记为已使用：" +
-                result.triggeredPassiveGuardSlot.GetDisplaySlotName()
-            );
-        }
+        HandlePlayerCardDisposition(
+            item.actionSlot,
+            result,
+            ContinuousDodgeSource.ExactEnemyIntent,
+            item.enemyIntent,
+            item.order + ". RespondedEnemyIntent"
+        );
 
         item.MarkExecuted();
         return true;
+    }
+
+    static void HandlePlayerCardDisposition(
+        BattleActionSlot slot,
+        BattleResolveResult result,
+        ContinuousDodgeSource dodgeSource,
+        BattleEnemyIntent enemyIntent,
+        string logPrefix
+    )
+    {
+        if (slot == null || result == null)
+        {
+            return;
+        }
+
+        if (result.playerCardUseDisposition == BattleCardUseDisposition.DeferForContinuousDodge)
+        {
+            BattleContinuousDodgeManager.RegisterSuccess(slot, result, dodgeSource, enemyIntent);
+            return;
+        }
+
+        if (result.playerCardUseDisposition == BattleCardUseDisposition.FinalizeImmediately)
+        {
+            BattleContinuousDodgeManager.RecordImmediateFinalization(slot, result);
+            return;
+        }
+
+        slot.MarkUsed();
+        Debug.Log(logPrefix + "：行动槽位已正式提交，标记为已使用");
+    }
+
+    static ContinuousDodgeSource GetContinuousDodgeSource(
+        BattleGuardSelectionType selectionType
+    )
+    {
+        if (selectionType == BattleGuardSelectionType.EnemySpecificGuard)
+        {
+            return ContinuousDodgeSource.EnemySpecificGuard;
+        }
+
+        if (selectionType == BattleGuardSelectionType.PassiveGuard)
+        {
+            return ContinuousDodgeSource.PassiveGuard;
+        }
+
+        if (selectionType == BattleGuardSelectionType.ContinuousDodge)
+        {
+            return ContinuousDodgeSource.ContinuousDodge;
+        }
+
+        return ContinuousDodgeSource.None;
     }
 
     static bool ExecuteRespondedActionUnavailableFallback(
@@ -621,10 +603,7 @@ public static class BattleExecutionPlanExecutor
             return true;
         }
 
-        System.Collections.Generic.List<BattleActionSlot> fallbackCandidates =
-            CollectRuntimePassiveGuardCandidatesForCurrentTarget(item, runtimeState);
-
-        bool fallbackCompleted = ExecuteUnrespondedEnemyIntent(item, fallbackCandidates);
+        bool fallbackCompleted = ExecuteUnrespondedEnemyIntent(item, runtimeState);
 
         if (fallbackCompleted &&
             item.status == BattleExecutionItemStatus.Executed &&
@@ -634,23 +613,6 @@ public static class BattleExecutionPlanExecutor
         }
 
         return fallbackCompleted;
-    }
-
-    static System.Collections.Generic.List<BattleActionSlot> CollectRuntimePassiveGuardCandidatesForCurrentTarget(
-        BattleExecutionItem item,
-        BattleRuntimeState runtimeState
-    )
-    {
-        if (item == null || item.enemyIntent == null || runtimeState == null)
-        {
-            return new System.Collections.Generic.List<BattleActionSlot>();
-        }
-
-        return BattleExecutionPlanManager.CollectPassiveGuardCandidatesForTarget(
-            runtimeState.actionSlots,
-            item.enemyIntent.actualTargetCharacter,
-            true
-        );
     }
 
     // ExecuteFreeAction = 执行自由行动
@@ -764,7 +726,9 @@ public static class BattleExecutionPlanExecutor
             " 槽位" +
             item.actionSlot.slotIndex +
             "，敌人意图：敌人意图" +
-            item.enemyIntent.intentOrder
+            item.enemyIntent.intentOrder +
+            "\n" +
+            GetSortMetadataPreviewText(item)
         );
     }
 
@@ -802,8 +766,25 @@ public static class BattleExecutionPlanExecutor
             "   将命中角色：" + targetCharacterName + "\n" +
             "   将命中槽位：" + targetSlotText + "\n" +
             "   被动守备候选数：" + passiveGuardCandidateCount + "\n" +
+            GetSortMetadataPreviewText(item) +
             "   当前仅预览点数范围和命中目标，不 roll 点数，不造成伤害"
         );
+    }
+
+    static string GetSortMetadataPreviewText(BattleExecutionItem item)
+    {
+        if (item == null)
+        {
+            return "";
+        }
+
+        return
+            "   排序键：速度=" + item.effectiveSpeed +
+            "，响应优先=" + item.responsePriority +
+            "，槽位=" + item.actionSlotOrder +
+            "，站位=" + item.actorPositionOrder +
+            "，稳定序=" + item.stableOrder +
+            "\n";
     }
 
     // GetEnemyAttackPointRangeText = 获取敌人攻击点数范围文本

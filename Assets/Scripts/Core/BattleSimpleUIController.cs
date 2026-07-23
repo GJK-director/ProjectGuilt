@@ -87,6 +87,11 @@ public class BattleSimpleUIController : MonoBehaviour
     private string selectedActionMode;
     private bool showingSinCards = false;
 
+    // 一级 UI 槽位选择只用于切换当前编辑角色和手牌，不直接安排正式行动。
+    private CharacterData selectedCharacter;
+    private int selectedActionSlotIndex = -1;
+    private BattleActionSlotUIView selectedActionSlotView;
+
     private readonly string[] normalTestHandCardIDs =
     {
         "atk_001",
@@ -106,6 +111,7 @@ public class BattleSimpleUIController : MonoBehaviour
     void Start()
     {
         InitializeTestBattleData();
+        BindCharacterStatusSlotInteractions();
         BindButtonEvents();
         RefreshView();
     }
@@ -285,6 +291,7 @@ public class BattleSimpleUIController : MonoBehaviour
             enemyAttackCardState,
             target,
             targetSlotIndex,
+            1,
             1
         );
 
@@ -1391,6 +1398,7 @@ public class BattleSimpleUIController : MonoBehaviour
         SetText(logText, lastLog);
         RefreshFixedStatusViews();
         RefreshCharacterStatusViews();
+        RefreshActionSlotIntentViews();
         RefreshTestCardView();
         RefreshTestCardHandView();
     }
@@ -1439,6 +1447,132 @@ public class BattleSimpleUIController : MonoBehaviour
         }
     }
 
+    private void RefreshActionSlotIntentViews()
+    {
+        ResetActionSlotIntentBaseStates();
+
+        if (runtimeState == null || runtimeState.intentQueue == null)
+        {
+            return;
+        }
+
+        if (runtimeState.intentQueue.Count > 2)
+        {
+            Debug.LogWarning("Enemy01 一级行动槽最多显示2条敌人意图，超出部分本轮不显示。");
+        }
+
+        int visibleIntentCount = Mathf.Min(runtimeState.intentQueue.Count, 2);
+
+        for (int intentIndex = 0; intentIndex < visibleIntentCount; intentIndex++)
+        {
+            BattleEnemyIntent intent = runtimeState.intentQueue[intentIndex];
+
+            if (intent == null)
+            {
+                continue;
+            }
+
+            if (!object.ReferenceEquals(intent.enemy, enemy01))
+            {
+                Debug.LogWarning("一级行动槽暂不显示非 Enemy01 的敌人意图：" + intent.intentID);
+                continue;
+            }
+
+            if (enemy01StatusView != null)
+            {
+                enemy01StatusView.SetSlotState(intentIndex, BattleActionSlotUIState.EnemyActionSet);
+            }
+
+            BattleCharacterStatusUIView targetStatusView = GetAllyStatusView(intent.originalTargetCharacter);
+
+            if (targetStatusView == null)
+            {
+                Debug.LogWarning("敌人意图原始目标不属于当前 Ally01 / Ally02：" + intent.intentID);
+                continue;
+            }
+
+            // 正式槽位编号从1开始，一级 UI Slot_01 / Slot_02 使用0/1索引。
+            int targetUISlotIndex = intent.originalTargetSlotIndex - 1;
+            targetStatusView.SetSlotState(
+                targetUISlotIndex,
+                BattleActionSlotUIState.AllyTargetedNoAction
+            );
+        }
+    }
+
+    private void ResetActionSlotIntentBaseStates()
+    {
+        SetTwoSlotStates(ally01StatusView, BattleActionSlotUIState.AllyEmpty);
+        SetTwoSlotStates(ally02StatusView, BattleActionSlotUIState.AllyEmpty);
+        SetTwoSlotStates(enemy01StatusView, BattleActionSlotUIState.EnemyEmpty);
+        SetTwoSlotStates(enemy02StatusView, BattleActionSlotUIState.EnemyEmpty);
+    }
+
+    private void SetTwoSlotStates(
+        BattleCharacterStatusUIView statusView,
+        BattleActionSlotUIState state
+    )
+    {
+        if (statusView == null)
+        {
+            return;
+        }
+
+        statusView.SetSlotState(0, state);
+        statusView.SetSlotState(1, state);
+    }
+
+    private BattleCharacterStatusUIView GetAllyStatusView(CharacterData character)
+    {
+        if (object.ReferenceEquals(character, ally01))
+        {
+            return ally01StatusView;
+        }
+
+        if (object.ReferenceEquals(character, ally02))
+        {
+            return ally02StatusView;
+        }
+
+        return null;
+    }
+
+    private void BindCharacterStatusSlotInteractions()
+    {
+        if (ally01StatusView != null)
+        {
+            ally01StatusView.SetSlotClickHandler(OnAllyActionSlotClicked);
+        }
+
+        if (ally02StatusView != null)
+        {
+            ally02StatusView.SetSlotClickHandler(OnAllyActionSlotClicked);
+        }
+    }
+
+    private void OnAllyActionSlotClicked(BattleActionSlotUIView clickedSlotView)
+    {
+        if (clickedSlotView == null ||
+            clickedSlotView.IsEnemySlot ||
+            clickedSlotView.BoundCharacter == null)
+        {
+            return;
+        }
+
+        if (selectedActionSlotView != null &&
+            !object.ReferenceEquals(selectedActionSlotView, clickedSlotView))
+        {
+            selectedActionSlotView.SetSelected(false);
+        }
+
+        selectedCharacter = clickedSlotView.BoundCharacter;
+        selectedActionSlotIndex = clickedSlotView.SlotIndex;
+        selectedActionSlotView = clickedSlotView;
+
+        clickedSlotView.SetSelected(true);
+        RefreshTestCardHandView();
+    }
+
     void RefreshTestCardView()
     {
         if (testCardView == null)
@@ -1468,7 +1602,11 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        if (ally01 == null || ally01.battleCards == null)
+        CharacterData handOwner = selectedCharacter != null
+            ? selectedCharacter
+            : ally01;
+
+        if (handOwner == null || handOwner.battleCards == null)
         {
             testCardHandView.ClearCards();
             return;
@@ -1478,20 +1616,20 @@ public class BattleSimpleUIController : MonoBehaviour
             ? sinTestHandCardIDs
             : normalTestHandCardIDs;
 
-        List<BattleCardState> cards = FindTestHandCardsByID(targetCardIDs);
+        List<BattleCardState> cards = FindTestHandCardsByID(handOwner, targetCardIDs);
 
         testCardHandView.SetCards(
-            ally01,
+            handOwner,
             enemy01,
             cards
         );
     }
 
-    private List<BattleCardState> FindTestHandCardsByID(string[] cardIDs)
+    private List<BattleCardState> FindTestHandCardsByID(CharacterData handOwner, string[] cardIDs)
     {
         List<BattleCardState> cards = new List<BattleCardState>();
 
-        if (cardIDs == null || ally01 == null || ally01.battleCards == null)
+        if (cardIDs == null || handOwner == null || handOwner.battleCards == null)
         {
             return cards;
         }
@@ -1499,11 +1637,11 @@ public class BattleSimpleUIController : MonoBehaviour
         for (int i = 0; i < cardIDs.Length; i++)
         {
             string cardID = cardIDs[i];
-            BattleCardState cardState = FindAlly01CardStateByID(cardID);
+            BattleCardState cardState = FindCardStateByID(handOwner, cardID);
 
             if (cardState == null)
             {
-                Debug.LogWarning("测试手牌缺少卡牌：" + cardID);
+                Debug.LogWarning(handOwner.characterName + " 的测试手牌缺少卡牌：" + cardID);
                 continue;
             }
 
@@ -1513,21 +1651,16 @@ public class BattleSimpleUIController : MonoBehaviour
         return cards;
     }
 
-    private BattleCardState FindAlly01CardStateByID(string cardID)
+    private BattleCardState FindCardStateByID(CharacterData handOwner, string cardID)
     {
-        if (string.IsNullOrEmpty(cardID) || ally01 == null || ally01.battleCards == null)
+        if (string.IsNullOrEmpty(cardID) || handOwner == null || handOwner.battleCards == null)
         {
             return null;
         }
 
-        if (cardID == "sin_attack_test_001" && allyASinAttackCardState != null)
+        for (int i = 0; i < handOwner.battleCards.Count; i++)
         {
-            return allyASinAttackCardState;
-        }
-
-        for (int i = 0; i < ally01.battleCards.Count; i++)
-        {
-            BattleCardState cardState = ally01.battleCards[i];
+            BattleCardState cardState = handOwner.battleCards[i];
 
             if (cardState == null || cardState.cardData == null)
             {

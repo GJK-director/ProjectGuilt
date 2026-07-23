@@ -1,4 +1,6 @@
+using System;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 public enum BattleActionSlotUIState
@@ -10,7 +12,7 @@ public enum BattleActionSlotUIState
     EnemyActionSet
 }
 
-public class BattleActionSlotUIView : MonoBehaviour
+public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler
 {
     [SerializeField] private Image slotImage;
 
@@ -19,8 +21,21 @@ public class BattleActionSlotUIView : MonoBehaviour
     [SerializeField] private Sprite slotAllyTargetedNoActionSprite;
     [SerializeField] private Sprite slotEnemyEmptySprite;
     [SerializeField] private Sprite slotEnemyActionSetSprite;
+    [SerializeField] private Sprite slotSelectedSprite;
 
     [SerializeField] private BattleActionSlotUIState defaultState = BattleActionSlotUIState.AllyEmpty;
+
+    private BattleActionSlotUIState currentBaseState;
+    private bool isSelected;
+    private CharacterData boundCharacter;
+    private int slotIndex = -1;
+    private bool isEnemySlot;
+    private Action<BattleActionSlotUIView> clickHandler;
+
+    public CharacterData BoundCharacter => boundCharacter;
+    public int SlotIndex => slotIndex;
+    public bool IsEnemySlot => isEnemySlot;
+    public bool IsSelected => isSelected;
 
     void Reset()
     {
@@ -30,10 +45,57 @@ public class BattleActionSlotUIView : MonoBehaviour
     void Awake()
     {
         TryBindImage();
-        SetDefaultState();
+        currentBaseState = defaultState;
+        isSelected = false;
+        RefreshDisplayedSprite();
     }
 
     public void SetState(BattleActionSlotUIState state)
+    {
+        currentBaseState = state;
+        RefreshDisplayedSprite();
+    }
+
+    public void SetDefaultState()
+    {
+        SetState(defaultState);
+    }
+
+    public void SetSelected(bool selected)
+    {
+        isSelected = selected;
+        RefreshDisplayedSprite();
+    }
+
+    public void BindInteraction(
+        CharacterData character,
+        int index,
+        bool enemySlot,
+        Action<BattleActionSlotUIView> onClicked
+    )
+    {
+        boundCharacter = character;
+        slotIndex = index;
+        isEnemySlot = enemySlot;
+        clickHandler = onClicked;
+    }
+
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        if (isEnemySlot || boundCharacter == null || eventData == null)
+        {
+            return;
+        }
+
+        if (eventData.button != PointerEventData.InputButton.Left)
+        {
+            return;
+        }
+
+        clickHandler?.Invoke(this);
+    }
+
+    private void RefreshDisplayedSprite()
     {
         TryBindImage();
 
@@ -43,20 +105,29 @@ public class BattleActionSlotUIView : MonoBehaviour
             return;
         }
 
-        Sprite targetSprite = GetSpriteByState(state);
+        if (isSelected)
+        {
+            if (slotSelectedSprite != null)
+            {
+                slotImage.sprite = slotSelectedSprite;
+            }
+            else
+            {
+                Debug.LogWarning("BattleActionSlotUIView 缺少选中状态 Sprite。");
+            }
+
+            return;
+        }
+
+        Sprite targetSprite = GetSpriteByState(currentBaseState);
 
         if (targetSprite == null)
         {
-            Debug.LogWarning("BattleActionSlotUIView 缺少状态 " + state + " 对应的 Sprite。");
+            Debug.LogWarning("BattleActionSlotUIView 缺少状态 " + currentBaseState + " 对应的 Sprite。");
             return;
         }
 
         slotImage.sprite = targetSprite;
-    }
-
-    public void SetDefaultState()
-    {
-        SetState(defaultState);
     }
 
     private void TryBindImage()

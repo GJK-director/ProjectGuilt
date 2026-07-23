@@ -38,14 +38,24 @@ public static class BattleExecutionPlanManager
             if (intent != null && intent.isResponded)
             {
                 // 根据敌人意图，找到绑定这个意图的玩家行动槽位。
-                BattleActionSlot actionSlot = FindSlotByEnemyIntent(actionSlots, intent);
+                BattleActionSlot actionSlot = FindValidResponseSlot(actionSlots, intent);
+
+                if (actionSlot == null)
+                {
+                    Debug.LogWarning(
+                        "敌人意图" +
+                        intent.intentOrder +
+                        " 标记为已响应但没有有效主响应槽位，已恢复原目标并按 Unresponded 生成"
+                    );
+                    intent.ResetResponseState();
+                    continue;
+                }
 
                 executionPlan.AddItem(new BattleExecutionItem(
                     order,
                     BattleExecutionItemType.RespondedEnemyIntent,
                     intent,
-                    actionSlot,
-                    CollectRespondedPassiveGuardCandidates(actionSlots, intent, actionSlot)
+                    actionSlot
                 ));
 
                 order++;
@@ -63,7 +73,7 @@ public static class BattleExecutionPlanManager
                     BattleExecutionItemType.UnrespondedEnemyIntent,
                     intent,
                     null,
-                    CollectPassiveGuardCandidates(actionSlots, intent, true)
+                    BattleGuardSelectionManager.CollectGuardCandidates(actionSlots, intent)
                 ));
 
                 order++;
@@ -73,122 +83,115 @@ public static class BattleExecutionPlanManager
         return executionPlan;
     }
 
-    // CreateSpeedBasedExecutionPlan = 创建速度规则版执行计划
-    // 第一版规则：
-    // 1. 高速玩家行动先处理；
-    // 2. 敌人意图按 intentOrder 处理；
-    // 3. 低速自由行动最后处理。
+    // CreateSpeedBasedExecutionPlan = 创建统一速度排序版执行计划
     public static BattleExecutionPlan CreateSpeedBasedExecutionPlan(
         List<BattleActionSlot> actionSlots,
         List<BattleEnemyIntent> intentQueue
     )
     {
+        return CreateSpeedBasedExecutionPlan(actionSlots, intentQueue, null);
+    }
+
+    public static BattleExecutionPlan CreateSpeedBasedExecutionPlan(
+        List<BattleActionSlot> actionSlots,
+        List<BattleEnemyIntent> intentQueue,
+        BattleRuntimeState runtimeState
+    )
+    {
         BattleExecutionPlan executionPlan = new BattleExecutionPlan();
-        HashSet<BattleEnemyIntent> handledHighSpeedIntents = new HashSet<BattleEnemyIntent>();
+        List<BattleExecutionItem> candidates = new List<BattleExecutionItem>();
+        List<CharacterData> fallbackBattleOrder = BuildFallbackBattleOrder(actionSlots, intentQueue);
+        int stableOrder = 1;
 
-        int order = 1;
-
-        // 第一阶段：高速玩家行动阶段。
-        // 按当前 actionSlots 顺序扫描，先加入能抢先的响应行动和自由行动。
-        if (actionSlots != null)
+        if (intentQueue != null)
         {
-            foreach (BattleActionSlot slot in actionSlots)
+            foreach (BattleEnemyIntent intent in intentQueue)
             {
-                if (!IsActionSlotReady(slot))
+                if (intent == null)
                 {
                     continue;
                 }
 
-                if (IsHighSpeedResponseSlot(slot) && IsIntentInQueue(intentQueue, slot.enemyIntent))
-                {
-                    executionPlan.AddItem(new BattleExecutionItem(
-                        order,
-                        BattleExecutionItemType.RespondedEnemyIntent,
-                        slot.enemyIntent,
-                        slot,
-                        CollectRespondedPassiveGuardCandidates(actionSlots, slot.enemyIntent, slot)
-                    ));
+                BattleActionSlot responseSlot = intent.isResponded
+                    ? FindValidResponseSlot(actionSlots, intent)
+                    : null;
 
-                    handledHighSpeedIntents.Add(slot.enemyIntent);
-                    order++;
-                    continue;
+                if (intent.isResponded && responseSlot == null)
+                {
+                    Debug.LogWarning(
+                        "敌人意图" +
+                        intent.intentOrder +
+                        " 标记为已响应但没有有效主响应槽位，已恢复原目标并按 Unresponded 生成"
+                    );
+                    intent.ResetResponseState();
                 }
 
-                if (IsHighSpeedFreeActionSlot(slot))
-                {
-                    executionPlan.AddItem(new BattleExecutionItem(
-                        order,
-                        BattleExecutionItemType.FreeAction,
-                        null,
-                        slot
-                    ));
-
-                    order++;
-                }
-            }
-        }
-
-        // 第二阶段：敌人意图节奏阶段。
-        // 按 intentOrder 从小到大处理；已经被高速响应提前处理的意图跳过。
-        List<BattleEnemyIntent> orderedIntents = GetIntentQueueByIntentOrder(intentQueue);
-
-        foreach (BattleEnemyIntent intent in orderedIntents)
-        {
-            if (intent == null || handledHighSpeedIntents.Contains(intent))
-            {
-                continue;
-            }
-
-            if (intent.isResponded)
-            {
-                BattleActionSlot actionSlot = FindSlotByEnemyIntent(actionSlots, intent);
-
-                executionPlan.AddItem(new BattleExecutionItem(
-                    order,
-                    BattleExecutionItemType.RespondedEnemyIntent,
+                BattleExecutionItemType itemType = responseSlot != null
+                    ? BattleExecutionItemType.RespondedEnemyIntent
+                    : BattleExecutionItemType.UnrespondedEnemyIntent;
+                CharacterData orderingActor = responseSlot != null ? responseSlot.actor : intent.enemy;
+                BattleExecutionItem item = new BattleExecutionItem(
+                    stableOrder,
+                    itemType,
                     intent,
-                    actionSlot,
-                    CollectRespondedPassiveGuardCandidates(actionSlots, intent, actionSlot)
-                ));
+                    responseSlot,
+                    itemType == BattleExecutionItemType.UnrespondedEnemyIntent
+                        ? BattleGuardSelectionManager.CollectGuardCandidates(actionSlots, intent)
+                        : null
+                );
 
-                order++;
-                continue;
+                PopulateSortMetadata(
+                    item,
+                    responseSlot != null
+                        ? System.Math.Max(GetSpeed(responseSlot.actor), GetSpeed(intent.enemy))
+                        : GetSpeed(intent.enemy),
+                    responseSlot != null ? 0 : 1,
+                    responseSlot != null ? responseSlot.slotIndex : intent.enemySlotIndex,
+                    GetBattlePositionIndex(runtimeState, fallbackBattleOrder, orderingActor),
+                    stableOrder
+                );
+                candidates.Add(item);
+                stableOrder++;
             }
-
-            executionPlan.AddItem(new BattleExecutionItem(
-                order,
-                BattleExecutionItemType.UnrespondedEnemyIntent,
-                intent,
-                null,
-                CollectPassiveGuardCandidates(actionSlots, intent, true)
-            ));
-
-            order++;
         }
 
-        // 第三阶段：低速自由行动阶段。
-        // 低速 FreeAction 不能抢在敌人攻击前，所以最后加入。
         if (actionSlots != null)
         {
             foreach (BattleActionSlot slot in actionSlots)
             {
-                if (!IsActionSlotReady(slot))
+                if (!IsActionSlotReady(slot) ||
+                    slot.slotType != BattleActionSlotType.FreeAction ||
+                    slot.isUsed ||
+                    slot.actor.IsDead())
                 {
                     continue;
                 }
 
-                if (slot.slotType == BattleActionSlotType.FreeAction && !IsHighSpeedFreeActionSlot(slot))
-                {
-                    executionPlan.AddItem(new BattleExecutionItem(
-                        order,
-                        BattleExecutionItemType.FreeAction,
-                        null,
-                        slot
-                    ));
-
-                    order++;
-                }
+                BattleExecutionItem item = new BattleExecutionItem(
+                    stableOrder,
+                    BattleExecutionItemType.FreeAction,
+                    null,
+                    slot
+                );
+                PopulateSortMetadata(
+                    item,
+                    GetSpeed(slot.actor),
+                    1,
+                    slot.slotIndex,
+                    GetBattlePositionIndex(runtimeState, fallbackBattleOrder, slot.actor),
+                    stableOrder
+                );
+                candidates.Add(item);
+                stableOrder++;
             }
+        }
+
+        candidates.Sort(CompareExecutionItems);
+
+        for (int index = 0; index < candidates.Count; index++)
+        {
+            candidates[index].order = index + 1;
+            executionPlan.AddItem(candidates[index]);
         }
 
         return executionPlan;
@@ -260,7 +263,8 @@ public static class BattleExecutionPlanManager
             "，卡牌：" +
             item.actionSlot.GetCardName() +
             "，目标：" +
-            item.actionSlot.GetTargetName()
+            item.actionSlot.GetTargetName() +
+            GetSortMetadataText(item)
         );
     }
 
@@ -301,7 +305,8 @@ public static class BattleExecutionPlanManager
             "，当前实际目标：" +
             item.enemyIntent.GetActualTargetSlotText() +
             "，被动守备候选数：" +
-            passiveGuardCandidateCount
+            passiveGuardCandidateCount +
+            GetSortMetadataText(item)
         );
     }
 
@@ -326,11 +331,28 @@ public static class BattleExecutionPlanManager
             " 未响应，未来按 actualTarget 执行，目标：" +
             item.enemyIntent.GetActualTargetSlotText() +
             "，被动守备候选数：" +
-            passiveGuardCandidateCount
+            passiveGuardCandidateCount +
+            GetSortMetadataText(item)
         );
     }
 
-    // CollectRespondedPassiveGuardCandidates = 为 Attack vs Attack 已响应意图收集被动守备候选
+    static string GetSortMetadataText(BattleExecutionItem item)
+    {
+        if (item == null)
+        {
+            return "";
+        }
+
+        return
+            "，排序键：[速度=" + item.effectiveSpeed +
+            "，响应优先=" + item.responsePriority +
+            "，槽位=" + item.actionSlotOrder +
+            "，站位=" + item.actorPositionOrder +
+            "，稳定序=" + item.stableOrder +
+            "]";
+    }
+
+    // 旧兼容方法：正式计划生成已不再为 Responded item 收集后备守备。
     static List<BattleActionSlot> CollectRespondedPassiveGuardCandidates(
         List<BattleActionSlot> actionSlots,
         BattleEnemyIntent enemyIntent,
@@ -507,7 +529,171 @@ public static class BattleExecutionPlanManager
     // IsActionSlotReady = 判断槽位是否有可加入计划的行动
     static bool IsActionSlotReady(BattleActionSlot slot)
     {
-        return slot != null && !slot.IsEmpty() && slot.actor != null;
+        return
+            slot != null &&
+            !slot.IsEmpty() &&
+            slot.actor != null &&
+            slot.cardState != null &&
+            slot.cardState.cardData != null;
+    }
+
+    static BattleActionSlot FindValidResponseSlot(
+        List<BattleActionSlot> actionSlots,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        BattleActionSlot slot = FindSlotByEnemyIntent(actionSlots, enemyIntent);
+
+        if (!IsActionSlotReady(slot) ||
+            slot.slotType != BattleActionSlotType.RespondToEnemyIntent ||
+            slot.isUsed ||
+            slot.actor.IsDead())
+        {
+            return null;
+        }
+
+        return slot;
+    }
+
+    static void PopulateSortMetadata(
+        BattleExecutionItem item,
+        int effectiveSpeed,
+        int responsePriority,
+        int actionSlotOrder,
+        int actorPositionOrder,
+        int stableOrder
+    )
+    {
+        item.effectiveSpeed = effectiveSpeed;
+        item.responsePriority = responsePriority;
+        item.actionSlotOrder = actionSlotOrder;
+        item.actorPositionOrder = actorPositionOrder;
+        item.stableOrder = stableOrder;
+    }
+
+    static int CompareExecutionItems(BattleExecutionItem left, BattleExecutionItem right)
+    {
+        int result = right.effectiveSpeed.CompareTo(left.effectiveSpeed);
+        if (result != 0)
+        {
+            return result;
+        }
+
+        result = left.responsePriority.CompareTo(right.responsePriority);
+        if (result != 0)
+        {
+            return result;
+        }
+
+        result = left.actionSlotOrder.CompareTo(right.actionSlotOrder);
+        if (result != 0)
+        {
+            return result;
+        }
+
+        result = left.actorPositionOrder.CompareTo(right.actorPositionOrder);
+        if (result != 0)
+        {
+            return result;
+        }
+
+        return left.stableOrder.CompareTo(right.stableOrder);
+    }
+
+    static int GetSpeed(CharacterData character)
+    {
+        return character != null ? character.GetCurrentSpeed() : int.MinValue;
+    }
+
+    static int GetBattlePositionIndex(
+        BattleRuntimeState runtimeState,
+        List<CharacterData> fallbackBattleOrder,
+        CharacterData character
+    )
+    {
+        if (runtimeState != null)
+        {
+            int runtimePosition = runtimeState.GetBattlePositionIndex(character);
+            if (runtimePosition != int.MaxValue)
+            {
+                return runtimePosition;
+            }
+        }
+
+        if (character == null || fallbackBattleOrder == null)
+        {
+            return int.MaxValue;
+        }
+
+        for (int index = 0; index < fallbackBattleOrder.Count; index++)
+        {
+            if (object.ReferenceEquals(fallbackBattleOrder[index], character))
+            {
+                return index + 1;
+            }
+        }
+
+        return int.MaxValue;
+    }
+
+    static List<CharacterData> BuildFallbackBattleOrder(
+        List<BattleActionSlot> actionSlots,
+        List<BattleEnemyIntent> intentQueue
+    )
+    {
+        List<CharacterData> battleOrder = new List<CharacterData>();
+
+        if (actionSlots != null)
+        {
+            foreach (BattleActionSlot slot in actionSlots)
+            {
+                if (slot == null)
+                {
+                    continue;
+                }
+
+                AddCharacterReferenceIfMissing(battleOrder, slot.owner);
+                AddCharacterReferenceIfMissing(battleOrder, slot.actor);
+            }
+        }
+
+        if (intentQueue != null)
+        {
+            foreach (BattleEnemyIntent intent in intentQueue)
+            {
+                if (intent == null)
+                {
+                    continue;
+                }
+
+                AddCharacterReferenceIfMissing(battleOrder, intent.enemy);
+                AddCharacterReferenceIfMissing(battleOrder, intent.originalTargetCharacter);
+                AddCharacterReferenceIfMissing(battleOrder, intent.actualTargetCharacter);
+            }
+        }
+
+        return battleOrder;
+    }
+
+    static void AddCharacterReferenceIfMissing(
+        List<CharacterData> characters,
+        CharacterData character
+    )
+    {
+        if (characters == null || character == null)
+        {
+            return;
+        }
+
+        foreach (CharacterData existingCharacter in characters)
+        {
+            if (object.ReferenceEquals(existingCharacter, character))
+            {
+                return;
+            }
+        }
+
+        characters.Add(character);
     }
 
     // IsHighSpeedResponseSlot = 判断响应槽位是否能高速抢先
@@ -649,5 +835,365 @@ public static class BattleExecutionPlanManager
         }
 
         return null;
+    }
+}
+
+public enum BattleGuardSelectionType
+{
+    None,
+    ContinuousDodge,
+    EnemySpecificGuard,
+    PassiveGuard
+}
+
+public sealed class BattleGuardSelectionResult
+{
+    public BattleGuardSelectionType selectionType;
+    public BattleActionSlot slot;
+
+    public BattleGuardSelectionResult(
+        BattleGuardSelectionType selectionType,
+        BattleActionSlot slot
+    )
+    {
+        this.selectionType = selectionType;
+        this.slot = slot;
+    }
+}
+
+// BattleGuardSelectionManager = 无人响应敌人攻击的唯一守备选择器。
+// 守备槽位不独立进入执行队列，只在敌人攻击真正执行时按优先级重新验证。
+public static class BattleGuardSelectionManager
+{
+    public static BattleActionSlot SelectGuardForEnemyIntent(
+        BattleRuntimeState runtimeState,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        return SelectGuardForEnemyIntent(
+            runtimeState != null ? runtimeState.actionSlots : null,
+            enemyIntent
+        );
+    }
+
+    public static BattleActionSlot SelectGuardForEnemyIntent(
+        IReadOnlyList<BattleActionSlot> actionSlots,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        return SelectHandlingCardForEnemyIntent(actionSlots, enemyIntent).slot;
+    }
+
+    public static BattleGuardSelectionResult SelectHandlingCardForEnemyIntent(
+        IReadOnlyList<BattleActionSlot> actionSlots,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        BattleActionSlot selectedSlot = SelectContinuousDodgeForEnemyIntent(
+            actionSlots,
+            enemyIntent
+        );
+        BattleGuardSelectionType selectionType = selectedSlot != null
+            ? BattleGuardSelectionType.ContinuousDodge
+            : BattleGuardSelectionType.None;
+
+        if (selectedSlot == null)
+        {
+            selectedSlot = SelectFirstValidGuardInScope(
+                actionSlots,
+                enemyIntent,
+                BattleActionSlotType.EnemySpecificGuard
+            );
+            selectionType = selectedSlot != null
+                ? BattleGuardSelectionType.EnemySpecificGuard
+                : BattleGuardSelectionType.None;
+        }
+
+        if (selectedSlot == null)
+        {
+            selectedSlot = SelectFirstValidGuardInScope(
+                actionSlots,
+                enemyIntent,
+                BattleActionSlotType.PassiveGuard
+            );
+            selectionType = selectedSlot != null
+                ? BattleGuardSelectionType.PassiveGuard
+                : BattleGuardSelectionType.None;
+        }
+
+        if (selectedSlot == null)
+        {
+            Debug.Log(
+                "敌人：" +
+                (enemyIntent != null ? enemyIntent.GetEnemyName() : "无敌人") +
+                "，actualTarget：" +
+                (enemyIntent != null ? enemyIntent.GetActualTargetName() : "无目标") +
+                "，没有有效守备，按 UnrespondedEnemyIntent 直接处理"
+            );
+            return new BattleGuardSelectionResult(BattleGuardSelectionType.None, null);
+        }
+
+        if (selectionType == BattleGuardSelectionType.ContinuousDodge)
+        {
+            Debug.Log(
+                "[ContinuousDodge Selected]\n" +
+                "Enemy: " + enemyIntent.GetEnemyName() + "\n" +
+                "ActualTarget: " + enemyIntent.GetActualTargetName() + "\n" +
+                "Slot: " + selectedSlot.slotIndex + "\n" +
+                "Card: " + selectedSlot.GetCardName() + "\n" +
+                "SuccessfulCount: " + selectedSlot.successfulDodgeCount
+            );
+        }
+        else
+        {
+            Debug.Log(
+                "敌人：" +
+                enemyIntent.GetEnemyName() +
+                "，actualTarget：" +
+                enemyIntent.GetActualTargetName() +
+                "，选中的守备范围：" +
+                selectedSlot.slotType +
+                "，槽位：" +
+                selectedSlot.slotIndex +
+                "，卡牌：" +
+                selectedSlot.GetCardName()
+            );
+        }
+
+        return new BattleGuardSelectionResult(selectionType, selectedSlot);
+    }
+
+    static BattleActionSlot SelectContinuousDodgeForEnemyIntent(
+        IReadOnlyList<BattleActionSlot> actionSlots,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        if (actionSlots == null || enemyIntent == null)
+        {
+            return null;
+        }
+
+        BattleActionSlot selectedSlot = null;
+
+        foreach (BattleActionSlot slot in actionSlots)
+        {
+            if (!IsValidContinuousDodgeSlot(slot, enemyIntent))
+            {
+                continue;
+            }
+
+            if (selectedSlot == null || slot.slotIndex < selectedSlot.slotIndex)
+            {
+                selectedSlot = slot;
+            }
+        }
+
+        return selectedSlot;
+    }
+
+    static bool IsValidContinuousDodgeSlot(
+        BattleActionSlot slot,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        if (slot == null ||
+            enemyIntent == null ||
+            enemyIntent.enemy == null ||
+            enemyIntent.actualTargetCharacter == null ||
+            !slot.isContinuousDodgeActive ||
+            slot.isCardUseFinalized ||
+            slot.isUsed ||
+            slot.owner == null ||
+            slot.actor == null ||
+            slot.cardState == null ||
+            slot.cardState.cardData == null)
+        {
+            return false;
+        }
+
+        if (enemyIntent.enemy.IsDead() ||
+            enemyIntent.actualTargetCharacter.IsDead() ||
+            slot.owner.IsDead() ||
+            slot.actor.IsDead())
+        {
+            return false;
+        }
+
+        if (!object.ReferenceEquals(slot.owner, slot.actor) ||
+            !object.ReferenceEquals(slot.owner, enemyIntent.actualTargetCharacter) ||
+            slot.cardState.cardData.cardType != CardType.Dodge)
+        {
+            return false;
+        }
+
+        CardEligibilityResult eligibility = BattleCardManager.EvaluateCardEligibility(
+            slot.actor,
+            enemyIntent.enemy,
+            slot.cardState
+        );
+        return eligibility != null && eligibility.isEligible;
+    }
+
+    public static List<BattleActionSlot> CollectGuardCandidates(
+        IReadOnlyList<BattleActionSlot> actionSlots,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        List<BattleActionSlot> candidates = new List<BattleActionSlot>();
+
+        if (actionSlots == null ||
+            enemyIntent == null ||
+            enemyIntent.enemy == null ||
+            enemyIntent.actualTargetCharacter == null)
+        {
+            return candidates;
+        }
+
+        foreach (BattleActionSlot slot in actionSlots)
+        {
+            if (IsStructurallyMatchedGuard(slot, enemyIntent))
+            {
+                candidates.Add(slot);
+            }
+        }
+
+        return candidates;
+    }
+
+    static bool IsStructurallyMatchedGuard(
+        BattleActionSlot slot,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        if (slot == null ||
+            slot.owner == null ||
+            slot.actor == null ||
+            slot.target == null ||
+            slot.cardState == null ||
+            slot.cardState.cardData == null)
+        {
+            return false;
+        }
+
+        if (!object.ReferenceEquals(slot.owner, enemyIntent.actualTargetCharacter) ||
+            !object.ReferenceEquals(slot.actor, enemyIntent.actualTargetCharacter))
+        {
+            return false;
+        }
+
+        string cardType = slot.cardState.cardData.cardType;
+        if (cardType != CardType.Defense && cardType != CardType.Dodge)
+        {
+            return false;
+        }
+
+        if (slot.slotType == BattleActionSlotType.EnemySpecificGuard)
+        {
+            return
+                object.ReferenceEquals(slot.requestedEnemy, enemyIntent.enemy) &&
+                object.ReferenceEquals(slot.target, enemyIntent.enemy);
+        }
+
+        return
+            slot.slotType == BattleActionSlotType.PassiveGuard &&
+            object.ReferenceEquals(slot.target, enemyIntent.actualTargetCharacter);
+    }
+
+    static BattleActionSlot SelectFirstValidGuardInScope(
+        IReadOnlyList<BattleActionSlot> actionSlots,
+        BattleEnemyIntent enemyIntent,
+        BattleActionSlotType requiredSlotType
+    )
+    {
+        if (actionSlots == null || enemyIntent == null)
+        {
+            return null;
+        }
+
+        BattleActionSlot selectedSlot = null;
+
+        foreach (BattleActionSlot slot in actionSlots)
+        {
+            if (!IsValidGuardSlot(slot, enemyIntent, requiredSlotType))
+            {
+                continue;
+            }
+
+            if (selectedSlot == null || slot.slotIndex < selectedSlot.slotIndex)
+            {
+                selectedSlot = slot;
+            }
+        }
+
+        return selectedSlot;
+    }
+
+    static bool IsValidGuardSlot(
+        BattleActionSlot slot,
+        BattleEnemyIntent enemyIntent,
+        BattleActionSlotType requiredSlotType
+    )
+    {
+        if (slot == null ||
+            enemyIntent == null ||
+            enemyIntent.enemy == null ||
+            enemyIntent.actualTargetCharacter == null)
+        {
+            return false;
+        }
+
+        if (slot.slotType != requiredSlotType ||
+            slot.isUsed ||
+            slot.owner == null ||
+            slot.actor == null ||
+            slot.target == null ||
+            slot.cardState == null ||
+            slot.cardState.cardData == null)
+        {
+            return false;
+        }
+
+        if (enemyIntent.enemy.IsDead() ||
+            enemyIntent.actualTargetCharacter.IsDead() ||
+            slot.owner.IsDead() ||
+            slot.actor.IsDead() ||
+            slot.target.IsDead())
+        {
+            return false;
+        }
+
+        if (!object.ReferenceEquals(slot.owner, enemyIntent.actualTargetCharacter) ||
+            !object.ReferenceEquals(slot.actor, enemyIntent.actualTargetCharacter))
+        {
+            return false;
+        }
+
+        if (requiredSlotType == BattleActionSlotType.EnemySpecificGuard)
+        {
+            if (slot.requestedEnemy == null ||
+                slot.requestedEnemy.IsDead() ||
+                !object.ReferenceEquals(slot.requestedEnemy, enemyIntent.enemy) ||
+                !object.ReferenceEquals(slot.target, enemyIntent.enemy))
+            {
+                return false;
+            }
+        }
+        else if (!object.ReferenceEquals(slot.target, enemyIntent.actualTargetCharacter))
+        {
+            return false;
+        }
+
+        string cardType = slot.cardState.cardData.cardType;
+        if (cardType != CardType.Defense && cardType != CardType.Dodge)
+        {
+            return false;
+        }
+
+        CardEligibilityResult eligibility = BattleCardManager.EvaluateCardEligibility(
+            slot.actor,
+            enemyIntent.enemy,
+            slot.cardState
+        );
+        return eligibility != null && eligibility.isEligible;
     }
 }

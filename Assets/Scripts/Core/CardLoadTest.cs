@@ -39,7 +39,10 @@ public enum BattleTestMode
     CardResourceSnapshotAndConsumeBasic = 53,
     CardAssignmentEligibilityBasic = 54,
     RealCardResourceMigrationBasic = 55,
-    BattleDefinitionDataBootstrapBasic = 56
+    BattleDefinitionDataBootstrapBasic = 56,
+    BattlePreparedActionAssignmentModelBasic = 57,
+    BattleExecutionOrderingAndGuardPriorityBasic = 58,
+    BattleContinuousDodgeLifecycleBasic = 59
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -221,6 +224,24 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleDefinitionDataBootstrapBasic)
         {
             RunBattleDefinitionDataBootstrapBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattlePreparedActionAssignmentModelBasic)
+        {
+            RunBattlePreparedActionAssignmentModelBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleExecutionOrderingAndGuardPriorityBasic)
+        {
+            RunBattleExecutionOrderingAndGuardPriorityBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleContinuousDodgeLifecycleBasic)
+        {
+            RunBattleContinuousDodgeLifecycleBasicTestSequence();
             return;
         }
 
@@ -1631,10 +1652,15 @@ public class CardLoadTest : MonoBehaviour
         BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan);
 
         int hpAfter = dodgeUser.currentHP;
-        bool expectCardsUsed = !expectTieLimit;
-        int expectedDodgeCooldown = expectCardsUsed ? dodgeCardState.cardData.cooldown : dodgeCooldownBefore;
-        int expectedEnemyCooldown = expectCardsUsed ? enemyAttackCardState.cardData.cooldown : enemyCooldownBefore;
-        bool expectedSlotUsed = expectCardsUsed;
+        bool expectDodgeSuccess = expectedResultType == "DodgeSuccess";
+        bool expectDodgeFailed = expectedResultType == "DodgeFailed";
+        int expectedDodgeCooldown = expectDodgeFailed
+            ? dodgeCardState.cardData.cooldown
+            : dodgeCooldownBefore;
+        int expectedEnemyCooldown = expectTieLimit
+            ? enemyCooldownBefore
+            : enemyAttackCardState.cardData.cooldown;
+        bool expectedSlotUsed = expectDodgeFailed;
 
         Debug.Log("执行后目标 HP：" + hpAfter + " / " + dodgeUser.maxHP);
         Debug.Log("执行后玩家 Dodge CD：" + dodgeCardState.currentCooldown);
@@ -1652,6 +1678,14 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期玩家 Dodge CD：" + expectedDodgeCooldown + "，实际是否符合：" + (dodgeCardState.currentCooldown == expectedDodgeCooldown));
         Debug.Log("预期敌人 Attack CD：" + expectedEnemyCooldown + "，实际是否符合：" + (enemyAttackCardState.currentCooldown == expectedEnemyCooldown));
         Debug.Log("预期 Dodge 槽位 isUsed：" + expectedSlotUsed + "，实际是否符合：" + (dodgeSlot != null && dodgeSlot.isUsed == expectedSlotUsed));
+        Debug.Log(
+            "DodgeSuccess预期进入连续闪避且暂不正式结算：" +
+            (!expectDodgeSuccess ||
+             (dodgeSlot != null &&
+              dodgeSlot.isContinuousDodgeActive &&
+              dodgeSlot.successfulDodgeCount == 1 &&
+              !dodgeSlot.isCardUseFinalized))
+        );
         Debug.Log("预期 ExecutionPlan 完成：" + (executionPlan != null && executionPlan.isCompleted));
 
         if (expectedResultType == "DodgeFailed")
@@ -3324,7 +3358,7 @@ public class CardLoadTest : MonoBehaviour
             5,
             "DodgeSuccess",
             0,
-            true,
+            false,
             true
         );
 
@@ -3434,6 +3468,11 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期 Enemy guilt 不变化：" + (enemy.currentGuilt == enemyGuiltBefore));
         Debug.Log("预期只造成一次伤害且不回落 Unresponded：" + (hpAfter == hpBefore - expectedDamage));
         Debug.Log("预期不会错误触发后续守备：" + (defenseSlot != null && !defenseSlot.isUsed && followDefense.currentCooldown == defenseCooldownBefore));
+        Debug.Log(
+            "预期DodgeSuccess激活连续闪避、其他分支不激活：" +
+            (dodgeSlot != null &&
+             dodgeSlot.isContinuousDodgeActive == (expectedResultType == "DodgeSuccess"))
+        );
 
         if (expectedResultType == "TieLimit")
         {
@@ -3559,7 +3598,14 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期计划生成RespondedEnemyIntent：" + (item != null && item.executionType == BattleExecutionItemType.RespondedEnemyIntent));
         Debug.Log("预期不生成Unresponded被动Dodge接管：" + (unrespondedCount == 0));
         Debug.Log("预期Responded item候选数为0：" + (candidateCount == 0));
-        Debug.Log("预期主响应Dodge正常执行：" + (responseSlot != null && responseSlot.isUsed && responseDodge.currentCooldown == responseDodge.cardData.cooldown && responseDodge.currentCooldown != responseCooldownBefore));
+        Debug.Log(
+            "预期主响应Dodge成功后激活连续闪避并延迟正式结算：" +
+            (responseSlot != null &&
+             responseSlot.isContinuousDodgeActive &&
+             responseSlot.successfulDodgeCount == 1 &&
+             !responseSlot.isUsed &&
+             responseDodge.currentCooldown == responseCooldownBefore)
+        );
         Debug.Log("预期被动Dodge不触发：" + (passiveSlot != null && !passiveSlot.isUsed));
         Debug.Log("预期被动Dodge CD不变化：" + (passiveDodge.currentCooldown == passiveCooldownBefore));
         Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
@@ -3605,47 +3651,12 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
     }
 
-    // RunActionSlotPassiveDodgeAfterAttackLoseBasicTestSequence = Attack 失败后被动 Dodge 接管聚合测试
+    // RunActionSlotPassiveDodgeAfterAttackLoseBasicTestSequence = 精确响应失败后不触发额外守备回归测试
     void RunActionSlotPassiveDodgeAfterAttackLoseBasicTestSequence()
     {
-        Debug.Log("===== Attack 拼点失败后被动 Dodge 接管聚合测试开始 =====");
-        Debug.Log("本入口只测试 Responded Attack vs Attack 的 EnemyWin 分支，不修改 Unresponded 被动 Dodge");
-
-        RunPassiveDodgeAfterAttackLoseDodgeFirstSubTest(
-            "PassiveDodgeAfterAttackLoseSuccess",
-            4,
-            8,
-            9,
-            "DodgeSuccess",
-            0,
-            true
-        );
-
-        RunPassiveDodgeAfterAttackLoseDodgeFirstSubTest(
-            "PassiveDodgeAfterAttackLoseFailed",
-            4,
-            8,
-            6,
-            "DodgeFailed",
-            8,
-            true
-        );
-
-        RunPassiveDodgeAfterAttackLoseDodgeFirstSubTest(
-            "PassiveDodgeAfterAttackLoseTieLimit",
-            4,
-            8,
-            8,
-            "TieLimit",
-            0,
-            false
-        );
-
-        RunPassiveDodgeAfterAttackLoseSkipInvalidToDefenseSubTest();
-        RunPassiveDodgeAfterAttackLoseDefenseFirstSubTest();
-        RunPassiveDodgeAfterAttackLoseNoCandidateSubTest();
-        RunPassiveDodgeAfterAttackLoseTargetMismatchSubTest();
-        RunPassiveDodgeAfterAttackLosePlayerWinSubTest();
+        Debug.Log("===== 精确响应失败后不触发额外守备回归测试开始 =====");
+        Debug.Log("Responded Attack已经正式执行后，不再触发PassiveGuard或EnemySpecificGuard");
+        RunPassiveDodgeRespondedAttackFailIsolationSubTest();
     }
 
     void RunPassiveDodgeAfterAttackLoseDodgeFirstSubTest(
@@ -4153,7 +4164,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("敌人胜利分支验证：我方角色A 应作为 actualTargetCharacter 扣血");
     }
 
-    // RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardReducedDamageBasicTestSequence = 敌人胜利后触发 PassiveGuard 减伤
+    // 历史入口保留枚举值；当前验证精确响应失败后不再触发 PassiveGuard。
     void RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardReducedDamageBasicTestSequence()
     {
         RunRespondedAttackPassiveGuardSubTest(
@@ -4165,15 +4176,15 @@ public class CardLoadTest : MonoBehaviour
             -1,
             false,
             false,
-            true,
             false,
-            3,
-            true,
-            "EnemyWinPassiveGuardReducedDamage"
+            false,
+            8,
+            false,
+            "EnemyWin"
         );
     }
 
-    // RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardFullBlockBasicTestSequence = 敌人胜利后触发 PassiveGuard 完全防御
+    // 历史入口保留枚举值；当前验证高点守备也不会在精确响应后补触发。
     void RunActionSlotExecutionPlanExecuteRespondedEnemyWinPassiveGuardFullBlockBasicTestSequence()
     {
         RunRespondedAttackPassiveGuardSubTest(
@@ -4185,11 +4196,11 @@ public class CardLoadTest : MonoBehaviour
             -1,
             false,
             false,
-            true,
             false,
-            0,
-            true,
-            "EnemyWinPassiveGuardFullBlock"
+            false,
+            8,
+            false,
+            "EnemyWin"
         );
     }
 
@@ -4952,15 +4963,17 @@ public class CardLoadTest : MonoBehaviour
 
         bool directRule =
             directResult != null &&
+            directResult.resultType == "EnemyWin" &&
             !directResult.playerCardUsed &&
             directResult.enemyCardUsed &&
-            object.ReferenceEquals(directResult.triggeredPassiveGuardSlot, directGuardSlot) &&
+            directResult.triggeredPassiveGuardSlot == null &&
             CountBuffStack(directContext.allyB, "ContractEDirectResponseResolved") == 0 &&
             CountBuffStack(directContext.enemy, "ContractEDirectEnemyBefore") == 1 &&
             CountBuffStack(directContext.enemy, "ContractEDirectEnemyResolved") == 1 &&
-            CountBuffStack(directContext.allyB, "ContractEDirectGuardResolved") == 1 &&
+            CountBuffStack(directContext.allyB, "ContractEDirectGuardResolved") == 0 &&
             CountBuffStack(directContext.enemy, "NextClashPointUp") == 0 &&
-            CountBuffStack(directContext.enemy, "NextCardPointUp") == 0;
+            CountBuffStack(directContext.enemy, "NextCardPointUp") == 0 &&
+            directContext.allyB.currentHP == 22;
 
         BattleEndedTestContext execContext = CreateBattleEndedTestContext("contract_e_exec", 30, 30, 50, 10, 3, 8);
         List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(execContext.allyA, execContext.allyB, 2);
@@ -4971,14 +4984,25 @@ public class CardLoadTest : MonoBehaviour
         BattleActionSlotManager.AssignResponseToEnemyIntent(actionSlots, execContext.allyB, 1, execContext.allyB, responseAttack, intent);
         BattleActionSlotManager.AssignPassiveGuard(actionSlots, execContext.allyB, 2, execContext.allyB, passiveGuard);
         BattleExecutionPlan plan = BattleExecutionPlanManager.CreateBasicExecutionPlan(actionSlots, BattleEnemyIntentManager.CreateIntentQueue(intent));
+        BattleExecutionItem respondedItem = GetFirstExecutionItem(plan);
+        int candidateCount = respondedItem != null && respondedItem.passiveGuardCandidates != null
+            ? respondedItem.passiveGuardCandidates.Count
+            : -1;
         ExecutePlanWithRuntimeStateAndCompleteTurn(execContext.runtimeState, plan);
         BattleActionSlot responseSlot = BattleActionSlotManager.GetSlot(actionSlots, execContext.allyB, 1);
         BattleActionSlot guardSlot = BattleActionSlotManager.GetSlot(actionSlots, execContext.allyB, 2);
 
-        bool slotRule = responseSlot != null && responseSlot.isUsed && guardSlot != null && guardSlot.isUsed && responseAttack.currentCooldown == 0;
+        bool slotRule =
+            candidateCount == 0 &&
+            responseSlot != null &&
+            responseSlot.isUsed &&
+            guardSlot != null &&
+            !guardSlot.isUsed &&
+            responseAttack.currentCooldown == 0 &&
+            execContext.allyB.currentHP == 22;
 
-        Debug.Log("模式52 E EnemyWin+PassiveGuard result字段与事件隔离正确：" + directRule);
-        Debug.Log("模式52 E 原响应槽位与PassiveGuard槽位MarkUsed正确：" + slotRule);
+        Debug.Log("模式52 E EnemyWin精确响应后不触发额外守备：" + directRule);
+        Debug.Log("模式52 E Responded候选为0且仅原响应槽位MarkUsed：" + slotRule);
     }
 
     void RunContractDefenseFullBlockHitSubTest()
@@ -5052,16 +5076,18 @@ public class CardLoadTest : MonoBehaviour
         bool worked =
             result != null &&
             result.resultType == "DodgeSuccess" &&
-            result.playerCardUsed &&
+            !result.playerCardUsed &&
             result.enemyCardUsed &&
+            result.playerCardParticipated &&
+            result.playerCardUseDisposition == BattleCardUseDisposition.DeferForContinuousDodge &&
             context.allyA.currentHP == hpBefore &&
             CountBuffStack(context.allyA, "ContractHDodgeClashWin") == 1 &&
-            CountBuffStack(context.allyA, "ContractHDodgeResolved") == 1 &&
+            CountBuffStack(context.allyA, "ContractHDodgeResolved") == 0 &&
             CountBuffStack(context.enemy, "ContractHEnemyClashLose") == 1 &&
             CountBuffStack(context.enemy, "ContractHEnemyResolved") == 1 &&
             CountBuffStack(context.enemy, "ContractHEnemyHit") == 0;
 
-        Debug.Log("模式52 H Dodge成功双方Resolved且不Hit不伤害：" + worked);
+        Debug.Log("模式52 H Dodge成功参与结算但玩家Resolved延迟且不Hit不伤害：" + worked);
     }
 
     void RunContractDodgeFailedZeroDamageHitSubTest()
@@ -5348,6 +5374,1182 @@ public class CardLoadTest : MonoBehaviour
         RunBattleDefinitionDataMissingCrossReferenceFailSubTest();
 
         Debug.Log("===== BattleDefinitionDataBootstrapBasic 聚合测试结束 =====");
+    }
+
+    void RunBattlePreparedActionAssignmentModelBasicTestSequence()
+    {
+        Debug.Log("===== BattlePreparedActionAssignmentModelBasic 聚合测试开始 =====");
+
+        RunPreparedAssignmentMainResponseAndPromotionSubTest();
+        RunPreparedAssignmentAutoDowngradeSubTest();
+        RunPreparedAssignmentGuardPlacementsSubTest();
+        RunPreparedAssignmentSelfAndInvalidTargetSubTest();
+        RunPreparedAssignmentAtomicReplaceAndDuplicateSubTest();
+        RunPreparedAssignmentCancelAndIntentCompatibilitySubTest();
+        RunPreparedAssignmentPurePrepareStateSubTest();
+
+        Debug.Log("===== BattlePreparedActionAssignmentModelBasic 聚合测试结束 =====");
+    }
+
+    void RunBattleExecutionOrderingAndGuardPriorityBasicTestSequence()
+    {
+        Debug.Log("===== BattleExecutionOrderingAndGuardPriorityBasic 聚合测试开始 =====");
+
+        RunExecutionOrderingEffectiveSpeedSubTests();
+        RunExecutionOrderingTieBreakerSubTests();
+        RunExecutionOrderingMixedAndStableSubTests();
+        RunGuardPriorityAndScopeSubTests();
+        RunGuardSingleUseAndInvalidCandidateSubTests();
+
+        Debug.Log("===== BattleExecutionOrderingAndGuardPriorityBasic 聚合测试结束 =====");
+    }
+
+    void RunExecutionOrderingEffectiveSpeedSubTests()
+    {
+        BattleEndedTestContext lowContext = CreateBattleEndedTestContext("order58_a", 30, 30, 50, 5, 8, 10);
+        BattleCardState lowResponseCard = CreateFixedAttackCardForCharacter(lowContext.allyA, "order58_a_response", 8);
+        BattleCardState speed8FreeCard = CreateFixedAttackCardForCharacter(lowContext.allyB, "order58_a_free", 5);
+        BattleCardState lowEnemyCard = CreateFixedEnemyAttackCardForDodgeTest(lowContext.enemy, "order58_a_enemy", 5, 0);
+        BattleEnemyIntent lowIntent = CreateEnemyAttackIntent("order58_a_intent", lowContext.enemy, lowEnemyCard, lowContext.allyA, 1);
+        BattleActionSlot lowResponseSlot = CreateMode58ResponseSlot(lowContext.allyA, 1, lowResponseCard, lowIntent);
+        BattleActionSlot speed8FreeSlot = CreateMode58FreeSlot(lowContext.allyB, 1, speed8FreeCard, lowContext.enemy);
+        List<BattleActionSlot> lowSlots = new List<BattleActionSlot> { speed8FreeSlot, lowResponseSlot };
+        BattleExecutionPlan lowPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            lowSlots,
+            BattleEnemyIntentManager.CreateIntentQueue(lowIntent),
+            lowContext.runtimeState
+        );
+        BattleExecutionItem lowItem = GetFirstExecutionItem(lowPlan);
+
+        bool lowInheritedEnemySpeed =
+            lowItem != null &&
+            lowItem.executionType == BattleExecutionItemType.RespondedEnemyIntent &&
+            lowItem.effectiveSpeed == 10 &&
+            lowItem.actionSlotOrder == 1 &&
+            lowPlan.executionItems.Count == 2 &&
+            lowPlan.executionItems[1].actionSlot == speed8FreeSlot &&
+            lowPlan.executionItems[1].effectiveSpeed == 8;
+        Debug.Log("模式58 A 速度5响应继承敌人速度10并排在速度8行动之前：" + lowInheritedEnemySpeed);
+
+        BattleEndedTestContext highContext = CreateBattleEndedTestContext("order58_b", 30, 30, 50, 12, 4, 10);
+        BattleCardState highResponseCard = CreateFixedAttackCardForCharacter(highContext.allyA, "order58_b_response", 8);
+        BattleCardState highEnemyCard = CreateFixedEnemyAttackCardForDodgeTest(highContext.enemy, "order58_b_enemy", 5, 0);
+        BattleEnemyIntent highIntent = CreateEnemyAttackIntent("order58_b_intent", highContext.enemy, highEnemyCard, highContext.allyA, 1);
+        BattleActionSlot highResponseSlot = CreateMode58ResponseSlot(highContext.allyA, 1, highResponseCard, highIntent);
+        BattleExecutionPlan highPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot> { highResponseSlot },
+            BattleEnemyIntentManager.CreateIntentQueue(highIntent),
+            highContext.runtimeState
+        );
+        BattleExecutionItem highItem = GetFirstExecutionItem(highPlan);
+
+        Debug.Log(
+            "模式58 B 高速响应使用玩家速度12：" +
+            (highItem != null && highItem.effectiveSpeed == 12)
+        );
+    }
+
+    void RunExecutionOrderingTieBreakerSubTests()
+    {
+        BattleEndedTestContext priorityContext = CreateBattleEndedTestContext("order58_c", 30, 30, 50, 10, 10, 10);
+        BattleCardState responseCard = CreateFixedAttackCardForCharacter(priorityContext.allyA, "order58_c_response", 8);
+        BattleCardState freeCard = CreateFixedAttackCardForCharacter(priorityContext.allyB, "order58_c_free", 5);
+        BattleCardState enemyCard = CreateFixedEnemyAttackCardForDodgeTest(priorityContext.enemy, "order58_c_enemy", 5, 0);
+        BattleEnemyIntent intent = CreateEnemyAttackIntent("order58_c_intent", priorityContext.enemy, enemyCard, priorityContext.allyA, 1);
+        BattleActionSlot responseSlot = CreateMode58ResponseSlot(priorityContext.allyA, 2, responseCard, intent);
+        BattleActionSlot freeSlot = CreateMode58FreeSlot(priorityContext.allyB, 1, freeCard, priorityContext.enemy);
+        BattleExecutionPlan priorityPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot> { freeSlot, responseSlot },
+            BattleEnemyIntentManager.CreateIntentQueue(intent),
+            priorityContext.runtimeState
+        );
+
+        bool respondedFirst =
+            priorityPlan.executionItems.Count == 2 &&
+            priorityPlan.executionItems[0].executionType == BattleExecutionItemType.RespondedEnemyIntent &&
+            priorityPlan.executionItems[0].responsePriority == 0 &&
+            priorityPlan.executionItems[1].executionType == BattleExecutionItemType.FreeAction;
+        Debug.Log("模式58 C 同速Responded优先于FreeAction：" + respondedFirst);
+
+        BattleEndedTestContext slotContext = CreateBattleEndedTestContext("order58_d", 30, 30, 50, 10, 4, 3);
+        BattleActionSlot slot2 = CreateMode58FreeSlot(
+            slotContext.allyA,
+            2,
+            CreateFixedAttackCardForCharacter(slotContext.allyA, "order58_d_slot2", 5),
+            slotContext.enemy
+        );
+        BattleActionSlot slot1 = CreateMode58FreeSlot(
+            slotContext.allyA,
+            1,
+            CreateFixedAttackCardForCharacter(slotContext.allyA, "order58_d_slot1", 5),
+            slotContext.enemy
+        );
+        BattleExecutionPlan slotPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot> { slot2, slot1 },
+            new List<BattleEnemyIntent>(),
+            slotContext.runtimeState
+        );
+        Debug.Log(
+            "模式58 D 同速同角色按槽位1先于槽位2：" +
+            (slotPlan.executionItems.Count == 2 &&
+             slotPlan.executionItems[0].actionSlot == slot1 &&
+             slotPlan.executionItems[1].actionSlot == slot2)
+        );
+
+        BattleEndedTestContext positionContext = CreateBattleEndedTestContext("order58_e", 30, 30, 50, 10, 10, 3);
+        BattleActionSlot allyBSlot = CreateMode58FreeSlot(
+            positionContext.allyB,
+            1,
+            CreateFixedAttackCardForCharacter(positionContext.allyB, "order58_e_b", 5),
+            positionContext.enemy
+        );
+        BattleActionSlot allyASlot = CreateMode58FreeSlot(
+            positionContext.allyA,
+            1,
+            CreateFixedAttackCardForCharacter(positionContext.allyA, "order58_e_a", 5),
+            positionContext.enemy
+        );
+        BattleExecutionPlan positionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot> { allyBSlot, allyASlot },
+            new List<BattleEnemyIntent>(),
+            positionContext.runtimeState
+        );
+        Debug.Log(
+            "模式58 E 同速同槽位按battleUnits站位A先于B：" +
+            (positionPlan.executionItems.Count == 2 &&
+             positionPlan.executionItems[0].actionSlot == allyASlot &&
+             positionPlan.executionItems[0].actorPositionOrder == 1 &&
+             positionPlan.executionItems[1].actorPositionOrder == 2)
+        );
+    }
+
+    void RunExecutionOrderingMixedAndStableSubTests()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("order58_f", 30, 30, 50, 12, 3, 8);
+        BattleCardState respondedEnemyCard = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "order58_f_enemy1", 5, 0);
+        BattleCardState unrespondedEnemyCard = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "order58_f_enemy2", 5, 0);
+        BattleEnemyIntent respondedIntent = new BattleEnemyIntent(
+            "order58_f_intent1",
+            context.enemy,
+            respondedEnemyCard,
+            context.allyB,
+            1,
+            1,
+            1
+        );
+        BattleEnemyIntent unrespondedIntent = new BattleEnemyIntent(
+            "order58_f_intent2",
+            context.enemy,
+            unrespondedEnemyCard,
+            context.allyB,
+            2,
+            2,
+            2
+        );
+        BattleActionSlot fastFree = CreateMode58FreeSlot(
+            context.allyA,
+            1,
+            CreateFixedAttackCardForCharacter(context.allyA, "order58_f_fast_free", 5),
+            context.enemy
+        );
+        BattleActionSlot response = CreateMode58ResponseSlot(
+            context.allyB,
+            1,
+            CreateFixedAttackCardForCharacter(context.allyB, "order58_f_response", 5),
+            respondedIntent
+        );
+        BattleActionSlot slowFree = CreateMode58FreeSlot(
+            context.allyB,
+            2,
+            CreateFixedAttackCardForCharacter(context.allyB, "order58_f_slow_free", 5),
+            context.enemy
+        );
+        List<BattleActionSlot> slots = new List<BattleActionSlot> { slowFree, response, fastFree };
+        List<BattleEnemyIntent> intents = new List<BattleEnemyIntent> { unrespondedIntent, respondedIntent };
+
+        BattleExecutionPlan firstPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            slots,
+            intents,
+            context.runtimeState
+        );
+        BattleExecutionPlan secondPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            slots,
+            intents,
+            context.runtimeState
+        );
+
+        bool mixedOrder =
+            firstPlan.executionItems.Count == 4 &&
+            firstPlan.executionItems[0].actionSlot == fastFree &&
+            firstPlan.executionItems[1].executionType == BattleExecutionItemType.RespondedEnemyIntent &&
+            firstPlan.executionItems[2].executionType == BattleExecutionItemType.UnrespondedEnemyIntent &&
+            firstPlan.executionItems[3].actionSlot == slowFree;
+        bool stableOrder = AreExecutionPlansReferenceOrderedTheSame(firstPlan, secondPlan);
+
+        Debug.Log("模式58 F Responded/Unresponded/Free进入统一速度队列：" + mixedOrder);
+        Debug.Log("模式58 N 相同输入重复生成计划顺序稳定：" + stableOrder);
+
+        BattleActionSlot guard = new BattleActionSlot(context.allyB, 3);
+        guard.AssignPassiveGuard(
+            context.allyB,
+            CreateTestDefenseCardForCharacter(context.allyB, "order58_g_guard", 9, 1)
+        );
+        BattleActionSlot specificGuard = new BattleActionSlot(context.allyB, 4);
+        specificGuard.AssignEnemySpecificGuard(
+            context.allyB,
+            CreateTestDefenseCardForCharacter(context.allyB, "order58_g_specific", 9, 1),
+            context.enemy
+        );
+        BattleExecutionPlan guardPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot> { guard, specificGuard },
+            BattleEnemyIntentManager.CreateIntentQueue(unrespondedIntent),
+            context.runtimeState
+        );
+        Debug.Log(
+            "模式58 G 守备槽位不独立生成ExecutionItem：" +
+            (guardPlan.executionItems.Count == 1 &&
+             guardPlan.executionItems[0].executionType == BattleExecutionItemType.UnrespondedEnemyIntent)
+        );
+    }
+
+    void RunGuardPriorityAndScopeSubTests()
+    {
+        BattleEndedTestContext priorityContext = CreateBattleEndedTestContext("guard58_h", 30, 30, 50, 5, 5, 8);
+        BattleEnemyIntent priorityIntent = CreateEnemyAttackIntent(
+            "guard58_h_intent",
+            priorityContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(priorityContext.enemy, "guard58_h_enemy", 5, 0),
+            priorityContext.allyB,
+            1
+        );
+        BattleActionSlot passiveSlot = new BattleActionSlot(priorityContext.allyB, 1);
+        passiveSlot.AssignPassiveGuard(
+            priorityContext.allyB,
+            CreateTestDefenseCardForCharacter(priorityContext.allyB, "guard58_h_passive", 12, 1)
+        );
+        BattleActionSlot specificSlot = new BattleActionSlot(priorityContext.allyB, 2);
+        specificSlot.AssignEnemySpecificGuard(
+            priorityContext.allyB,
+            CreateTestDefenseCardForCharacter(priorityContext.allyB, "guard58_h_specific", 12, 1),
+            priorityContext.enemy
+        );
+        ExecuteMode58UnrespondedPlan(priorityContext, priorityIntent, new List<BattleActionSlot> { passiveSlot, specificSlot });
+        Debug.Log(
+            "模式58 H 指定守备优先于更小槽位的被动守备：" +
+            (specificSlot.isUsed && !passiveSlot.isUsed)
+        );
+
+        BattleEndedTestContext mismatchContext = CreateBattleEndedTestContext("guard58_i", 30, 30, 50, 5, 5, 8);
+        BattleEnemyIntent mismatchIntent = CreateEnemyAttackIntent(
+            "guard58_i_intent",
+            mismatchContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(mismatchContext.enemy, "guard58_i_enemy", 5, 0),
+            mismatchContext.allyB,
+            1
+        );
+        CharacterData otherEnemy = new CharacterData("guard58_i_other_enemy", 50, 8, 8);
+        BattleActionSlot mismatchSpecific = new BattleActionSlot(mismatchContext.allyB, 1);
+        mismatchSpecific.AssignEnemySpecificGuard(
+            mismatchContext.allyB,
+            CreateTestDefenseCardForCharacter(mismatchContext.allyB, "guard58_i_specific", 12, 1),
+            otherEnemy
+        );
+        BattleActionSlot fallbackPassive = new BattleActionSlot(mismatchContext.allyB, 2);
+        fallbackPassive.AssignPassiveGuard(
+            mismatchContext.allyB,
+            CreateTestDefenseCardForCharacter(mismatchContext.allyB, "guard58_i_passive", 12, 1)
+        );
+        ExecuteMode58UnrespondedPlan(
+            mismatchContext,
+            mismatchIntent,
+            new List<BattleActionSlot> { mismatchSpecific, fallbackPassive }
+        );
+        Debug.Log(
+            "模式58 I 指定敌人不匹配后回落被动守备：" +
+            (!mismatchSpecific.isUsed && fallbackPassive.isUsed)
+        );
+
+        BattleEndedTestContext slotContext = CreateBattleEndedTestContext("guard58_j", 30, 30, 50, 5, 5, 8);
+        BattleEnemyIntent slotIntent = CreateEnemyAttackIntent(
+            "guard58_j_intent",
+            slotContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(slotContext.enemy, "guard58_j_enemy", 5, 0),
+            slotContext.allyB,
+            1
+        );
+        BattleActionSlot specific2 = new BattleActionSlot(slotContext.allyB, 2);
+        specific2.AssignEnemySpecificGuard(
+            slotContext.allyB,
+            CreateTestDefenseCardForCharacter(slotContext.allyB, "guard58_j_slot2", 12, 1),
+            slotContext.enemy
+        );
+        BattleActionSlot specific1 = new BattleActionSlot(slotContext.allyB, 1);
+        specific1.AssignEnemySpecificGuard(
+            slotContext.allyB,
+            CreateTestDefenseCardForCharacter(slotContext.allyB, "guard58_j_slot1", 12, 1),
+            slotContext.enemy
+        );
+        ExecuteMode58UnrespondedPlan(slotContext, slotIntent, new List<BattleActionSlot> { specific2, specific1 });
+        Debug.Log(
+            "模式58 J 同一守备范围按slotIndex升序：" +
+            (specific1.isUsed && !specific2.isUsed)
+        );
+
+        BattleEndedTestContext passiveOrderContext = CreateBattleEndedTestContext("guard58_j_passive", 30, 30, 50, 5, 5, 8);
+        BattleEnemyIntent passiveOrderIntent = CreateEnemyAttackIntent(
+            "guard58_j_passive_intent",
+            passiveOrderContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(passiveOrderContext.enemy, "guard58_j_passive_enemy", 5, 0),
+            passiveOrderContext.allyB,
+            1
+        );
+        BattleActionSlot passive2 = new BattleActionSlot(passiveOrderContext.allyB, 2);
+        passive2.AssignPassiveGuard(
+            passiveOrderContext.allyB,
+            CreateTestDefenseCardForCharacter(passiveOrderContext.allyB, "guard58_j_passive2", 12, 1)
+        );
+        BattleActionSlot passive1 = new BattleActionSlot(passiveOrderContext.allyB, 1);
+        passive1.AssignPassiveGuard(
+            passiveOrderContext.allyB,
+            CreateTestDefenseCardForCharacter(passiveOrderContext.allyB, "guard58_j_passive1", 12, 1)
+        );
+        ExecuteMode58UnrespondedPlan(
+            passiveOrderContext,
+            passiveOrderIntent,
+            new List<BattleActionSlot> { passive2, passive1 }
+        );
+        Debug.Log(
+            "模式58 J 同一PassiveGuard范围同样按slotIndex升序：" +
+            (passive1.isUsed && !passive2.isUsed)
+        );
+
+        BattleEndedTestContext exactContext = CreateBattleEndedTestContext("guard58_k", 30, 30, 50, 5, 5, 8);
+        int hpBefore = exactContext.allyB.currentHP;
+        BattleEnemyIntent exactIntent = CreateEnemyAttackIntent(
+            "guard58_k_intent",
+            exactContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(exactContext.enemy, "guard58_k_enemy", 8, 0),
+            exactContext.allyB,
+            1
+        );
+        BattleActionSlot exactResponse = CreateMode58ResponseSlot(
+            exactContext.allyB,
+            1,
+            CreateFixedAttackCardForCharacter(exactContext.allyB, "guard58_k_response", 4),
+            exactIntent
+        );
+        BattleActionSlot exactGuard = new BattleActionSlot(exactContext.allyB, 2);
+        exactGuard.AssignEnemySpecificGuard(
+            exactContext.allyB,
+            CreateTestDefenseCardForCharacter(exactContext.allyB, "guard58_k_guard", 12, 1),
+            exactContext.enemy
+        );
+        BattleActionSlot exactPassiveGuard = new BattleActionSlot(exactContext.allyB, 3);
+        exactPassiveGuard.AssignPassiveGuard(
+            exactContext.allyB,
+            CreateTestDefenseCardForCharacter(exactContext.allyB, "guard58_k_passive", 12, 1)
+        );
+        exactContext.runtimeState.SetActionSlots(
+            new List<BattleActionSlot> { exactResponse, exactGuard, exactPassiveGuard }
+        );
+        exactContext.runtimeState.SetIntentQueue(BattleEnemyIntentManager.CreateIntentQueue(exactIntent));
+        BattleExecutionPlan exactPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            exactContext.runtimeState.actionSlots,
+            exactContext.runtimeState.intentQueue,
+            exactContext.runtimeState
+        );
+        ExecutePlanWithRuntimeStateAndCompleteTurn(exactContext.runtimeState, exactPlan);
+        Debug.Log(
+            "模式58 K 精确响应失败后不触发任何守备：" +
+            (exactResponse.isUsed &&
+             !exactGuard.isUsed &&
+             !exactPassiveGuard.isUsed &&
+             exactContext.allyB.currentHP == hpBefore - 8 &&
+             exactPlan.executionItems[0].passiveGuardCandidates.Count == 0)
+        );
+    }
+
+    void RunGuardSingleUseAndInvalidCandidateSubTests()
+    {
+        BattleEndedTestContext singleContext = CreateBattleEndedTestContext("guard58_l", 30, 30, 50, 5, 5, 8);
+        int hpBefore = singleContext.allyB.currentHP;
+        BattleActionSlot singleGuard = new BattleActionSlot(singleContext.allyB, 1);
+        BattleCardState singleDefense = CreateTestDefenseCardForCharacter(singleContext.allyB, "guard58_l_defense", 12, 1);
+        singleGuard.AssignEnemySpecificGuard(singleContext.allyB, singleDefense, singleContext.enemy);
+        BattleEnemyIntent firstIntent = new BattleEnemyIntent(
+            "guard58_l_intent1",
+            singleContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(singleContext.enemy, "guard58_l_enemy1", 5, 0),
+            singleContext.allyB,
+            1,
+            1,
+            1
+        );
+        BattleEnemyIntent secondIntent = new BattleEnemyIntent(
+            "guard58_l_intent2",
+            singleContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(singleContext.enemy, "guard58_l_enemy2", 5, 0),
+            singleContext.allyB,
+            2,
+            2,
+            2
+        );
+        singleContext.runtimeState.SetActionSlots(new List<BattleActionSlot> { singleGuard });
+        singleContext.runtimeState.SetIntentQueue(new List<BattleEnemyIntent> { firstIntent, secondIntent });
+        BattleExecutionPlan singlePlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            singleContext.runtimeState.actionSlots,
+            singleContext.runtimeState.intentQueue,
+            singleContext.runtimeState
+        );
+        ExecutePlanWithRuntimeStateAndCompleteTurn(singleContext.runtimeState, singlePlan);
+        Debug.Log(
+            "模式58 L 同一Defense只处理两次攻击中的第一张：" +
+            (singleGuard.isUsed &&
+             singleDefense.currentCooldown == singleDefense.cardData.cooldown &&
+             singleContext.allyB.currentHP == hpBefore - 5)
+        );
+
+        BattleEndedTestContext invalidContext = CreateBattleEndedTestContext("guard58_m", 30, 30, 50, 5, 5, 8);
+        BattleEnemyIntent invalidIntent = CreateEnemyAttackIntent(
+            "guard58_m_intent",
+            invalidContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(invalidContext.enemy, "guard58_m_enemy", 5, 0),
+            invalidContext.allyB,
+            1
+        );
+        BattleActionSlot invalidFirst = new BattleActionSlot(invalidContext.allyB, 1);
+        BattleCardState invalidDefense = CreateTestDefenseCardForCharacter(invalidContext.allyB, "guard58_m_invalid", 12, 1);
+        invalidFirst.AssignEnemySpecificGuard(invalidContext.allyB, invalidDefense, invalidContext.enemy);
+        invalidDefense.currentCooldown = 1;
+        BattleActionSlot validSecond = new BattleActionSlot(invalidContext.allyB, 2);
+        validSecond.AssignEnemySpecificGuard(
+            invalidContext.allyB,
+            CreateTestDefenseCardForCharacter(invalidContext.allyB, "guard58_m_valid", 12, 1),
+            invalidContext.enemy
+        );
+        ExecuteMode58UnrespondedPlan(
+            invalidContext,
+            invalidIntent,
+            new List<BattleActionSlot> { invalidFirst, validSecond }
+        );
+        Debug.Log(
+            "模式58 M 执行时跳过失效第一守备并选择后续有效槽位：" +
+            (!invalidFirst.isUsed && validSecond.isUsed && invalidDefense.currentCooldown == 1)
+        );
+    }
+
+    void RunBattleContinuousDodgeLifecycleBasicTestSequence()
+    {
+        Debug.Log("===== BattleContinuousDodgeLifecycleBasic 聚合测试开始 =====");
+
+        RunContinuousDodgeActivationSourceSubTests();
+        RunContinuousDodgeCrossEnemyAndExactPrioritySubTests();
+        RunContinuousDodgeSelectionAndFailureSubTests();
+        RunContinuousDodgeLifecycleFinalizationSubTests();
+        RunContinuousDodgeSingleFormalUseAndItemReuseSubTests();
+
+        Debug.Log("===== BattleContinuousDodgeLifecycleBasic 聚合测试结束 =====");
+    }
+
+    void RunContinuousDodgeActivationSourceSubTests()
+    {
+        BattleEndedTestContext exactContext =
+            CreateBattleEndedTestContext("continuous59_1", 30, 30, 50, 10, 5, 8);
+        BattleCardState exactDodge =
+            CreateFixedDodgeCardForCharacter(exactContext.allyA, "continuous59_1_dodge", 10, 2);
+        BattleEnemyIntent exactIntent = CreateEnemyAttackIntent(
+            "continuous59_1_intent",
+            exactContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(exactContext.enemy, "continuous59_1_enemy", 4, 0),
+            exactContext.allyA,
+            1
+        );
+        BattleActionSlot exactSlot = CreateMode58ResponseSlot(
+            exactContext.allyA,
+            1,
+            exactDodge,
+            exactIntent
+        );
+        ExecuteMode59Plan(exactContext, exactIntent, new List<BattleActionSlot> { exactSlot });
+        Debug.Log(
+            "模式59 测试1 精确Dodge首次成功激活：" +
+            (exactSlot.isContinuousDodgeActive &&
+             exactSlot.successfulDodgeCount == 1 &&
+             exactSlot.continuousDodgeSource == ContinuousDodgeSource.ExactEnemyIntent &&
+             !exactSlot.isUsed &&
+             !exactSlot.isCardUseFinalized &&
+             exactDodge.currentCooldown == 0)
+        );
+
+        BattleEndedTestContext specificContext =
+            CreateBattleEndedTestContext("continuous59_2", 30, 30, 50, 10, 5, 8);
+        BattleCardState specificDodge =
+            CreateFixedDodgeCardForCharacter(specificContext.allyB, "continuous59_2_dodge", 10, 2);
+        BattleActionSlot specificSlot = new BattleActionSlot(specificContext.allyB, 1);
+        specificSlot.AssignEnemySpecificGuard(
+            specificContext.allyB,
+            specificDodge,
+            specificContext.enemy
+        );
+        BattleEnemyIntent specificIntent = CreateEnemyAttackIntent(
+            "continuous59_2_intent",
+            specificContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(specificContext.enemy, "continuous59_2_enemy", 4, 0),
+            specificContext.allyB,
+            1
+        );
+        ExecuteMode59Plan(specificContext, specificIntent, new List<BattleActionSlot> { specificSlot });
+        Debug.Log(
+            "模式59 测试2 EnemySpecificGuard Dodge首次成功激活：" +
+            (specificSlot.isContinuousDodgeActive &&
+             specificSlot.successfulDodgeCount == 1 &&
+             specificSlot.continuousDodgeSource == ContinuousDodgeSource.EnemySpecificGuard &&
+             !specificSlot.isUsed &&
+             specificDodge.currentCooldown == 0)
+        );
+
+        BattleEndedTestContext passiveContext =
+            CreateBattleEndedTestContext("continuous59_3", 30, 30, 50, 10, 5, 8);
+        BattleCardState passiveDodge =
+            CreateFixedDodgeCardForCharacter(passiveContext.allyB, "continuous59_3_dodge", 10, 2);
+        BattleActionSlot passiveSlot = new BattleActionSlot(passiveContext.allyB, 1);
+        passiveSlot.AssignPassiveGuard(passiveContext.allyB, passiveDodge);
+        BattleEnemyIntent passiveIntent = CreateEnemyAttackIntent(
+            "continuous59_3_intent",
+            passiveContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(passiveContext.enemy, "continuous59_3_enemy", 4, 0),
+            passiveContext.allyB,
+            1
+        );
+        ExecuteMode59Plan(passiveContext, passiveIntent, new List<BattleActionSlot> { passiveSlot });
+        Debug.Log(
+            "模式59 测试3 PassiveGuard Dodge首次成功激活：" +
+            (passiveSlot.isContinuousDodgeActive &&
+             passiveSlot.successfulDodgeCount == 1 &&
+             passiveSlot.continuousDodgeSource == ContinuousDodgeSource.PassiveGuard &&
+             !passiveSlot.isUsed &&
+             passiveDodge.currentCooldown == 0)
+        );
+    }
+
+    void RunContinuousDodgeCrossEnemyAndExactPrioritySubTests()
+    {
+        BattleEndedTestContext crossContext =
+            CreateBattleEndedTestContext("continuous59_4", 30, 30, 50, 10, 5, 8);
+        CharacterData secondEnemy = new CharacterData("continuous59_4_Enemy02", 50, 8, 8);
+        BattleCardState crossDodge =
+            CreateFixedDodgeCardForCharacter(crossContext.allyA, "continuous59_4_dodge", 10, 2);
+        BattleActionSlot crossSlot = new BattleActionSlot(crossContext.allyA, 1);
+        crossSlot.AssignEnemySpecificGuard(crossContext.allyA, crossDodge, crossContext.enemy);
+        BattleEnemyIntent firstIntent = CreateEnemyAttackIntent(
+            "continuous59_4_intent1",
+            crossContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(crossContext.enemy, "continuous59_4_enemy1", 4, 0),
+            crossContext.allyA,
+            1
+        );
+        ExecuteMode59Plan(crossContext, firstIntent, new List<BattleActionSlot> { crossSlot });
+        BattleEnemyIntent secondIntent = CreateEnemyAttackIntent(
+            "continuous59_4_intent2",
+            secondEnemy,
+            CreateFixedEnemyAttackCardForDodgeTest(secondEnemy, "continuous59_4_enemy2", 4, 0),
+            crossContext.allyA,
+            2
+        );
+        ExecuteMode59Plan(crossContext, secondIntent, new List<BattleActionSlot> { crossSlot });
+        Debug.Log(
+            "模式59 测试4 激活后跨敌人生效：" +
+            (crossSlot.isContinuousDodgeActive &&
+             crossSlot.successfulDodgeCount == 2 &&
+             object.ReferenceEquals(crossSlot.lastContinuousDodgeOpponent, secondEnemy))
+        );
+        Debug.Log(
+            "模式59 测试8 连续闪避再次成功后保持激活：" +
+            (crossSlot.isContinuousDodgeActive &&
+             !crossSlot.isUsed &&
+             !crossSlot.isCardUseFinalized &&
+             crossDodge.currentCooldown == 0)
+        );
+
+        BattleEndedTestContext exactPriorityContext =
+            CreateBattleEndedTestContext("continuous59_5", 30, 30, 50, 10, 5, 8);
+        BattleActionSlot activeSlot = CreateMode59ActiveDodgeSlot(
+            exactPriorityContext.allyA,
+            1,
+            "continuous59_5_active",
+            12,
+            2,
+            exactPriorityContext.enemy
+        );
+        BattleEnemyIntent exactPriorityIntent = CreateEnemyAttackIntent(
+            "continuous59_5_intent",
+            exactPriorityContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(exactPriorityContext.enemy, "continuous59_5_enemy", 4, 0),
+            exactPriorityContext.allyA,
+            1
+        );
+        BattleActionSlot exactAttackSlot = CreateMode58ResponseSlot(
+            exactPriorityContext.allyA,
+            2,
+            CreateFixedAttackCardForCharacter(exactPriorityContext.allyA, "continuous59_5_exact", 8),
+            exactPriorityIntent
+        );
+        ExecuteMode59Plan(
+            exactPriorityContext,
+            exactPriorityIntent,
+            new List<BattleActionSlot> { activeSlot, exactAttackSlot }
+        );
+        Debug.Log(
+            "模式59 测试5 有效精确响应优先于连续闪避：" +
+            (exactAttackSlot.isUsed &&
+             activeSlot.isContinuousDodgeActive &&
+             activeSlot.successfulDodgeCount == 1)
+        );
+
+        BattleEndedTestContext exactFailContext =
+            CreateBattleEndedTestContext("continuous59_6", 30, 30, 50, 10, 5, 8);
+        int hpBefore = exactFailContext.allyA.currentHP;
+        BattleActionSlot waitingActiveSlot = CreateMode59ActiveDodgeSlot(
+            exactFailContext.allyA,
+            1,
+            "continuous59_6_active",
+            12,
+            2,
+            exactFailContext.enemy
+        );
+        BattleEnemyIntent exactFailIntent = CreateEnemyAttackIntent(
+            "continuous59_6_intent",
+            exactFailContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(exactFailContext.enemy, "continuous59_6_enemy", 8, 0),
+            exactFailContext.allyA,
+            1
+        );
+        BattleActionSlot losingExactSlot = CreateMode58ResponseSlot(
+            exactFailContext.allyA,
+            2,
+            CreateFixedAttackCardForCharacter(exactFailContext.allyA, "continuous59_6_exact", 3),
+            exactFailIntent
+        );
+        ExecuteMode59Plan(
+            exactFailContext,
+            exactFailIntent,
+            new List<BattleActionSlot> { waitingActiveSlot, losingExactSlot }
+        );
+        Debug.Log(
+            "模式59 测试6 精确响应结算失败后连续闪避不补防且保持激活：" +
+            (losingExactSlot.isUsed &&
+             exactFailContext.allyA.currentHP == hpBefore - 8 &&
+             waitingActiveSlot.isContinuousDodgeActive &&
+             waitingActiveSlot.successfulDodgeCount == 1)
+        );
+    }
+
+    void RunContinuousDodgeSelectionAndFailureSubTests()
+    {
+        BattleEndedTestContext orderContext =
+            CreateBattleEndedTestContext("continuous59_7", 30, 30, 50, 10, 5, 8);
+        BattleActionSlot slot2 = CreateMode59ActiveDodgeSlot(
+            orderContext.allyB, 2, "continuous59_7_slot2", 12, 2, orderContext.enemy
+        );
+        BattleActionSlot slot1 = CreateMode59ActiveDodgeSlot(
+            orderContext.allyB, 1, "continuous59_7_slot1", 12, 2, orderContext.enemy
+        );
+        slot1.assignmentSequence = 1;
+        slot2.assignmentSequence = 99;
+        BattleEnemyIntent orderIntent = CreateEnemyAttackIntent(
+            "continuous59_7_intent",
+            orderContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(orderContext.enemy, "continuous59_7_enemy", 4, 0),
+            orderContext.allyB,
+            1
+        );
+        ExecuteMode59Plan(orderContext, orderIntent, new List<BattleActionSlot> { slot2, slot1 });
+        Debug.Log(
+            "模式59 测试7 多张连续闪避按slotIndex升序：" +
+            (slot1.successfulDodgeCount == 2 && slot2.successfulDodgeCount == 1)
+        );
+
+        BattleEndedTestContext failContext =
+            CreateBattleEndedTestContext("continuous59_9", 30, 30, 50, 10, 5, 8);
+        int failHpBefore = failContext.allyB.currentHP;
+        BattleActionSlot failingActive = CreateMode59ActiveDodgeSlot(
+            failContext.allyB, 1, "continuous59_9_fail", 2, 2, failContext.enemy
+        );
+        BattleActionSlot waitingActive = CreateMode59ActiveDodgeSlot(
+            failContext.allyB, 2, "continuous59_9_wait", 12, 2, failContext.enemy
+        );
+        BattleActionSlot specificGuard = new BattleActionSlot(failContext.allyB, 3);
+        specificGuard.AssignEnemySpecificGuard(
+            failContext.allyB,
+            CreateTestDefenseCardForCharacter(failContext.allyB, "continuous59_9_specific", 20, 1),
+            failContext.enemy
+        );
+        BattleActionSlot passiveGuard = new BattleActionSlot(failContext.allyB, 4);
+        passiveGuard.AssignPassiveGuard(
+            failContext.allyB,
+            CreateTestDefenseCardForCharacter(failContext.allyB, "continuous59_9_passive", 20, 1)
+        );
+        BattleEnemyIntent failIntent = CreateEnemyAttackIntent(
+            "continuous59_9_intent",
+            failContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(failContext.enemy, "continuous59_9_enemy", 8, 0),
+            failContext.allyB,
+            1
+        );
+        ExecuteMode59Plan(
+            failContext,
+            failIntent,
+            new List<BattleActionSlot> { failingActive, waitingActive, specificGuard, passiveGuard }
+        );
+        Debug.Log(
+            "模式59 测试9 连续闪避失败后伤害和单卡收尾且不补第二守备：" +
+            (failContext.allyB.currentHP == failHpBefore - 8 &&
+             failingActive.isUsed &&
+             failingActive.isCardUseFinalized &&
+             !failingActive.isContinuousDodgeActive &&
+             waitingActive.isContinuousDodgeActive &&
+             !specificGuard.isUsed &&
+             !passiveGuard.isUsed)
+        );
+
+        BattleEndedTestContext firstFailContext =
+            CreateBattleEndedTestContext("continuous59_10", 30, 30, 50, 10, 5, 8);
+        int firstFailHpBefore = firstFailContext.allyB.currentHP;
+        BattleActionSlot firstFailDodge = new BattleActionSlot(firstFailContext.allyB, 1);
+        firstFailDodge.AssignPassiveGuard(
+            firstFailContext.allyB,
+            CreateFixedDodgeCardForCharacter(firstFailContext.allyB, "continuous59_10_dodge", 2, 2)
+        );
+        BattleActionSlot followDefense = new BattleActionSlot(firstFailContext.allyB, 2);
+        followDefense.AssignPassiveGuard(
+            firstFailContext.allyB,
+            CreateTestDefenseCardForCharacter(firstFailContext.allyB, "continuous59_10_defense", 20, 1)
+        );
+        BattleEnemyIntent firstFailIntent = CreateEnemyAttackIntent(
+            "continuous59_10_intent",
+            firstFailContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(firstFailContext.enemy, "continuous59_10_enemy", 8, 0),
+            firstFailContext.allyB,
+            1
+        );
+        ExecuteMode59Plan(
+            firstFailContext,
+            firstFailIntent,
+            new List<BattleActionSlot> { firstFailDodge, followDefense }
+        );
+        Debug.Log(
+            "模式59 测试10 首次Dodge失败立即正式结算且不触发第二守备：" +
+            (firstFailContext.allyB.currentHP == firstFailHpBefore - 8 &&
+             !firstFailDodge.isContinuousDodgeActive &&
+             firstFailDodge.isCardUseFinalized &&
+             firstFailDodge.isUsed &&
+             firstFailDodge.cardState.currentCooldown == 2 &&
+             !followDefense.isUsed)
+        );
+
+        BattleEndedTestContext priorityContext =
+            CreateBattleEndedTestContext("continuous59_11", 30, 30, 50, 10, 5, 8);
+        BattleActionSlot priorityActive = CreateMode59ActiveDodgeSlot(
+            priorityContext.allyB, 2, "continuous59_11_active", 12, 2, priorityContext.enemy
+        );
+        BattleActionSlot lowerSpecific = new BattleActionSlot(priorityContext.allyB, 1);
+        lowerSpecific.AssignEnemySpecificGuard(
+            priorityContext.allyB,
+            CreateTestDefenseCardForCharacter(priorityContext.allyB, "continuous59_11_specific", 20, 1),
+            priorityContext.enemy
+        );
+        BattleEnemyIntent priorityIntent = CreateEnemyAttackIntent(
+            "continuous59_11_intent",
+            priorityContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(priorityContext.enemy, "continuous59_11_enemy", 4, 0),
+            priorityContext.allyB,
+            1
+        );
+        BattleGuardSelectionResult specificSelection =
+            BattleGuardSelectionManager.SelectHandlingCardForEnemyIntent(
+                new List<BattleActionSlot> { lowerSpecific, priorityActive },
+                priorityIntent
+            );
+        Debug.Log(
+            "模式59 测试11 连续闪避优先于EnemySpecificGuard：" +
+            (specificSelection.selectionType == BattleGuardSelectionType.ContinuousDodge &&
+             specificSelection.slot == priorityActive)
+        );
+
+        BattleActionSlot lowerPassive = new BattleActionSlot(priorityContext.allyB, 1);
+        lowerPassive.AssignPassiveGuard(
+            priorityContext.allyB,
+            CreateTestDefenseCardForCharacter(priorityContext.allyB, "continuous59_12_passive", 20, 1)
+        );
+        BattleGuardSelectionResult passiveSelection =
+            BattleGuardSelectionManager.SelectHandlingCardForEnemyIntent(
+                new List<BattleActionSlot> { lowerPassive, priorityActive },
+                priorityIntent
+            );
+        Debug.Log(
+            "模式59 测试12 连续闪避优先于PassiveGuard：" +
+            (passiveSelection.selectionType == BattleGuardSelectionType.ContinuousDodge &&
+             passiveSelection.slot == priorityActive)
+        );
+
+        BattleActionSlot invalidActive = CreateMode59ActiveDodgeSlot(
+            priorityContext.allyB, 1, "continuous59_13_invalid", 12, 2, priorityContext.enemy
+        );
+        invalidActive.cardState.currentCooldown = 1;
+        BattleActionSlot validActive = CreateMode59ActiveDodgeSlot(
+            priorityContext.allyB, 2, "continuous59_13_valid", 12, 2, priorityContext.enemy
+        );
+        BattleGuardSelectionResult validFallback =
+            BattleGuardSelectionManager.SelectHandlingCardForEnemyIntent(
+                new List<BattleActionSlot> { invalidActive, validActive, lowerSpecific },
+                priorityIntent
+            );
+        BattleGuardSelectionResult guardFallback =
+            BattleGuardSelectionManager.SelectHandlingCardForEnemyIntent(
+                new List<BattleActionSlot> { invalidActive, lowerSpecific },
+                priorityIntent
+            );
+        Debug.Log(
+            "模式59 测试13 失效连续闪避跳过并继续后续优先级：" +
+            (validFallback.slot == validActive &&
+             validFallback.selectionType == BattleGuardSelectionType.ContinuousDodge &&
+             guardFallback.slot == lowerSpecific &&
+             guardFallback.selectionType == BattleGuardSelectionType.EnemySpecificGuard)
+        );
+    }
+
+    void RunContinuousDodgeLifecycleFinalizationSubTests()
+    {
+        BattleEndedTestContext turnEndContext =
+            CreateBattleEndedTestContext("continuous59_14", 30, 30, 50, 10, 5, 8);
+        BattleActionSlot turnEndSlot = CreateMode59ActiveDodgeSlot(
+            turnEndContext.allyA, 1, "continuous59_14_dodge", 12, 2, turnEndContext.enemy
+        );
+        turnEndSlot.RegisterContinuousDodgeSuccess(12, turnEndContext.enemy);
+        turnEndSlot.RegisterContinuousDodgeSuccess(12, turnEndContext.enemy);
+        PrepareMode59CompletedRuntime(turnEndContext, new List<BattleActionSlot> { turnEndSlot });
+        turnEndContext.runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+        Debug.Log(
+            "模式59 测试14 回合结束统一结算激活Dodge：" +
+            (!turnEndSlot.isContinuousDodgeActive &&
+             turnEndSlot.isCardUseFinalized &&
+             turnEndSlot.isUsed &&
+             turnEndSlot.successfulDodgeCount == 3 &&
+             turnEndSlot.cardState.currentCooldown == 1)
+        );
+
+        BattleEndedTestContext untouchedContext =
+            CreateBattleEndedTestContext("continuous59_15", 30, 30, 50, 10, 5, 8);
+        BattleActionSlot untouchedSlot = new BattleActionSlot(untouchedContext.allyA, 1);
+        BattleCardState untouchedDodge =
+            CreateFixedDodgeCardForCharacter(untouchedContext.allyA, "continuous59_15_dodge", 12, 2);
+        untouchedSlot.AssignPassiveGuard(untouchedContext.allyA, untouchedDodge);
+        PrepareMode59CompletedRuntime(untouchedContext, new List<BattleActionSlot> { untouchedSlot });
+        untouchedContext.runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+        Debug.Log(
+            "模式59 测试15 未触发Dodge在回合结束不结算：" +
+            (!untouchedSlot.isCardUseFinalized &&
+             !untouchedSlot.isUsed &&
+             untouchedDodge.currentCooldown == 0 &&
+             untouchedDodge.currentUseCount == 0)
+        );
+
+        BattleEndedTestContext multipleContext =
+            CreateBattleEndedTestContext("continuous59_16", 30, 30, 50, 10, 5, 8);
+        BattleActionSlot firstActive = CreateMode59ActiveDodgeSlot(
+            multipleContext.allyA, 1, "continuous59_16_first", 12, 2, multipleContext.enemy
+        );
+        BattleActionSlot secondActive = CreateMode59ActiveDodgeSlot(
+            multipleContext.allyA, 2, "continuous59_16_second", 12, 2, multipleContext.enemy
+        );
+        PrepareMode59CompletedRuntime(
+            multipleContext,
+            new List<BattleActionSlot> { firstActive, secondActive }
+        );
+        multipleContext.runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+        Debug.Log(
+            "模式59 测试16 多张激活Dodge分别且仅结算一次：" +
+            (firstActive.isCardUseFinalized &&
+             secondActive.isCardUseFinalized &&
+             firstActive.isUsed &&
+             secondActive.isUsed &&
+             firstActive.cardState.currentCooldown == 1 &&
+             secondActive.cardState.currentCooldown == 1)
+        );
+
+        BattleEndedTestContext battleEndedContext =
+            CreateBattleEndedTestContext("continuous59_17", 30, 30, 50, 10, 5, 8);
+        BattleActionSlot battleEndedSlot = CreateMode59ActiveDodgeSlot(
+            battleEndedContext.allyA, 1, "continuous59_17_dodge", 12, 2, battleEndedContext.enemy
+        );
+        battleEndedContext.runtimeState.SetActionSlots(new List<BattleActionSlot> { battleEndedSlot });
+        battleEndedContext.enemy.currentHP = 0;
+        battleEndedContext.runtimeState.EvaluateBattleEnd();
+        int battleEndedCooldown = battleEndedSlot.cardState.currentCooldown;
+        battleEndedContext.runtimeState.EvaluateBattleEnd();
+        Debug.Log(
+            "模式59 测试17 BattleEnded在槽位清理前幂等收尾：" +
+            (battleEndedContext.runtimeState.IsBattleEnded &&
+             battleEndedSlot.isCardUseFinalized &&
+             battleEndedSlot.isUsed &&
+             battleEndedCooldown == 2 &&
+             battleEndedSlot.cardState.currentCooldown == battleEndedCooldown)
+        );
+
+        BattleEndedTestContext failureCdContext =
+            CreateBattleEndedTestContext("continuous59_18_fail", 30, 30, 50, 10, 5, 8);
+        BattleActionSlot failureSlot = new BattleActionSlot(failureCdContext.allyA, 1);
+        failureSlot.AssignPassiveGuard(
+            failureCdContext.allyA,
+            CreateFixedDodgeCardForCharacter(failureCdContext.allyA, "continuous59_18_fail_dodge", 2, 2)
+        );
+        BattleEnemyIntent failureIntent = CreateEnemyAttackIntent(
+            "continuous59_18_fail_intent",
+            failureCdContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(failureCdContext.enemy, "continuous59_18_fail_enemy", 8, 0),
+            failureCdContext.allyA,
+            1
+        );
+        ExecuteMode59Plan(failureCdContext, failureIntent, new List<BattleActionSlot> { failureSlot });
+        failureCdContext.runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+
+        BattleEndedTestContext successCdContext =
+            CreateBattleEndedTestContext("continuous59_18_success", 30, 30, 50, 10, 5, 8);
+        BattleActionSlot successSlot = new BattleActionSlot(successCdContext.allyA, 1);
+        successSlot.AssignPassiveGuard(
+            successCdContext.allyA,
+            CreateFixedDodgeCardForCharacter(successCdContext.allyA, "continuous59_18_success_dodge", 12, 2)
+        );
+        BattleEnemyIntent successIntent = CreateEnemyAttackIntent(
+            "continuous59_18_success_intent",
+            successCdContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(successCdContext.enemy, "continuous59_18_success_enemy", 4, 0),
+            successCdContext.allyA,
+            1
+        );
+        ExecuteMode59Plan(successCdContext, successIntent, new List<BattleActionSlot> { successSlot });
+        successCdContext.runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+        Debug.Log(
+            "模式59 测试18 失败即时结算与成功回合末结算的下一回合CD一致：" +
+            (failureSlot.cardState.currentCooldown == 1 &&
+             successSlot.cardState.currentCooldown == 1)
+        );
+    }
+
+    void RunContinuousDodgeSingleFormalUseAndItemReuseSubTests()
+    {
+        BattleEndedTestContext formalUseContext =
+            CreateBattleEndedTestContext("continuous59_19", 30, 30, 50, 10, 5, 8);
+        BattleCardState sinDodge =
+            CreateFixedDodgeCardForCharacter(formalUseContext.allyA, "continuous59_19_dodge", 12, 0);
+        sinDodge.cardData.isSinCard = true;
+        sinDodge.cardData.sinCardUseRule = SinCardUseRule.UseCount;
+        sinDodge.cardData.maxUseCount = 5;
+        sinDodge.maxUseCount = 5;
+        sinDodge.cardData.guiltGain = 2;
+        BattleActionSlot sinDodgeSlot = new BattleActionSlot(formalUseContext.allyA, 1);
+        sinDodgeSlot.AssignPassiveGuard(formalUseContext.allyA, sinDodge);
+        List<BattleActionSlot> formalUseSlots = new List<BattleActionSlot> { sinDodgeSlot };
+
+        for (int index = 1; index <= 3; index++)
+        {
+            BattleEnemyIntent intent = CreateEnemyAttackIntent(
+                "continuous59_19_intent_" + index,
+                formalUseContext.enemy,
+                CreateFixedEnemyAttackCardForDodgeTest(
+                    formalUseContext.enemy,
+                    "continuous59_19_enemy_" + index,
+                    4,
+                    0
+                ),
+                formalUseContext.allyA,
+                index
+            );
+            ExecuteMode59Plan(formalUseContext, intent, formalUseSlots);
+        }
+
+        bool beforeFinalize =
+            sinDodgeSlot.successfulDodgeCount == 3 &&
+            sinDodge.currentUseCount == 0 &&
+            formalUseContext.runtimeState.currentGuilt == 0 &&
+            !sinDodgeSlot.isUsed;
+        formalUseContext.runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+        Debug.Log(
+            "模式59 测试19 多次成功只触发一次正式UseCount/Guilt/Resolved收尾：" +
+            (beforeFinalize &&
+             sinDodge.currentUseCount == 1 &&
+             formalUseContext.runtimeState.currentGuilt == 2 &&
+             sinDodgeSlot.isCardUseFinalized &&
+             sinDodgeSlot.isUsed)
+        );
+
+        BattleEndedTestContext itemContext =
+            CreateBattleEndedTestContext("continuous59_20", 30, 30, 50, 10, 5, 8);
+        BattleCardState itemDodge =
+            CreateFixedDodgeCardForCharacter(itemContext.allyA, "continuous59_20_dodge", 12, 2);
+        BattleEnemyIntent firstIntent = CreateEnemyAttackIntent(
+            "continuous59_20_intent1",
+            itemContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(itemContext.enemy, "continuous59_20_enemy1", 4, 0),
+            itemContext.allyA,
+            1
+        );
+        BattleActionSlot itemSlot = CreateMode58ResponseSlot(
+            itemContext.allyA,
+            1,
+            itemDodge,
+            firstIntent
+        );
+        List<BattleActionSlot> itemSlots = new List<BattleActionSlot> { itemSlot };
+        BattleExecutionPlan originalPlan = ExecuteMode59Plan(itemContext, firstIntent, itemSlots);
+        int countAfterFirstExecution = itemSlot.successfulDodgeCount;
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(originalPlan, itemContext.runtimeState);
+        int countAfterRepeatedPlan = itemSlot.successfulDodgeCount;
+        BattleEnemyIntent laterIntent = CreateEnemyAttackIntent(
+            "continuous59_20_intent2",
+            itemContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(itemContext.enemy, "continuous59_20_enemy2", 4, 0),
+            itemContext.allyA,
+            2
+        );
+        ExecuteMode59Plan(itemContext, laterIntent, itemSlots);
+        Debug.Log(
+            "模式59 测试20 原Responded item不重复执行且后续仅由连续选择器触发：" +
+            (originalPlan.executionItems.Count == 1 &&
+             originalPlan.executionItems[0].isCompleted &&
+             countAfterFirstExecution == 1 &&
+             countAfterRepeatedPlan == 1 &&
+             itemSlot.successfulDodgeCount == 2)
+        );
+    }
+
+    BattleExecutionPlan ExecuteMode59Plan(
+        BattleEndedTestContext context,
+        BattleEnemyIntent enemyIntent,
+        List<BattleActionSlot> actionSlots
+    )
+    {
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(BattleEnemyIntentManager.CreateIntentQueue(enemyIntent));
+        BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            actionSlots,
+            context.runtimeState.intentQueue,
+            context.runtimeState
+        );
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+        return plan;
+    }
+
+    BattleActionSlot CreateMode59ActiveDodgeSlot(
+        CharacterData actor,
+        int slotIndex,
+        string instanceID,
+        int dodgePoint,
+        int cooldown,
+        CharacterData opponent
+    )
+    {
+        BattleActionSlot slot = new BattleActionSlot(actor, slotIndex);
+        slot.AssignPassiveGuard(
+            actor,
+            CreateFixedDodgeCardForCharacter(actor, instanceID, dodgePoint, cooldown)
+        );
+        slot.ActivateContinuousDodge(
+            ContinuousDodgeSource.PassiveGuard,
+            dodgePoint,
+            opponent
+        );
+        return slot;
+    }
+
+    void PrepareMode59CompletedRuntime(
+        BattleEndedTestContext context,
+        List<BattleActionSlot> actionSlots
+    )
+    {
+        BattleExecutionPlan completedPlan = new BattleExecutionPlan();
+        completedPlan.isCompleted = true;
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetExecutionPlan(completedPlan);
+        context.runtimeState.SetPhase("Completed");
+    }
+
+    BattleActionSlot CreateMode58ResponseSlot(
+        CharacterData actor,
+        int slotIndex,
+        BattleCardState cardState,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        BattleActionSlot slot = new BattleActionSlot(actor, slotIndex);
+        slot.AssignResponse(actor, cardState, enemyIntent, false);
+        enemyIntent.MarkResponded();
+        return slot;
+    }
+
+    BattleActionSlot CreateMode58FreeSlot(
+        CharacterData actor,
+        int slotIndex,
+        BattleCardState cardState,
+        CharacterData target
+    )
+    {
+        BattleActionSlot slot = new BattleActionSlot(actor, slotIndex);
+        slot.AssignFreeAction(actor, cardState, target);
+        return slot;
+    }
+
+    void ExecuteMode58UnrespondedPlan(
+        BattleEndedTestContext context,
+        BattleEnemyIntent enemyIntent,
+        List<BattleActionSlot> actionSlots
+    )
+    {
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(BattleEnemyIntentManager.CreateIntentQueue(enemyIntent));
+        BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            actionSlots,
+            context.runtimeState.intentQueue,
+            context.runtimeState
+        );
+        ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
+    }
+
+    bool AreExecutionPlansReferenceOrderedTheSame(
+        BattleExecutionPlan first,
+        BattleExecutionPlan second
+    )
+    {
+        if (first == null ||
+            second == null ||
+            first.executionItems == null ||
+            second.executionItems == null ||
+            first.executionItems.Count != second.executionItems.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < first.executionItems.Count; index++)
+        {
+            BattleExecutionItem left = first.executionItems[index];
+            BattleExecutionItem right = second.executionItems[index];
+
+            if (left == null ||
+                right == null ||
+                left.executionType != right.executionType ||
+                !object.ReferenceEquals(left.actionSlot, right.actionSlot) ||
+                !object.ReferenceEquals(left.enemyIntent, right.enemyIntent) ||
+                left.effectiveSpeed != right.effectiveSpeed ||
+                left.responsePriority != right.responsePriority ||
+                left.actionSlotOrder != right.actionSlotOrder ||
+                left.actorPositionOrder != right.actorPositionOrder ||
+                left.stableOrder != right.stableOrder)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     void RunBattleDefinitionDataJsonLoadSubTest()
@@ -6648,6 +7850,451 @@ public class CardLoadTest : MonoBehaviour
         bool secondAssigned = BattleActionSlotManager.AssignFreeAction(slots, context.allyA, 2, context.allyA, requiredCard, context.enemy, out secondResult);
 
         Debug.Log("模式54 P 不预测牌序结果仍按当前Guilt拒绝：" + (!secondAssigned && secondResult.failureReason == CardEligibilityFailureReason.GuiltRequirementNotMet && secondResult.currentValue == 15));
+    }
+
+    void RunPreparedAssignmentMainResponseAndPromotionSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("prepared57_a", 30, 30, 50, 10, 12, 5);
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        BattleEnemyIntent intent = CreatePreparedAssignmentIntent(context, "prepared57_a_intent", context.allyA, 2, 1, 1);
+        context.runtimeState.SetActionSlots(slots);
+        context.runtimeState.SetIntentQueue(BattleEnemyIntentManager.CreateIntentQueue(intent));
+
+        BattleCardState attack = CreateFixedAttackCardForCharacter(context.allyA, "prepared57_a_attack", 5);
+        BattleCardState defense = CreateTestDefenseCardForCharacter(context.allyB, "prepared57_a_defense", 4, 1);
+        BattleActionAssignmentResult firstResult;
+        BattleActionAssignmentResult secondResult;
+        bool firstAssigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+            context.runtimeState,
+            context.allyA,
+            1,
+            attack,
+            intent,
+            out firstResult
+        );
+        bool secondAssigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+            context.runtimeState,
+            context.allyB,
+            1,
+            defense,
+            intent,
+            out secondResult
+        );
+
+        BattleActionSlot allyASlot = BattleActionSlotManager.GetSlot(slots, context.allyA, 1);
+        BattleActionSlot allyBSlot = BattleActionSlotManager.GetSlot(slots, context.allyB, 1);
+        bool laterResponderWins =
+            firstAssigned &&
+            secondAssigned &&
+            secondResult.isSuccess &&
+            allyBSlot.slotType == BattleActionSlotType.RespondToEnemyIntent &&
+            object.ReferenceEquals(allyBSlot.enemyIntent, intent) &&
+            allyASlot.placementType == BattleActionPlacementType.ExactEnemyIntent &&
+            object.ReferenceEquals(allyASlot.requestedEnemyIntent, intent) &&
+            allyASlot.slotType == BattleActionSlotType.FreeAction &&
+            allyASlot.enemyIntent == null &&
+            object.ReferenceEquals(allyASlot.target, context.enemy) &&
+            allyBSlot.assignmentSequence > allyASlot.assignmentSequence &&
+            intent.isResponded;
+
+        BattleActionAssignmentResult cancelResult;
+        bool cancelled = BattleActionSlotManager.TryCancelAssignment(
+            context.runtimeState,
+            context.allyB,
+            1,
+            out cancelResult
+        );
+        bool earlierResponderPromoted =
+            cancelled &&
+            cancelResult.isSuccess &&
+            allyBSlot.IsEmpty() &&
+            allyASlot.slotType == BattleActionSlotType.RespondToEnemyIntent &&
+            object.ReferenceEquals(allyASlot.enemyIntent, intent) &&
+            intent.isResponded &&
+            object.ReferenceEquals(intent.actualTargetCharacter, context.allyA) &&
+            intent.actualTargetSlotIndex == 1;
+
+        Debug.Log("模式57 A 后放合格响应者成为当前主要响应：" + laterResponderWins);
+        Debug.Log("模式57 A 取消主要响应后较早候选自动顶替：" + earlierResponderPromoted);
+    }
+
+    void RunPreparedAssignmentAutoDowngradeSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("prepared57_b", 30, 30, 50, 20, 3, 8);
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        BattleEnemyIntent intent = CreatePreparedAssignmentIntent(context, "prepared57_b_intent", context.allyA, 2, 1, 1);
+        context.runtimeState.SetActionSlots(slots);
+        context.runtimeState.SetIntentQueue(BattleEnemyIntentManager.CreateIntentQueue(intent));
+
+        BattleCardState mainAttack = CreateFixedAttackCardForCharacter(context.allyA, "prepared57_b_main", 5);
+        BattleCardState lowSpeedAttack = CreateFixedAttackCardForCharacter(context.allyB, "prepared57_b_low", 5);
+        BattleActionAssignmentResult mainResult;
+        BattleActionAssignmentResult downgradeResult;
+        bool mainAssigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+            context.runtimeState,
+            context.allyA,
+            1,
+            mainAttack,
+            intent,
+            out mainResult
+        );
+        bool lowAssigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+            context.runtimeState,
+            context.allyB,
+            1,
+            lowSpeedAttack,
+            intent,
+            out downgradeResult
+        );
+
+        BattleActionSlot mainSlot = BattleActionSlotManager.GetSlot(slots, context.allyA, 1);
+        BattleActionSlot lowSlot = BattleActionSlotManager.GetSlot(slots, context.allyB, 1);
+        bool downgraded =
+            mainAssigned &&
+            lowAssigned &&
+            downgradeResult.isSuccess &&
+            downgradeResult.wasAutoDowngraded &&
+            downgradeResult.placementType == BattleActionPlacementType.SpecificEnemy &&
+            lowSlot.placementType == BattleActionPlacementType.SpecificEnemy &&
+            lowSlot.requestedEnemyIntent == null &&
+            object.ReferenceEquals(lowSlot.requestedEnemy, context.enemy) &&
+            lowSlot.slotType == BattleActionSlotType.FreeAction &&
+            object.ReferenceEquals(lowSlot.target, context.enemy) &&
+            mainSlot.slotType == BattleActionSlotType.RespondToEnemyIntent &&
+            object.ReferenceEquals(mainSlot.enemyIntent, intent);
+
+        Debug.Log("模式57 B 低速非原目标Attack自动降级且不影响主要响应：" + downgraded);
+    }
+
+    void RunPreparedAssignmentGuardPlacementsSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("prepared57_c", 30, 30, 50, 10, 3, 8);
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        BattleEnemyIntent intent = CreatePreparedAssignmentIntent(context, "prepared57_c_intent", context.allyA, 2, 1, 1);
+        context.runtimeState.SetActionSlots(slots);
+        context.runtimeState.SetIntentQueue(BattleEnemyIntentManager.CreateIntentQueue(intent));
+
+        BattleCardState defense = CreateTestDefenseCardForCharacter(context.allyB, "prepared57_c_defense", 4, 1);
+        BattleCardState dodge = CreateFixedDodgeCardForCharacter(context.allyB, "prepared57_c_dodge", 4, 1);
+        BattleActionAssignmentResult defenseResult;
+        BattleActionAssignmentResult dodgeResult;
+        bool defenseAssigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+            context.runtimeState,
+            context.allyB,
+            1,
+            defense,
+            intent,
+            out defenseResult
+        );
+        bool dodgeAssigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+            context.runtimeState,
+            context.allyB,
+            2,
+            dodge,
+            intent,
+            out dodgeResult
+        );
+
+        BattleActionSlot defenseSlot = BattleActionSlotManager.GetSlot(slots, context.allyB, 1);
+        BattleActionSlot dodgeSlot = BattleActionSlotManager.GetSlot(slots, context.allyB, 2);
+        bool enemySpecificGuards =
+            defenseAssigned &&
+            dodgeAssigned &&
+            defenseResult.wasAutoDowngraded &&
+            dodgeResult.wasAutoDowngraded &&
+            defenseSlot.placementType == BattleActionPlacementType.SpecificEnemy &&
+            dodgeSlot.placementType == BattleActionPlacementType.SpecificEnemy &&
+            defenseSlot.slotType == BattleActionSlotType.EnemySpecificGuard &&
+            dodgeSlot.slotType == BattleActionSlotType.EnemySpecificGuard &&
+            object.ReferenceEquals(defenseSlot.requestedEnemy, context.enemy) &&
+            object.ReferenceEquals(dodgeSlot.requestedEnemy, context.enemy) &&
+            defenseSlot.requestedEnemyIntent == null &&
+            dodgeSlot.requestedEnemyIntent == null &&
+            defenseSlot.enemyIntent == null &&
+            dodgeSlot.enemyIntent == null;
+
+        Debug.Log("模式57 C 低速Defense与Dodge自动降级为EnemySpecificGuard：" + enemySpecificGuards);
+    }
+
+    void RunPreparedAssignmentSelfAndInvalidTargetSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("prepared57_d", 30, 30, 50, 10, 10, 8);
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 3);
+        context.runtimeState.SetActionSlots(slots);
+        context.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+
+        BattleCardState defense = CreateTestDefenseCardForCharacter(context.allyA, "prepared57_d_defense", 4, 1);
+        BattleCardState dodge = CreateFixedDodgeCardForCharacter(context.allyA, "prepared57_d_dodge", 4, 1);
+        BattleCardState ability = CreateBattleEndedAbilityCard(context.allyA, "prepared57_d_ability", "Prepared57DAbility");
+        BattleActionAssignmentResult defenseResult;
+        BattleActionAssignmentResult dodgeResult;
+        BattleActionAssignmentResult abilityResult;
+        bool defenseAssigned = BattleActionSlotManager.TryAssignToSelf(context.runtimeState, context.allyA, 1, defense, out defenseResult);
+        bool dodgeAssigned = BattleActionSlotManager.TryAssignToSelf(context.runtimeState, context.allyA, 2, dodge, out dodgeResult);
+        bool abilityAssigned = BattleActionSlotManager.TryAssignToSelf(context.runtimeState, context.allyA, 3, ability, out abilityResult);
+
+        BattleActionSlot defenseSlot = BattleActionSlotManager.GetSlot(slots, context.allyA, 1);
+        BattleActionSlot dodgeSlot = BattleActionSlotManager.GetSlot(slots, context.allyA, 2);
+        BattleActionSlot abilitySlot = BattleActionSlotManager.GetSlot(slots, context.allyA, 3);
+        bool selfPlacements =
+            defenseAssigned &&
+            dodgeAssigned &&
+            abilityAssigned &&
+            defenseSlot.placementType == BattleActionPlacementType.Self &&
+            dodgeSlot.placementType == BattleActionPlacementType.Self &&
+            abilitySlot.placementType == BattleActionPlacementType.Self &&
+            defenseSlot.slotType == BattleActionSlotType.PassiveGuard &&
+            dodgeSlot.slotType == BattleActionSlotType.PassiveGuard &&
+            abilitySlot.slotType == BattleActionSlotType.FreeAction &&
+            object.ReferenceEquals(defenseSlot.target, context.allyA) &&
+            object.ReferenceEquals(dodgeSlot.target, context.allyA) &&
+            object.ReferenceEquals(abilitySlot.target, context.allyA);
+
+        BattleCardState attack = CreateFixedAttackCardForCharacter(context.allyB, "prepared57_d_attack", 5);
+        BattleCardState enemyAbility = CreateBattleEndedAbilityCard(context.allyB, "prepared57_d_enemy_ability", "Prepared57DEnemyAbility");
+        BattleActionAssignmentResult attackResult;
+        BattleActionAssignmentResult enemyAbilityResult;
+        bool attackAssigned = BattleActionSlotManager.TryAssignToSelf(context.runtimeState, context.allyB, 1, attack, out attackResult);
+        bool enemyAbilityAssigned = BattleActionSlotManager.TryAssignToEnemy(
+            context.runtimeState,
+            context.allyB,
+            2,
+            enemyAbility,
+            context.enemy,
+            out enemyAbilityResult
+        );
+        bool invalidRejected =
+            !attackAssigned &&
+            !enemyAbilityAssigned &&
+            IsSlotEmpty(BattleActionSlotManager.GetSlot(slots, context.allyB, 1)) &&
+            IsSlotEmpty(BattleActionSlotManager.GetSlot(slots, context.allyB, 2));
+
+        Debug.Log("模式57 D Self正确派生Defense/Dodge/Ability：" + selfPlacements);
+        Debug.Log("模式57 D Self Attack与Enemy Ability正确拒绝：" + invalidRejected);
+    }
+
+    void RunPreparedAssignmentAtomicReplaceAndDuplicateSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("prepared57_e", 30, 30, 50, 20, 10, 8);
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        BattleEnemyIntent intent = CreatePreparedAssignmentIntent(context, "prepared57_e_intent", context.allyB, 2, 1, 1);
+        context.runtimeState.SetActionSlots(slots);
+        context.runtimeState.SetIntentQueue(BattleEnemyIntentManager.CreateIntentQueue(intent));
+
+        BattleCardState attack = CreateFixedAttackCardForCharacter(context.allyA, "prepared57_e_attack", 5);
+        BattleActionAssignmentResult firstResult;
+        bool firstAssigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+            context.runtimeState,
+            context.allyA,
+            1,
+            attack,
+            intent,
+            out firstResult
+        );
+        BattleActionSlot slot1 = BattleActionSlotManager.GetSlot(slots, context.allyA, 1);
+        long firstSequence = slot1.assignmentSequence;
+        BattleActionAssignmentResult rearrangeResult;
+        bool rearranged = BattleActionSlotManager.TryAssignToEnemyIntent(
+            context.runtimeState,
+            context.allyA,
+            1,
+            attack,
+            intent,
+            out rearrangeResult
+        );
+        long oldSequence = slot1.assignmentSequence;
+        CharacterData oldActualTarget = intent.actualTargetCharacter;
+        int oldActualSlot = intent.actualTargetSlotIndex;
+
+        BattleActionAssignmentResult duplicateResult;
+        bool duplicateAssigned = BattleActionSlotManager.TryAssignToEnemy(
+            context.runtimeState,
+            context.allyA,
+            2,
+            attack,
+            context.enemy,
+            out duplicateResult
+        );
+
+        BattleCardState invalidReplacement = CreateFixedAttackCardForCharacter(context.allyA, "prepared57_e_invalid", 5);
+        BattleActionAssignmentResult invalidResult;
+        bool invalidAssigned = BattleActionSlotManager.TryAssignToSelf(
+            context.runtimeState,
+            context.allyA,
+            1,
+            invalidReplacement,
+            out invalidResult
+        );
+        bool failedReplaceAtomic =
+            firstAssigned &&
+            rearranged &&
+            oldSequence > firstSequence &&
+            !invalidAssigned &&
+            object.ReferenceEquals(slot1.cardState, attack) &&
+            slot1.placementType == BattleActionPlacementType.ExactEnemyIntent &&
+            object.ReferenceEquals(slot1.requestedEnemyIntent, intent) &&
+            slot1.assignmentSequence == oldSequence &&
+            slot1.slotType == BattleActionSlotType.RespondToEnemyIntent &&
+            object.ReferenceEquals(intent.actualTargetCharacter, oldActualTarget) &&
+            intent.actualTargetSlotIndex == oldActualSlot;
+
+        BattleCardState defense = CreateTestDefenseCardForCharacter(context.allyA, "prepared57_e_defense", 4, 1);
+        BattleActionAssignmentResult replacementResult;
+        bool replacementAssigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+            context.runtimeState,
+            context.allyA,
+            1,
+            defense,
+            intent,
+            out replacementResult
+        );
+        bool validReplaceWorked =
+            replacementAssigned &&
+            object.ReferenceEquals(slot1.cardState, defense) &&
+            slot1.placementType == BattleActionPlacementType.ExactEnemyIntent &&
+            slot1.assignmentSequence > oldSequence &&
+            slot1.slotType == BattleActionSlotType.RespondToEnemyIntent;
+        bool duplicateRejected =
+            !duplicateAssigned &&
+            duplicateResult.eligibilityResult.failureReason == CardEligibilityFailureReason.CardAlreadyAssigned &&
+            IsSlotEmpty(BattleActionSlotManager.GetSlot(slots, context.allyA, 2));
+
+        Debug.Log("模式57 E 非法替换保持旧安排与主要响应原子不变：" + failedReplaceAtomic);
+        Debug.Log("模式57 E 同一卡重新安排到同槽会刷新安排序号：" + (rearranged && oldSequence > firstSequence));
+        Debug.Log("模式57 E 合法替换刷新安排序号与关系：" + validReplaceWorked);
+        Debug.Log("模式57 E 同一卡实例不能安排到其他槽位：" + duplicateRejected);
+    }
+
+    void RunPreparedAssignmentCancelAndIntentCompatibilitySubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("prepared57_f", 30, 30, 50, 10, 12, 5);
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        BattleEnemyIntent intent = CreatePreparedAssignmentIntent(context, "prepared57_f_intent", context.allyA, 2, 1, 7);
+        context.runtimeState.SetActionSlots(slots);
+        context.runtimeState.SetIntentQueue(BattleEnemyIntentManager.CreateIntentQueue(intent));
+
+        BattleCardState attackA = CreateFixedAttackCardForCharacter(context.allyA, "prepared57_f_attack_a", 5);
+        BattleCardState attackB = CreateFixedAttackCardForCharacter(context.allyB, "prepared57_f_attack_b", 5);
+        BattleActionAssignmentResult resultA;
+        BattleActionAssignmentResult resultB;
+        BattleActionSlotManager.TryAssignToEnemyIntent(context.runtimeState, context.allyA, 1, attackA, intent, out resultA);
+        BattleActionSlotManager.TryAssignToEnemyIntent(context.runtimeState, context.allyB, 1, attackB, intent, out resultB);
+
+        BattleActionAssignmentResult cancelNonMainResult;
+        bool cancelNonMain = BattleActionSlotManager.TryCancelAssignment(
+            context.runtimeState,
+            context.allyA,
+            1,
+            out cancelNonMainResult
+        );
+        BattleActionSlot mainSlot = BattleActionSlotManager.GetSlot(slots, context.allyB, 1);
+        bool nonMainCancelPreserved =
+            cancelNonMain &&
+            mainSlot.slotType == BattleActionSlotType.RespondToEnemyIntent &&
+            object.ReferenceEquals(mainSlot.enemyIntent, intent) &&
+            intent.isResponded &&
+            object.ReferenceEquals(intent.actualTargetCharacter, context.allyB) &&
+            intent.actualTargetSlotIndex == 1;
+
+        BattleActionAssignmentResult cancelLastResult;
+        bool cancelLast = BattleActionSlotManager.TryCancelAssignment(
+            context.runtimeState,
+            context.allyB,
+            1,
+            out cancelLastResult
+        );
+        bool lastCancelReset =
+            cancelLast &&
+            !intent.isResponded &&
+            object.ReferenceEquals(intent.actualTargetCharacter, intent.originalTargetCharacter) &&
+            intent.actualTargetSlotIndex == intent.originalTargetSlotIndex;
+
+        BattleEnemyIntent oldConstructorIntent = new BattleEnemyIntent(
+            "prepared57_f_old_constructor",
+            context.enemy,
+            intent.enemyCardState,
+            context.allyA,
+            1,
+            3
+        );
+        intent.SetActualTarget(context.allyB, 1);
+        intent.MarkResponded();
+        intent.ResetResponseState();
+        bool intentCompatibility =
+            intent.enemySlotIndex == 7 &&
+            oldConstructorIntent.enemySlotIndex == 3 &&
+            !intent.isResponded &&
+            object.ReferenceEquals(intent.actualTargetCharacter, intent.originalTargetCharacter) &&
+            intent.actualTargetSlotIndex == intent.originalTargetSlotIndex;
+
+        Debug.Log("模式57 F 取消非主要候选不影响主要响应：" + nonMainCancelPreserved);
+        Debug.Log("模式57 F 取消最后候选重置敌人响应状态：" + lastCancelReset);
+        Debug.Log("模式57 F enemySlotIndex新旧构造与ResetResponseState兼容：" + intentCompatibility);
+    }
+
+    void RunPreparedAssignmentPurePrepareStateSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext("prepared57_g", 30, 30, 50, 10, 10, 8);
+        List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        context.runtimeState.SetActionSlots(slots);
+        context.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+        context.runtimeState.currentGuilt = 6;
+        context.allyA.AddBuff("Strength", 2, 2);
+
+        BattleCardState attack = CreateFixedAttackCardForCharacter(context.allyA, "prepared57_g_attack", 5);
+        int guiltBefore = context.runtimeState.currentGuilt;
+        int buffBefore = CountBuffStack(context.allyA, "Strength");
+        int cooldownBefore = attack.currentCooldown;
+        int useCountBefore = attack.currentUseCount;
+        bool consumedBefore = attack.isConsumed;
+        int enemyHpBefore = context.enemy.currentHP;
+
+        BattleActionAssignmentResult result;
+        bool assigned = BattleActionSlotManager.TryAssignToEnemy(
+            context.runtimeState,
+            context.allyA,
+            1,
+            attack,
+            context.enemy,
+            out result
+        );
+        bool purePrepare =
+            assigned &&
+            result.isSuccess &&
+            context.runtimeState.currentGuilt == guiltBefore &&
+            CountBuffStack(context.allyA, "Strength") == buffBefore &&
+            attack.currentCooldown == cooldownBefore &&
+            attack.currentUseCount == useCountBefore &&
+            attack.isConsumed == consumedBefore &&
+            context.enemy.currentHP == enemyHpBefore;
+
+        Debug.Log("模式57 G 准备阶段安排不修改CD/UseCount/Guilt/Buff/HP：" + purePrepare);
+    }
+
+    BattleEnemyIntent CreatePreparedAssignmentIntent(
+        BattleEndedTestContext context,
+        string intentID,
+        CharacterData originalTarget,
+        int originalTargetSlotIndex,
+        int intentOrder,
+        int enemySlotIndex
+    )
+    {
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(
+            context.enemy,
+            intentID + "_enemy_attack",
+            5,
+            0
+        );
+        return new BattleEnemyIntent(
+            intentID,
+            context.enemy,
+            enemyAttack,
+            originalTarget,
+            originalTargetSlotIndex,
+            intentOrder,
+            enemySlotIndex
+        );
     }
 
     void RunCardResourceFallbackBasePointSubTest()
@@ -8042,6 +9689,9 @@ public class CardLoadTest : MonoBehaviour
         dodgeContext.enemy.AddBuff("NextCardPointUp", 1, 1);
         BattleActionSlot passiveDodgeSlot = new BattleActionSlot(dodgeContext.allyB, 1);
         passiveDodgeSlot.AssignPassiveGuard(dodgeContext.allyB, passiveDodge);
+        dodgeContext.runtimeState.SetActionSlots(
+            new List<BattleActionSlot> { passiveDodgeSlot }
+        );
         BattleExecutionPlan dodgePlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
             new List<BattleActionSlot> { passiveDodgeSlot },
             new List<BattleEnemyIntent>
@@ -8052,7 +9702,8 @@ public class CardLoadTest : MonoBehaviour
         ExecutePlanWithRuntimeStateAndCompleteTurn(dodgeContext.runtimeState, dodgePlan);
 
         bool passiveDodgeRule =
-            passiveDodgeSlot.isUsed &&
+            passiveDodgeSlot.isContinuousDodgeActive &&
+            !passiveDodgeSlot.isUsed &&
             CountBuffStack(dodgeContext.allyB, "NextClashPointUp") == 0 &&
             CountBuffStack(dodgeContext.allyB, "NextCardPointUp") == 0 &&
             CountBuffStack(dodgeContext.enemy, "NextClashPointUp") == 0 &&

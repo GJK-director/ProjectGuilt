@@ -1,5 +1,15 @@
 ﻿// 脚本中文说明：行动槽位。负责保存准备阶段放入槽位的角色、卡牌、目标和响应的敌人意图。
-// BattleActionSlotType = 行动槽位类型
+// BattleActionPlacementType = 玩家在准备阶段保存的原始放置范围
+// 该字段只描述“放到哪里”，不描述当前是否成为主要响应者。
+public enum BattleActionPlacementType
+{
+    None,
+    ExactEnemyIntent,
+    SpecificEnemy,
+    Self
+}
+
+// BattleActionSlotType = 行动槽位当前生效类型
 // RespondToEnemyIntent：响应敌人意图
 // FreeAction：不直接响应敌人意图的自由行动，第一版只用于 Ability 罪卡测试
 // PassiveGuard：被动守备，等待敌人攻击实际命中本槽位 owner 时触发
@@ -15,7 +25,20 @@ public enum BattleActionSlotType
 
     // PassiveGuard = 被动守备
     // 例如：玩家把 Defense 放在自己的槽位中，等待无人响应的敌人攻击命中自己时触发。
-    PassiveGuard
+    PassiveGuard,
+
+    // EnemySpecificGuard = 针对指定敌人的守备
+    // 本轮只保存准备阶段语义，不接入 Executor / Resolver。
+    EnemySpecificGuard
+}
+
+public enum ContinuousDodgeSource
+{
+    None,
+    ExactEnemyIntent,
+    EnemySpecificGuard,
+    PassiveGuard,
+    ContinuousDodge
 }
 
 // BattleActionSlot = 行动槽位
@@ -51,10 +74,31 @@ public class BattleActionSlot
     // 只有响应敌人意图时，这里才应该有值。
     public BattleEnemyIntent enemyIntent;
 
+    // placementType = 玩家最终保存的原始放置范围
+    public BattleActionPlacementType placementType;
+
+    // requestedEnemyIntent = 玩家原本精确放置到的敌人意图
+    // 即使当前不是主要响应者，也必须保留。
+    public BattleEnemyIntent requestedEnemyIntent;
+
+    // requestedEnemy = 精确意图或指定敌人放置所针对的敌人
+    public CharacterData requestedEnemy;
+
+    // assignmentSequence = 本回合安排顺序，越大表示越晚放置
+    public long assignmentSequence;
+
     // isUsed = 槽位本回合的正式行动是否已经完成一次提交
     // 注意：卡牌是否 Resolved 与槽位是否完成行动不是同一个概念。
     // 例如 Attack vs Attack 失败方卡牌不算成功使用，但响应槽位已经正式参与拼点。
     public bool isUsed;
+
+    // 连续闪避在本回合内保持槽位未使用，直到失败或回合结束时统一结算。
+    public bool isContinuousDodgeActive;
+    public int successfulDodgeCount;
+    public bool isCardUseFinalized;
+    public ContinuousDodgeSource continuousDodgeSource;
+    public int lastContinuousDodgePoint;
+    public CharacterData lastContinuousDodgeOpponent;
 
     // BattleActionSlot = 行动槽位构造函数
     // slotIndex = 槽位编号。
@@ -98,7 +142,17 @@ public class BattleActionSlot
         this.actor = actor;
         this.cardState = cardState;
         this.enemyIntent = enemyIntent;
+        placementType = BattleActionPlacementType.ExactEnemyIntent;
+        requestedEnemyIntent = enemyIntent;
+        requestedEnemy = enemyIntent != null ? enemyIntent.enemy : null;
+
+        if (assignmentSequence <= 0)
+        {
+            assignmentSequence = 1;
+        }
+
         isUsed = false;
+        ResetContinuousDodgeState();
 
         if (enemyIntent != null)
         {
@@ -133,7 +187,26 @@ public class BattleActionSlot
         this.cardState = cardState;
         this.target = target;
         enemyIntent = null;
+        requestedEnemyIntent = null;
+
+        if (object.ReferenceEquals(actor, target))
+        {
+            placementType = BattleActionPlacementType.Self;
+            requestedEnemy = null;
+        }
+        else
+        {
+            placementType = BattleActionPlacementType.SpecificEnemy;
+            requestedEnemy = target;
+        }
+
+        if (assignmentSequence <= 0)
+        {
+            assignmentSequence = 1;
+        }
+
         isUsed = false;
+        ResetContinuousDodgeState();
     }
 
     // AssignPassiveGuard = 安排被动守备
@@ -150,7 +223,43 @@ public class BattleActionSlot
         this.cardState = cardState;
         target = actor;
         enemyIntent = null;
+        placementType = BattleActionPlacementType.Self;
+        requestedEnemyIntent = null;
+        requestedEnemy = null;
+
+        if (assignmentSequence <= 0)
+        {
+            assignmentSequence = 1;
+        }
+
         isUsed = false;
+        ResetContinuousDodgeState();
+    }
+
+    // AssignEnemySpecificGuard = 保存针对指定敌人的守备
+    // 本轮不执行该类型，只建立准备阶段数据模型。
+    public void AssignEnemySpecificGuard(
+        CharacterData actor,
+        BattleCardState cardState,
+        CharacterData enemy
+    )
+    {
+        slotType = BattleActionSlotType.EnemySpecificGuard;
+        this.actor = actor;
+        this.cardState = cardState;
+        target = enemy;
+        enemyIntent = null;
+        placementType = BattleActionPlacementType.SpecificEnemy;
+        requestedEnemyIntent = null;
+        requestedEnemy = enemy;
+
+        if (assignmentSequence <= 0)
+        {
+            assignmentSequence = 1;
+        }
+
+        isUsed = false;
+        ResetContinuousDodgeState();
     }
 
     // MarkUsed = 标记槽位行动已提交
@@ -160,12 +269,81 @@ public class BattleActionSlot
         isUsed = true;
     }
 
+    public void ActivateContinuousDodge(
+        ContinuousDodgeSource source,
+        int dodgePoint,
+        CharacterData opponent
+    )
+    {
+        isContinuousDodgeActive = true;
+        successfulDodgeCount = 1;
+        isCardUseFinalized = false;
+        continuousDodgeSource = source;
+        lastContinuousDodgePoint = dodgePoint;
+        lastContinuousDodgeOpponent = opponent;
+    }
+
+    public void RegisterContinuousDodgeSuccess(int dodgePoint, CharacterData opponent)
+    {
+        if (!isContinuousDodgeActive || isCardUseFinalized)
+        {
+            return;
+        }
+
+        successfulDodgeCount++;
+        lastContinuousDodgePoint = dodgePoint;
+        lastContinuousDodgeOpponent = opponent;
+    }
+
+    public void FinishContinuousDodge()
+    {
+        isContinuousDodgeActive = false;
+    }
+
+    public void MarkCardUseFinalized()
+    {
+        isCardUseFinalized = true;
+        isContinuousDodgeActive = false;
+    }
+
+    public void ResetContinuousDodgeState()
+    {
+        isContinuousDodgeActive = false;
+        successfulDodgeCount = 0;
+        isCardUseFinalized = false;
+        continuousDodgeSource = ContinuousDodgeSource.None;
+        lastContinuousDodgePoint = 0;
+        lastContinuousDodgeOpponent = null;
+    }
+
     // UnbindEnemyIntent = 解除敌人意图绑定
     // 用于“同一个敌人意图只能有一个主要响应槽位”时，解除旧槽位绑定。
     public void UnbindEnemyIntent()
     {
         enemyIntent = null;
-        target = null;
+
+        if (placementType == BattleActionPlacementType.ExactEnemyIntent ||
+            placementType == BattleActionPlacementType.SpecificEnemy)
+        {
+            target = requestedEnemy;
+
+            if (cardState != null &&
+                cardState.cardData != null &&
+                (cardState.cardData.cardType == CardType.Defense ||
+                 cardState.cardData.cardType == CardType.Dodge))
+            {
+                slotType = BattleActionSlotType.EnemySpecificGuard;
+            }
+            else
+            {
+                slotType = BattleActionSlotType.FreeAction;
+            }
+        }
+        else
+        {
+            target = null;
+        }
+
         isUsed = false;
     }
 
@@ -178,7 +356,12 @@ public class BattleActionSlot
         cardState = null;
         target = null;
         enemyIntent = null;
+        placementType = BattleActionPlacementType.None;
+        requestedEnemyIntent = null;
+        requestedEnemy = null;
+        assignmentSequence = 0;
         isUsed = false;
+        ResetContinuousDodgeState();
     }
 
     // GetActorName = 获取行动者名字
@@ -239,5 +422,134 @@ public class BattleActionSlot
         }
 
         return target.characterName;
+    }
+}
+
+// BattleContinuousDodgeManager = 连续闪避激活与正式卡牌使用收尾的唯一入口。
+public static class BattleContinuousDodgeManager
+{
+    public static void RegisterSuccess(
+        BattleActionSlot slot,
+        BattleResolveResult result,
+        ContinuousDodgeSource source,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        if (slot == null || result == null || slot.isCardUseFinalized)
+        {
+            return;
+        }
+
+        if (slot.isContinuousDodgeActive)
+        {
+            slot.RegisterContinuousDodgeSuccess(
+                result.playerPoint,
+                enemyIntent != null ? enemyIntent.enemy : null
+            );
+            UnityEngine.Debug.Log(
+                "[ContinuousDodge Success]\n" +
+                "Actor: " + slot.GetActorName() + "\n" +
+                "Slot: " + slot.slotIndex + "\n" +
+                "SuccessfulCount: " + slot.successfulDodgeCount + "\n" +
+                "RemainActive: True\n" +
+                "CardUseFinalized: False"
+            );
+            return;
+        }
+
+        slot.ActivateContinuousDodge(
+            source,
+            result.playerPoint,
+            enemyIntent != null ? enemyIntent.enemy : null
+        );
+        UnityEngine.Debug.Log(
+            "[ContinuousDodge]\n" +
+            "Actor: " + slot.GetActorName() + "\n" +
+            "Slot: " + slot.slotIndex + "\n" +
+            "Card: " + slot.GetCardName() + "\n" +
+            "SuccessfulCount: " + slot.successfulDodgeCount + "\n" +
+            "Source: " + source
+        );
+    }
+
+    public static void RecordImmediateFinalization(
+        BattleActionSlot slot,
+        BattleResolveResult result
+    )
+    {
+        if (slot == null || slot.isCardUseFinalized)
+        {
+            return;
+        }
+
+        slot.MarkCardUseFinalized();
+        slot.MarkUsed();
+
+        UnityEngine.Debug.Log(
+            "[ContinuousDodge Failed]\n" +
+            "Actor: " + slot.GetActorName() + "\n" +
+            "Slot: " + slot.slotIndex + "\n" +
+            "Damage: " + (result != null ? result.damage : 0) + "\n" +
+            "RemainActive: False\n" +
+            "CardUseFinalized: True"
+        );
+    }
+
+    public static bool FinalizeActionCardUse(
+        BattleRuntimeState runtimeState,
+        BattleActionSlot slot,
+        string reason
+    )
+    {
+        if (slot == null ||
+            !slot.isContinuousDodgeActive ||
+            slot.successfulDodgeCount < 1 ||
+            slot.isCardUseFinalized)
+        {
+            return false;
+        }
+
+        int oldUseCount = slot.cardState != null ? slot.cardState.currentUseCount : 0;
+        int oldGuilt = runtimeState != null ? runtimeState.currentGuilt : 0;
+
+        // 先锁定幂等状态，再触发 Resolved，避免任何回调重复结算同一槽位。
+        slot.MarkCardUseFinalized();
+        BattleResolver.FinalizeDeferredDodgeCardUse(slot);
+        slot.MarkUsed();
+
+        int newUseCount = slot.cardState != null ? slot.cardState.currentUseCount : oldUseCount;
+        int newCooldown = slot.cardState != null ? slot.cardState.currentCooldown : 0;
+        int newGuilt = runtimeState != null ? runtimeState.currentGuilt : oldGuilt;
+
+        UnityEngine.Debug.Log(
+            "[ContinuousDodge " + reason + " Finalize]\n" +
+            "Actor: " + slot.GetActorName() + "\n" +
+            "Slot: " + slot.slotIndex + "\n" +
+            "SuccessfulCount: " + slot.successfulDodgeCount + "\n" +
+            "UseCount delta: " + (newUseCount - oldUseCount) + "\n" +
+            "Cooldown: " + newCooldown + "\n" +
+            "Guilt delta: " + (newGuilt - oldGuilt)
+        );
+        return true;
+    }
+
+    public static int FinalizeActiveDodges(BattleRuntimeState runtimeState, string reason)
+    {
+        if (runtimeState == null || runtimeState.actionSlots == null)
+        {
+            return 0;
+        }
+
+        int finalizedCount = 0;
+
+        foreach (BattleActionSlot slot in runtimeState.actionSlots)
+        {
+            if (FinalizeActionCardUse(runtimeState, slot, reason))
+            {
+                finalizedCount++;
+            }
+        }
+
+        return finalizedCount;
     }
 }
