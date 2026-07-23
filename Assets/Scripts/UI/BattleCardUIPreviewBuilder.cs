@@ -20,7 +20,7 @@ public static class BattleCardUIPreviewBuilder
             data.pointText = "—";
             data.typeText = "";
             data.descriptionText = "";
-            data.cooldownText = "CD：—";
+            data.cooldownText = "—";
             data.isUsable = false;
             data.unavailableReason = "卡牌状态为空";
             return data;
@@ -40,14 +40,14 @@ public static class BattleCardUIPreviewBuilder
             data.pointText = "—";
             data.typeText = "";
             data.descriptionText = "卡牌数据为空";
-            data.cooldownText = "CD：—";
+            data.cooldownText = "—";
             data.isUsable = false;
             data.unavailableReason = "卡牌数据为空";
             return data;
         }
 
         data.typeText = BuildTypeText(cardData);
-        data.cooldownText = BuildCooldownText(cardState, cardData);
+        data.cooldownText = BuildCooldownText(cardData);
         data.pointText = BuildPointText(owner, cardData);
 
         CardEligibilityResult eligibility = BattleCardManager.EvaluateCardEligibility(
@@ -100,13 +100,8 @@ public static class BattleCardUIPreviewBuilder
         return string.IsNullOrEmpty(cardType) ? "未知" : cardType;
     }
 
-    static string BuildCooldownText(BattleCardState cardState, CardTestData cardData)
+    static string BuildCooldownText(CardTestData cardData)
     {
-        if (cardData.isSinCard)
-        {
-            return "—";
-        }
-
         return cardData.cooldown.ToString();
     }
 
@@ -138,11 +133,6 @@ public static class BattleCardUIPreviewBuilder
         if (maxPoint < 0)
         {
             maxPoint = 0;
-        }
-
-        if (minPoint == maxPoint)
-        {
-            return minPoint.ToString();
         }
 
         return minPoint + "-" + maxPoint;

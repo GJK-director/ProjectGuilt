@@ -7,6 +7,8 @@ using UnityEngine.UI;
 
 public class BattleSimpleUIController : MonoBehaviour
 {
+    internal const string ClashSinTestCardID = "sin_attack_test_001";
+
     [SerializeField] private TMP_Text topInfoText;
     [SerializeField] private TMP_Text enemyStateText;
     [SerializeField] private TMP_Text allyAStateText;
@@ -91,6 +93,9 @@ public class BattleSimpleUIController : MonoBehaviour
     private CharacterData selectedCharacter;
     private int selectedActionSlotIndex = -1;
     private BattleActionSlotUIView selectedActionSlotView;
+    private bool pendingCardDragRefresh;
+    private bool pendingSuccessfulAssignment;
+    private bool isRunningCompleteTurnCycle;
 
     private readonly string[] normalTestHandCardIDs =
     {
@@ -112,12 +117,18 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         InitializeTestBattleData();
         BindCharacterStatusSlotInteractions();
+        BindCardHandInteractions();
         BindButtonEvents();
         RefreshView();
     }
 
     void OnDestroy()
     {
+        if (testCardHandView != null)
+        {
+            testCardHandView.SetCardDragEndedHandler(null);
+        }
+
         UnbindButtonEvents();
     }
 
@@ -171,7 +182,7 @@ public class BattleSimpleUIController : MonoBehaviour
         CardTestData defenseCard = CardDataLoader.FindCardByID(cards, "def_001");
         CardTestData dodgeCard = CardDataLoader.FindCardByID(cards, "dodge_001");
         CardTestData allyAAbilityCard = CardDataLoader.FindCardByID(cards, "sin_ability_001");
-        CardTestData allyASinAttackCard = CardDataLoader.FindCardByID(cards, "sin_attack_test_001");
+        CardTestData allyASinAttackCard = CardDataLoader.FindCardByID(cards, ClashSinTestCardID);
         CardTestData bulletAttackCard = CardDataLoader.FindCardByID(cards, "atk_bullet_001");
 
         enemyAttackCardState = BattleCardManager.CreateBattleCard(
@@ -219,23 +230,17 @@ public class BattleSimpleUIController : MonoBehaviour
 
         if (allyASinAttackCard != null)
         {
-            allyASinAttackCardState = BattleCardManager.CreateBattleCard(
+            allyASinAttackCardState = CreateClashSinCardState(
                 ally01,
                 allyASinAttackCard,
                 "ui_allyA_sin_attack_test_001_copy_0"
             );
+            allyAClashSinCardState = allyASinAttackCardState;
         }
         else
         {
             Debug.LogWarning("创建测试罪卡手牌失败：找不到 sin_attack_test_001");
         }
-
-        // Temporary: atk_001 is reused as clash sin card data until JSON splits normal attack and clash sin cards.
-        allyAClashSinCardState = BattleCardManager.CreateBattleCard(
-            ally01,
-            allyAAttackCard,
-            "ui_allyA_clash_sin_atk_001_copy_0"
-        );
 
         allyBAttackCardState = BattleCardManager.CreateBattleCard(
             ally02,
@@ -261,43 +266,39 @@ public class BattleSimpleUIController : MonoBehaviour
             "ui_allyB_sin_ability_001_copy_0"
         );
 
-        allyBClashSinCardState = BattleCardManager.CreateBattleCard(
+        allyBClashSinCardState = CreateClashSinCardState(
             ally02,
-            allyAAttackCard,
-            "ui_allyB_clash_sin_atk_001_copy_0"
+            allyASinAttackCard,
+            "ui_allyB_sin_attack_test_001_copy_0"
         );
+    }
+
+    internal static BattleCardState CreateClashSinCardState(
+        CharacterData owner,
+        CardTestData cardData,
+        string instanceID
+    )
+    {
+        if (owner == null ||
+            cardData == null ||
+            cardData.cardID != ClashSinTestCardID)
+        {
+            Debug.LogWarning("创建拼点罪卡失败：必须使用 " + ClashSinTestCardID);
+            return null;
+        }
+
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
     }
 
     List<BattleEnemyIntent> CreateFixedEnemyIntentQueue(List<BattleActionSlot> actionSlots)
     {
-        if (enemy01 == null || enemyAttackCardState == null)
-        {
-            Debug.LogWarning("创建固定敌人意图失败：敌人 / 敌人卡牌数据不完整");
-            return new List<BattleEnemyIntent>();
-        }
-
-        int targetSlotIndex;
-        CharacterData target = SelectFixedEnemyIntentTarget(ally01, ally02, actionSlots, out targetSlotIndex);
-
-        if (target == null)
-        {
-            Debug.LogWarning("创建固定敌人意图失败：没有可用的存活目标槽位");
-            return new List<BattleEnemyIntent>();
-        }
-
-        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
-            "ui_fixed_enemy_intent_001",
+        return BattleAutomaticTurnCycle.CreateFixedEnemyIntentQueue(
             enemy01,
             enemyAttackCardState,
-            target,
-            targetSlotIndex,
-            1,
-            1
+            ally01,
+            ally02,
+            actionSlots
         );
-
-        Debug.Log("敌人新意图目标改为：" + target.characterName + " 槽位" + targetSlotIndex);
-
-        return BattleEnemyIntentManager.CreateIntentQueue(enemyIntent);
     }
 
     internal static CharacterData SelectFixedEnemyIntentTarget(
@@ -307,42 +308,12 @@ public class BattleSimpleUIController : MonoBehaviour
         out int targetSlotIndex
     )
     {
-        targetSlotIndex = 1;
-
-        if (ally02 != null && !ally02.IsDead())
-        {
-            return HasOwnerSlot(actionSlots, ally02, targetSlotIndex)
-                ? ally02
-                : null;
-        }
-
-        if (ally01 != null && !ally01.IsDead())
-        {
-            return HasOwnerSlot(actionSlots, ally01, targetSlotIndex)
-                ? ally01
-                : null;
-        }
-
-        return null;
-    }
-
-    static bool HasOwnerSlot(List<BattleActionSlot> actionSlots, CharacterData owner, int slotIndex)
-    {
-        if (actionSlots == null || owner == null)
-        {
-            return false;
-        }
-
-        foreach (BattleActionSlot slot in actionSlots)
-        {
-            if (slot != null && object.ReferenceEquals(slot.owner, owner) && slot.slotIndex == slotIndex)
-            {
-                return true;
-            }
-        }
-
-        Debug.LogWarning("存活目标 " + owner.characterName + " 缺少槽位" + slotIndex + "，不创建敌人意图");
-        return false;
+        return BattleAutomaticTurnCycle.SelectFixedEnemyIntentTarget(
+            ally01,
+            ally02,
+            actionSlots,
+            out targetSlotIndex
+        );
     }
 
     void BindButtonEvents()
@@ -768,7 +739,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void OnClickSelectClashSinCard()
     {
-        SelectCardForCurrentActor(allyAClashSinCardState, allyBClashSinCardState, "ClashSin(atk_001 temp)");
+        SelectCardForCurrentActor(allyAClashSinCardState, allyBClashSinCardState, "ClashSin");
     }
 
     private void SelectCardForCurrentActor(BattleCardState allyACardState, BattleCardState allyBCardState, string cardLabel)
@@ -1111,103 +1082,72 @@ public class BattleSimpleUIController : MonoBehaviour
         selectedActionMode = null;
     }
 
-    private void OnClickBattleStart()
+    private void ClearAllUISelectionState()
     {
-        if (runtimeState == null)
-        {
-            lastLog = "战斗状态未初始化，无法开始战斗";
-            RefreshView();
-            return;
-        }
-
-        if (runtimeState.IsBattleEnded)
-        {
-            lastLog = "战斗已经结束，不能再次开始战斗";
-            RefreshView();
-            return;
-        }
-
-        if (IsCurrentPlanCompleted())
-        {
-            lastLog = "当前计划已经执行完成，请结束回合或准备下一回合";
-            RefreshView();
-            return;
-        }
-
-        if (IsPhase("TurnEnded"))
-        {
-            lastLog = "当前回合已经结束，请准备下一回合";
-            RefreshView();
-            return;
-        }
-
-        if (HasCurrentPlan())
-        {
-            runtimeState.SetPhase("BattleStart");
-            BattleExecutionPlanManager.PrintExecutionPlan(runtimeState.currentExecutionPlan);
-
-            BattleExecutionPlanExecutor.ExecuteExecutionPlan(runtimeState.currentExecutionPlan, runtimeState);
-
-            if (!runtimeState.IsBattleEnded)
-            {
-                if (IsCurrentPlanCompleted())
-                {
-                    runtimeState.SetPhase("Completed");
-                    lastLog = "战斗开始：已执行当前已有计划";
-                }
-                else
-                {
-                    lastLog = "ExecutionPlan仍有未完成项，不能进入Completed";
-                }
-            }
-
-            if (runtimeState.IsBattleEnded)
-            {
-                lastLog = "战斗结束：" + runtimeState.battleResult;
-            }
-
-            RefreshView();
-            return;
-        }
-
-        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
-            runtimeState.actionSlots,
-            runtimeState.intentQueue
+        BattleCardDragRefreshUtility.ClearSelectedActionSlot(
+            ref selectedCharacter,
+            ref selectedActionSlotIndex,
+            ref selectedActionSlotView
         );
 
-        runtimeState.SetExecutionPlan(executionPlan);
+        pendingCardDragRefresh = false;
+        pendingSuccessfulAssignment = false;
+        ClearSelectedActionState();
+    }
 
-        if (executionPlan == null || executionPlan.executionItems == null || executionPlan.executionItems.Count == 0)
+    private void RefreshBattleStartButtonState()
+    {
+        if (battleStartButton == null)
         {
-            lastLog = "生成执行计划失败，无法开始战斗";
+            return;
+        }
+
+        battleStartButton.interactable =
+            !isRunningCompleteTurnCycle &&
+            BattleAutomaticTurnCycle.CanStart(runtimeState);
+    }
+
+    private void OnClickBattleStart()
+    {
+        if (isRunningCompleteTurnCycle)
+        {
+            lastLog = "当前回合正在处理中，请勿重复开始";
             RefreshView();
             return;
         }
 
-        runtimeState.SetPhase("BattleStart");
-        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
-
-        BattleExecutionPlanExecutor.ExecuteExecutionPlan(runtimeState.currentExecutionPlan, runtimeState);
-
-        if (!runtimeState.IsBattleEnded)
+        if (!BattleAutomaticTurnCycle.CanStart(runtimeState))
         {
-            if (IsCurrentPlanCompleted())
-            {
-                runtimeState.SetPhase("Completed");
-                lastLog = "战斗开始：已生成并执行本回合计划";
-            }
-            else
-            {
-                lastLog = "ExecutionPlan仍有未完成项，不能进入Completed";
-            }
+            lastLog = "当前状态不能开始完整回合：必须处于 Prepare、战斗未结束且没有已有计划";
+            RefreshView();
+            return;
         }
 
-        if (runtimeState.IsBattleEnded)
-        {
-            lastLog = "战斗结束：" + runtimeState.battleResult;
-        }
+        isRunningCompleteTurnCycle = true;
+        RefreshBattleStartButtonState();
 
-        RefreshView();
+        try
+        {
+            BattleAutomaticTurnCycleResult result = BattleAutomaticTurnCycle.TryRun(
+                runtimeState,
+                ally01,
+                ally02,
+                enemy01,
+                enemyAttackCardState
+            );
+
+            lastLog = result.message;
+
+            if (result.advancedToNextTurn || result.battleEnded)
+            {
+                ClearAllUISelectionState();
+            }
+        }
+        finally
+        {
+            isRunningCompleteTurnCycle = false;
+            RefreshView();
+        }
     }
 
     private void OnClickCreateExecutionPlan()
@@ -1401,6 +1341,7 @@ public class BattleSimpleUIController : MonoBehaviour
         RefreshActionSlotIntentViews();
         RefreshTestCardView();
         RefreshTestCardHandView();
+        RefreshBattleStartButtonState();
     }
 
     private void RefreshFixedStatusViews()
@@ -1451,51 +1392,93 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         ResetActionSlotIntentBaseStates();
 
-        if (runtimeState == null || runtimeState.intentQueue == null)
+        if (runtimeState == null)
         {
             return;
         }
 
-        if (runtimeState.intentQueue.Count > 2)
+        if (runtimeState.intentQueue != null)
         {
-            Debug.LogWarning("Enemy01 一级行动槽最多显示2条敌人意图，超出部分本轮不显示。");
+            for (int intentIndex = 0; intentIndex < runtimeState.intentQueue.Count; intentIndex++)
+            {
+                BattleEnemyIntent intent = runtimeState.intentQueue[intentIndex];
+
+                if (intent == null)
+                {
+                    continue;
+                }
+
+                BattleCharacterStatusUIView enemyStatusView = GetEnemyStatusView(intent.enemy);
+                if (enemyStatusView == null)
+                {
+                    Debug.LogWarning("一级行动槽找不到敌人状态视图：" + intent.intentID);
+                    continue;
+                }
+
+                int enemyUISlotIndex =
+                    BattleCardDropAssignmentRouter.EnemySlotIndexToUIIndex(intent.enemySlotIndex);
+                if (enemyUISlotIndex < 0)
+                {
+                    Debug.LogWarning(
+                        "敌人意图 enemySlotIndex 超出一级 UI 范围：" +
+                        intent.intentID +
+                        " / " +
+                        intent.enemySlotIndex
+                    );
+                    continue;
+                }
+
+                enemyStatusView.SetSlotState(
+                    enemyUISlotIndex,
+                    BattleActionSlotUIState.EnemyActionSet
+                );
+                enemyStatusView.SetBoundEnemyIntent(enemyUISlotIndex, intent);
+
+                BattleCharacterStatusUIView targetStatusView =
+                    GetAllyStatusView(intent.originalTargetCharacter);
+                int targetUISlotIndex = intent.originalTargetSlotIndex - 1;
+
+                if (targetStatusView == null ||
+                    targetUISlotIndex < 0 ||
+                    targetUISlotIndex > 1)
+                {
+                    Debug.LogWarning("敌人意图原始目标无法映射到友方一级行动槽：" + intent.intentID);
+                    continue;
+                }
+
+                targetStatusView.SetSlotState(
+                    targetUISlotIndex,
+                    BattleActionSlotUIState.AllyTargetedNoAction
+                );
+            }
         }
 
-        int visibleIntentCount = Mathf.Min(runtimeState.intentQueue.Count, 2);
-
-        for (int intentIndex = 0; intentIndex < visibleIntentCount; intentIndex++)
+        if (runtimeState.actionSlots == null)
         {
-            BattleEnemyIntent intent = runtimeState.intentQueue[intentIndex];
+            return;
+        }
 
-            if (intent == null)
+        foreach (BattleActionSlot slot in runtimeState.actionSlots)
+        {
+            if (slot == null || slot.IsEmpty())
             {
                 continue;
             }
 
-            if (!object.ReferenceEquals(intent.enemy, enemy01))
+            BattleCharacterStatusUIView ownerStatusView = GetAllyStatusView(slot.owner);
+            int ownerUISlotIndex = slot.slotIndex - 1;
+
+            if (ownerStatusView == null ||
+                ownerUISlotIndex < 0 ||
+                ownerUISlotIndex > 1)
             {
-                Debug.LogWarning("一级行动槽暂不显示非 Enemy01 的敌人意图：" + intent.intentID);
                 continue;
             }
 
-            if (enemy01StatusView != null)
-            {
-                enemy01StatusView.SetSlotState(intentIndex, BattleActionSlotUIState.EnemyActionSet);
-            }
-
-            BattleCharacterStatusUIView targetStatusView = GetAllyStatusView(intent.originalTargetCharacter);
-
-            if (targetStatusView == null)
-            {
-                Debug.LogWarning("敌人意图原始目标不属于当前 Ally01 / Ally02：" + intent.intentID);
-                continue;
-            }
-
-            // 正式槽位编号从1开始，一级 UI Slot_01 / Slot_02 使用0/1索引。
-            int targetUISlotIndex = intent.originalTargetSlotIndex - 1;
-            targetStatusView.SetSlotState(
-                targetUISlotIndex,
-                BattleActionSlotUIState.AllyTargetedNoAction
+            // 已安排状态覆盖“被敌人瞄准但未行动”，选中贴图仍由 Slot View 单独叠加。
+            ownerStatusView.SetSlotState(
+                ownerUISlotIndex,
+                BattleActionSlotUIState.AllyActionSet
             );
         }
     }
@@ -1506,6 +1489,16 @@ public class BattleSimpleUIController : MonoBehaviour
         SetTwoSlotStates(ally02StatusView, BattleActionSlotUIState.AllyEmpty);
         SetTwoSlotStates(enemy01StatusView, BattleActionSlotUIState.EnemyEmpty);
         SetTwoSlotStates(enemy02StatusView, BattleActionSlotUIState.EnemyEmpty);
+
+        if (enemy01StatusView != null)
+        {
+            enemy01StatusView.ClearBoundEnemyIntents();
+        }
+
+        if (enemy02StatusView != null)
+        {
+            enemy02StatusView.ClearBoundEnemyIntents();
+        }
     }
 
     private void SetTwoSlotStates(
@@ -1537,16 +1530,57 @@ public class BattleSimpleUIController : MonoBehaviour
         return null;
     }
 
+    private BattleCharacterStatusUIView GetEnemyStatusView(CharacterData character)
+    {
+        if (object.ReferenceEquals(character, enemy01))
+        {
+            return enemy01StatusView;
+        }
+
+        if (object.ReferenceEquals(character, enemy02))
+        {
+            return enemy02StatusView;
+        }
+
+        return null;
+    }
+
     private void BindCharacterStatusSlotInteractions()
     {
         if (ally01StatusView != null)
         {
-            ally01StatusView.SetSlotClickHandler(OnAllyActionSlotClicked);
+            ally01StatusView.SetAllySlotInteractionHandlers(
+                OnAllyActionSlotClicked,
+                OnAllyActionSlotRightClicked
+            );
+            ally01StatusView.SetSelfCardDropHandler(OnSelfActionCardDropped);
         }
 
         if (ally02StatusView != null)
         {
-            ally02StatusView.SetSlotClickHandler(OnAllyActionSlotClicked);
+            ally02StatusView.SetAllySlotInteractionHandlers(
+                OnAllyActionSlotClicked,
+                OnAllyActionSlotRightClicked
+            );
+            ally02StatusView.SetSelfCardDropHandler(OnSelfActionCardDropped);
+        }
+
+        if (enemy01StatusView != null)
+        {
+            enemy01StatusView.SetEnemySlotDropHandler(OnEnemyActionSlotCardDropped);
+        }
+
+        if (enemy02StatusView != null)
+        {
+            enemy02StatusView.SetEnemySlotDropHandler(OnEnemyActionSlotCardDropped);
+        }
+    }
+
+    private void BindCardHandInteractions()
+    {
+        if (testCardHandView != null)
+        {
+            testCardHandView.SetCardDragEndedHandler(OnCardDragEnded);
         }
     }
 
@@ -1571,6 +1605,136 @@ public class BattleSimpleUIController : MonoBehaviour
 
         clickedSlotView.SetSelected(true);
         RefreshTestCardHandView();
+    }
+
+    private void OnAllyActionSlotRightClicked(BattleActionSlotUIView clickedSlotView)
+    {
+        if (clickedSlotView == null ||
+            clickedSlotView.IsEnemySlot ||
+            clickedSlotView.BoundCharacter == null)
+        {
+            return;
+        }
+
+        BattleActionAssignmentResult result;
+        bool cancelled = BattleCardDropAssignmentRouter.TryCancelSelectedSlot(
+            runtimeState,
+            clickedSlotView.BoundCharacter,
+            clickedSlotView.FormalSlotIndex,
+            out result
+        );
+
+        lastLog = result != null
+            ? result.message
+            : cancelled
+                ? "已取消行动安排"
+                : "取消行动安排失败";
+
+        // 取消安排只改变槽位内容，保留当前一级槽位选择。
+        RefreshView();
+    }
+
+    private void OnEnemyActionSlotCardDropped(
+        BattleActionSlotUIView targetSlotView,
+        BattleCardUIView cardView
+    )
+    {
+        if (targetSlotView == null || !targetSlotView.IsEnemySlot)
+        {
+            lastLog = "卡牌拖放安排失败：目标不是敌方行动槽";
+            BattleCardDragRefreshUtility.MarkPending(
+                ref pendingCardDragRefresh,
+                ref pendingSuccessfulAssignment,
+                false
+            );
+            return;
+        }
+
+        BattleActionAssignmentResult result;
+        bool assigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            runtimeState,
+            selectedCharacter,
+            GetSelectedFormalActionSlotIndex(),
+            cardView != null ? cardView.BoundOwner : null,
+            cardView != null ? cardView.BoundCardState : null,
+            targetSlotView != null ? targetSlotView.BoundCharacter : null,
+            targetSlotView != null ? targetSlotView.BoundEnemyIntent : null,
+            out result
+        );
+
+        lastLog = result != null
+            ? result.message
+            : assigned
+                ? "卡牌拖放安排成功"
+                : "卡牌拖放安排失败";
+        BattleCardDragRefreshUtility.MarkPending(
+            ref pendingCardDragRefresh,
+            ref pendingSuccessfulAssignment,
+            assigned && result != null && result.isSuccess
+        );
+    }
+
+    private void OnSelfActionCardDropped(
+        BattleSelfActionDropZone dropZone,
+        BattleCardUIView cardView
+    )
+    {
+        BattleActionAssignmentResult result;
+        bool assigned = BattleCardDropAssignmentRouter.TryAssignToSelf(
+            runtimeState,
+            selectedCharacter,
+            GetSelectedFormalActionSlotIndex(),
+            cardView != null ? cardView.BoundOwner : null,
+            cardView != null ? cardView.BoundCardState : null,
+            dropZone != null ? dropZone.BoundCharacter : null,
+            out result
+        );
+
+        lastLog = result != null
+            ? result.message
+            : assigned
+                ? "卡牌拖放安排成功"
+                : "卡牌拖放安排失败";
+        BattleCardDragRefreshUtility.MarkPending(
+            ref pendingCardDragRefresh,
+            ref pendingSuccessfulAssignment,
+            assigned && result != null && result.isSuccess
+        );
+    }
+
+    private int GetSelectedFormalActionSlotIndex()
+    {
+        if (selectedActionSlotView == null ||
+            selectedActionSlotView.IsEnemySlot ||
+            !object.ReferenceEquals(selectedActionSlotView.BoundCharacter, selectedCharacter))
+        {
+            return 0;
+        }
+
+        return selectedActionSlotView.FormalSlotIndex;
+    }
+
+    private void OnCardDragEnded(BattleCardUIView cardView)
+    {
+        bool assignmentSucceeded;
+        if (!BattleCardDragRefreshUtility.ConsumePending(
+                ref pendingCardDragRefresh,
+                ref pendingSuccessfulAssignment,
+                out assignmentSucceeded))
+        {
+            return;
+        }
+
+        if (assignmentSucceeded)
+        {
+            BattleCardDragRefreshUtility.ClearSelectedActionSlot(
+                ref selectedCharacter,
+                ref selectedActionSlotIndex,
+                ref selectedActionSlotView
+            );
+        }
+
+        RefreshView();
     }
 
     void RefreshTestCardView()
@@ -1641,7 +1805,16 @@ public class BattleSimpleUIController : MonoBehaviour
 
             if (cardState == null)
             {
-                Debug.LogWarning(handOwner.characterName + " 的测试手牌缺少卡牌：" + cardID);
+                if (!HasCardStateByID(handOwner, cardID))
+                {
+                    Debug.LogWarning(handOwner.characterName + " 的测试手牌缺少卡牌：" + cardID);
+                }
+
+                continue;
+            }
+
+            if (!ShouldDisplayCardInHand(runtimeState, cardState))
+            {
                 continue;
             }
 
@@ -1649,6 +1822,16 @@ public class BattleSimpleUIController : MonoBehaviour
         }
 
         return cards;
+    }
+
+    internal static bool ShouldDisplayCardInHand(
+        BattleRuntimeState runtimeState,
+        BattleCardState cardState
+    )
+    {
+        return cardState != null &&
+            cardState.cardData != null &&
+            !BattleCardDropAssignmentRouter.IsCardAssigned(runtimeState, cardState);
     }
 
     private BattleCardState FindCardStateByID(CharacterData handOwner, string cardID)
@@ -1674,6 +1857,28 @@ public class BattleSimpleUIController : MonoBehaviour
         }
 
         return null;
+    }
+
+    private bool HasCardStateByID(CharacterData handOwner, string cardID)
+    {
+        if (string.IsNullOrEmpty(cardID) || handOwner == null || handOwner.battleCards == null)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < handOwner.battleCards.Count; i++)
+        {
+            BattleCardState cardState = handOwner.battleCards[i];
+
+            if (cardState != null &&
+                cardState.cardData != null &&
+                cardState.cardData.cardID == cardID)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool IsPhase(string phaseName)
@@ -2063,5 +2268,302 @@ public class BattleSimpleUIController : MonoBehaviour
         {
             text.text = value;
         }
+    }
+}
+
+public sealed class BattleAutomaticTurnCycleResult
+{
+    public bool isSuccess;
+    public bool executionPlanCompleted;
+    public bool advancedToNextTurn;
+    public bool battleEnded;
+    public int startingTurn;
+    public int endingTurn;
+    public string message;
+    public BattleExecutionPlan executedPlan;
+}
+
+// 正式“战斗开始”按钮与模式61共用这一数据闭环，UI只负责锁按钮、清选择和刷新。
+public static class BattleAutomaticTurnCycle
+{
+    const int ActionSlotCountPerCharacter = 2;
+    const string FixedEnemyAttackCardID = "enemy_atk_001";
+
+    public static bool CanStart(BattleRuntimeState runtimeState)
+    {
+        return runtimeState != null &&
+            !runtimeState.IsBattleEnded &&
+            runtimeState.currentPhase == "Prepare" &&
+            runtimeState.currentExecutionPlan == null;
+    }
+
+    public static BattleAutomaticTurnCycleResult TryRun(
+        BattleRuntimeState runtimeState,
+        CharacterData ally01,
+        CharacterData ally02,
+        CharacterData enemy01,
+        BattleCardState enemyAttackCardState
+    )
+    {
+        BattleAutomaticTurnCycleResult result = new BattleAutomaticTurnCycleResult
+        {
+            startingTurn = runtimeState != null ? runtimeState.currentTurn : 0,
+            endingTurn = runtimeState != null ? runtimeState.currentTurn : 0,
+            message = "完整回合未开始"
+        };
+
+        if (!CanStart(runtimeState))
+        {
+            result.message = "完整回合启动失败：必须处于 Prepare、战斗未结束且没有已有计划";
+            return result;
+        }
+
+        BattleExecutionPlan executionPlan =
+            BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+                runtimeState.actionSlots,
+                runtimeState.intentQueue
+            );
+
+        runtimeState.SetExecutionPlan(executionPlan);
+        result.executedPlan = executionPlan;
+
+        if (executionPlan == null ||
+            executionPlan.executionItems == null ||
+            executionPlan.executionItems.Count == 0)
+        {
+            Debug.LogWarning("完整回合启动失败：ExecutionPlan为空，已安全返回Prepare");
+            runtimeState.ClearExecutionPlan();
+            runtimeState.SetPhase("Prepare");
+            result.message = "执行计划为空，本回合未执行";
+            return result;
+        }
+
+        runtimeState.SetPhase("BattleStart");
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan, runtimeState);
+
+        result.executionPlanCompleted = executionPlan.isCompleted;
+        result.battleEnded = runtimeState.IsBattleEnded;
+
+        if (!executionPlan.isCompleted)
+        {
+            Debug.LogWarning("完整回合停止：ExecutionPlan仍有未完成项，保留现场用于诊断");
+            result.message = "ExecutionPlan仍有未完成项，本回合未结束";
+            result.endingTurn = runtimeState.currentTurn;
+            return result;
+        }
+
+        if (runtimeState.IsBattleEnded)
+        {
+            result.isSuccess = true;
+            result.message = "战斗结束：" + runtimeState.battleResult;
+            result.endingTurn = runtimeState.currentTurn;
+            return result;
+        }
+
+        runtimeState.SetPhase("Completed");
+        runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+
+        if (runtimeState.currentPhase != "TurnEnded")
+        {
+            result.message = "结束当前回合失败，未准备下一回合";
+            result.endingTurn = runtimeState.currentTurn;
+            return result;
+        }
+
+        List<BattleActionSlot> newActionSlots =
+            BattleActionSlotManager.CreateLivingPartyActionSlots(
+                ally01,
+                ally02,
+                ActionSlotCountPerCharacter
+            );
+
+        if (newActionSlots == null || newActionSlots.Count == 0)
+        {
+            runtimeState.EvaluateBattleEnd();
+            result.battleEnded = runtimeState.IsBattleEnded;
+            result.isSuccess = result.battleEnded;
+            result.message = result.battleEnded
+                ? "战斗结束：" + runtimeState.battleResult
+                : "没有存活角色槽位，无法准备下一回合";
+            result.endingTurn = runtimeState.currentTurn;
+            return result;
+        }
+
+        List<BattleEnemyIntent> newIntentQueue = CreateFixedEnemyIntentQueue(
+            enemy01,
+            enemyAttackCardState,
+            ally01,
+            ally02,
+            newActionSlots
+        );
+
+        runtimeState.PrepareNextTurnWithRuntimeObjects(newActionSlots, newIntentQueue);
+
+        result.advancedToNextTurn =
+            runtimeState.currentTurn == result.startingTurn + 1 &&
+            runtimeState.currentPhase == "Prepare" &&
+            runtimeState.currentExecutionPlan == null;
+        result.isSuccess = result.advancedToNextTurn;
+        result.battleEnded = runtimeState.IsBattleEnded;
+        result.endingTurn = runtimeState.currentTurn;
+        result.message = result.advancedToNextTurn
+            ? "当前回合已完成，自动进入回合 " + runtimeState.currentTurn
+            : "下一回合准备失败";
+
+        return result;
+    }
+
+    public static List<BattleEnemyIntent> CreateFixedEnemyIntentQueue(
+        CharacterData enemy01,
+        BattleCardState enemyAttackCardState,
+        CharacterData ally01,
+        CharacterData ally02,
+        List<BattleActionSlot> actionSlots
+    )
+    {
+        List<BattleEnemyIntent> intentQueue = new List<BattleEnemyIntent>();
+
+        if (enemy01 == null ||
+            enemyAttackCardState == null ||
+            enemyAttackCardState.cardData == null)
+        {
+            Debug.LogWarning("创建固定敌人意图失败：Enemy01或敌人卡牌数据不完整");
+            return intentQueue;
+        }
+
+        if (enemyAttackCardState.cardData.cardID != FixedEnemyAttackCardID)
+        {
+            Debug.LogWarning(
+                "创建固定敌人意图失败：固定敌人卡必须是 " +
+                FixedEnemyAttackCardID
+            );
+            return intentQueue;
+        }
+
+        int targetSlotIndex;
+        CharacterData target = SelectFixedEnemyIntentTarget(
+            ally01,
+            ally02,
+            actionSlots,
+            out targetSlotIndex
+        );
+
+        if (target == null)
+        {
+            Debug.LogWarning("创建固定敌人意图失败：没有可用的存活目标槽位");
+            return intentQueue;
+        }
+
+        CardEligibilityResult eligibility =
+            BattleCardManager.EvaluateCardEligibility(
+                enemy01,
+                target,
+                enemyAttackCardState
+            );
+
+        if (eligibility == null || !eligibility.isEligible)
+        {
+            Debug.LogWarning(
+                "固定敌人攻击当前不可用，不生成意图：" +
+                (eligibility != null ? eligibility.failureMessage : "资格检查失败")
+            );
+            return intentQueue;
+        }
+
+        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
+            "ui_fixed_enemy_intent_001",
+            enemy01,
+            enemyAttackCardState,
+            target,
+            targetSlotIndex,
+            1,
+            1
+        );
+
+        Debug.Log(
+            "固定敌人意图：Enemy01 使用 " +
+            FixedEnemyAttackCardID +
+            " 攻击 " +
+            target.characterName +
+            " 槽位" +
+            targetSlotIndex
+        );
+
+        return BattleEnemyIntentManager.CreateIntentQueue(enemyIntent);
+    }
+
+    public static CharacterData SelectFixedEnemyIntentTarget(
+        CharacterData ally01,
+        CharacterData ally02,
+        List<BattleActionSlot> actionSlots,
+        out int targetSlotIndex
+    )
+    {
+        if (TrySelectTargetSlot(ally01, actionSlots, out targetSlotIndex))
+        {
+            return ally01;
+        }
+
+        if (TrySelectTargetSlot(ally02, actionSlots, out targetSlotIndex))
+        {
+            return ally02;
+        }
+
+        targetSlotIndex = 1;
+        return null;
+    }
+
+    static bool TrySelectTargetSlot(
+        CharacterData owner,
+        List<BattleActionSlot> actionSlots,
+        out int targetSlotIndex
+    )
+    {
+        targetSlotIndex = 1;
+
+        if (owner == null || owner.IsDead() || actionSlots == null)
+        {
+            return false;
+        }
+
+        int lowestValidSlotIndex = int.MaxValue;
+
+        foreach (BattleActionSlot slot in actionSlots)
+        {
+            if (slot == null || !object.ReferenceEquals(slot.owner, owner))
+            {
+                continue;
+            }
+
+            if (slot.slotIndex == 1)
+            {
+                return true;
+            }
+
+            if (slot.slotIndex > 0 && slot.slotIndex < lowestValidSlotIndex)
+            {
+                lowestValidSlotIndex = slot.slotIndex;
+            }
+        }
+
+        if (lowestValidSlotIndex != int.MaxValue)
+        {
+            targetSlotIndex = lowestValidSlotIndex;
+            Debug.LogWarning(
+                "固定敌人目标 " +
+                owner.characterName +
+                " 缺少槽位1，降级使用最低有效槽位" +
+                targetSlotIndex
+            );
+            return true;
+        }
+
+        Debug.LogWarning(
+            "固定敌人目标 " +
+            owner.characterName +
+            " 没有有效行动槽位，尝试下一名存活角色"
+        );
+        return false;
     }
 }

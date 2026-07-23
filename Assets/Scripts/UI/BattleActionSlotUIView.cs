@@ -12,7 +12,7 @@ public enum BattleActionSlotUIState
     EnemyActionSet
 }
 
-public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler
+public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler, IDropHandler
 {
     [SerializeField] private Image slotImage;
 
@@ -30,12 +30,19 @@ public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler
     private CharacterData boundCharacter;
     private int slotIndex = -1;
     private bool isEnemySlot;
-    private Action<BattleActionSlotUIView> clickHandler;
+    private BattleEnemyIntent boundEnemyIntent;
+    private Action<BattleActionSlotUIView> leftClickHandler;
+    private Action<BattleActionSlotUIView> rightClickHandler;
+    private Action<BattleActionSlotUIView, BattleCardUIView> cardDropHandler;
 
     public CharacterData BoundCharacter => boundCharacter;
     public int SlotIndex => slotIndex;
+    public int UISlotIndex => slotIndex;
+    public int FormalSlotIndex => slotIndex >= 0 ? slotIndex + 1 : -1;
     public bool IsEnemySlot => isEnemySlot;
     public bool IsSelected => isSelected;
+    public BattleActionSlotUIState CurrentBaseState => currentBaseState;
+    public BattleEnemyIntent BoundEnemyIntent => boundEnemyIntent;
 
     void Reset()
     {
@@ -74,10 +81,40 @@ public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler
         Action<BattleActionSlotUIView> onClicked
     )
     {
+        BindInteraction(character, index, enemySlot, onClicked, null, null);
+    }
+
+    public void BindInteraction(
+        CharacterData character,
+        int index,
+        bool enemySlot,
+        Action<BattleActionSlotUIView> onLeftClicked,
+        Action<BattleActionSlotUIView> onRightClicked,
+        Action<BattleActionSlotUIView, BattleCardUIView> onCardDropped
+    )
+    {
         boundCharacter = character;
         slotIndex = index;
         isEnemySlot = enemySlot;
-        clickHandler = onClicked;
+        leftClickHandler = onLeftClicked;
+        rightClickHandler = onRightClicked;
+        cardDropHandler = onCardDropped;
+    }
+
+    public void SetBoundEnemyIntent(BattleEnemyIntent enemyIntent)
+    {
+        boundEnemyIntent = enemyIntent;
+    }
+
+    internal void ConfigureTestVisuals(Image image, Sprite sprite)
+    {
+        slotImage = image;
+        slotEmptySprite = sprite;
+        slotAllyActionSetSprite = sprite;
+        slotAllyTargetedNoActionSprite = sprite;
+        slotEnemyEmptySprite = sprite;
+        slotEnemyActionSetSprite = sprite;
+        slotSelectedSprite = sprite;
     }
 
     public void OnPointerClick(PointerEventData eventData)
@@ -87,12 +124,32 @@ public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler
             return;
         }
 
-        if (eventData.button != PointerEventData.InputButton.Left)
+        if (eventData.button == PointerEventData.InputButton.Left)
+        {
+            leftClickHandler?.Invoke(this);
+            return;
+        }
+
+        if (eventData.button == PointerEventData.InputButton.Right)
+        {
+            rightClickHandler?.Invoke(this);
+        }
+    }
+
+    public void OnDrop(PointerEventData eventData)
+    {
+        if (!isEnemySlot || boundCharacter == null || eventData == null || eventData.pointerDrag == null)
         {
             return;
         }
 
-        clickHandler?.Invoke(this);
+        BattleCardUIView cardView = eventData.pointerDrag.GetComponent<BattleCardUIView>();
+        if (cardView == null || cardView.BoundCardState == null)
+        {
+            return;
+        }
+
+        cardDropHandler?.Invoke(this, cardView);
     }
 
     private void RefreshDisplayedSprite()

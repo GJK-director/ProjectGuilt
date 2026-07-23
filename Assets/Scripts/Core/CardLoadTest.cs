@@ -1,6 +1,7 @@
 ﻿// 脚本中文说明：卡牌读取和战斗测试入口。负责在 Unity 场景启动时创建测试角色、读取卡牌并运行指定测试流程。
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.EventSystems;
 
 public enum BattleTestMode
 {
@@ -42,7 +43,10 @@ public enum BattleTestMode
     BattleDefinitionDataBootstrapBasic = 56,
     BattlePreparedActionAssignmentModelBasic = 57,
     BattleExecutionOrderingAndGuardPriorityBasic = 58,
-    BattleContinuousDodgeLifecycleBasic = 59
+    BattleContinuousDodgeLifecycleBasic = 59,
+    BattleCardDragAssignmentRoutingBasic = 60,
+    BattleAutomaticTurnCycleAndCooldownDragBasic = 61,
+    BattleCardPrimaryPreviewContractBasic = 62
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -68,6 +72,7 @@ public class CardLoadTest : MonoBehaviour
     BattleCardState allyBDefenseCardState;       // 我方角色B的防御卡
     BattleCardState enemyAttackCardState;        // 敌人的攻击卡
     private BattleCardState allyAAbilitySinCardState;
+    private CardTestData clashSinTestCardData;
 
     // ================================
     // Unity 入口
@@ -242,6 +247,24 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleContinuousDodgeLifecycleBasic)
         {
             RunBattleContinuousDodgeLifecycleBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardDragAssignmentRoutingBasic)
+        {
+            RunBattleCardDragAssignmentRoutingBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleAutomaticTurnCycleAndCooldownDragBasic)
+        {
+            RunBattleAutomaticTurnCycleAndCooldownDragBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardPrimaryPreviewContractBasic)
+        {
+            RunBattleCardPrimaryPreviewContractBasicTestSequence();
             return;
         }
 
@@ -5389,6 +5412,2079 @@ public class CardLoadTest : MonoBehaviour
         RunPreparedAssignmentPurePrepareStateSubTest();
 
         Debug.Log("===== BattlePreparedActionAssignmentModelBasic 聚合测试结束 =====");
+    }
+
+    void RunBattleCardDragAssignmentRoutingBasicTestSequence()
+    {
+        Debug.Log("===== BattleCardDragAssignmentRoutingBasic 聚合测试开始 =====");
+
+        RunCardDragExactViewBindingSubTest();
+        RunCardDragHandFilterAndCancelSubTests();
+        RunCardDragAtomicReplacementSubTests();
+        RunCardDragEnemyRoutingSubTests();
+        RunCardDragSelfAndValidationSubTests();
+        RunCardDragUISlotAndRefreshSubTests();
+
+        Debug.Log("===== BattleCardDragAssignmentRoutingBasic 聚合测试结束 =====");
+    }
+
+    void RunBattleAutomaticTurnCycleAndCooldownDragBasicTestSequence()
+    {
+        Debug.Log("===== BattleAutomaticTurnCycleAndCooldownDragBasic 聚合测试开始 =====");
+
+        RunAutomaticTurnSingleCycleSubTest();
+        RunAutomaticTurnWithoutPlayerActionSubTest();
+        RunAutomaticTurnIncrementOnceSubTest();
+        RunAutomaticTurnLivingSlotSubTest();
+        RunAutomaticTurnFixedIntentSubTest();
+        RunAutomaticTurnFixedTargetPrioritySubTest();
+        RunAutomaticTurnAllyFallbackSubTest();
+        RunAutomaticTurnAllAlliesDeadSubTest();
+        RunAutomaticTurnEnemy02IsolationSubTest();
+        RunAutomaticTurnSelectionClearSubTest();
+        RunAutomaticTurnCooldownHandVisibilitySubTest();
+        RunAutomaticTurnCooldownDragBlockedSubTest();
+        RunAutomaticTurnReadyCardDragGateSubTest();
+        RunAutomaticTurnCooldownTickRecoverySubTest();
+        RunAutomaticTurnBattleEndedStopSubTest();
+        RunAutomaticTurnDuplicateCallProtectionSubTest();
+
+        Debug.Log("===== BattleAutomaticTurnCycleAndCooldownDragBasic 聚合测试结束 =====");
+    }
+
+    void RunBattleCardPrimaryPreviewContractBasicTestSequence()
+    {
+        Debug.Log("===== BattleCardPrimaryPreviewContractBasic 聚合测试开始 =====");
+
+        RunPrimaryPreviewCooldownContractSubTests();
+        RunPrimaryPreviewPointRangeContractSubTests();
+        RunPrimaryPreviewRealCardDataContractSubTests();
+
+        Debug.Log("===== BattleCardPrimaryPreviewContractBasic 聚合测试结束 =====");
+    }
+
+    void RunPrimaryPreviewCooldownContractSubTests()
+    {
+        CharacterData owner = new CharacterData("preview62_cd_owner", 30, 10, 10);
+        CharacterData target = new CharacterData("preview62_cd_target", 50, 5, 5);
+        CardTestData cardData = CreatePrimaryPreviewAttackCardData(
+            "preview62_cd_card",
+            "CD契约测试卡",
+            3,
+            5,
+            1
+        );
+        BattleCardState cardState = BattleCardManager.CreateBattleCard(
+            owner,
+            cardData,
+            "preview62_cd_card_copy"
+        );
+
+        cardState.currentCooldown = 0;
+        BattleCardUIPreviewData cooldownOnePreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        bool test1 = cooldownOnePreview.cooldownText == "1";
+
+        cardData.cooldown = 2;
+        cardState.currentCooldown = 1;
+        BattleCardUIPreviewData coolingPreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        bool test2 = coolingPreview.cooldownText == "2";
+
+        cardState.currentCooldown = 2;
+        string cooldownAtTwo =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState).cooldownText;
+        cardState.currentCooldown = 1;
+        string cooldownAtOne =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState).cooldownText;
+        cardState.currentCooldown = 0;
+        string cooldownAtZero =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState).cooldownText;
+        bool test3 =
+            cooldownAtTwo == "2" &&
+            cooldownAtOne == "2" &&
+            cooldownAtZero == "2";
+
+        cardData.cooldown = 0;
+        BattleCardUIPreviewData zeroCooldownPreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        bool test4 = zeroCooldownPreview.cooldownText == "0";
+
+        cardData.cooldown = 2;
+        cardState.currentCooldown = 0;
+        BattleCardUIView readyView = CreatePrimaryPreviewCardView(
+            "Preview62ReadyView",
+            owner,
+            target,
+            cardState
+        );
+        BattleCardUIPreviewData readyPreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        bool test5 =
+            readyPreview.cooldownText == "2" &&
+            readyView != null &&
+            readyView.CanBeginDrag;
+
+        cardState.currentCooldown = 1;
+        BattleCardUIView coolingView = CreatePrimaryPreviewCardView(
+            "Preview62CoolingView",
+            owner,
+            target,
+            cardState
+        );
+        BattleCardUIPreviewData blockedPreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        bool test6 =
+            blockedPreview.cooldownText == "2" &&
+            coolingView != null &&
+            !coolingView.CanBeginDrag;
+
+        Debug.Log("模式62 测试1 基础CD为1且剩余CD为0时显示1：" + test1);
+        Debug.Log("模式62 测试2 冷却中一级卡面仍显示基础CD2：" + test2);
+        Debug.Log("模式62 测试3 剩余CD变化不改变一级卡面基础CD：" + test3);
+        Debug.Log("模式62 测试4 基础CD为0时显示0：" + test4);
+        Debug.Log("模式62 测试5 基础CD2但剩余CD0时允许拖拽：" + test5);
+        Debug.Log("模式62 测试6 基础CD仍显示2但剩余CD1时禁止拖拽：" + test6);
+
+        if (readyView != null)
+        {
+            Destroy(readyView.gameObject);
+        }
+
+        if (coolingView != null)
+        {
+            Destroy(coolingView.gameObject);
+        }
+    }
+
+    void RunPrimaryPreviewPointRangeContractSubTests()
+    {
+        CharacterData owner = new CharacterData("preview62_point_owner", 30, 10, 10);
+        CharacterData target = new CharacterData("preview62_point_target", 50, 5, 5);
+        CardTestData cardData = CreatePrimaryPreviewAttackCardData(
+            "preview62_point_card",
+            "点数范围测试卡",
+            10,
+            10,
+            1
+        );
+        BattleCardState cardState = BattleCardManager.CreateBattleCard(
+            owner,
+            cardData,
+            "preview62_point_card_copy"
+        );
+
+        BattleCardUIPreviewData fixedPreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        bool test7 = fixedPreview.pointText == "10-10";
+
+        owner.AddBuff(
+            "Strength",
+            "强壮",
+            "UpBuff",
+            1,
+            1,
+            "None",
+            "Permanent"
+        );
+        BattleCardUIPreviewData buffedPreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        bool test8 = buffedPreview.pointText == "11-11";
+
+        cardData.minPoint = 1;
+        cardData.maxPoint = 12;
+        CharacterData plainOwner = new CharacterData(
+            "preview62_plain_range_owner",
+            30,
+            10,
+            10
+        );
+        BattleCardState plainRangeCard = BattleCardManager.CreateBattleCard(
+            plainOwner,
+            cardData,
+            "preview62_plain_range_copy"
+        );
+        BattleCardUIPreviewData plainRangePreview =
+            BattleCardUIPreviewBuilder.Build(
+                plainOwner,
+                target,
+                plainRangeCard
+            );
+        bool test9 = plainRangePreview.pointText == "1-12";
+
+        Debug.Log("模式62 测试7 固定点数完整显示10-10：" + test7);
+        Debug.Log("模式62 测试8 Buff后固定点数完整显示11-11：" + test8);
+        Debug.Log("模式62 测试9 普通点数范围显示1-12：" + test9);
+    }
+
+    void RunPrimaryPreviewRealCardDataContractSubTests()
+    {
+        List<CardTestData> cards = CardDataLoader.LoadCardData();
+        CardTestData basicAttack = CardDataLoader.FindCardByID(cards, "atk_001");
+        CardTestData clashSin = CardDataLoader.FindCardByID(
+            cards,
+            BattleSimpleUIController.ClashSinTestCardID
+        );
+
+        bool test10 = basicAttack != null && !basicAttack.isSinCard;
+
+        CharacterData owner = new CharacterData("preview62_real_owner", 30, 10, 10);
+        CharacterData target = new CharacterData("preview62_real_target", 50, 5, 5);
+        BattleCardState basicAttackState = BattleCardManager.CreateBattleCard(
+            owner,
+            basicAttack,
+            "preview62_real_atk_001_copy"
+        );
+        CardEligibilityResult eligibility =
+            BattleCardManager.EvaluateCardEligibility(
+                owner,
+                target,
+                basicAttackState
+            );
+        bool test11 =
+            basicAttack != null &&
+            (basicAttack.useConditions == null ||
+             basicAttack.useConditions.Length == 0) &&
+            eligibility != null &&
+            eligibility.isEligible;
+
+        BattleCardUIPreviewData basicPreview =
+            BattleCardUIPreviewBuilder.Build(
+                owner,
+                target,
+                basicAttackState
+            );
+        bool test12 =
+            basicPreview != null &&
+            basicPreview.cardName == "基础攻击" &&
+            (basicPreview.typeText == null ||
+             !basicPreview.typeText.Contains("罪卡")) &&
+            basicPreview.pointText == "10-10" &&
+            basicPreview.cooldownText == "1";
+
+        bool test13 =
+            clashSin != null &&
+            clashSin.isSinCard &&
+            clashSin.sinCardCategory == SinCardCategory.Clash;
+
+        BattleCardState clashSinState =
+            BattleSimpleUIController.CreateClashSinCardState(
+                owner,
+                clashSin,
+                "preview62_clash_sin_copy"
+            );
+        bool test14 =
+            clashSinState != null &&
+            clashSinState.cardData != null &&
+            clashSinState.cardData.cardID ==
+                BattleSimpleUIController.ClashSinTestCardID &&
+            clashSinState.cardData.cardID != "atk_001";
+
+        Debug.Log("模式62 测试10 真实atk_001不是罪卡：" + test10);
+        Debug.Log("模式62 测试11 真实atk_001无Bullet条件且普通角色可用：" + test11);
+        Debug.Log("模式62 测试12 基础攻击一级预览契约正确：" + test12);
+        Debug.Log("模式62 测试13 正式攻击罪卡仍为Clash罪卡：" + test13);
+        Debug.Log("模式62 测试14 ClashSin实例来源为sin_attack_test_001：" + test14);
+    }
+
+    CardTestData CreatePrimaryPreviewAttackCardData(
+        string cardID,
+        string cardName,
+        int minPoint,
+        int maxPoint,
+        int cooldown
+    )
+    {
+        return new CardTestData
+        {
+            cardID = cardID,
+            cardName = cardName,
+            description = "",
+            rarity = "White",
+            cardType = CardType.Attack,
+            isClashable = true,
+            isSinCard = false,
+            minPoint = minPoint,
+            maxPoint = maxPoint,
+            cooldown = cooldown,
+            damageFormula = "PointAsDamage",
+            effects = new List<CardEffectData>()
+        };
+    }
+
+    BattleCardUIView CreatePrimaryPreviewCardView(
+        string objectName,
+        CharacterData owner,
+        CharacterData target,
+        BattleCardState cardState
+    )
+    {
+        GameObject cardObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(BattleCardUIView)
+        );
+        BattleCardUIView view = cardObject.GetComponent<BattleCardUIView>();
+        view.BindCard(
+            owner,
+            cardState,
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState),
+            null
+        );
+        return view;
+    }
+
+    void RunAutomaticTurnSingleCycleSubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "auto61_1",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+
+        BattleAutomaticTurnCycleResult result = RunAutomaticTurnCycle(context);
+        bool passed =
+            result.isSuccess &&
+            result.executionPlanCompleted &&
+            result.advancedToNextTurn &&
+            context.runtimeState.currentTurn == 2 &&
+            context.runtimeState.currentPhase == "Prepare" &&
+            context.runtimeState.currentExecutionPlan == null &&
+            context.runtimeState.actionSlots.Count == 4 &&
+            context.runtimeState.intentQueue.Count == 1;
+
+        Debug.Log("模式61 测试1 单次入口完成整回合并自动进入回合2：" + passed);
+    }
+
+    void RunAutomaticTurnWithoutPlayerActionSubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "auto61_2",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5,
+            2
+        );
+        int hpBefore = context.allyA.currentHP;
+
+        BattleAutomaticTurnCycleResult result = RunAutomaticTurnCycle(context);
+        bool createdUnresponded =
+            result.executedPlan != null &&
+            result.executedPlan.executionItems != null &&
+            result.executedPlan.executionItems.Count == 1 &&
+            result.executedPlan.executionItems[0].executionType ==
+                BattleExecutionItemType.UnrespondedEnemyIntent;
+        bool passed =
+            createdUnresponded &&
+            context.allyA.currentHP < hpBefore &&
+            result.advancedToNextTurn;
+
+        Debug.Log("模式61 测试2 无玩家安排仍执行Unresponded并进入下一回合：" + passed);
+    }
+
+    void RunAutomaticTurnIncrementOnceSubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "auto61_3",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+
+        BattleAutomaticTurnCycleResult first = RunAutomaticTurnCycle(context);
+        int turnAfterFirst = context.runtimeState.currentTurn;
+        BattleAutomaticTurnCycleResult second = RunAutomaticTurnCycle(context);
+        int turnAfterSecond = context.runtimeState.currentTurn;
+
+        bool passed =
+            first.advancedToNextTurn &&
+            second.advancedToNextTurn &&
+            turnAfterFirst == 2 &&
+            turnAfterSecond == 3;
+
+        Debug.Log("模式61 测试3 每次完整入口只增加一个回合（1→2→3）：" + passed);
+    }
+
+    void RunAutomaticTurnLivingSlotSubTest()
+    {
+        AutomaticTurnTestContext allLiving = CreateAutomaticTurnTestContext(
+            "auto61_4_all",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+        BattleAutomaticTurnCycleResult allLivingResult =
+            RunAutomaticTurnCycle(allLiving);
+
+        AutomaticTurnTestContext allyADead = CreateAutomaticTurnTestContext(
+            "auto61_4_dead",
+            0,
+            30,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+        BattleAutomaticTurnCycleResult allyADeadResult =
+            RunAutomaticTurnCycle(allyADead);
+
+        bool passed =
+            allLivingResult.advancedToNextTurn &&
+            allLiving.runtimeState.actionSlots.Count == 4 &&
+            allyADeadResult.advancedToNextTurn &&
+            allyADead.runtimeState.actionSlots.Count == 2 &&
+            AreAllSlotsOwnedBy(
+                allyADead.runtimeState.actionSlots,
+                allyADead.allyB
+            );
+
+        Debug.Log("模式61 测试4 下一回合只为存活友方创建槽位：" + passed);
+    }
+
+    void RunAutomaticTurnFixedIntentSubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "auto61_5",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+        BattleEnemyIntent initialIntent = GetSingleIntent(context.runtimeState);
+        BattleAutomaticTurnCycleResult result = RunAutomaticTurnCycle(context);
+        BattleEnemyIntent nextIntent = GetSingleIntent(context.runtimeState);
+
+        bool passed =
+            IsExpectedFixedEnemyIntent(initialIntent, context) &&
+            result.advancedToNextTurn &&
+            IsExpectedFixedEnemyIntent(nextIntent, context);
+
+        Debug.Log("模式61 测试5 每回合固定生成Enemy01基础攻击意图：" + passed);
+    }
+
+    void RunAutomaticTurnFixedTargetPrioritySubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "auto61_6",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+        BattleEnemyIntent intent = GetSingleIntent(context.runtimeState);
+
+        bool passed =
+            intent != null &&
+            object.ReferenceEquals(intent.originalTargetCharacter, context.allyA) &&
+            intent.originalTargetSlotIndex == 1;
+
+        Debug.Log("模式61 测试6 固定目标优先Ally01槽位1：" + passed);
+    }
+
+    void RunAutomaticTurnAllyFallbackSubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "auto61_7",
+            0,
+            30,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+        BattleEnemyIntent intent = GetSingleIntent(context.runtimeState);
+
+        bool passed =
+            intent != null &&
+            object.ReferenceEquals(intent.originalTargetCharacter, context.allyB) &&
+            intent.originalTargetSlotIndex == 1;
+
+        Debug.Log("模式61 测试7 Ally01死亡后固定攻击Ally02槽位1：" + passed);
+    }
+
+    void RunAutomaticTurnAllAlliesDeadSubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "auto61_8",
+            0,
+            0,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+        context.runtimeState.EvaluateBattleEnd();
+        int turnBefore = context.runtimeState.currentTurn;
+        BattleAutomaticTurnCycleResult result = RunAutomaticTurnCycle(context);
+
+        bool passed =
+            context.runtimeState.IsBattleEnded &&
+            context.runtimeState.battleResult == BattleResult.Defeat &&
+            context.runtimeState.currentTurn == turnBefore &&
+            context.runtimeState.actionSlots.Count == 0 &&
+            context.runtimeState.intentQueue.Count == 0 &&
+            context.runtimeState.currentPhase != "Prepare" &&
+            !BattleAutomaticTurnCycle.CanStart(context.runtimeState) &&
+            !result.advancedToNextTurn;
+
+        Debug.Log("模式61 测试8 无存活友方时结束战斗且不创建下一回合：" + passed);
+    }
+
+    void RunAutomaticTurnEnemy02IsolationSubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "auto61_9",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+        CharacterData enemy02 = new CharacterData("auto61_9_Enemy02", 50, 5, 5);
+        bool initialIsolated =
+            !ContainsIntentOwner(context.runtimeState.intentQueue, enemy02) &&
+            !context.runtimeState.battleUnits.Contains(enemy02);
+
+        BattleAutomaticTurnCycleResult result = RunAutomaticTurnCycle(context);
+        bool passed =
+            initialIsolated &&
+            result.advancedToNextTurn &&
+            !ContainsIntentOwner(context.runtimeState.intentQueue, enemy02) &&
+            context.runtimeState.battleUnits.Count == 3;
+
+        Debug.Log("模式61 测试9 Enemy02不生成正式意图且不加入battleUnits：" + passed);
+    }
+
+    void RunAutomaticTurnSelectionClearSubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "auto61_10",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+        GameObject slotObject = new GameObject(
+            "Auto61SelectedSlot",
+            typeof(RectTransform),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView selectedView =
+            slotObject.GetComponent<BattleActionSlotUIView>();
+        selectedView.SetSelected(true);
+
+        CharacterData selectedCharacter = context.allyA;
+        int selectedSlotIndex = 0;
+
+        BattleAutomaticTurnCycleResult result = RunAutomaticTurnCycle(context);
+        if (result.advancedToNextTurn)
+        {
+            BattleCardDragRefreshUtility.ClearSelectedActionSlot(
+                ref selectedCharacter,
+                ref selectedSlotIndex,
+                ref selectedView
+            );
+        }
+
+        bool passed =
+            result.advancedToNextTurn &&
+            selectedCharacter == null &&
+            selectedSlotIndex == -1 &&
+            selectedView == null;
+
+        Debug.Log("模式61 测试10 下一回合统一清除一级UI槽位选择：" + passed);
+        Destroy(slotObject);
+    }
+
+    void RunAutomaticTurnCooldownHandVisibilitySubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "auto61_11",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+        BattleCardState cooldownCard = CreateAutomaticTurnCooldownCard(
+            context.allyA,
+            "auto61_11_cd",
+            3
+        );
+        bool assigned = BattleActionSlotManager.AssignFreeAction(
+            context.runtimeState.actionSlots,
+            context.allyA,
+            1,
+            context.allyA,
+            cooldownCard,
+            context.enemy
+        );
+
+        BattleAutomaticTurnCycleResult result = RunAutomaticTurnCycle(context);
+        BattleCardUIPreviewData preview = BattleCardUIPreviewBuilder.Build(
+            context.allyA,
+            context.enemy,
+            cooldownCard
+        );
+
+        bool passed =
+            assigned &&
+            result.advancedToNextTurn &&
+            context.allyA.battleCards.Contains(cooldownCard) &&
+            cooldownCard.currentCooldown > 0 &&
+            BattleSimpleUIController.ShouldDisplayCardInHand(
+                context.runtimeState,
+                cooldownCard
+            ) &&
+            preview.cooldownText == cooldownCard.cardData.cooldown.ToString();
+
+        Debug.Log("模式61 测试11 已使用CD卡在下一回合仍显示基础CD：" + passed);
+    }
+
+    void RunAutomaticTurnCooldownDragBlockedSubTest()
+    {
+        CharacterData owner = new CharacterData("auto61_12_A", 30, 10, 10);
+        CharacterData target = new CharacterData("auto61_12_Enemy", 50, 5, 5);
+        BattleCardState cooldownCard = CreateAutomaticTurnCooldownCard(
+            owner,
+            "auto61_12_cd",
+            3
+        );
+        cooldownCard.currentCooldown = 2;
+
+        GameObject parentObject = new GameObject(
+            "Auto61CardParent",
+            typeof(RectTransform)
+        );
+        GameObject cardObject = new GameObject(
+            "Auto61CooldownCardView",
+            typeof(RectTransform),
+            typeof(CanvasGroup),
+            typeof(BattleCardUIView)
+        );
+        cardObject.transform.SetParent(parentObject.transform, false);
+
+        BattleCardUIView view = cardObject.GetComponent<BattleCardUIView>();
+        CanvasGroup group = cardObject.GetComponent<CanvasGroup>();
+        bool dragEndedCalled = false;
+        view.BindCard(
+            owner,
+            cooldownCard,
+            BattleCardUIPreviewBuilder.Build(owner, target, cooldownCard),
+            ignored => dragEndedCalled = true
+        );
+
+        Transform parentBefore = cardObject.transform.parent;
+        int siblingBefore = cardObject.transform.GetSiblingIndex();
+        Vector2 anchoredBefore =
+            ((RectTransform)cardObject.transform).anchoredPosition;
+        float alphaBefore = group.alpha;
+        bool interactableBefore = group.interactable;
+        bool blocksBefore = group.blocksRaycasts;
+
+        PointerEventData eventData = new PointerEventData(null);
+        view.OnBeginDrag(eventData);
+        view.OnDrag(eventData);
+        view.OnEndDrag(eventData);
+
+        bool passed =
+            !view.CanBeginDrag &&
+            !view.IsDragging &&
+            object.ReferenceEquals(cardObject.transform.parent, parentBefore) &&
+            cardObject.transform.GetSiblingIndex() == siblingBefore &&
+            ((RectTransform)cardObject.transform).anchoredPosition ==
+                anchoredBefore &&
+            group.alpha == alphaBefore &&
+            group.interactable == interactableBefore &&
+            group.blocksRaycasts == blocksBefore &&
+            !dragEndedCalled;
+
+        Debug.Log("模式61 测试12 CD卡不能开始拖拽且不改变任何拖拽视觉：" + passed);
+        Destroy(cardObject);
+        Destroy(parentObject);
+    }
+
+    void RunAutomaticTurnReadyCardDragGateSubTest()
+    {
+        CharacterData owner = new CharacterData("auto61_13_A", 30, 10, 10);
+        BattleCardState readyCard = CreateAutomaticTurnCooldownCard(
+            owner,
+            "auto61_13_ready",
+            3
+        );
+        readyCard.currentCooldown = 0;
+
+        GameObject cardObject = new GameObject(
+            "Auto61ReadyCardView",
+            typeof(RectTransform),
+            typeof(BattleCardUIView)
+        );
+        BattleCardUIView view = cardObject.GetComponent<BattleCardUIView>();
+        view.BindCard(
+            owner,
+            readyCard,
+            BattleCardUIPreviewBuilder.Build(owner, owner, readyCard),
+            null
+        );
+
+        Debug.Log("模式61 测试13 CD为0时正式拖拽门禁允许开始：" + view.CanBeginDrag);
+        Destroy(cardObject);
+    }
+
+    void RunAutomaticTurnCooldownTickRecoverySubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "auto61_14",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+        BattleCardState cooldownCard = CreateAutomaticTurnCooldownCard(
+            context.allyA,
+            "auto61_14_cd",
+            3
+        );
+        bool assigned = BattleActionSlotManager.AssignFreeAction(
+            context.runtimeState.actionSlots,
+            context.allyA,
+            1,
+            context.allyA,
+            cooldownCard,
+            context.enemy
+        );
+
+        BattleAutomaticTurnCycleResult first = RunAutomaticTurnCycle(context);
+        int cooldownAfterFirst = cooldownCard.currentCooldown;
+        BattleAutomaticTurnCycleResult second = RunAutomaticTurnCycle(context);
+        int cooldownAfterSecond = cooldownCard.currentCooldown;
+        BattleAutomaticTurnCycleResult third = RunAutomaticTurnCycle(context);
+        int cooldownAfterThird = cooldownCard.currentCooldown;
+
+        GameObject cardObject = new GameObject(
+            "Auto61RecoveredCardView",
+            typeof(RectTransform),
+            typeof(BattleCardUIView)
+        );
+        BattleCardUIView view = cardObject.GetComponent<BattleCardUIView>();
+        view.BindCard(
+            context.allyA,
+            cooldownCard,
+            BattleCardUIPreviewBuilder.Build(
+                context.allyA,
+                context.enemy,
+                cooldownCard
+            ),
+            null
+        );
+
+        bool passed =
+            assigned &&
+            first.advancedToNextTurn &&
+            second.advancedToNextTurn &&
+            third.advancedToNextTurn &&
+            cooldownAfterFirst == 2 &&
+            cooldownAfterSecond == 1 &&
+            cooldownAfterThird == 0 &&
+            view.CanBeginDrag;
+
+        Debug.Log("模式61 测试14 CD每回合只Tick一次并在归零后恢复拖拽：" + passed);
+        Destroy(cardObject);
+    }
+
+    void RunAutomaticTurnBattleEndedStopSubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "auto61_15",
+            30,
+            30,
+            1,
+            20,
+            8,
+            5,
+            1
+        );
+        BattleCardState finishingCard = CreateAutomaticTurnCooldownCard(
+            context.allyA,
+            "auto61_15_finish",
+            0
+        );
+        bool assigned = BattleActionSlotManager.AssignFreeAction(
+            context.runtimeState.actionSlots,
+            context.allyA,
+            1,
+            context.allyA,
+            finishingCard,
+            context.enemy
+        );
+        List<BattleActionSlot> slotsBefore = context.runtimeState.actionSlots;
+        List<BattleEnemyIntent> intentsBefore = context.runtimeState.intentQueue;
+
+        BattleAutomaticTurnCycleResult result = RunAutomaticTurnCycle(context);
+        bool passed =
+            assigned &&
+            result.battleEnded &&
+            result.executionPlanCompleted &&
+            context.runtimeState.IsBattleEnded &&
+            context.runtimeState.battleResult == BattleResult.Victory &&
+            context.runtimeState.currentTurn == 1 &&
+            object.ReferenceEquals(context.runtimeState.actionSlots, slotsBefore) &&
+            object.ReferenceEquals(context.runtimeState.intentQueue, intentsBefore) &&
+            context.runtimeState.currentPhase == "BattleEnded" &&
+            !BattleAutomaticTurnCycle.CanStart(context.runtimeState);
+
+        Debug.Log("模式61 测试15 BattleEnded后不创建下一回合且按钮语义禁用：" + passed);
+    }
+
+    void RunAutomaticTurnDuplicateCallProtectionSubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "auto61_16",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+        BattleExecutionPlan existingPlan = new BattleExecutionPlan();
+        context.runtimeState.SetExecutionPlan(existingPlan);
+        int turnBefore = context.runtimeState.currentTurn;
+        int hpBefore = context.allyA.currentHP;
+        int enemyUseCountBefore = context.enemyAttackCardState.currentUseCount;
+
+        BattleAutomaticTurnCycleResult existingPlanResult =
+            RunAutomaticTurnCycle(context);
+
+        bool existingPlanProtected =
+            !existingPlanResult.isSuccess &&
+            object.ReferenceEquals(
+                context.runtimeState.currentExecutionPlan,
+                existingPlan
+            ) &&
+            context.runtimeState.currentTurn == turnBefore &&
+            context.allyA.currentHP == hpBefore &&
+            context.enemyAttackCardState.currentUseCount == enemyUseCountBefore;
+
+        context.runtimeState.ClearExecutionPlan();
+        context.runtimeState.SetPhase("Completed");
+        BattleAutomaticTurnCycleResult wrongPhaseResult =
+            RunAutomaticTurnCycle(context);
+
+        bool passed =
+            existingPlanProtected &&
+            !wrongPhaseResult.isSuccess &&
+            context.runtimeState.currentTurn == turnBefore &&
+            context.allyA.currentHP == hpBefore &&
+            context.enemyAttackCardState.currentUseCount == enemyUseCountBefore;
+
+        Debug.Log("模式61 测试16 非Prepare或已有计划时拒绝重复执行：" + passed);
+    }
+
+    class AutomaticTurnTestContext
+    {
+        public CharacterData allyA;
+        public CharacterData allyB;
+        public CharacterData enemy;
+        public BattleRuntimeState runtimeState;
+        public BattleCardState enemyAttackCardState;
+    }
+
+    AutomaticTurnTestContext CreateAutomaticTurnTestContext(
+        string title,
+        int allyAHP,
+        int allyBHP,
+        int enemyHP,
+        int allyASpeed,
+        int allyBSpeed,
+        int enemySpeed,
+        int enemyPoint
+    )
+    {
+        AutomaticTurnTestContext context = new AutomaticTurnTestContext
+        {
+            allyA = new CharacterData(title + "_Ally01", 30, allyASpeed, allyASpeed),
+            allyB = new CharacterData(title + "_Ally02", 30, allyBSpeed, allyBSpeed),
+            enemy = new CharacterData(title + "_Enemy01", 50, enemySpeed, enemySpeed)
+        };
+
+        context.allyA.currentHP = allyAHP;
+        context.allyB.currentHP = allyBHP;
+        context.enemy.currentHP = enemyHP;
+
+        CardTestData enemyCardData = CreateFixedAttackCardData(
+            "enemy_atk_001",
+            "固定敌人基础攻击",
+            enemyPoint
+        );
+        enemyCardData.cooldown = 0;
+        context.enemyAttackCardState = BattleCardManager.CreateBattleCard(
+            context.enemy,
+            enemyCardData,
+            title + "_enemy_atk_001"
+        );
+
+        context.runtimeState = new BattleRuntimeState();
+        context.runtimeState.SetCharacters(
+            context.allyA,
+            context.allyB,
+            context.enemy
+        );
+
+        List<BattleActionSlot> actionSlots =
+            BattleActionSlotManager.CreateLivingPartyActionSlots(
+                context.allyA,
+                context.allyB,
+                2
+            );
+        context.runtimeState.SetActionSlots(actionSlots);
+        context.runtimeState.SetIntentQueue(
+            BattleAutomaticTurnCycle.CreateFixedEnemyIntentQueue(
+                context.enemy,
+                context.enemyAttackCardState,
+                context.allyA,
+                context.allyB,
+                actionSlots
+            )
+        );
+        context.runtimeState.SetPhase("Prepare");
+
+        return context;
+    }
+
+    BattleAutomaticTurnCycleResult RunAutomaticTurnCycle(
+        AutomaticTurnTestContext context
+    )
+    {
+        return BattleAutomaticTurnCycle.TryRun(
+            context.runtimeState,
+            context.allyA,
+            context.allyB,
+            context.enemy,
+            context.enemyAttackCardState
+        );
+    }
+
+    BattleCardState CreateAutomaticTurnCooldownCard(
+        CharacterData owner,
+        string instanceID,
+        int cooldown
+    )
+    {
+        CardTestData cardData = CreateFixedAttackCardData(
+            instanceID + "_data",
+            "模式61冷却攻击",
+            1
+        );
+        cardData.cooldown = cooldown;
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
+    }
+
+    BattleEnemyIntent GetSingleIntent(BattleRuntimeState runtimeState)
+    {
+        return runtimeState != null &&
+            runtimeState.intentQueue != null &&
+            runtimeState.intentQueue.Count == 1
+                ? runtimeState.intentQueue[0]
+                : null;
+    }
+
+    bool IsExpectedFixedEnemyIntent(
+        BattleEnemyIntent intent,
+        AutomaticTurnTestContext context
+    )
+    {
+        return intent != null &&
+            object.ReferenceEquals(intent.enemy, context.enemy) &&
+            object.ReferenceEquals(
+                intent.enemyCardState,
+                context.enemyAttackCardState
+            ) &&
+            intent.enemyCardState.cardData != null &&
+            intent.enemyCardState.cardData.cardID == "enemy_atk_001" &&
+            intent.intentOrder == 1 &&
+            intent.enemySlotIndex == 1 &&
+            intent.originalTargetSlotIndex == 1;
+    }
+
+    bool ContainsIntentOwner(
+        List<BattleEnemyIntent> intentQueue,
+        CharacterData enemyCharacter
+    )
+    {
+        if (intentQueue == null)
+        {
+            return false;
+        }
+
+        foreach (BattleEnemyIntent intent in intentQueue)
+        {
+            if (intent != null &&
+                object.ReferenceEquals(intent.enemy, enemyCharacter))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    void RunCardDragExactViewBindingSubTest()
+    {
+        BattleEndedTestContext context =
+            CreateBattleEndedTestContext("drag60_1", 30, 30, 50, 10, 8, 5);
+        CardTestData sharedCardData =
+            CreateFixedAttackCardData("drag60_1_shared_data", "模式60同定义攻击", 5);
+        BattleCardState cardA = BattleCardManager.CreateBattleCard(
+            context.allyA,
+            sharedCardData,
+            "drag60_1_same_card_a"
+        );
+        BattleCardState cardB = BattleCardManager.CreateBattleCard(
+            context.allyA,
+            sharedCardData,
+            "drag60_1_same_card_b"
+        );
+
+        GameObject viewObjectA = new GameObject(
+            "Drag60ViewA",
+            typeof(RectTransform),
+            typeof(BattleCardUIView)
+        );
+        GameObject viewObjectB = new GameObject(
+            "Drag60ViewB",
+            typeof(RectTransform),
+            typeof(BattleCardUIView)
+        );
+        BattleCardUIView viewA = viewObjectA.GetComponent<BattleCardUIView>();
+        BattleCardUIView viewB = viewObjectB.GetComponent<BattleCardUIView>();
+
+        viewA.BindCard(context.allyA, cardA, new BattleCardUIPreviewData(), null);
+        viewB.BindCard(context.allyA, cardB, new BattleCardUIPreviewData(), null);
+
+        bool exactInstances =
+            cardA.cardData.cardID == cardB.cardData.cardID &&
+            cardA.instanceID != cardB.instanceID &&
+            !object.ReferenceEquals(cardA, cardB) &&
+            object.ReferenceEquals(viewA.BoundOwner, context.allyA) &&
+            object.ReferenceEquals(viewB.BoundOwner, context.allyA) &&
+            object.ReferenceEquals(viewA.BoundCardState, cardA) &&
+            object.ReferenceEquals(viewB.BoundCardState, cardB);
+
+        Debug.Log("模式60 测试1 卡牌View精确绑定BattleCardState实例：" + exactInstances);
+        Destroy(viewObjectA);
+        Destroy(viewObjectB);
+    }
+
+    void RunCardDragHandFilterAndCancelSubTests()
+    {
+        BattleEndedTestContext context =
+            CreateBattleEndedTestContext("drag60_2", 30, 30, 50, 10, 8, 5);
+        List<BattleActionSlot> slots =
+            BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
+        context.runtimeState.SetActionSlots(slots);
+        context.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+
+        BattleCardState cardA =
+            CreateFixedAttackCardForCharacter(context.allyA, "drag60_2_card_a", 5);
+        BattleCardState cardB =
+            CreateFixedAttackCardForCharacter(context.allyA, "drag60_2_card_b", 5);
+        int battleCardCountBefore = context.allyA.battleCards.Count;
+
+        BattleActionAssignmentResult assignResult;
+        bool assigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            context.runtimeState,
+            context.allyA,
+            1,
+            context.allyA,
+            cardA,
+            context.enemy,
+            null,
+            out assignResult
+        );
+        List<BattleCardState> visibleAfterAssign = GetMode60VisibleCards(
+            context.runtimeState,
+            cardA,
+            cardB
+        );
+        bool hiddenByReference =
+            assigned &&
+            !visibleAfterAssign.Contains(cardA) &&
+            visibleAfterAssign.Contains(cardB) &&
+            context.allyA.battleCards.Contains(cardA) &&
+            context.allyA.battleCards.Count == battleCardCountBefore;
+
+        LogMode60Diagnostic(
+            "测试2 已安排卡隐藏",
+            context.runtimeState,
+            context.allyA,
+            1,
+            cardA,
+            "正式安排成功 expected=True actual=" + assigned,
+            "IsCardAssigned(cardA) expected=True actual=" +
+                BattleCardDropAssignmentRouter.IsCardAssigned(context.runtimeState, cardA),
+            "可显示手牌包含cardA expected=False actual=" + visibleAfterAssign.Contains(cardA),
+            "可显示手牌包含cardB expected=True actual=" + visibleAfterAssign.Contains(cardB),
+            "battleCards仍包含cardA expected=True actual=" +
+                context.allyA.battleCards.Contains(cardA),
+            "battleCards数量不变 expected=" + battleCardCountBefore +
+                " actual=" + context.allyA.battleCards.Count
+        );
+
+        BattleActionAssignmentResult cancelResult;
+        bool cancelled = BattleCardDropAssignmentRouter.TryCancelSelectedSlot(
+            context.runtimeState,
+            context.allyA,
+            1,
+            out cancelResult
+        );
+        List<BattleCardState> visibleAfterCancel = GetMode60VisibleCards(
+            context.runtimeState,
+            cardA,
+            cardB
+        );
+        bool restoredAfterCancel =
+            cancelled &&
+            visibleAfterCancel.Contains(cardA) &&
+            visibleAfterCancel.Contains(cardB);
+
+        Debug.Log("模式60 测试2 已安排具体卡牌实例从手牌过滤且未删除：" + hiddenByReference);
+        Debug.Log("模式60 测试3 取消安排后具体卡牌实例重新显示：" + restoredAfterCancel);
+    }
+
+    void RunCardDragAtomicReplacementSubTests()
+    {
+        BattleEndedTestContext validContext =
+            CreateBattleEndedTestContext("drag60_4", 30, 30, 50, 10, 8, 5);
+        List<BattleActionSlot> validSlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                validContext.allyA,
+                validContext.allyB,
+                2
+            );
+        validContext.runtimeState.SetActionSlots(validSlots);
+        validContext.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+
+        BattleCardState oldAttack =
+            CreateFixedAttackCardForCharacter(validContext.allyA, "drag60_4_old_attack", 5);
+        BattleCardState newDefense =
+            CreateTestDefenseCardForCharacter(validContext.allyA, "drag60_4_new_defense", 4, 1);
+        BattleActionAssignmentResult oldResult;
+        BattleActionAssignmentResult replaceResult;
+        BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            validContext.runtimeState,
+            validContext.allyA,
+            1,
+            validContext.allyA,
+            oldAttack,
+            validContext.enemy,
+            null,
+            out oldResult
+        );
+        bool replaced = BattleCardDropAssignmentRouter.TryAssignToSelf(
+            validContext.runtimeState,
+            validContext.allyA,
+            1,
+            validContext.allyA,
+            newDefense,
+            validContext.allyA,
+            out replaceResult
+        );
+        BattleActionSlot validSlot =
+            BattleActionSlotManager.GetSlot(validSlots, validContext.allyA, 1);
+        bool validHiddenChange =
+            replaced &&
+            object.ReferenceEquals(validSlot.cardState, newDefense) &&
+            !BattleCardDropAssignmentRouter.IsCardAssigned(
+                validContext.runtimeState,
+                oldAttack
+            ) &&
+            BattleCardDropAssignmentRouter.IsCardAssigned(
+                validContext.runtimeState,
+                newDefense
+            );
+
+        BattleEndedTestContext invalidContext =
+            CreateBattleEndedTestContext("drag60_5", 30, 30, 50, 10, 8, 5);
+        List<BattleActionSlot> invalidSlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                invalidContext.allyA,
+                invalidContext.allyB,
+                2
+            );
+        invalidContext.runtimeState.SetActionSlots(invalidSlots);
+        invalidContext.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+
+        BattleCardState retainedAttack =
+            CreateFixedAttackCardForCharacter(invalidContext.allyA, "drag60_5_old_attack", 5);
+        BattleCardState illegalAttack =
+            CreateFixedAttackCardForCharacter(invalidContext.allyA, "drag60_5_new_attack", 5);
+        BattleActionAssignmentResult retainedResult;
+        BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            invalidContext.runtimeState,
+            invalidContext.allyA,
+            1,
+            invalidContext.allyA,
+            retainedAttack,
+            invalidContext.enemy,
+            null,
+            out retainedResult
+        );
+        BattleActionSlot invalidSlot =
+            BattleActionSlotManager.GetSlot(invalidSlots, invalidContext.allyA, 1);
+        long oldSequence = invalidSlot.assignmentSequence;
+        BattleActionPlacementType oldPlacementType = invalidSlot.placementType;
+        BattleActionAssignmentResult illegalResult;
+        bool illegalReplaced = BattleCardDropAssignmentRouter.TryAssignToSelf(
+            invalidContext.runtimeState,
+            invalidContext.allyA,
+            1,
+            invalidContext.allyA,
+            illegalAttack,
+            invalidContext.allyA,
+            out illegalResult
+        );
+        List<BattleCardState> visibleAfterIllegalReplace = GetMode60VisibleCards(
+            invalidContext.runtimeState,
+            retainedAttack,
+            illegalAttack
+        );
+        bool invalidAtomic =
+            !illegalReplaced &&
+            object.ReferenceEquals(invalidSlot.cardState, retainedAttack) &&
+            invalidSlot.assignmentSequence == oldSequence &&
+            invalidSlot.placementType == oldPlacementType &&
+            !visibleAfterIllegalReplace.Contains(retainedAttack) &&
+            visibleAfterIllegalReplace.Contains(illegalAttack) &&
+            BattleCardDropAssignmentRouter.IsCardAssigned(
+                invalidContext.runtimeState,
+                retainedAttack
+            ) &&
+            !BattleCardDropAssignmentRouter.IsCardAssigned(
+                invalidContext.runtimeState,
+                illegalAttack
+            );
+
+        LogMode60Diagnostic(
+            "测试5 非法替换原子保持",
+            invalidContext.runtimeState,
+            invalidContext.allyA,
+            1,
+            illegalAttack,
+            "旧卡前置安排成功 expected=True actual=" +
+                (retainedResult != null && retainedResult.isSuccess),
+            "非法Self Attack返回失败 expected=False actual=" + illegalReplaced,
+            "槽位仍引用旧卡 expected=" + retainedAttack.instanceID +
+                " actual=" + (invalidSlot.cardState != null
+                    ? invalidSlot.cardState.instanceID
+                    : "null"),
+            "旧卡仍隐藏 expected=True actual=" +
+                BattleCardDropAssignmentRouter.IsCardAssigned(
+                    invalidContext.runtimeState,
+                    retainedAttack
+                ),
+            "新卡仍显示 expected=True actual=" +
+                visibleAfterIllegalReplace.Contains(illegalAttack),
+            "assignmentSequence保持 expected=" + oldSequence +
+                " actual=" + invalidSlot.assignmentSequence,
+            "placementType保持 expected=" + oldPlacementType +
+                " actual=" + invalidSlot.placementType
+        );
+
+        Debug.Log("模式60 测试4 合法原子替换后旧卡显示且新卡隐藏：" + validHiddenChange);
+        Debug.Log("模式60 测试5 非法替换保持旧卡安排与隐藏状态：" + invalidAtomic);
+    }
+
+    void RunCardDragEnemyRoutingSubTests()
+    {
+        BattleEndedTestContext exactContext =
+            CreateBattleEndedTestContext("drag60_6_exact", 30, 30, 50, 12, 4, 5);
+        List<BattleActionSlot> exactSlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                exactContext.allyA,
+                exactContext.allyB,
+                2
+            );
+        BattleEnemyIntent exactIntent = CreatePreparedAssignmentIntent(
+            exactContext,
+            "drag60_6_exact_intent",
+            exactContext.allyB,
+            2,
+            1,
+            1
+        );
+        exactContext.runtimeState.SetActionSlots(exactSlots);
+        exactContext.runtimeState.SetIntentQueue(
+            BattleEnemyIntentManager.CreateIntentQueue(exactIntent)
+        );
+        BattleCardState exactAttack =
+            CreateFixedAttackCardForCharacter(exactContext.allyA, "drag60_6_exact_attack", 5);
+        BattleActionAssignmentResult exactResult;
+        bool exactAssigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            exactContext.runtimeState,
+            exactContext.allyA,
+            1,
+            exactContext.allyA,
+            exactAttack,
+            exactContext.enemy,
+            exactIntent,
+            out exactResult
+        );
+
+        BattleEndedTestContext lowContext =
+            CreateBattleEndedTestContext("drag60_6_low", 30, 30, 50, 3, 4, 8);
+        List<BattleActionSlot> lowSlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                lowContext.allyA,
+                lowContext.allyB,
+                2
+            );
+        BattleEnemyIntent lowIntent = CreatePreparedAssignmentIntent(
+            lowContext,
+            "drag60_6_low_intent",
+            lowContext.allyB,
+            2,
+            1,
+            1
+        );
+        lowContext.runtimeState.SetActionSlots(lowSlots);
+        lowContext.runtimeState.SetIntentQueue(
+            BattleEnemyIntentManager.CreateIntentQueue(lowIntent)
+        );
+        BattleCardState lowAttack =
+            CreateFixedAttackCardForCharacter(lowContext.allyA, "drag60_6_low_attack", 5);
+        BattleActionAssignmentResult lowResult;
+        bool lowAssigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            lowContext.runtimeState,
+            lowContext.allyA,
+            1,
+            lowContext.allyA,
+            lowAttack,
+            lowContext.enemy,
+            lowIntent,
+            out lowResult
+        );
+
+        BattleEndedTestContext lowGuardContext =
+            CreateBattleEndedTestContext("drag60_6_low_guard", 30, 30, 50, 3, 4, 8);
+        List<BattleActionSlot> lowGuardSlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                lowGuardContext.allyA,
+                lowGuardContext.allyB,
+                2
+            );
+        BattleEnemyIntent lowGuardIntent = CreatePreparedAssignmentIntent(
+            lowGuardContext,
+            "drag60_6_low_guard_intent",
+            lowGuardContext.allyB,
+            2,
+            1,
+            1
+        );
+        lowGuardContext.runtimeState.SetActionSlots(lowGuardSlots);
+        lowGuardContext.runtimeState.SetIntentQueue(
+            BattleEnemyIntentManager.CreateIntentQueue(lowGuardIntent)
+        );
+        BattleCardState lowDefense = CreateTestDefenseCardForCharacter(
+            lowGuardContext.allyA,
+            "drag60_6_low_defense",
+            4,
+            1
+        );
+        BattleCardState lowDodge = CreateFixedDodgeCardForCharacter(
+            lowGuardContext.allyA,
+            "drag60_6_low_dodge",
+            4,
+            1
+        );
+        BattleActionAssignmentResult lowDefenseResult;
+        BattleActionAssignmentResult lowDodgeResult;
+        bool lowDefenseAssigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            lowGuardContext.runtimeState,
+            lowGuardContext.allyA,
+            1,
+            lowGuardContext.allyA,
+            lowDefense,
+            lowGuardContext.enemy,
+            lowGuardIntent,
+            out lowDefenseResult
+        );
+        bool lowDodgeAssigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            lowGuardContext.runtimeState,
+            lowGuardContext.allyA,
+            2,
+            lowGuardContext.allyA,
+            lowDodge,
+            lowGuardContext.enemy,
+            lowGuardIntent,
+            out lowDodgeResult
+        );
+        bool occupiedEnemyRoute =
+            exactAssigned &&
+            exactResult != null &&
+            exactResult.placementType == BattleActionPlacementType.ExactEnemyIntent &&
+            !exactResult.wasAutoDowngraded &&
+            lowAssigned &&
+            lowResult != null &&
+            lowResult.placementType == BattleActionPlacementType.SpecificEnemy &&
+            lowResult.wasAutoDowngraded &&
+            lowResult.effectiveSlotType == BattleActionSlotType.FreeAction &&
+            lowDefenseAssigned &&
+            lowDefenseResult != null &&
+            lowDefenseResult.wasAutoDowngraded &&
+            lowDefenseResult.placementType == BattleActionPlacementType.SpecificEnemy &&
+            lowDefenseResult.effectiveSlotType == BattleActionSlotType.EnemySpecificGuard &&
+            lowDodgeAssigned &&
+            lowDodgeResult != null &&
+            lowDodgeResult.wasAutoDowngraded &&
+            lowDodgeResult.placementType == BattleActionPlacementType.SpecificEnemy &&
+            lowDodgeResult.effectiveSlotType == BattleActionSlotType.EnemySpecificGuard;
+
+        LogMode60Diagnostic(
+            "测试6 敌方已有意图路由",
+            exactContext.runtimeState,
+            exactContext.allyA,
+            1,
+            exactAttack,
+            "合格响应安排成功 expected=True actual=" + exactAssigned,
+            "合格placement expected=ExactEnemyIntent actual=" +
+                (exactResult != null
+                    ? exactResult.placementType.ToString()
+                    : "null"),
+            "合格自动降级 expected=False actual=" +
+                (exactResult != null && exactResult.wasAutoDowngraded),
+            "低速响应安排成功 expected=True actual=" + lowAssigned,
+            "低速placement expected=SpecificEnemy actual=" +
+                (lowResult != null
+                    ? lowResult.placementType.ToString()
+                    : "null"),
+            "低速自动降级 expected=True actual=" +
+                (lowResult != null && lowResult.wasAutoDowngraded),
+            "低速Attack有效类型 expected=FreeAction actual=" +
+                (lowResult != null
+                    ? lowResult.effectiveSlotType.ToString()
+                    : "null"),
+            "低速Defense路由 expected=SpecificEnemy/EnemySpecificGuard/downgraded actual=" +
+                FormatMode60AssignmentResult(lowDefenseResult) + "/" +
+                (lowDefenseResult != null && lowDefenseResult.wasAutoDowngraded),
+            "低速Dodge路由 expected=SpecificEnemy/EnemySpecificGuard/downgraded actual=" +
+                FormatMode60AssignmentResult(lowDodgeResult) + "/" +
+                (lowDodgeResult != null && lowDodgeResult.wasAutoDowngraded)
+        );
+
+        BattleEndedTestContext emptyContext =
+            CreateBattleEndedTestContext("drag60_7", 30, 30, 50, 10, 8, 5);
+        List<BattleActionSlot> emptySlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                emptyContext.allyA,
+                emptyContext.allyB,
+                3
+            );
+        emptyContext.runtimeState.SetActionSlots(emptySlots);
+        emptyContext.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+        BattleCardState attack =
+            CreateFixedAttackCardForCharacter(emptyContext.allyA, "drag60_7_attack", 5);
+        BattleCardState defense =
+            CreateTestDefenseCardForCharacter(emptyContext.allyA, "drag60_7_defense", 4, 1);
+        BattleCardState dodge =
+            CreateFixedDodgeCardForCharacter(emptyContext.allyA, "drag60_7_dodge", 4, 1);
+        BattleActionAssignmentResult attackResult;
+        BattleActionAssignmentResult defenseResult;
+        BattleActionAssignmentResult dodgeResult;
+        bool attackAssigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            emptyContext.runtimeState,
+            emptyContext.allyA,
+            1,
+            emptyContext.allyA,
+            attack,
+            emptyContext.enemy,
+            null,
+            out attackResult
+        );
+        bool defenseAssigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            emptyContext.runtimeState,
+            emptyContext.allyA,
+            2,
+            emptyContext.allyA,
+            defense,
+            emptyContext.enemy,
+            null,
+            out defenseResult
+        );
+        bool dodgeAssigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            emptyContext.runtimeState,
+            emptyContext.allyA,
+            3,
+            emptyContext.allyA,
+            dodge,
+            emptyContext.enemy,
+            null,
+            out dodgeResult
+        );
+        bool emptyEnemyRoute =
+            attackAssigned &&
+            defenseAssigned &&
+            dodgeAssigned &&
+            attackResult != null &&
+            defenseResult != null &&
+            dodgeResult != null &&
+            attackResult.placementType == BattleActionPlacementType.SpecificEnemy &&
+            attackResult.effectiveSlotType == BattleActionSlotType.FreeAction &&
+            defenseResult.placementType == BattleActionPlacementType.SpecificEnemy &&
+            defenseResult.effectiveSlotType == BattleActionSlotType.EnemySpecificGuard &&
+            dodgeResult.placementType == BattleActionPlacementType.SpecificEnemy &&
+            dodgeResult.effectiveSlotType == BattleActionSlotType.EnemySpecificGuard;
+
+        LogMode60Diagnostic(
+            "测试7 敌方空槽三卡路由",
+            emptyContext.runtimeState,
+            emptyContext.allyA,
+            1,
+            attack,
+            "Attack安排成功 expected=True actual=" + attackAssigned,
+            "Attack placement/type expected=SpecificEnemy/FreeAction actual=" +
+                FormatMode60AssignmentResult(attackResult),
+            "Defense安排成功 expected=True actual=" + defenseAssigned,
+            "Defense placement/type expected=SpecificEnemy/EnemySpecificGuard actual=" +
+                FormatMode60AssignmentResult(defenseResult),
+            "Dodge安排成功 expected=True actual=" + dodgeAssigned,
+            "Dodge placement/type expected=SpecificEnemy/EnemySpecificGuard actual=" +
+                FormatMode60AssignmentResult(dodgeResult)
+        );
+
+        Debug.Log("模式60 测试6 敌方已有意图路由并保留正式自动降级：" + occupiedEnemyRoute);
+        Debug.Log("模式60 测试7 敌方空槽路由派生Attack与守备类型：" + emptyEnemyRoute);
+    }
+
+    void RunCardDragSelfAndValidationSubTests()
+    {
+        BattleEndedTestContext selfContext =
+            CreateBattleEndedTestContext("drag60_8", 30, 30, 50, 10, 8, 5);
+        List<BattleActionSlot> selfSlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                selfContext.allyA,
+                selfContext.allyB,
+                4
+            );
+        selfContext.runtimeState.SetActionSlots(selfSlots);
+        selfContext.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+        BattleCardState defense =
+            CreateTestDefenseCardForCharacter(selfContext.allyA, "drag60_8_defense", 4, 1);
+        BattleCardState dodge =
+            CreateFixedDodgeCardForCharacter(selfContext.allyA, "drag60_8_dodge", 4, 1);
+        BattleCardState ability =
+            CreateBattleEndedAbilityCard(selfContext.allyA, "drag60_8_ability", "Drag60Ability");
+        BattleCardState retainedDefense =
+            CreateTestDefenseCardForCharacter(selfContext.allyA, "drag60_8_retained", 4, 1);
+        BattleCardState illegalAttack =
+            CreateFixedAttackCardForCharacter(selfContext.allyA, "drag60_8_illegal_attack", 5);
+        BattleActionAssignmentResult defenseResult;
+        BattleActionAssignmentResult dodgeResult;
+        BattleActionAssignmentResult abilityResult;
+        BattleActionAssignmentResult retainedResult;
+        BattleActionAssignmentResult illegalResult;
+        bool defenseAssigned = BattleCardDropAssignmentRouter.TryAssignToSelf(
+            selfContext.runtimeState,
+            selfContext.allyA,
+            1,
+            selfContext.allyA,
+            defense,
+            selfContext.allyA,
+            out defenseResult
+        );
+        bool dodgeAssigned = BattleCardDropAssignmentRouter.TryAssignToSelf(
+            selfContext.runtimeState,
+            selfContext.allyA,
+            2,
+            selfContext.allyA,
+            dodge,
+            selfContext.allyA,
+            out dodgeResult
+        );
+        bool abilityAssigned = BattleCardDropAssignmentRouter.TryAssignToSelf(
+            selfContext.runtimeState,
+            selfContext.allyA,
+            3,
+            selfContext.allyA,
+            ability,
+            selfContext.allyA,
+            out abilityResult
+        );
+        BattleCardDropAssignmentRouter.TryAssignToSelf(
+            selfContext.runtimeState,
+            selfContext.allyA,
+            4,
+            selfContext.allyA,
+            retainedDefense,
+            selfContext.allyA,
+            out retainedResult
+        );
+        bool attackAssigned = BattleCardDropAssignmentRouter.TryAssignToSelf(
+            selfContext.runtimeState,
+            selfContext.allyA,
+            4,
+            selfContext.allyA,
+            illegalAttack,
+            selfContext.allyA,
+            out illegalResult
+        );
+        BattleActionSlot retainedSlot =
+            BattleActionSlotManager.GetSlot(selfSlots, selfContext.allyA, 4);
+        bool selfRoute =
+            defenseAssigned &&
+            dodgeAssigned &&
+            abilityAssigned &&
+            !attackAssigned &&
+            object.ReferenceEquals(retainedSlot.cardState, retainedDefense);
+
+        BattleEndedTestContext mismatchContext =
+            CreateBattleEndedTestContext("drag60_9", 30, 30, 50, 10, 8, 5);
+        List<BattleActionSlot> mismatchSlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                mismatchContext.allyA,
+                mismatchContext.allyB,
+                2
+            );
+        mismatchContext.runtimeState.SetActionSlots(mismatchSlots);
+        mismatchContext.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+        BattleCardState foreignCard =
+            CreateFixedAttackCardForCharacter(mismatchContext.allyB, "drag60_9_foreign", 5);
+        BattleActionAssignmentResult mismatchResult;
+        bool mismatchAssigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            mismatchContext.runtimeState,
+            mismatchContext.allyA,
+            1,
+            mismatchContext.allyB,
+            foreignCard,
+            mismatchContext.enemy,
+            null,
+            out mismatchResult
+        );
+        bool mismatchRejected =
+            !mismatchAssigned &&
+            BattleActionSlotManager.GetSlot(mismatchSlots, mismatchContext.allyA, 1).IsEmpty();
+
+        BattleCardState ownCard =
+            CreateFixedAttackCardForCharacter(mismatchContext.allyA, "drag60_10_own", 5);
+        BattleActionAssignmentResult noSlotResult;
+        bool noSlotAssigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            mismatchContext.runtimeState,
+            mismatchContext.allyA,
+            0,
+            mismatchContext.allyA,
+            ownCard,
+            mismatchContext.enemy,
+            null,
+            out noSlotResult
+        );
+        bool noSlotRejected =
+            !noSlotAssigned &&
+            BattleActionSlotManager.GetSlot(mismatchSlots, mismatchContext.allyA, 1).IsEmpty();
+
+        Debug.Log("模式60 测试8 Self允许Defense/Dodge/Ability且拒绝Attack原子替换：" + selfRoute);
+        Debug.Log("模式60 测试9 卡牌持有者与选中角色不匹配时拒绝：" + mismatchRejected);
+        Debug.Log("模式60 测试10 未选择正式槽位时拒绝且不改状态：" + noSlotRejected);
+    }
+
+    void RunCardDragUISlotAndRefreshSubTests()
+    {
+        bool enemySlotMapping =
+            BattleCardDropAssignmentRouter.EnemySlotIndexToUIIndex(2) == 1 &&
+            BattleCardDropAssignmentRouter.EnemySlotIndexToUIIndex(0) == -1 &&
+            BattleCardDropAssignmentRouter.EnemySlotIndexToUIIndex(3) == -1;
+
+        BattleEndedTestContext cancelContext =
+            CreateBattleEndedTestContext("drag60_12", 30, 30, 50, 10, 8, 5);
+        List<BattleActionSlot> cancelSlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                cancelContext.allyA,
+                cancelContext.allyB,
+                2
+            );
+        cancelContext.runtimeState.SetActionSlots(cancelSlots);
+        cancelContext.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+        BattleCardState slot1Card =
+            CreateFixedAttackCardForCharacter(cancelContext.allyA, "drag60_12_slot1", 5);
+        BattleCardState slot2Card =
+            CreateFixedAttackCardForCharacter(cancelContext.allyA, "drag60_12_slot2", 5);
+        BattleActionAssignmentResult slot1Result;
+        BattleActionAssignmentResult slot2Result;
+        BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            cancelContext.runtimeState,
+            cancelContext.allyA,
+            1,
+            cancelContext.allyA,
+            slot1Card,
+            cancelContext.enemy,
+            null,
+            out slot1Result
+        );
+        BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            cancelContext.runtimeState,
+            cancelContext.allyA,
+            2,
+            cancelContext.allyA,
+            slot2Card,
+            cancelContext.enemy,
+            null,
+            out slot2Result
+        );
+
+        GameObject slotObject = new GameObject("Drag60SlotView", typeof(RectTransform));
+        slotObject.SetActive(false);
+        UnityEngine.UI.Image testImage = slotObject.AddComponent<UnityEngine.UI.Image>();
+        BattleActionSlotUIView slotView = slotObject.AddComponent<BattleActionSlotUIView>();
+        Texture2D testTexture = new Texture2D(1, 1);
+        Sprite testSprite = Sprite.Create(
+            testTexture,
+            new Rect(0f, 0f, 1f, 1f),
+            new Vector2(0.5f, 0.5f)
+        );
+        slotView.ConfigureTestVisuals(testImage, testSprite);
+        slotObject.SetActive(true);
+        slotView.BindInteraction(cancelContext.allyA, 0, false, null);
+        BattleActionAssignmentResult cancelResult;
+        bool cancelled = BattleCardDropAssignmentRouter.TryCancelSelectedSlot(
+            cancelContext.runtimeState,
+            cancelContext.allyA,
+            slotView.FormalSlotIndex,
+            out cancelResult
+        );
+        bool slot1EmptyAfterCancel =
+            BattleActionSlotManager.GetSlot(cancelSlots, cancelContext.allyA, 1).IsEmpty();
+        bool slot2RetainedAfterCancel = object.ReferenceEquals(
+            BattleActionSlotManager.GetSlot(cancelSlots, cancelContext.allyA, 2).cardState,
+            slot2Card
+        );
+        bool formalIndexCancel =
+            slotView.UISlotIndex == 0 &&
+            slotView.FormalSlotIndex == 1 &&
+            cancelled &&
+            slot1EmptyAfterCancel &&
+            slot2RetainedAfterCancel;
+
+        LogMode60Diagnostic(
+            "测试12 UI索引与正式取消索引",
+            cancelContext.runtimeState,
+            cancelContext.allyA,
+            slotView.FormalSlotIndex,
+            slot1Card,
+            "UISlotIndex expected=0 actual=" + slotView.UISlotIndex,
+            "FormalSlotIndex expected=1 actual=" + slotView.FormalSlotIndex,
+            "取消返回成功 expected=True actual=" + cancelled,
+            "AllyA Slot_01为空 expected=True actual=" + slot1EmptyAfterCancel,
+            "AllyA Slot_02保留原卡 expected=True actual=" + slot2RetainedAfterCancel
+        );
+
+        slotView.SetState(BattleActionSlotUIState.AllyActionSet);
+        slotView.SetSelected(false);
+        bool assignedNotSelected =
+            slotView.CurrentBaseState == BattleActionSlotUIState.AllyActionSet &&
+            !slotView.IsSelected;
+        slotView.SetSelected(true);
+        bool clickedAssignedSlotSelected =
+            slotView.IsSelected &&
+            slotView.CurrentBaseState == BattleActionSlotUIState.AllyActionSet;
+
+        BattleCardState replacementSourceCard =
+            CreateFixedAttackCardForCharacter(cancelContext.allyA, "drag60_13_old", 5);
+        BattleCardState replacementDefense =
+            CreateTestDefenseCardForCharacter(cancelContext.allyA, "drag60_13_defense", 4, 1);
+        BattleActionAssignmentResult sourceAssignResult;
+        bool sourceAssigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            cancelContext.runtimeState,
+            cancelContext.allyA,
+            1,
+            cancelContext.allyA,
+            replacementSourceCard,
+            cancelContext.enemy,
+            null,
+            out sourceAssignResult
+        );
+
+        CharacterData selectedCharacter = cancelContext.allyA;
+        int selectedUISlotIndex = 0;
+        BattleActionSlotUIView selectedSlotView = slotView;
+        BattleActionAssignmentResult replacementResult;
+        bool replacementSucceeded = BattleCardDropAssignmentRouter.TryAssignToSelf(
+            cancelContext.runtimeState,
+            selectedCharacter,
+            selectedSlotView.FormalSlotIndex,
+            cancelContext.allyA,
+            replacementDefense,
+            cancelContext.allyA,
+            out replacementResult
+        );
+        bool pending = false;
+        bool pendingSuccess = false;
+        int refreshCount = 0;
+        BattleCardDragRefreshUtility.MarkPending(
+            ref pending,
+            ref pendingSuccess,
+            replacementSucceeded && replacementResult != null && replacementResult.isSuccess
+        );
+        bool delayedBeforeDragEnd =
+            sourceAssigned &&
+            replacementSucceeded &&
+            object.ReferenceEquals(
+                BattleActionSlotManager.GetSlot(cancelSlots, cancelContext.allyA, 1).cardState,
+                replacementDefense
+            ) &&
+            pending &&
+            pendingSuccess &&
+            refreshCount == 0 &&
+            slotObject != null &&
+            selectedSlotView.IsSelected;
+        int refreshCountBeforeDragEnd = refreshCount;
+
+        bool consumedAssignmentSucceeded;
+        if (BattleCardDragRefreshUtility.ConsumePending(
+                ref pending,
+                ref pendingSuccess,
+                out consumedAssignmentSucceeded))
+        {
+            if (consumedAssignmentSucceeded)
+            {
+                BattleCardDragRefreshUtility.ClearSelectedActionSlot(
+                    ref selectedCharacter,
+                    ref selectedUISlotIndex,
+                    ref selectedSlotView
+                );
+            }
+
+            refreshCount++;
+        }
+        slotView.SetState(BattleActionSlotUIState.AllyActionSet);
+        bool successfulReplacementClearsSelection =
+            sourceAssigned &&
+            replacementSucceeded &&
+            !slotView.IsSelected &&
+            slotView.CurrentBaseState == BattleActionSlotUIState.AllyActionSet &&
+            selectedCharacter == null &&
+            selectedUISlotIndex == -1 &&
+            selectedSlotView == null;
+        bool refreshedAfterDragEnd =
+            !pending &&
+            !pendingSuccess &&
+            refreshCount == 1 &&
+            successfulReplacementClearsSelection;
+
+        slotView.SetSelected(true);
+        selectedCharacter = cancelContext.allyA;
+        selectedUISlotIndex = 0;
+        selectedSlotView = slotView;
+        BattleCardState illegalReplacement =
+            CreateFixedAttackCardForCharacter(cancelContext.allyA, "drag60_13_illegal", 5);
+        BattleActionAssignmentResult illegalReplacementResult;
+        bool illegalReplacementSucceeded = BattleCardDropAssignmentRouter.TryAssignToSelf(
+            cancelContext.runtimeState,
+            selectedCharacter,
+            selectedSlotView.FormalSlotIndex,
+            cancelContext.allyA,
+            illegalReplacement,
+            cancelContext.allyA,
+            out illegalReplacementResult
+        );
+        bool failedPending = false;
+        bool failedPendingSuccess = false;
+        BattleCardDragRefreshUtility.MarkPending(
+            ref failedPending,
+            ref failedPendingSuccess,
+            illegalReplacementSucceeded &&
+                illegalReplacementResult != null &&
+                illegalReplacementResult.isSuccess
+        );
+        bool failedAssignmentSucceeded;
+        if (BattleCardDragRefreshUtility.ConsumePending(
+                ref failedPending,
+                ref failedPendingSuccess,
+                out failedAssignmentSucceeded))
+        {
+            if (failedAssignmentSucceeded)
+            {
+                BattleCardDragRefreshUtility.ClearSelectedActionSlot(
+                    ref selectedCharacter,
+                    ref selectedUISlotIndex,
+                    ref selectedSlotView
+                );
+            }
+        }
+        bool failedReplacementKeepsSelection =
+            !illegalReplacementSucceeded &&
+            slotView.IsSelected &&
+            object.ReferenceEquals(selectedCharacter, cancelContext.allyA) &&
+            selectedUISlotIndex == 0 &&
+            object.ReferenceEquals(selectedSlotView, slotView) &&
+            object.ReferenceEquals(
+                BattleActionSlotManager.GetSlot(cancelSlots, cancelContext.allyA, 1).cardState,
+                replacementDefense
+            );
+
+        LogMode60Diagnostic(
+            "测试14 Drop延迟刷新",
+            cancelContext.runtimeState,
+            cancelContext.allyA,
+            1,
+            replacementDefense,
+            "业务安排立即成功 expected=True actual=" + replacementSucceeded,
+            "DragEnd前pending expected=True actual=" + delayedBeforeDragEnd,
+            "DragEnd前刷新次数 expected=0 actual=" + refreshCountBeforeDragEnd,
+            "DragEnd后pending expected=False actual=" + pending,
+            "DragEnd后pendingSuccess expected=False actual=" + pendingSuccess,
+            "DragEnd后刷新次数 expected=1 actual=" + refreshCount,
+            "成功后逻辑选择清空 expected=True actual=" +
+                successfulReplacementClearsSelection,
+            "失败后逻辑选择保留 expected=True actual=" +
+                failedReplacementKeepsSelection
+        );
+
+        Debug.Log("模式60 测试11 enemySlotIndex 2映射到UI索引1：" + enemySlotMapping);
+        Debug.Log("模式60 测试12 UI索引0使用正式槽位1执行右键取消：" + formalIndexCancel);
+        Debug.Log(
+            "模式60 测试13 安排成功清除选择且失败保持选择：" +
+            (assignedNotSelected &&
+             clickedAssignedSlotSelected &&
+             successfulReplacementClearsSelection &&
+             failedReplacementKeepsSelection)
+        );
+        Debug.Log(
+            "模式60 测试14 Drop只标记待刷新且DragEnd后消费标记：" +
+            (delayedBeforeDragEnd && refreshedAfterDragEnd)
+        );
+        Destroy(slotObject);
+        Destroy(testSprite);
+        Destroy(testTexture);
+    }
+
+    List<BattleCardState> GetMode60VisibleCards(
+        BattleRuntimeState runtimeState,
+        params BattleCardState[] cardStates
+    )
+    {
+        List<BattleCardState> visibleCards = new List<BattleCardState>();
+        if (cardStates == null)
+        {
+            return visibleCards;
+        }
+
+        foreach (BattleCardState cardState in cardStates)
+        {
+            if (cardState != null &&
+                !BattleCardDropAssignmentRouter.IsCardAssigned(runtimeState, cardState))
+            {
+                visibleCards.Add(cardState);
+            }
+        }
+
+        return visibleCards;
+    }
+
+    void LogMode60Diagnostic(
+        string testName,
+        BattleRuntimeState runtimeState,
+        CharacterData owner,
+        int formalSlotIndex,
+        BattleCardState cardState,
+        params string[] checks
+    )
+    {
+        string checkText = checks != null && checks.Length > 0
+            ? string.Join("\n- ", checks)
+            : "无子条件";
+
+        Debug.Log(
+            "[模式60结构化诊断] " + testName + "\n" +
+            "Card instanceID: " +
+                (cardState != null ? cardState.instanceID : "null") + "\n" +
+            "Card owner: " +
+                (cardState != null && cardState.owner != null
+                    ? cardState.owner.characterName
+                    : "null") + "\n" +
+            "Selected owner: " +
+                (owner != null ? owner.characterName : "null") + "\n" +
+            "Formal slot: " + formalSlotIndex + "\n" +
+            "Phase: " +
+                (runtimeState != null ? runtimeState.currentPhase : "null") + "\n" +
+            "ExecutionPlan is null: " +
+                (runtimeState == null || runtimeState.currentExecutionPlan == null) + "\n" +
+            "Checks:\n- " + checkText + "\n" +
+            "Runtime slots:\n" + FormatMode60SlotSnapshot(runtimeState)
+        );
+    }
+
+    string FormatMode60AssignmentResult(BattleActionAssignmentResult result)
+    {
+        return result != null
+            ? result.placementType + "/" + result.effectiveSlotType
+            : "null";
+    }
+
+    string FormatMode60SlotSnapshot(BattleRuntimeState runtimeState)
+    {
+        if (runtimeState == null || runtimeState.actionSlots == null)
+        {
+            return "actionSlots=null";
+        }
+
+        string snapshot = "";
+        for (int i = 0; i < runtimeState.actionSlots.Count; i++)
+        {
+            BattleActionSlot slot = runtimeState.actionSlots[i];
+            if (slot == null)
+            {
+                snapshot += "[" + i + "] null\n";
+                continue;
+            }
+
+            snapshot +=
+                "[" + i + "] owner=" +
+                (slot.owner != null ? slot.owner.characterName : "null") +
+                ", formalSlot=" + slot.slotIndex +
+                ", card=" +
+                (slot.cardState != null ? slot.cardState.instanceID : "null") +
+                ", placement=" + slot.placementType +
+                ", type=" + slot.slotType +
+                ", sequence=" + slot.assignmentSequence +
+                "\n";
+        }
+
+        return snapshot;
     }
 
     void RunBattleExecutionOrderingAndGuardPriorityBasicTestSequence()
@@ -12602,9 +14698,13 @@ public class CardLoadTest : MonoBehaviour
     // CreateTestAttackCardForCharacter = 给测试角色创建一张基础攻击卡实例
     BattleCardState CreateTestAttackCardForCharacter(CharacterData owner, string instanceID)
     {
+        CardTestData cardData = clashSinTestCardData != null
+            ? clashSinTestCardData
+            : allyAAttackCardState.cardData;
+
         return BattleCardManager.CreateBattleCard(
             owner,
-            allyAAttackCardState.cardData,
+            cardData,
             instanceID
         );
     }
@@ -13110,6 +15210,10 @@ public class CardLoadTest : MonoBehaviour
         CardTestData allyACard = CardDataLoader.FindCardByID(cards, "atk_001");
         CardTestData allyBCard = CardDataLoader.FindCardByID(cards, "def_001");
         CardTestData allyAAbilitySinCard = CardDataLoader.FindCardByID(cards, "sin_ability_001");
+        clashSinTestCardData = CardDataLoader.FindCardByID(
+            cards,
+            BattleSimpleUIController.ClashSinTestCardID
+        );
 
         enemyAttackCardState = BattleCardManager.CreateBattleCard(
             enemy,

@@ -1278,6 +1278,7 @@ RectTransform:
   m_Children:
   - {fileID: 1346866423}
   - {fileID: 778318741}
+  - {fileID: 698946751}
   m_Father: {fileID: 793876057}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -1302,6 +1303,7 @@ MonoBehaviour:
   slot02View: {fileID: 863888061}
   hpView: {fileID: 778318742}
   buffGroupView: {fileID: 428574205}
+  selfActionDropZone: {fileID: 698946752}
   isEnemy: 0
 --- !u!1 &128017591
 GameObject:
@@ -2006,6 +2008,7 @@ MonoBehaviour:
   slot02View: {fileID: 240047820}
   hpView: {fileID: 1791191465}
   buffGroupView: {fileID: 449926648}
+  selfActionDropZone: {fileID: 0}
   isEnemy: 1
 --- !u!1 &213311371
 GameObject:
@@ -2336,6 +2339,94 @@ MonoBehaviour:
   slotEnemyActionSetSprite: {fileID: 0}
   slotSelectedSprite: {fileID: 21300000, guid: ba9700f2800314240b5a5643b5c38ff4, type: 3}
   defaultState: 3
+--- !u!1 &288989014
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 288989015}
+  - component: {fileID: 288989018}
+  - component: {fileID: 288989017}
+  - component: {fileID: 288989016}
+  m_Layer: 5
+  m_Name: SelfActionDropZone
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &288989015
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 288989014}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 763909641}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: -349.00928, y: 31.23259}
+  m_SizeDelta: {x: 146.4147, y: 348.312}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &288989016
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 288989014}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eebed56430835a54cb25ab62230b3eb9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleSelfActionDropZone
+--- !u!114 &288989017
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 288989014}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 0}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &288989018
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 288989014}
+  m_CullTransparentMesh: 1
 --- !u!1 &310020662
 GameObject:
   m_ObjectHideFlags: 0
@@ -4928,6 +5019,94 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 686495374}
   m_CullTransparentMesh: 1
+--- !u!1 &698946750
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 698946751}
+  - component: {fileID: 698946754}
+  - component: {fileID: 698946753}
+  - component: {fileID: 698946752}
+  m_Layer: 5
+  m_Name: SelfActionDropZone
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!224 &698946751
+RectTransform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 698946750}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 124996448}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+  m_AnchorMin: {x: 0.5, y: 0.5}
+  m_AnchorMax: {x: 0.5, y: 0.5}
+  m_AnchoredPosition: {x: -715, y: 31.232544}
+  m_SizeDelta: {x: 146.4147, y: 348.312}
+  m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &698946752
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 698946750}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: eebed56430835a54cb25ab62230b3eb9, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleSelfActionDropZone
+--- !u!114 &698946753
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 698946750}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
+  m_Material: {fileID: 0}
+  m_Color: {r: 1, g: 1, b: 1, a: 0}
+  m_RaycastTarget: 1
+  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
+  m_Maskable: 1
+  m_OnCullStateChanged:
+    m_PersistentCalls:
+      m_Calls: []
+  m_Sprite: {fileID: 0}
+  m_Type: 0
+  m_PreserveAspect: 0
+  m_FillCenter: 1
+  m_FillMethod: 4
+  m_FillAmount: 1
+  m_FillClockwise: 1
+  m_FillOrigin: 0
+  m_UseSpriteMesh: 0
+  m_PixelsPerUnitMultiplier: 1
+--- !u!222 &698946754
+CanvasRenderer:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 698946750}
+  m_CullTransparentMesh: 1
 --- !u!1 &703327015
 GameObject:
   m_ObjectHideFlags: 0
@@ -5362,6 +5541,7 @@ RectTransform:
   m_Children:
   - {fileID: 178325129}
   - {fileID: 1511736115}
+  - {fileID: 288989015}
   m_Father: {fileID: 793876057}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
@@ -5386,6 +5566,7 @@ MonoBehaviour:
   slot02View: {fileID: 867342239}
   hpView: {fileID: 1511736116}
   buffGroupView: {fileID: 1342317937}
+  selfActionDropZone: {fileID: 288989016}
   isEnemy: 0
 --- !u!1 &772755879
 GameObject:
@@ -5943,8 +6124,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleActionSlotUIView
   slotImage: {fileID: 863888059}
   slotEmptySprite: {fileID: 21300000, guid: eed3ad91692f0c94494b18ed52c23658, type: 3}
-  slotAllyActionSetSprite: {fileID: 0}
-  slotAllyTargetedNoActionSprite: {fileID: 0}
+  slotAllyActionSetSprite: {fileID: 21300000, guid: 328e69d1f51a36841887ec80fb68e15d, type: 3}
+  slotAllyTargetedNoActionSprite: {fileID: 21300000, guid: aa9268bf39cf30649b1c027d89108a19, type: 3}
   slotEnemyEmptySprite: {fileID: 0}
   slotEnemyActionSetSprite: {fileID: 0}
   slotSelectedSprite: {fileID: 21300000, guid: ba9700f2800314240b5a5643b5c38ff4, type: 3}
@@ -6039,8 +6220,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleActionSlotUIView
   slotImage: {fileID: 867342237}
   slotEmptySprite: {fileID: 21300000, guid: eed3ad91692f0c94494b18ed52c23658, type: 3}
-  slotAllyActionSetSprite: {fileID: 0}
-  slotAllyTargetedNoActionSprite: {fileID: 0}
+  slotAllyActionSetSprite: {fileID: 21300000, guid: 328e69d1f51a36841887ec80fb68e15d, type: 3}
+  slotAllyTargetedNoActionSprite: {fileID: 21300000, guid: aa9268bf39cf30649b1c027d89108a19, type: 3}
   slotEnemyEmptySprite: {fileID: 0}
   slotEnemyActionSetSprite: {fileID: 0}
   slotSelectedSprite: {fileID: 21300000, guid: ba9700f2800314240b5a5643b5c38ff4, type: 3}
@@ -9414,6 +9595,7 @@ MonoBehaviour:
   slot02View: {fileID: 892694287}
   hpView: {fileID: 889041723}
   buffGroupView: {fileID: 1311195621}
+  selfActionDropZone: {fileID: 0}
   isEnemy: 1
 --- !u!1 &1357235926
 GameObject:
@@ -10780,8 +10962,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleActionSlotUIView
   slotImage: {fileID: 1634498289}
   slotEmptySprite: {fileID: 21300000, guid: eed3ad91692f0c94494b18ed52c23658, type: 3}
-  slotAllyActionSetSprite: {fileID: 0}
-  slotAllyTargetedNoActionSprite: {fileID: 0}
+  slotAllyActionSetSprite: {fileID: 21300000, guid: 328e69d1f51a36841887ec80fb68e15d, type: 3}
+  slotAllyTargetedNoActionSprite: {fileID: 21300000, guid: aa9268bf39cf30649b1c027d89108a19, type: 3}
   slotEnemyEmptySprite: {fileID: 0}
   slotEnemyActionSetSprite: {fileID: 0}
   slotSelectedSprite: {fileID: 21300000, guid: ba9700f2800314240b5a5643b5c38ff4, type: 3}
@@ -11250,7 +11432,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleActionSlotUIView
   slotImage: {fileID: 1680973944}
   slotEmptySprite: {fileID: 21300000, guid: eed3ad91692f0c94494b18ed52c23658, type: 3}
-  slotAllyActionSetSprite: {fileID: 0}
+  slotAllyActionSetSprite: {fileID: 21300000, guid: 328e69d1f51a36841887ec80fb68e15d, type: 3}
   slotAllyTargetedNoActionSprite: {fileID: 21300000, guid: aa9268bf39cf30649b1c027d89108a19, type: 3}
   slotEnemyEmptySprite: {fileID: 0}
   slotEnemyActionSetSprite: {fileID: 0}

@@ -9,48 +9,11 @@
     "isClashable": true,
     "minPoint": 10,
     "maxPoint": 10,
-    "cooldown": 0,
+    "cooldown": 1,
     "guiltCost": 0,
-    "isSinCard": true,
-    "consumeOnUse": true,
-    "maxUseCount": 3,
-    "sinCardUseRule": "UseCount",
-    "sinCardCategory": "Clash",
-    "guiltGain": 2,
-    "useConditions": [
-      {
-        "conditionType": "BuffStackAtLeast",
-        "target": "Self",
-        "buffType": "Bullet",
-        "value": 3
-      }
-    ],
-    "damageFormula": "DoublePointDamage",
-    "effects": [
-      {
-        "trigger": "BeforeUse",
-        "effectType": "ApplyBuff",
-        "target": "Self",
-        "buffType": "Strength",
-        "value": 0,
-        "stack": 1,
-        "duration": 1
-      },
-      {
-        "trigger": "AfterDamage",
-        "effectType": "ApplyBuff",
-        "target": "Self",
-        "buffType": "DamageUp",
-        "value": 0,
-        "stack": 1,
-        "duration": 1,
-        "applyTiming": "Delayed",
-        "delayTurns": 1,
-        "applyTimes": 1,
-        "intervalTurns": 1
-      }
-
-    ]
+    "isSinCard": false,
+    "damageFormula": "PointAsDamage",
+    "effects": []
   },
   {
     "cardID": "sin_ability_001",

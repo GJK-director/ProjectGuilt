@@ -9,15 +9,88 @@ public class BattleCharacterStatusUIView : MonoBehaviour
     [SerializeField] private BattleActionSlotUIView slot02View;
     [SerializeField] private BattleHpUIView hpView;
     [SerializeField] private BattleBuffGroupUIView buffGroupView;
+    [SerializeField] private BattleSelfActionDropZone selfActionDropZone;
     [SerializeField] private bool isEnemy;
 
     private CharacterData boundCharacter;
-    private Action<BattleActionSlotUIView> slotClickHandler;
+    private Action<BattleActionSlotUIView> slotLeftClickHandler;
+    private Action<BattleActionSlotUIView> slotRightClickHandler;
+    private Action<BattleActionSlotUIView, BattleCardUIView> enemySlotDropHandler;
+    private Action<BattleSelfActionDropZone, BattleCardUIView> selfCardDropHandler;
 
     public void SetSlotClickHandler(Action<BattleActionSlotUIView> handler)
     {
-        slotClickHandler = handler;
+        slotLeftClickHandler = handler;
         RefreshSlotInteractionBindings();
+    }
+
+    public void SetAllySlotInteractionHandlers(
+        Action<BattleActionSlotUIView> onLeftClicked,
+        Action<BattleActionSlotUIView> onRightClicked
+    )
+    {
+        slotLeftClickHandler = onLeftClicked;
+        slotRightClickHandler = onRightClicked;
+        RefreshSlotInteractionBindings();
+    }
+
+    public void SetEnemySlotDropHandler(
+        Action<BattleActionSlotUIView, BattleCardUIView> onCardDropped
+    )
+    {
+        enemySlotDropHandler = onCardDropped;
+        RefreshSlotInteractionBindings();
+    }
+
+    public void SetSelfCardDropHandler(
+        Action<BattleSelfActionDropZone, BattleCardUIView> onCardDropped
+    )
+    {
+        selfCardDropHandler = onCardDropped;
+        RefreshSelfDropBinding();
+    }
+
+    public void ClearBoundEnemyIntents()
+    {
+        if (slot01View != null)
+        {
+            slot01View.SetBoundEnemyIntent(null);
+        }
+
+        if (slot02View != null)
+        {
+            slot02View.SetBoundEnemyIntent(null);
+        }
+    }
+
+    public void SetBoundEnemyIntent(int slotIndex, BattleEnemyIntent enemyIntent)
+    {
+        BattleActionSlotUIView slotView = GetSlotView(slotIndex);
+        if (slotView != null)
+        {
+            slotView.SetBoundEnemyIntent(enemyIntent);
+        }
+    }
+
+    public CharacterData BoundCharacter => boundCharacter;
+
+    public bool IsEnemyView => isEnemy;
+
+    private void RefreshSelfDropBinding()
+    {
+        if (selfActionDropZone != null)
+        {
+            selfActionDropZone.Bind(
+                isEnemy ? null : boundCharacter,
+                isEnemy ? null : selfCardDropHandler
+            );
+        }
+    }
+
+    private void RefreshAllInteractionBindings()
+    {
+        RefreshSlotInteractionBindings();
+        RefreshSelfDropBinding();
     }
 
     public void SetCharacter(CharacterData characterData)
@@ -43,7 +116,7 @@ public class BattleCharacterStatusUIView : MonoBehaviour
             buffGroupView.SetCharacter(characterData);
         }
 
-        RefreshSlotInteractionBindings();
+        RefreshAllInteractionBindings();
     }
 
     public void Clear()
@@ -77,7 +150,8 @@ public class BattleCharacterStatusUIView : MonoBehaviour
             slot02View.SetSelected(false);
         }
 
-        RefreshSlotInteractionBindings();
+        ClearBoundEnemyIntents();
+        RefreshAllInteractionBindings();
     }
 
     public void RefreshDefaultSlots()
@@ -127,12 +201,26 @@ public class BattleCharacterStatusUIView : MonoBehaviour
     {
         if (slot01View != null)
         {
-            slot01View.BindInteraction(boundCharacter, 0, isEnemy, slotClickHandler);
+            slot01View.BindInteraction(
+                boundCharacter,
+                0,
+                isEnemy,
+                isEnemy ? null : slotLeftClickHandler,
+                isEnemy ? null : slotRightClickHandler,
+                isEnemy ? enemySlotDropHandler : null
+            );
         }
 
         if (slot02View != null)
         {
-            slot02View.BindInteraction(boundCharacter, 1, isEnemy, slotClickHandler);
+            slot02View.BindInteraction(
+                boundCharacter,
+                1,
+                isEnemy,
+                isEnemy ? null : slotLeftClickHandler,
+                isEnemy ? null : slotRightClickHandler,
+                isEnemy ? enemySlotDropHandler : null
+            );
         }
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -9,6 +10,7 @@ public class BattleCardHandUIView : MonoBehaviour
     [SerializeField] private bool hideTemplateOnAwake = true;
 
     private readonly List<BattleCardUIView> spawnedCardViews = new List<BattleCardUIView>();
+    private Action<BattleCardUIView> cardDragEndedHandler;
 
     void Awake()
     {
@@ -21,6 +23,11 @@ public class BattleCardHandUIView : MonoBehaviour
         {
             cardViewPrefab.gameObject.SetActive(false);
         }
+    }
+
+    public void SetCardDragEndedHandler(Action<BattleCardUIView> handler)
+    {
+        cardDragEndedHandler = handler;
     }
 
     public void SetCards(
@@ -63,7 +70,7 @@ public class BattleCardHandUIView : MonoBehaviour
                 cardState
             );
 
-            view.SetCard(previewData);
+            view.BindCard(owner, cardState, previewData, cardDragEndedHandler);
             spawnedCardViews.Add(view);
         }
 
