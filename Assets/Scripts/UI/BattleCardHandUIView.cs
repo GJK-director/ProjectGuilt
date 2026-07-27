@@ -11,6 +11,7 @@ public class BattleCardHandUIView : MonoBehaviour
 
     private readonly List<BattleCardUIView> spawnedCardViews = new List<BattleCardUIView>();
     private Action<BattleCardUIView> cardDragEndedHandler;
+    private BattleCardSelectionController selectionController;
 
     void Awake()
     {
@@ -28,6 +29,18 @@ public class BattleCardHandUIView : MonoBehaviour
     public void SetCardDragEndedHandler(Action<BattleCardUIView> handler)
     {
         cardDragEndedHandler = handler;
+    }
+
+    public void SetSelectionController(
+        BattleCardSelectionController controller
+    )
+    {
+        if (!object.ReferenceEquals(selectionController, controller))
+        {
+            selectionController?.ClearSelection();
+        }
+
+        selectionController = controller;
     }
 
     public void SetCards(
@@ -70,7 +83,13 @@ public class BattleCardHandUIView : MonoBehaviour
                 cardState
             );
 
-            view.BindCard(owner, cardState, previewData, cardDragEndedHandler);
+            view.BindCard(
+                owner,
+                cardState,
+                previewData,
+                cardDragEndedHandler,
+                selectionController
+            );
             spawnedCardViews.Add(view);
         }
 
@@ -82,6 +101,8 @@ public class BattleCardHandUIView : MonoBehaviour
 
     public void ClearCards()
     {
+        selectionController?.ClearSelection();
+
         for (int i = spawnedCardViews.Count - 1; i >= 0; i--)
         {
             BattleCardUIView view = spawnedCardViews[i];

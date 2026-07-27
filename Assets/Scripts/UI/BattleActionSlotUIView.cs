@@ -119,7 +119,7 @@ public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler, IDrop
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (isEnemySlot || boundCharacter == null || eventData == null)
+        if (boundCharacter == null || eventData == null)
         {
             return;
         }
@@ -130,7 +130,8 @@ public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler, IDrop
             return;
         }
 
-        if (eventData.button == PointerEventData.InputButton.Right)
+        if (!isEnemySlot &&
+            eventData.button == PointerEventData.InputButton.Right)
         {
             rightClickHandler?.Invoke(this);
         }

@@ -4,17 +4,23 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public class BattleCardUIView : MonoBehaviour, IBeginDragHandler, IDragHandler, IEndDragHandler
+public class BattleCardUIView : MonoBehaviour,
+    IPointerEnterHandler,
+    IPointerExitHandler,
+    IPointerClickHandler
 {
     [SerializeField] private TMP_Text cardNameText;
     [SerializeField] private TMP_Text pointText;
     [SerializeField] private TMP_Text typeText;
     [SerializeField] private TMP_Text descriptionText;
     [SerializeField] private TMP_Text cooldownText;
+    [SerializeField] private BattleCardVisualStyle visualStyle;
+    [SerializeField] private BattleCardMotionUIView motionView;
 
     private CharacterData boundOwner;
     private BattleCardState boundCardState;
     private Action<BattleCardUIView> dragEndedHandler;
+    private BattleCardSelectionController selectionController;
 
     private RectTransform draggedRect;
     private Canvas rootCanvas;
@@ -30,16 +36,37 @@ public class BattleCardUIView : MonoBehaviour, IBeginDragHandler, IDragHandler, 
     private float originalAlpha;
     private bool originalInteractable;
     private bool originalBlocksRaycasts;
+    private Vector2 dragPointerOffset;
+    private bool hasDragPointerOffset;
     private bool isDragging;
+    private bool warnedMissingVisualStyle;
 
     public CharacterData BoundOwner => boundOwner;
     public BattleCardState BoundCardState => boundCardState;
     public bool IsDragging => isDragging;
-    public bool CanBeginDrag =>
+    public bool IsSelected =>
+        selectionController != null &&
+        selectionController.IsSelected(this);
+    public bool CanSelect =>
         boundOwner != null &&
+        boundOwner.battleCards != null &&
         boundCardState != null &&
         boundCardState.cardData != null &&
-        boundCardState.currentCooldown <= 0;
+        boundCardState.currentCooldown <= 0 &&
+        boundOwner.battleCards.Contains(boundCardState);
+    public bool CanBeginDrag =>
+        CanSelect;
+
+    void Awake()
+    {
+        if (motionView == null)
+        {
+            motionView = GetComponent<BattleCardMotionUIView>();
+        }
+
+        motionView?.EnsureInitialized();
+        HideLegacyCooldown();
+    }
 
     public void BindCard(
         CharacterData owner,
@@ -48,9 +75,22 @@ public class BattleCardUIView : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         Action<BattleCardUIView> onDragEnded
     )
     {
+        BindCard(owner, cardState, data, onDragEnded, null);
+    }
+
+    public void BindCard(
+        CharacterData owner,
+        BattleCardState cardState,
+        BattleCardUIPreviewData data,
+        Action<BattleCardUIView> onDragEnded,
+        BattleCardSelectionController cardSelectionController
+    )
+    {
         boundOwner = owner;
         boundCardState = cardState;
         dragEndedHandler = onDragEnded;
+        selectionController = cardSelectionController;
+        motionView?.EnsureInitialized();
         SetCard(data);
     }
 
@@ -66,21 +106,64 @@ public class BattleCardUIView : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         SetText(pointText, data.pointText);
         SetText(typeText, data.typeText);
         SetText(descriptionText, data.descriptionText);
-        SetText(cooldownText, data.cooldownText);
+        HideLegacyCooldown();
+
+        if (visualStyle != null)
+        {
+            visualStyle.Apply(data, typeText);
+        }
+        else if (!warnedMissingVisualStyle)
+        {
+            Debug.LogWarning(
+                "BattleCardUIView 缺少 BattleCardVisualStyle，已保留基础文字显示。",
+                this
+            );
+            warnedMissingVisualStyle = true;
+        }
     }
 
     public void SetEmpty()
     {
+        selectionController?.ClearSelectionIfSelected(this);
         boundOwner = null;
         boundCardState = null;
         dragEndedHandler = null;
+        selectionController = null;
         SetText(cardNameText, "空");
         SetText(pointText, "—");
         SetText(typeText, "");
         SetText(descriptionText, "");
-        SetText(cooldownText, "CD：—");
+        HideLegacyCooldown();
     }
 
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        motionView?.SetHovered(true);
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        motionView?.SetHovered(false);
+    }
+
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        if (eventData == null ||
+            eventData.button != PointerEventData.InputButton.Left ||
+            selectionController == null)
+        {
+            return;
+        }
+
+        selectionController.ToggleCardSelection(this);
+    }
+
+    public void SetSelected(bool selected)
+    {
+        motionView?.SetSelected(selected);
+    }
+
+    // 旧拖拽方法仅保留给历史测试和兼容调用，BattleCardUIView 不再注册拖拽接口。
     public void OnBeginDrag(PointerEventData eventData)
     {
         isDragging = false;
@@ -120,11 +203,32 @@ public class BattleCardUIView : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         originalBlocksRaycasts = canvasGroup.blocksRaycasts;
 
         isDragging = true;
+        hasDragPointerOffset = false;
         draggedRect.SetParent(rootCanvas.transform, true);
-        draggedRect.SetAsLastSibling();
+
+        RectTransform canvasRect = rootCanvas.transform as RectTransform;
+        if (canvasRect != null)
+        {
+            Vector3 worldPosition = draggedRect.position;
+            draggedRect.anchorMin = canvasRect.pivot;
+            draggedRect.anchorMax = canvasRect.pivot;
+            draggedRect.position = worldPosition;
+        }
+
         canvasGroup.alpha = 0.85f;
         canvasGroup.interactable = false;
         canvasGroup.blocksRaycasts = false;
+
+        Vector2 pointerAnchoredPosition;
+        if (TryGetPointerAnchoredPosition(
+                eventData,
+                out pointerAnchoredPosition))
+        {
+            dragPointerOffset =
+                draggedRect.anchoredPosition - pointerAnchoredPosition;
+            hasDragPointerOffset = true;
+        }
+
         UpdateDragPosition(eventData);
     }
 
@@ -155,37 +259,64 @@ public class BattleCardUIView : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         {
             RestoreDragVisual();
         }
+
+        selectionController?.ClearSelectionIfSelected(this);
+        motionView?.ResetVisualState();
     }
 
     private void UpdateDragPosition(PointerEventData eventData)
     {
-        RectTransform canvasRect = rootCanvas != null
-            ? rootCanvas.transform as RectTransform
-            : null;
-
-        if (canvasRect == null || draggedRect == null)
+        if (draggedRect == null)
         {
             return;
         }
 
-        Camera eventCamera = rootCanvas.renderMode == RenderMode.ScreenSpaceOverlay
+        Vector2 pointerAnchoredPosition;
+        if (!TryGetPointerAnchoredPosition(
+                eventData,
+                out pointerAnchoredPosition))
+        {
+            return;
+        }
+
+        Vector2 targetPosition = pointerAnchoredPosition +
+            (hasDragPointerOffset ? dragPointerOffset : Vector2.zero);
+
+        draggedRect.anchoredPosition = targetPosition;
+    }
+
+    private bool TryGetPointerAnchoredPosition(
+        PointerEventData eventData,
+        out Vector2 anchoredPosition
+    )
+    {
+        anchoredPosition = Vector2.zero;
+        RectTransform canvasRect = rootCanvas != null
+            ? rootCanvas.transform as RectTransform
+            : null;
+
+        if (canvasRect == null || eventData == null)
+        {
+            return false;
+        }
+
+        Camera eventCamera = rootCanvas.renderMode ==
+            RenderMode.ScreenSpaceOverlay
             ? null
             : eventData.pressEventCamera;
 
-        Vector2 localPoint;
-        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                canvasRect,
-                eventData.position,
-                eventCamera,
-                out localPoint))
-        {
-            draggedRect.position = canvasRect.TransformPoint(localPoint);
-        }
+        return RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            canvasRect,
+            eventData.position,
+            eventCamera,
+            out anchoredPosition
+        );
     }
 
     private void RestoreDragVisual()
     {
         isDragging = false;
+        hasDragPointerOffset = false;
 
         if (draggedRect != null && originalParent != null)
         {
@@ -215,5 +346,13 @@ public class BattleCardUIView : MonoBehaviour, IBeginDragHandler, IDragHandler, 
         }
 
         text.text = value;
+    }
+
+    void HideLegacyCooldown()
+    {
+        if (cooldownText != null)
+        {
+            cooldownText.gameObject.SetActive(false);
+        }
     }
 }

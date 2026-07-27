@@ -17,6 +17,9 @@ public static class BattleCardUIPreviewBuilder
         if (cardState == null)
         {
             data.cardName = "空";
+            data.cardType = "";
+            data.rarity = CardRarity.White;
+            data.isSinCard = false;
             data.pointText = "—";
             data.typeText = "";
             data.descriptionText = "";
@@ -37,6 +40,9 @@ public static class BattleCardUIPreviewBuilder
 
         if (cardData == null)
         {
+            data.cardType = "";
+            data.rarity = CardRarity.White;
+            data.isSinCard = false;
             data.pointText = "—";
             data.typeText = "";
             data.descriptionText = "卡牌数据为空";
@@ -46,6 +52,11 @@ public static class BattleCardUIPreviewBuilder
             return data;
         }
 
+        data.cardType = cardData.cardType;
+        data.rarity = string.IsNullOrEmpty(cardData.rarity)
+            ? CardRarity.White
+            : cardData.rarity;
+        data.isSinCard = cardData.isSinCard;
         data.typeText = BuildTypeText(cardData);
         data.cooldownText = BuildCooldownText(cardData);
         data.pointText = BuildPointText(owner, cardData);
@@ -65,44 +76,37 @@ public static class BattleCardUIPreviewBuilder
 
     static string BuildTypeText(CardTestData cardData)
     {
-        string typeText = GetCardTypeDisplayName(cardData.cardType);
-
-        if (cardData.isSinCard)
-        {
-            typeText = "罪卡 / " + typeText;
-        }
-
-        return typeText;
+        return GetCardTypeDisplayName(cardData.cardType);
     }
 
     static string GetCardTypeDisplayName(string cardType)
     {
         if (cardType == CardType.Attack)
         {
-            return "攻击";
+            return "攻";
         }
 
         if (cardType == CardType.Defense)
         {
-            return "防御";
+            return "防";
         }
 
         if (cardType == CardType.Dodge)
         {
-            return "闪避";
+            return "闪";
         }
 
         if (cardType == AbilityCardType)
         {
-            return "能力";
+            return "能";
         }
 
-        return string.IsNullOrEmpty(cardType) ? "未知" : cardType;
+        return "？";
     }
 
     static string BuildCooldownText(CardTestData cardData)
     {
-        return cardData.cooldown.ToString();
+        return BattleCardManager.GetBaseCooldown(cardData).ToString();
     }
 
     static string BuildPointText(CharacterData owner, CardTestData cardData)

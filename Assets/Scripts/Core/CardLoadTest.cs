@@ -46,7 +46,11 @@ public enum BattleTestMode
     BattleContinuousDodgeLifecycleBasic = 59,
     BattleCardDragAssignmentRoutingBasic = 60,
     BattleAutomaticTurnCycleAndCooldownDragBasic = 61,
-    BattleCardPrimaryPreviewContractBasic = 62
+    BattleCardPrimaryPreviewContractBasic = 62,
+    BattleCardCooldownFutureTurnSemanticsBasic = 63,
+    BattleCardPrimaryVisualPresetBasic = 64,
+    BattleCardHoverAndDragMotionBasic = 65,
+    BattleCardClickAssignBasic = 66
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -265,6 +269,30 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleCardPrimaryPreviewContractBasic)
         {
             RunBattleCardPrimaryPreviewContractBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardCooldownFutureTurnSemanticsBasic)
+        {
+            RunBattleCardCooldownFutureTurnSemanticsBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardPrimaryVisualPresetBasic)
+        {
+            RunBattleCardPrimaryVisualPresetBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardHoverAndDragMotionBasic)
+        {
+            RunBattleCardHoverAndDragMotionBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardClickAssignBasic)
+        {
+            RunBattleCardClickAssignBasicTestSequence();
             return;
         }
 
@@ -1678,11 +1706,11 @@ public class CardLoadTest : MonoBehaviour
         bool expectDodgeSuccess = expectedResultType == "DodgeSuccess";
         bool expectDodgeFailed = expectedResultType == "DodgeFailed";
         int expectedDodgeCooldown = expectDodgeFailed
-            ? dodgeCardState.cardData.cooldown
+            ? GetExpectedResolvedCooldown(dodgeCardState)
             : dodgeCooldownBefore;
         int expectedEnemyCooldown = expectTieLimit
             ? enemyCooldownBefore
-            : enemyAttackCardState.cardData.cooldown;
+            : GetExpectedResolvedCooldown(enemyAttackCardState);
         bool expectedSlotUsed = expectDodgeFailed;
 
         Debug.Log("执行后目标 HP：" + hpAfter + " / " + dodgeUser.maxHP);
@@ -1940,7 +1968,7 @@ public class CardLoadTest : MonoBehaviour
         bool expectPlayerCardResolved = expectedResultType == "PlayerWin";
         bool expectEnemyCardResolved = expectedResultType == "EnemyWin";
         int expectedPlayerCooldown = expectPlayerCardResolved && !playerAttackIsSinCard
-            ? playerAttack.cardData.cooldown
+            ? GetExpectedResolvedCooldown(playerAttack)
             : playerCooldownBefore;
         int expectedPlayerUseCount = expectPlayerCardResolved && playerAttackIsSinCard
             ? playerUseCountBefore + 1
@@ -1949,7 +1977,7 @@ public class CardLoadTest : MonoBehaviour
             ? playerGuiltBefore + playerAttack.cardData.guiltGain
             : playerGuiltBefore;
         int expectedEnemyCooldown = expectEnemyCardResolved
-            ? enemyAttack.cardData.cooldown
+            ? GetExpectedResolvedCooldown(enemyAttack)
             : enemyCooldownBefore;
 
         Debug.Log("预期 resultType：" + expectedResultType + "，实际可从 Executor Resolver 日志确认");
@@ -2065,7 +2093,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期 enemyCardUsed：True，实际是否符合：" + (result != null && result.enemyCardUsed));
         Debug.Log("预期 shouldCompleteItem：True，实际是否符合：" + (result != null && result.shouldCompleteItem));
         Debug.Log("预期 triggeredEventChain：True，实际是否符合：" + (result != null && result.triggeredEventChain));
-        Debug.Log("预期 Defense CD 进入配置 cooldown：" + (defenseCardState.currentCooldown == defenseCooldown));
+        Debug.Log("预期 Defense CD 进入运行时补偿值：" + (defenseCardState.currentCooldown == GetExpectedResolvedCooldown(defenseCardState)));
         Debug.Log("预期剩余攻击点数出现在 message：" + (result != null && result.message.Contains("剩余攻击点数")));
 
         if (expectedDamage == 0)
@@ -2177,7 +2205,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期防御者 HP 按最终伤害变化：" + (testDefender.currentHP == defenderHPBefore - expectedDamage));
         Debug.Log("预期 playerCardUsed：True，实际是否符合：" + (result != null && result.playerCardUsed));
         Debug.Log("预期 enemyCardUsed：False，实际是否符合：" + (result != null && !result.enemyCardUsed));
-        Debug.Log("预期 Defense 进入 CD：" + (defenseCardState.currentCooldown == defenseCard.cooldown));
+        Debug.Log("预期 Defense 进入运行时补偿CD：" + (defenseCardState.currentCooldown == GetExpectedResolvedCooldown(defenseCardState)));
         Debug.Log("预期敌人卡没有由该入口进入 CD：" + (enemyCardState.currentCooldown == enemyCooldownBefore));
         Debug.Log("预期敌人卡 UseCount 未变化：" + (enemyCardState.currentUseCount == enemyUseCountBefore));
         Debug.Log("预期 shouldCompleteItem：True，实际是否符合：" + (result != null && result.shouldCompleteItem));
@@ -3299,7 +3327,7 @@ public class CardLoadTest : MonoBehaviour
         BattleActionSlotManager.PrintSlotStates(actionSlots);
 
         Debug.Log("预期只触发 B槽位1：" + (BattleActionSlotManager.GetSlot(actionSlots, allyB, 1).isUsed && !BattleActionSlotManager.GetSlot(actionSlots, allyB, 2).isUsed));
-        Debug.Log("预期 B槽位1 Defense 进入 CD：" + (guard1.currentCooldown == guard1.cardData.cooldown));
+        Debug.Log("预期 B槽位1 Defense 进入 CD：" + (guard1.currentCooldown == GetExpectedResolvedCooldown(guard1)));
         Debug.Log("预期 B槽位2 Defense CD 不变：" + (guard2.currentCooldown == 0));
         Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
     }
@@ -3339,7 +3367,7 @@ public class CardLoadTest : MonoBehaviour
 
         Debug.Log("预期 B槽位1 保持已使用但未进入 CD：" + (BattleActionSlotManager.GetSlot(actionSlots, allyB, 1).isUsed && guard1.currentCooldown == 0));
         Debug.Log("预期 B槽位2 接管并 MarkUsed：" + BattleActionSlotManager.GetSlot(actionSlots, allyB, 2).isUsed);
-        Debug.Log("预期 B槽位2 Defense 进入 CD：" + (guard2.currentCooldown == guard2.cardData.cooldown));
+        Debug.Log("预期 B槽位2 Defense 进入 CD：" + (guard2.currentCooldown == GetExpectedResolvedCooldown(guard2)));
         Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
     }
 
@@ -3482,10 +3510,10 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期实际目标 HP 变化为 " + expectedDamage + "：" + (hpAfter == hpBefore - expectedDamage));
         Debug.Log("预期 Dodge槽位 isUsed = " + expectDodgeUsed + "：" + (dodgeSlot != null && dodgeSlot.isUsed == expectDodgeUsed));
         Debug.Log("预期后续 Defense槽位未使用：" + (defenseSlot != null && !defenseSlot.isUsed));
-        Debug.Log("预期 Dodge CD 变化符合分支：" + (expectDodgeUsed ? passiveDodge.currentCooldown == passiveDodge.cardData.cooldown : passiveDodge.currentCooldown == dodgeCooldownBefore));
+        Debug.Log("预期 Dodge CD 变化符合分支：" + (expectDodgeUsed ? passiveDodge.currentCooldown == GetExpectedResolvedCooldown(passiveDodge) : passiveDodge.currentCooldown == dodgeCooldownBefore));
         Debug.Log("预期 Defense CD 不变化：" + (followDefense.currentCooldown == defenseCooldownBefore));
         Debug.Log("预期 Defense UseCount / isConsumed 不变化：" + (followDefense.currentUseCount == defenseUseCountBefore && followDefense.isConsumed == defenseConsumedBefore));
-        Debug.Log("预期 Enemy Attack 状态符合分支：" + (expectEnemyAttackUsed ? enemyAttack.currentCooldown == enemyAttack.cardData.cooldown : enemyAttack.currentCooldown == enemyCooldownBefore));
+        Debug.Log("预期 Enemy Attack 状态符合分支：" + (expectEnemyAttackUsed ? enemyAttack.currentCooldown == GetExpectedResolvedCooldown(enemyAttack) : enemyAttack.currentCooldown == enemyCooldownBefore));
         Debug.Log("预期 Enemy Attack UseCount / isConsumed 符合分支：" + (enemyAttack.currentUseCount == enemyUseCountBefore && enemyAttack.isConsumed == enemyConsumedBefore));
         Debug.Log("预期 Dodge UseCount / guilt / isConsumed 符合分支：" + (passiveDodge.currentUseCount == dodgeUseCountBefore && allyB.currentGuilt == dodgeGuiltBefore && passiveDodge.isConsumed == dodgeConsumedBefore));
         Debug.Log("预期 Enemy guilt 不变化：" + (enemy.currentGuilt == enemyGuiltBefore));
@@ -3546,7 +3574,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期执行时跳过失效Dodge：" + (dodgeSlot != null && !dodgeSlot.isUsed));
         Debug.Log("预期Dodge不进新的CD或事件：" + (passiveDodge.currentCooldown == 1 && passiveDodge.currentUseCount == dodgeUseCountBefore && passiveDodge.isConsumed == dodgeConsumedBefore && allyB.currentGuilt == dodgeGuiltBefore));
         Debug.Log("预期槽位2 Defense正常接管：" + (defenseSlot != null && defenseSlot.isUsed));
-        Debug.Log("预期Defense正常进入CD：" + (followDefense.currentCooldown == followDefense.cardData.cooldown && followDefense.currentCooldown != defenseCooldownBefore));
+        Debug.Log("预期Defense正常进入CD：" + (followDefense.currentCooldown == GetExpectedResolvedCooldown(followDefense) && followDefense.currentCooldown != defenseCooldownBefore));
         Debug.Log("预期伤害结果符合Defense固定数据：" + (allyB.currentHP == hpBefore - 5));
         Debug.Log("Enemy item 是否完成：" + (item != null && item.isCompleted));
         Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
@@ -3741,8 +3769,8 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期Dodge槽位 isUsed = " + expectDodgeUsed + "：" + (dodgeSlot != null && dodgeSlot.isUsed == expectDodgeUsed));
         Debug.Log("预期Defense槽位未使用：" + (defenseSlot != null && !defenseSlot.isUsed));
         Debug.Log("预期主Attack失败后不Resolved：" + (responseAttack.currentCooldown == responseAttackCooldownBefore));
-        Debug.Log("预期Enemy Attack已使用：" + (enemyAttack.currentCooldown == enemyAttack.cardData.cooldown && enemyAttack.currentCooldown != enemyAttackCooldownBefore));
-        Debug.Log("预期Dodge使用状态符合分支：" + (expectDodgeUsed ? passiveDodge.currentCooldown == passiveDodge.cardData.cooldown : passiveDodge.currentCooldown == dodgeCooldownBefore));
+        Debug.Log("预期Enemy Attack已使用：" + (enemyAttack.currentCooldown == GetExpectedResolvedCooldown(enemyAttack) && enemyAttack.currentCooldown != enemyAttackCooldownBefore));
+        Debug.Log("预期Dodge使用状态符合分支：" + (expectDodgeUsed ? passiveDodge.currentCooldown == GetExpectedResolvedCooldown(passiveDodge) : passiveDodge.currentCooldown == dodgeCooldownBefore));
         Debug.Log("预期Defense CD / UseCount不变：" + (followDefense.currentCooldown == defenseCooldownBefore && followDefense.currentUseCount == defenseUseCountBefore));
         Debug.Log("预期主Attack UseCount前后：" + responseAttackUseCountBefore + " -> " + responseAttack.currentUseCount);
         Debug.Log("预期Enemy Attack UseCount前后：" + enemyAttackUseCountBefore + " -> " + enemyAttack.currentUseCount);
@@ -3753,7 +3781,7 @@ public class CardLoadTest : MonoBehaviour
         if (expectedResultType == "TieLimit")
         {
             Debug.Log("TieLimit 额外验证：主Attack槽位不MarkUsed且卡不Resolved：" + (responseSlot != null && !responseSlot.isUsed && responseAttack.currentCooldown == responseAttackCooldownBefore));
-            Debug.Log("TieLimit 额外验证：Enemy Attack已使用：" + (enemyAttack.currentCooldown == enemyAttack.cardData.cooldown));
+            Debug.Log("TieLimit 额外验证：Enemy Attack已使用：" + (enemyAttack.currentCooldown == GetExpectedResolvedCooldown(enemyAttack)));
             Debug.Log("TieLimit 额外验证：Dodge未使用：" + (passiveDodge.currentCooldown == dodgeCooldownBefore && passiveDodge.currentUseCount == dodgeUseCountBefore && passiveDodge.isConsumed == dodgeConsumedBefore));
             Debug.Log("TieLimit 额外验证：Dodge槽位未MarkUsed：" + (dodgeSlot != null && !dodgeSlot.isUsed));
             Debug.Log("TieLimit 额外验证：后续Defense未触发：" + (defenseSlot != null && !defenseSlot.isUsed && followDefense.currentCooldown == defenseCooldownBefore));
@@ -4861,7 +4889,7 @@ public class CardLoadTest : MonoBehaviour
             CountBuffStack(context.enemy, "ContractAEnemyClashLose") == 1 &&
             CountBuffStack(context.enemy, "ContractAEnemyResolved") == 0;
         bool stateRule =
-            playerAttack.currentCooldown == playerAttack.cardData.cooldown &&
+            playerAttack.currentCooldown == GetExpectedResolvedCooldown(playerAttack) &&
             enemyAttack.currentCooldown == 0;
         bool buffRule =
             CountBuffStack(context.allyA, "NextClashPointUp") == 0 &&
@@ -4903,7 +4931,7 @@ public class CardLoadTest : MonoBehaviour
             CountBuffStack(context.allyA, "ContractBPlayerClashLose") == 1 &&
             CountBuffStack(context.allyA, "ContractBPlayerResolved") == 0 &&
             CountBuffStack(context.enemy, "ContractBEnemyResolved") == 1;
-        bool stateRule = playerAttack.currentCooldown == 0 && enemyAttack.currentCooldown == enemyAttack.cardData.cooldown;
+        bool stateRule = playerAttack.currentCooldown == 0 && enemyAttack.currentCooldown == GetExpectedResolvedCooldown(enemyAttack);
         bool buffRule =
             CountBuffStack(context.allyA, "NextClashPointUp") == 0 &&
             CountBuffStack(context.allyA, "NextCardPointUp") == 2 &&
@@ -5461,6 +5489,2510 @@ public class CardLoadTest : MonoBehaviour
         RunPrimaryPreviewRealCardDataContractSubTests();
 
         Debug.Log("===== BattleCardPrimaryPreviewContractBasic 聚合测试结束 =====");
+    }
+
+    void RunBattleCardCooldownFutureTurnSemanticsBasicTestSequence()
+    {
+        Debug.Log("===== BattleCardCooldownFutureTurnSemanticsBasic 聚合测试开始 =====");
+
+        RunFutureTurnCooldownZeroSubTest();
+        RunFutureTurnCooldownOneSubTests();
+        RunFutureTurnCooldownTwoSubTest();
+        RunFutureTurnCooldownPreviewSubTests();
+        RunFutureTurnCooldownAutomaticCycleSubTest();
+        RunFutureTurnCooldownDodgeSubTests();
+        RunFutureTurnCooldownDefenseSubTests();
+        RunFutureTurnCooldownSinAndIdempotentSubTests();
+
+        Debug.Log("===== BattleCardCooldownFutureTurnSemanticsBasic 聚合测试结束 =====");
+    }
+
+    bool RunBattleCardPrimaryVisualPresetBasicTestSequence()
+    {
+        Debug.Log("===== BattleCardPrimaryVisualPresetBasic 聚合测试开始 =====");
+
+        GameObject cardObject = new GameObject(
+            "Visual64Card",
+            typeof(RectTransform)
+        );
+        BattleCardVisualStyle visualStyle =
+            cardObject.AddComponent<BattleCardVisualStyle>();
+        BattleCardUIView cardView = cardObject.AddComponent<BattleCardUIView>();
+
+        TMPro.TMP_Text cardNameText = CreateMode64Text(
+            cardObject.transform,
+            "name"
+        );
+        TMPro.TMP_Text pointText = CreateMode64Text(
+            cardObject.transform,
+            "dianshu"
+        );
+        TMPro.TMP_Text typeText = CreateMode64Text(
+            cardObject.transform,
+            "leibie"
+        );
+        TMPro.TMP_Text descriptionText = CreateMode64Text(
+            cardObject.transform,
+            "miaoshu"
+        );
+        TMPro.TMP_Text[] primaryTexts =
+        {
+            cardNameText,
+            descriptionText,
+            pointText,
+            typeText
+        };
+        float[] fontSizesBeforeBind =
+        {
+            cardNameText.fontSize,
+            descriptionText.fontSize,
+            pointText.fontSize,
+            typeText.fontSize
+        };
+        bool[] autoSizingBeforeBind =
+        {
+            cardNameText.enableAutoSizing,
+            descriptionText.enableAutoSizing,
+            pointText.enableAutoSizing,
+            typeText.enableAutoSizing
+        };
+        Vector3[] localScalesBeforeBind =
+        {
+            cardNameText.rectTransform.localScale,
+            descriptionText.rectTransform.localScale,
+            pointText.rectTransform.localScale,
+            typeText.rectTransform.localScale
+        };
+        UnityEngine.UI.Image frameImage = CreateMode64Image(
+            cardObject.transform,
+            "kamian"
+        );
+
+        Texture2D frameTexture = new Texture2D(6, 1);
+        Sprite whiteSprite = CreateMode64Sprite(frameTexture, 0, "White");
+        Sprite blueSprite = CreateMode64Sprite(frameTexture, 1, "Blue");
+        Sprite purpleSprite = CreateMode64Sprite(frameTexture, 2, "Purple");
+        Sprite goldSprite = CreateMode64Sprite(frameTexture, 3, "Gold");
+        Sprite sinSprite = CreateMode64Sprite(frameTexture, 4, "Sin");
+        Sprite fallbackSprite = CreateMode64Sprite(frameTexture, 5, "Fallback");
+
+        bool referencesConfigured =
+            SetMode64PrivateField(visualStyle, "frameImage", frameImage) &&
+            SetMode64PrivateField(
+                visualStyle,
+                "whiteFrameSprite",
+                whiteSprite
+            ) &&
+            SetMode64PrivateField(
+                visualStyle,
+                "blueFrameSprite",
+                blueSprite
+            ) &&
+            SetMode64PrivateField(
+                visualStyle,
+                "purpleFrameSprite",
+                purpleSprite
+            ) &&
+            SetMode64PrivateField(
+                visualStyle,
+                "goldFrameSprite",
+                goldSprite
+            ) &&
+            SetMode64PrivateField(
+                visualStyle,
+                "sinFrameSprite",
+                sinSprite
+            ) &&
+            SetMode64PrivateField(
+                visualStyle,
+                "fallbackFrameSprite",
+                fallbackSprite
+            ) &&
+            SetMode64PrivateField(cardView, "cardNameText", cardNameText) &&
+            SetMode64PrivateField(cardView, "pointText", pointText) &&
+            SetMode64PrivateField(cardView, "typeText", typeText) &&
+            SetMode64PrivateField(
+                cardView,
+                "descriptionText",
+                descriptionText
+            ) &&
+            SetMode64PrivateField(cardView, "visualStyle", visualStyle);
+
+        CharacterData owner = new CharacterData(
+            "visual64_owner",
+            30,
+            10,
+            10
+        );
+        CharacterData target = new CharacterData(
+            "visual64_target",
+            50,
+            5,
+            5
+        );
+        CardTestData cardData = CreatePrimaryPreviewAttackCardData(
+            "visual64_card",
+            "一级视觉测试卡",
+            10,
+            10,
+            1
+        );
+        cardData.description = "策划手写描述。";
+        BattleCardState cardState = BattleCardManager.CreateBattleCard(
+            owner,
+            cardData,
+            "visual64_card_copy"
+        );
+
+        BattleCardUIPreviewData attackPreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        cardView.BindCard(owner, cardState, attackPreview, null);
+        Material firstOutlineMaterial = visualStyle.AppliedOutlineMaterial;
+        bool test1 =
+            referencesConfigured &&
+            attackPreview.typeText == "攻" &&
+            typeText.text == "攻" &&
+            AreMode64ColorsEqual(
+                typeText.color,
+                visualStyle.GetTypeColor(CardType.Attack)
+            ) &&
+            HasMode64BlackOutline(firstOutlineMaterial);
+
+        cardData.cardType = CardType.Defense;
+        cardData.isClashable = false;
+        cardData.damageFormula = "";
+        cardData.defenseFormula = "PointAsDefense";
+        BattleCardUIPreviewData defensePreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        cardView.SetCard(defensePreview);
+        bool test2 =
+            defensePreview.typeText == "防" &&
+            typeText.text == "防" &&
+            AreMode64ColorsEqual(
+                typeText.color,
+                visualStyle.GetTypeColor(CardType.Defense)
+            );
+
+        cardData.cardType = CardType.Dodge;
+        cardData.isClashable = true;
+        cardData.defenseFormula = "";
+        BattleCardUIPreviewData dodgePreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        cardView.SetCard(dodgePreview);
+        bool test3 =
+            dodgePreview.typeText == "闪" &&
+            typeText.text == "闪" &&
+            AreMode64ColorsEqual(
+                typeText.color,
+                visualStyle.GetTypeColor(CardType.Dodge)
+            );
+
+        cardData.cardType = "Ability";
+        BattleCardUIPreviewData abilityPreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        cardView.SetCard(abilityPreview);
+        bool abilitySupported =
+            abilityPreview.typeText == "能" &&
+            typeText.text == "能" &&
+            AreMode64ColorsEqual(
+                typeText.color,
+                visualStyle.GetTypeColor("Ability")
+            );
+
+        cardData.cardType = "UnknownVisualType";
+        BattleCardUIPreviewData fallbackTypePreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        cardView.SetCard(fallbackTypePreview);
+        bool test4 =
+            abilitySupported &&
+            fallbackTypePreview.typeText == "？" &&
+            typeText.text == visualStyle.GetTypeLabel("UnknownVisualType") &&
+            AreMode64ColorsEqual(
+                typeText.color,
+                visualStyle.GetTypeColor("UnknownVisualType")
+            );
+
+        cardData.cardType = CardType.Attack;
+        cardData.isClashable = true;
+        cardData.damageFormula = "PointAsDamage";
+        cardData.isSinCard = false;
+
+        cardData.rarity = CardRarity.White;
+        cardView.SetCard(
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState)
+        );
+        bool whiteSelected =
+            object.ReferenceEquals(frameImage.sprite, whiteSprite);
+
+        cardData.rarity = CardRarity.Blue;
+        cardView.SetCard(
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState)
+        );
+        bool blueSelected =
+            object.ReferenceEquals(frameImage.sprite, blueSprite);
+
+        cardData.rarity = CardRarity.Purple;
+        cardView.SetCard(
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState)
+        );
+        bool purpleSelected =
+            object.ReferenceEquals(frameImage.sprite, purpleSprite);
+
+        cardData.rarity = CardRarity.Gold;
+        cardView.SetCard(
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState)
+        );
+        bool goldSelected =
+            object.ReferenceEquals(frameImage.sprite, goldSprite);
+        bool test5 =
+            whiteSelected &&
+            blueSelected &&
+            purpleSelected &&
+            goldSelected &&
+            !frameImage.raycastTarget;
+
+        cardData.isSinCard = true;
+        cardData.rarity = CardRarity.Gold;
+        cardView.SetCard(
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState)
+        );
+        bool test6 = object.ReferenceEquals(frameImage.sprite, sinSprite);
+
+        cardData.isSinCard = false;
+        cardData.rarity = CardRarity.Blue;
+        bool blueSpriteCleared = SetMode64PrivateField(
+            visualStyle,
+            "blueFrameSprite",
+            null
+        );
+        cardView.SetCard(
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState)
+        );
+        bool missingSpriteFallback =
+            object.ReferenceEquals(frameImage.sprite, fallbackSprite);
+
+        cardData.rarity = "InvalidQuality";
+        cardView.SetCard(
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState)
+        );
+        bool invalidQualityFallback =
+            object.ReferenceEquals(frameImage.sprite, fallbackSprite);
+        bool test7 =
+            blueSpriteCleared &&
+            missingSpriteFallback &&
+            invalidQualityFallback;
+
+        cardData.rarity = null;
+        BattleCardUIPreviewData missingRarityPreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        cardView.SetCard(missingRarityPreview);
+        bool test8 =
+            missingRarityPreview.rarity == CardRarity.White &&
+            object.ReferenceEquals(frameImage.sprite, whiteSprite);
+
+        bool cooldownReferenceInitiallyNull =
+            GetMode64PrivateField<TMPro.TMP_Text>(
+                cardView,
+                "cooldownText"
+            ) == null;
+        cardData.cooldown = 1;
+        cardState.currentCooldown = 1;
+        BattleCardUIPreviewData cooldownPreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        cardView.BindCard(owner, cardState, cooldownPreview, null);
+        bool cooldownDataAndGatePreserved =
+            cooldownPreview.cooldownText == "1" &&
+            cardData.cooldown == 1 &&
+            cardState.currentCooldown == 1 &&
+            !cardView.CanBeginDrag;
+
+        TMPro.TMP_Text legacyCooldownText = CreateMode64Text(
+            cardObject.transform,
+            "CD"
+        );
+        bool legacyCooldownConfigured = SetMode64PrivateField(
+            cardView,
+            "cooldownText",
+            legacyCooldownText
+        );
+        legacyCooldownText.gameObject.SetActive(true);
+        cardView.SetCard(cooldownPreview);
+        bool test9 =
+            cooldownReferenceInitiallyNull &&
+            cooldownDataAndGatePreserved &&
+            legacyCooldownConfigured &&
+            !legacyCooldownText.gameObject.activeSelf;
+
+        cardState.currentCooldown = 0;
+        cardData.minPoint = 10;
+        cardData.maxPoint = 10;
+        BattleCardUIPreviewData rangePreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        cardView.SetCard(rangePreview);
+        bool test10 =
+            rangePreview.pointText == "10-10" &&
+            pointText.text == "10-10";
+
+        cardData.description = "使用前获得一层【强壮】。";
+        BattleCardUIPreviewData descriptionPreview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        cardView.SetCard(descriptionPreview);
+        bool test11 =
+            descriptionPreview.descriptionText == cardData.description &&
+            descriptionText.text == cardData.description &&
+            !descriptionText.text.Contains("CD");
+
+        cardView.SetCard(attackPreview);
+        Material repeatedBindMaterial = visualStyle.AppliedOutlineMaterial;
+        cardView.SetCard(attackPreview);
+        bool test12 =
+            firstOutlineMaterial != null &&
+            object.ReferenceEquals(
+                firstOutlineMaterial,
+                repeatedBindMaterial
+            ) &&
+            object.ReferenceEquals(
+                repeatedBindMaterial,
+                visualStyle.AppliedOutlineMaterial
+            );
+
+        bool test13 = RunMode64HandFilterAndAssignmentRegressionSubTest();
+        bool test14 = AreMode64TextSettingsUnchanged(
+            primaryTexts,
+            fontSizesBeforeBind,
+            autoSizingBeforeBind,
+            localScalesBeforeBind
+        );
+
+        Debug.Log("模式64 测试1 Attack显示攻、使用配置颜色并应用黑色描边：" + test1);
+        Debug.Log("模式64 测试2 Defense显示防并使用配置颜色：" + test2);
+        Debug.Log("模式64 测试3 Dodge显示闪并使用配置颜色：" + test3);
+        Debug.Log("模式64 测试4 Ability和未知类型短字回退安全：" + test4);
+        Debug.Log("模式64 测试5 White/Blue/Purple/Gold选择正确底图：" + test5);
+        Debug.Log("模式64 测试6 罪卡无条件覆盖为Sin底图：" + test6);
+        Debug.Log("模式64 测试7 缺少品质图或非法品质时使用fallback：" + test7);
+        Debug.Log("模式64 测试8 旧数据未填写rarity时默认White：" + test8);
+        Debug.Log("模式64 测试9 一级CD引用可空、旧对象隐藏且拖拽门禁保留：" + test9);
+        Debug.Log("模式64 测试10 固定点数完整显示10-10：" + test10);
+        Debug.Log("模式64 测试11 描述保持策划原文且不拼接CD：" + test11);
+        Debug.Log("模式64 测试12 重复Bind复用同一TMP材质实例：" + test12);
+        Debug.Log("模式64 测试13 普通卡/罪卡手牌过滤与指派逻辑保持：" + test13);
+        Debug.Log("模式64 测试14 重复Bind不改变四个TMP字号、Auto Size或局部缩放：" + test14);
+
+        Destroy(cardObject);
+        Destroy(whiteSprite);
+        Destroy(blueSprite);
+        Destroy(purpleSprite);
+        Destroy(goldSprite);
+        Destroy(sinSprite);
+        Destroy(fallbackSprite);
+        Destroy(frameTexture);
+
+        Debug.Log("===== BattleCardPrimaryVisualPresetBasic 聚合测试结束 =====");
+        return test1 &&
+            test2 &&
+            test3 &&
+            test4 &&
+            test5 &&
+            test6 &&
+            test7 &&
+            test8 &&
+            test9 &&
+            test10 &&
+            test11 &&
+            test12 &&
+            test13 &&
+            test14;
+    }
+
+    void RunBattleCardHoverAndDragMotionBasicTestSequence()
+    {
+        Debug.Log("===== BattleCardHoverAndDragMotionBasic 聚合测试开始 =====");
+
+        GameObject rootCanvasObject = new GameObject(
+            "Motion65RootCanvas",
+            typeof(RectTransform),
+            typeof(Canvas),
+            typeof(UnityEngine.UI.GraphicRaycaster)
+        );
+        rootCanvasObject.GetComponent<Canvas>().renderMode =
+            RenderMode.ScreenSpaceOverlay;
+
+        GameObject cardObject = new GameObject(
+            "Motion65Card",
+            typeof(RectTransform),
+            typeof(Canvas),
+            typeof(UnityEngine.UI.GraphicRaycaster)
+        );
+        cardObject.transform.SetParent(rootCanvasObject.transform, false);
+        cardObject.SetActive(false);
+
+        RectTransform cardRoot = cardObject.GetComponent<RectTransform>();
+        cardRoot.anchoredPosition = new Vector2(30f, 40f);
+        cardRoot.localScale = new Vector3(0.8f, 0.9f, 1f);
+        cardRoot.localRotation = Quaternion.Euler(0f, 0f, -6f);
+
+        GameObject visualObject = new GameObject(
+            "VisualRoot",
+            typeof(RectTransform)
+        );
+        visualObject.transform.SetParent(cardObject.transform, false);
+        RectTransform visualRoot =
+            visualObject.GetComponent<RectTransform>();
+        visualRoot.anchoredPosition = new Vector2(5f, 7f);
+        visualRoot.localScale = new Vector3(0.7f, 0.8f, 1f);
+        visualRoot.localRotation = Quaternion.Euler(0f, 0f, -9f);
+
+        Canvas sortingCanvas = cardObject.GetComponent<Canvas>();
+        sortingCanvas.overrideSorting = false;
+        sortingCanvas.sortingOrder = 3;
+        BattleCardMotionUIView motionView =
+            cardObject.AddComponent<BattleCardMotionUIView>();
+        BattleCardVisualStyle visualStyle =
+            cardObject.AddComponent<BattleCardVisualStyle>();
+        BattleCardUIView cardView =
+            cardObject.AddComponent<BattleCardUIView>();
+        TMPro.TMP_Text typeText = CreateMode64Text(
+            visualRoot,
+            "Motion65TypeText"
+        );
+        UnityEngine.UI.Image frameImage = CreateMode64Image(
+            visualRoot,
+            "Motion65Frame"
+        );
+
+        bool referencesConfigured =
+            SetMode64PrivateField(motionView, "cardRoot", cardRoot) &&
+            SetMode64PrivateField(motionView, "visualRoot", visualRoot) &&
+            SetMode64PrivateField(
+                motionView,
+                "sortingCanvas",
+                sortingCanvas
+            ) &&
+            SetMode64PrivateField(motionView, "hoverLiftY", 100f) &&
+            SetMode64PrivateField(motionView, "hoverDuration", 0.12f) &&
+            SetMode64PrivateField(motionView, "returnDuration", 0.10f) &&
+            SetMode64PrivateField(
+                motionView,
+                "normalSortingOrder",
+                3
+            ) &&
+            SetMode64PrivateField(
+                motionView,
+                "hoverSortingOrder",
+                10
+            ) &&
+            SetMode64PrivateField(
+                motionView,
+                "selectedSortingOrder",
+                20
+            ) &&
+            SetMode64PrivateField(cardView, "motionView", motionView) &&
+            SetMode64PrivateField(cardView, "typeText", typeText) &&
+            SetMode64PrivateField(
+                cardView,
+                "visualStyle",
+                visualStyle
+            ) &&
+            SetMode64PrivateField(
+                visualStyle,
+                "frameImage",
+                frameImage
+            );
+
+        cardObject.SetActive(true);
+
+        CharacterData owner = new CharacterData(
+            "motion65_owner",
+            30,
+            10,
+            10
+        );
+        CharacterData target = new CharacterData(
+            "motion65_target",
+            50,
+            5,
+            5
+        );
+        CardTestData cardData = CreatePrimaryPreviewAttackCardData(
+            "motion65_card_data",
+            "模式65点击卡",
+            5,
+            5,
+            1
+        );
+        BattleCardState cardState = BattleCardManager.CreateBattleCard(
+            owner,
+            cardData,
+            "motion65_card"
+        );
+        BattleCardSelectionController selectionController =
+            new BattleCardSelectionController();
+        BattleCardUIPreviewData preview =
+            BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+        cardView.BindCard(
+            owner,
+            cardState,
+            preview,
+            null,
+            selectionController
+        );
+
+        Vector2 rootPositionBeforeHover = cardRoot.anchoredPosition;
+        Vector3 rootScaleBeforeHover = cardRoot.localScale;
+        Quaternion rootRotationBeforeHover = cardRoot.localRotation;
+        bool cachedOriginalOverrideSorting =
+            sortingCanvas.overrideSorting;
+        int cachedOriginalSortingOrder =
+            sortingCanvas.sortingOrder;
+        bool test9InitialCanvasCacheMatches =
+            motionView.HasCachedOriginalCanvasState &&
+            motionView.OriginalOverrideSorting ==
+                cachedOriginalOverrideSorting &&
+            motionView.OriginalSortingOrder ==
+                cachedOriginalSortingOrder;
+        cardView.OnPointerEnter(null);
+        motionView.CompleteCurrentTransitionImmediately();
+        bool test9CacheStableAfterHover =
+            sortingCanvas.overrideSorting &&
+            motionView.OriginalOverrideSorting ==
+                cachedOriginalOverrideSorting &&
+            motionView.OriginalSortingOrder ==
+                cachedOriginalSortingOrder;
+        bool test1 =
+            referencesConfigured &&
+            motionView.HasCachedBaseTransform &&
+            cardRoot.anchoredPosition == rootPositionBeforeHover &&
+            cardRoot.localScale == rootScaleBeforeHover &&
+            Quaternion.Angle(
+                cardRoot.localRotation,
+                rootRotationBeforeHover
+            ) < 0.001f;
+        bool test2 =
+            visualRoot.anchoredPosition ==
+                motionView.HoverTargetAnchoredPosition &&
+            visualRoot.localScale == motionView.BaseVisualScale &&
+            Mathf.Abs(
+                Mathf.DeltaAngle(
+                    visualRoot.localEulerAngles.z,
+                    0f
+                )
+            ) < 0.001f &&
+            sortingCanvas.overrideSorting &&
+            sortingCanvas.sortingOrder == 10;
+
+        cardView.OnPointerExit(null);
+        motionView.CompleteCurrentTransitionImmediately();
+        bool test3 =
+            visualRoot.anchoredPosition ==
+                motionView.BaseVisualAnchoredPosition &&
+            visualRoot.localScale == motionView.BaseVisualScale &&
+            Quaternion.Angle(
+                visualRoot.localRotation,
+                motionView.BaseVisualRotation
+            ) < 0.001f;
+
+        bool noAccumulatedTransitions = true;
+        for (int i = 0; i < 6; i++)
+        {
+            cardView.OnPointerEnter(null);
+            noAccumulatedTransitions &=
+                motionView.ActiveTransitionCount <= 1;
+            cardView.OnPointerExit(null);
+            noAccumulatedTransitions &=
+                motionView.ActiveTransitionCount <= 1;
+        }
+
+        motionView.CompleteCurrentTransitionImmediately();
+        bool test4 =
+            noAccumulatedTransitions &&
+            motionView.ActiveTransitionCount == 0 &&
+            visualRoot.localScale == motionView.BaseVisualScale;
+
+        cardView.OnPointerEnter(null);
+        selectionController.SelectCard(cardView);
+        motionView.CompleteCurrentTransitionImmediately();
+        bool test9CacheStableAfterSelected =
+            sortingCanvas.overrideSorting &&
+            motionView.OriginalOverrideSorting ==
+                cachedOriginalOverrideSorting &&
+            motionView.OriginalSortingOrder ==
+                cachedOriginalSortingOrder;
+        bool test5 =
+            motionView.IsSelected &&
+            cardView.IsSelected &&
+            sortingCanvas.overrideSorting &&
+            sortingCanvas.sortingOrder == 20;
+
+        cardView.OnPointerExit(null);
+        motionView.CompleteCurrentTransitionImmediately();
+        bool test6 =
+            motionView.IsSelected &&
+            visualRoot.anchoredPosition ==
+                motionView.HoverTargetAnchoredPosition &&
+            sortingCanvas.sortingOrder == 20;
+
+        selectionController.ClearSelection();
+        motionView.CompleteCurrentTransitionImmediately();
+        bool test7 =
+            !motionView.IsSelected &&
+            visualRoot.anchoredPosition ==
+                motionView.BaseVisualAnchoredPosition;
+
+        cardState.currentCooldown = 1;
+        cardView.OnPointerEnter(null);
+        bool selectedCoolingCard =
+            selectionController.ToggleCardSelection(cardView);
+        motionView.CompleteCurrentTransitionImmediately();
+        bool test8 =
+            motionView.IsHovered &&
+            !selectedCoolingCard &&
+            !cardView.CanSelect &&
+            !selectionController.HasSelection;
+        cardView.OnPointerExit(null);
+        cardState.currentCooldown = 0;
+        motionView.CompleteCurrentTransitionImmediately();
+
+        Vector2 cachedBasePosition =
+            motionView.BaseVisualAnchoredPosition;
+        Vector3 cachedBaseScale = motionView.BaseVisualScale;
+        Quaternion cachedBaseRotation = motionView.BaseVisualRotation;
+        cardView.BindCard(
+            owner,
+            cardState,
+            preview,
+            null,
+            selectionController
+        );
+        motionView.RecalculateBaseVisualTransform();
+        bool test9CacheStableAfterRecalculate =
+            motionView.OriginalOverrideSorting ==
+                cachedOriginalOverrideSorting &&
+            motionView.OriginalSortingOrder ==
+                cachedOriginalSortingOrder;
+        cardView.BindCard(
+            owner,
+            cardState,
+            preview,
+            null,
+            selectionController
+        );
+        bool test9CacheStableAfterRepeatedBind =
+            motionView.OriginalOverrideSorting ==
+                cachedOriginalOverrideSorting &&
+            motionView.OriginalSortingOrder ==
+                cachedOriginalSortingOrder;
+        bool test10 =
+            motionView.BaseVisualAnchoredPosition ==
+                cachedBasePosition &&
+            motionView.BaseVisualScale == cachedBaseScale &&
+            Quaternion.Angle(
+                motionView.BaseVisualRotation,
+                cachedBaseRotation
+            ) < 0.001f;
+
+        bool test11 =
+            !(cardView is IBeginDragHandler) &&
+            !(cardView is IDragHandler) &&
+            !(cardView is IEndDragHandler);
+        bool test12 =
+            cardObject.GetComponent<UnityEngine.UI.GraphicRaycaster>() !=
+                null &&
+            object.ReferenceEquals(
+                sortingCanvas.transform,
+                cardObject.transform
+            );
+
+        motionView.SetSelected(true);
+        motionView.CompleteCurrentTransitionImmediately();
+        motionView.ResetVisualState();
+        bool test13 =
+            !motionView.IsSelected &&
+            !motionView.IsHovered &&
+            visualRoot.anchoredPosition == cachedBasePosition &&
+            visualRoot.localScale == cachedBaseScale &&
+            Quaternion.Angle(
+                visualRoot.localRotation,
+                cachedBaseRotation
+            ) < 0.001f;
+
+        cardView.OnPointerEnter(null);
+        selectionController.SelectCard(cardView);
+        cardObject.SetActive(false);
+        bool test9OverrideAfterDisable =
+            sortingCanvas.overrideSorting;
+        motionView.SetSelected(false);
+        bool test9OverrideAfterDisabledSetSelected =
+            sortingCanvas.overrideSorting;
+        bool test9PositionRestored =
+            visualRoot.anchoredPosition == cachedBasePosition;
+        bool test9ScaleRestored =
+            visualRoot.localScale == cachedBaseScale;
+        bool test9RotationRestored =
+            Quaternion.Angle(
+                visualRoot.localRotation,
+                cachedBaseRotation
+            ) < 0.001f;
+        bool test9OverrideSortingRestored =
+            sortingCanvas.overrideSorting ==
+                cachedOriginalOverrideSorting;
+        bool test9SortingOrderRestored =
+            sortingCanvas.sortingOrder ==
+                cachedOriginalSortingOrder;
+        bool test9HoverCleared = !motionView.IsHovered;
+        bool test9SelectedCleared =
+            !motionView.IsSelected &&
+            !selectionController.HasSelection;
+        bool test9CoroutineCleared =
+            motionView.ActiveTransitionCount == 0;
+        bool test9LifecycleOrderA =
+            test9OverrideAfterDisable ==
+                cachedOriginalOverrideSorting &&
+            test9OverrideAfterDisabledSetSelected ==
+                cachedOriginalOverrideSorting;
+
+        cardObject.SetActive(true);
+        motionView.SetSelected(true);
+        motionView.CompleteCurrentTransitionImmediately();
+        motionView.SetSelected(false);
+        motionView.CompleteCurrentTransitionImmediately();
+        motionView.RestoreVisualImmediately();
+        bool test9LifecycleOrderB =
+            sortingCanvas.overrideSorting ==
+                cachedOriginalOverrideSorting;
+        cardObject.SetActive(false);
+
+        bool test9 =
+            test9PositionRestored &&
+            test9ScaleRestored &&
+            test9RotationRestored &&
+            test9OverrideSortingRestored &&
+            test9SortingOrderRestored &&
+            test9HoverCleared &&
+            test9SelectedCleared &&
+            test9CoroutineCleared &&
+            test9InitialCanvasCacheMatches &&
+            test9CacheStableAfterHover &&
+            test9CacheStableAfterSelected &&
+            test9CacheStableAfterRecalculate &&
+            test9CacheStableAfterRepeatedBind &&
+            test9LifecycleOrderA &&
+            test9LifecycleOrderB;
+
+        Destroy(rootCanvasObject);
+
+        bool test14 =
+            RunBattleCardPrimaryVisualPresetBasicTestSequence();
+        bool test15 =
+            RunMode65HandAssignmentRegressionSubTest();
+
+        Debug.Log("模式65 测试1 Hover不修改cardRoot基础布局：" + test1);
+        Debug.Log("模式65 测试2 Hover上移、回正且不修改基础缩放：" + test2);
+        Debug.Log("模式65 测试3 Pointer Exit恢复初始Transform：" + test3);
+        Debug.Log("模式65 测试4 快速Enter/Exit不累积协程或缩放：" + test4);
+        Debug.Log("模式65 测试5 Selected优先于Hovered并使用选中排序：" + test5);
+        Debug.Log("模式65 测试6 Selected在Pointer Exit后持续展开：" + test6);
+        Debug.Log("模式65 测试7 取消Selected后恢复Resting：" + test7);
+        Debug.Log("模式65 测试8 CD卡可Hover但不可Selected：" + test8);
+        Debug.Log("模式65 测试9诊断 Position恢复：" + test9PositionRestored);
+        Debug.Log("模式65 测试9诊断 Scale恢复：" + test9ScaleRestored);
+        Debug.Log("模式65 测试9诊断 Rotation恢复：" + test9RotationRestored);
+        Debug.Log("模式65 测试9诊断 OverrideSorting恢复：" + test9OverrideSortingRestored);
+        Debug.Log("模式65 测试9诊断 SortingOrder恢复：" + test9SortingOrderRestored);
+        Debug.Log("模式65 测试9诊断 Hover状态清除：" + test9HoverCleared);
+        Debug.Log("模式65 测试9诊断 Selected状态清除：" + test9SelectedCleared);
+        Debug.Log("模式65 测试9诊断 Coroutine清理：" + test9CoroutineCleared);
+        Debug.Log(
+            "模式65 测试9诊断 Canvas初始化OverrideSorting：" +
+            cachedOriginalOverrideSorting
+        );
+        Debug.Log(
+            "模式65 测试9诊断 Canvas缓存OverrideSorting：" +
+            motionView.OriginalOverrideSorting
+        );
+        Debug.Log(
+            "模式65 测试9诊断 初始化Canvas缓存一致：" +
+            test9InitialCanvasCacheMatches
+        );
+        Debug.Log(
+            "模式65 测试9诊断 Hover后Canvas缓存稳定：" +
+            test9CacheStableAfterHover
+        );
+        Debug.Log(
+            "模式65 测试9诊断 Selected后Canvas缓存稳定：" +
+            test9CacheStableAfterSelected
+        );
+        Debug.Log(
+            "模式65 测试9诊断 Recalculate后Canvas缓存稳定：" +
+            test9CacheStableAfterRecalculate
+        );
+        Debug.Log(
+            "模式65 测试9诊断 重复Bind后Canvas缓存稳定：" +
+            test9CacheStableAfterRepeatedBind
+        );
+        Debug.Log(
+            "模式65 测试9诊断 禁用恢复后OverrideSorting：" +
+            test9OverrideAfterDisable
+        );
+        Debug.Log(
+            "模式65 测试9诊断 禁用后再次SetSelected(false)的OverrideSorting：" +
+            test9OverrideAfterDisabledSetSelected
+        );
+        Debug.Log(
+            "模式65 测试9诊断 生命周期顺序A恢复：" +
+            test9LifecycleOrderA
+        );
+        Debug.Log(
+            "模式65 测试9诊断 生命周期顺序B恢复：" +
+            test9LifecycleOrderB
+        );
+        Debug.Log("模式65 测试9 OnDisable恢复Transform与排序：" + test9);
+        Debug.Log("模式65 测试10 多次Bind不改变动画缓存：" + test10);
+        Debug.Log("模式65 测试11 BattleCardUIView不再注册拖拽接口：" + test11);
+        Debug.Log("模式65 测试12 嵌套Canvas与GraphicRaycaster结构有效：" + test12);
+        Debug.Log("模式65 测试13 Reset清除Hover与Selected状态：" + test13);
+        Debug.Log("模式65 测试14 原模式64全部回归通过：" + test14);
+        Debug.Log("模式65 测试15 手牌过滤、指派、替换与取消继续通过：" + test15);
+
+        Debug.Log("===== BattleCardHoverAndDragMotionBasic 聚合测试结束 =====");
+    }
+
+    bool RunMode65HandAssignmentRegressionSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "motion65_hand",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5
+        );
+        List<BattleActionSlot> slots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                context.allyA,
+                context.allyB,
+                2
+            );
+        context.runtimeState.SetActionSlots(slots);
+        context.runtimeState.SetIntentQueue(
+            new List<BattleEnemyIntent>()
+        );
+        context.runtimeState.SetPhase("Prepare");
+
+        BattleCardState firstCard =
+            CreateFixedAttackCardForCharacter(
+                context.allyA,
+                "motion65_first_card",
+                5
+            );
+        BattleCardState replacementCard =
+            CreateFixedAttackCardForCharacter(
+                context.allyA,
+                "motion65_replacement_card",
+                6
+            );
+        CardTestData sinCardData = CreateFixedAttackCardData(
+            "motion65_sin_card_data",
+            "模式65攻击罪卡",
+            5
+        );
+        sinCardData.isSinCard = true;
+        sinCardData.sinCardCategory = SinCardCategory.Clash;
+        sinCardData.sinCardUseRule = SinCardUseRule.Permanent;
+        BattleCardState sinCard = BattleCardManager.CreateBattleCard(
+            context.allyA,
+            sinCardData,
+            "motion65_sin_card"
+        );
+
+        List<BattleCardState> visibleBefore =
+            GetMode60VisibleCards(
+                context.runtimeState,
+                firstCard,
+                replacementCard,
+                sinCard
+            );
+        BattleActionAssignmentResult firstAssignResult;
+        bool firstAssigned =
+            BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+                context.runtimeState,
+                context.allyA,
+                1,
+                context.allyA,
+                firstCard,
+                context.enemy,
+                null,
+                out firstAssignResult
+            );
+        BattleActionAssignmentResult replaceResult;
+        bool replaced =
+            BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+                context.runtimeState,
+                context.allyA,
+                1,
+                context.allyA,
+                replacementCard,
+                context.enemy,
+                null,
+                out replaceResult
+            );
+        List<BattleCardState> visibleAfterReplace =
+            GetMode60VisibleCards(
+                context.runtimeState,
+                firstCard,
+                replacementCard,
+                sinCard
+            );
+        BattleActionAssignmentResult cancelResult;
+        bool cancelled =
+            BattleCardDropAssignmentRouter.TryCancelSelectedSlot(
+                context.runtimeState,
+                context.allyA,
+                1,
+                out cancelResult
+            );
+        List<BattleCardState> visibleAfterCancel =
+            GetMode60VisibleCards(
+                context.runtimeState,
+                firstCard,
+                replacementCard,
+                sinCard
+            );
+
+        return visibleBefore.Contains(firstCard) &&
+            visibleBefore.Contains(replacementCard) &&
+            visibleBefore.Contains(sinCard) &&
+            firstAssigned &&
+            firstAssignResult != null &&
+            firstAssignResult.isSuccess &&
+            replaced &&
+            replaceResult != null &&
+            replaceResult.isSuccess &&
+            visibleAfterReplace.Contains(firstCard) &&
+            !visibleAfterReplace.Contains(replacementCard) &&
+            visibleAfterReplace.Contains(sinCard) &&
+            cancelled &&
+            cancelResult != null &&
+            cancelResult.isSuccess &&
+            visibleAfterCancel.Contains(firstCard) &&
+            visibleAfterCancel.Contains(replacementCard) &&
+            visibleAfterCancel.Contains(sinCard);
+    }
+
+    void RunBattleCardClickAssignBasicTestSequence()
+    {
+        Debug.Log("===== BattleCardClickAssignBasic 聚合测试开始 =====");
+
+        bool hoverMovedUp;
+        bool hoverRootStable;
+        bool hoverExitRestored;
+        RunMode66HoverVisualSubTest(
+            out hoverMovedUp,
+            out hoverRootStable,
+            out hoverExitRestored
+        );
+
+        CharacterData owner = new CharacterData(
+            "click66_owner",
+            30,
+            10,
+            10
+        );
+        CharacterData target = new CharacterData(
+            "click66_target",
+            50,
+            5,
+            5
+        );
+        BattleCardState firstCard =
+            CreateFixedAttackCardForCharacter(
+                owner,
+                "click66_first",
+                5
+            );
+        BattleCardState secondCard =
+            CreateFixedAttackCardForCharacter(
+                owner,
+                "click66_second",
+                6
+            );
+        BattleCardState coolingCard =
+            CreateFixedAttackCardForCharacter(
+                owner,
+                "click66_cooling",
+                5
+            );
+        coolingCard.currentCooldown = 1;
+
+        BattleCardSelectionController selection =
+            new BattleCardSelectionController();
+        BattleCardUIView firstView = CreatePrimaryPreviewCardView(
+            "Click66FirstView",
+            owner,
+            target,
+            firstCard
+        );
+        BattleCardUIView secondView = CreatePrimaryPreviewCardView(
+            "Click66SecondView",
+            owner,
+            target,
+            secondCard
+        );
+        BattleCardUIView coolingView = CreatePrimaryPreviewCardView(
+            "Click66CoolingView",
+            owner,
+            target,
+            coolingCard
+        );
+        firstView.BindCard(
+            owner,
+            firstCard,
+            BattleCardUIPreviewBuilder.Build(owner, target, firstCard),
+            null,
+            selection
+        );
+        secondView.BindCard(
+            owner,
+            secondCard,
+            BattleCardUIPreviewBuilder.Build(owner, target, secondCard),
+            null,
+            selection
+        );
+        coolingView.BindCard(
+            owner,
+            coolingCard,
+            BattleCardUIPreviewBuilder.Build(owner, target, coolingCard),
+            null,
+            selection
+        );
+
+        PointerEventData leftClick = new PointerEventData(null)
+        {
+            button = PointerEventData.InputButton.Left
+        };
+        firstView.OnPointerClick(leftClick);
+        bool test4 =
+            selection.IsSelected(firstView) &&
+            firstView.IsSelected;
+        firstView.OnPointerExit(leftClick);
+        bool test5 =
+            selection.IsSelected(firstView) &&
+            firstView.IsSelected;
+        firstView.OnPointerClick(leftClick);
+        bool test6 = !selection.HasSelection;
+
+        firstView.OnPointerClick(leftClick);
+        secondView.OnPointerClick(leftClick);
+        bool test7 =
+            selection.IsSelected(secondView) &&
+            !selection.IsSelected(firstView) &&
+            secondView.IsSelected &&
+            !firstView.IsSelected;
+
+        selection.ClearSelection();
+        coolingView.OnPointerEnter(leftClick);
+        coolingView.OnPointerClick(leftClick);
+        bool test8 =
+            !selection.HasSelection &&
+            !coolingView.CanSelect;
+
+        BattleEndedTestContext assignContext =
+            CreateBattleEndedTestContext(
+                "click66_assign",
+                30,
+                30,
+                50,
+                12,
+                4,
+                5
+            );
+        List<BattleActionSlot> assignSlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                assignContext.allyA,
+                assignContext.allyB,
+                2
+            );
+        BattleEnemyIntent assignIntent =
+            CreatePreparedAssignmentIntent(
+                assignContext,
+                "click66_assign_intent",
+                assignContext.allyB,
+                2,
+                1,
+                1
+            );
+        assignContext.runtimeState.SetActionSlots(assignSlots);
+        assignContext.runtimeState.SetIntentQueue(
+            BattleEnemyIntentManager.CreateIntentQueue(assignIntent)
+        );
+        BattleCardState assignCard =
+            CreateFixedAttackCardForCharacter(
+                assignContext.allyA,
+                "click66_assign_card",
+                8
+            );
+        BattleCardSelectionController assignSelection =
+            new BattleCardSelectionController();
+        BattleCardUIView assignView = CreatePrimaryPreviewCardView(
+            "Click66AssignView",
+            assignContext.allyA,
+            assignContext.enemy,
+            assignCard
+        );
+        assignView.BindCard(
+            assignContext.allyA,
+            assignCard,
+            BattleCardUIPreviewBuilder.Build(
+                assignContext.allyA,
+                assignContext.enemy,
+                assignCard
+            ),
+            null,
+            assignSelection
+        );
+
+        GameObject enemySlotObject = new GameObject(
+            "Click66EnemySlot",
+            typeof(RectTransform),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView enemySlotView =
+            enemySlotObject.GetComponent<BattleActionSlotUIView>();
+        bool clickAssigned = false;
+        BattleActionAssignmentResult clickAssignResult = null;
+        enemySlotView.BindInteraction(
+            assignContext.enemy,
+            0,
+            true,
+            clickedSlot =>
+            {
+                BattleCardUIView selectedView =
+                    assignSelection.SelectedCardView;
+                if (selectedView == null)
+                {
+                    return;
+                }
+
+                clickAssigned =
+                    BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+                        assignContext.runtimeState,
+                        assignContext.allyA,
+                        1,
+                        selectedView.BoundOwner,
+                        selectedView.BoundCardState,
+                        clickedSlot.BoundCharacter,
+                        clickedSlot.BoundEnemyIntent,
+                        out clickAssignResult
+                    );
+
+                if (clickAssigned &&
+                    clickAssignResult != null &&
+                    clickAssignResult.isSuccess)
+                {
+                    assignSelection.ClearSelection();
+                }
+            }
+        );
+        enemySlotView.SetBoundEnemyIntent(assignIntent);
+
+        enemySlotView.OnPointerClick(leftClick);
+        bool test9 =
+            !clickAssigned &&
+            BattleActionSlotManager.GetSlot(
+                assignSlots,
+                assignContext.allyA,
+                1
+            ).IsEmpty();
+
+        assignView.OnPointerClick(leftClick);
+        enemySlotView.OnPointerClick(leftClick);
+        bool test10 =
+            clickAssigned &&
+            clickAssignResult != null &&
+            clickAssignResult.isSuccess &&
+            object.ReferenceEquals(
+                BattleActionSlotManager.GetSlot(
+                    assignSlots,
+                    assignContext.allyA,
+                    1
+                ).cardState,
+                assignCard
+            );
+        bool test11 = !assignSelection.HasSelection;
+
+        BattleExecutionPlan executionPlan =
+            BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+                assignSlots,
+                assignContext.runtimeState.intentQueue
+            );
+        assignContext.runtimeState.SetExecutionPlan(executionPlan);
+        assignContext.runtimeState.SetPhase("PlanReady");
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(
+            executionPlan,
+            assignContext.runtimeState
+        );
+
+        BattleEndedTestContext invalidContext =
+            CreateBattleEndedTestContext(
+                "click66_invalid",
+                30,
+                30,
+                50,
+                10,
+                8,
+                5
+            );
+        List<BattleActionSlot> invalidSlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                invalidContext.allyA,
+                invalidContext.allyB,
+                2
+            );
+        invalidContext.runtimeState.SetActionSlots(invalidSlots);
+        invalidContext.runtimeState.SetIntentQueue(
+            new List<BattleEnemyIntent>()
+        );
+        BattleCardState invalidCard =
+            CreateFixedAttackCardForCharacter(
+                invalidContext.allyA,
+                "click66_invalid_card",
+                5
+            );
+        BattleCardSelectionController invalidSelection =
+            new BattleCardSelectionController();
+        BattleCardUIView invalidView = CreatePrimaryPreviewCardView(
+            "Click66InvalidView",
+            invalidContext.allyA,
+            invalidContext.enemy,
+            invalidCard
+        );
+        invalidView.BindCard(
+            invalidContext.allyA,
+            invalidCard,
+            BattleCardUIPreviewBuilder.Build(
+                invalidContext.allyA,
+                invalidContext.enemy,
+                invalidCard
+            ),
+            null,
+            invalidSelection
+        );
+        invalidSelection.SelectCard(invalidView);
+        BattleActionAssignmentResult invalidResult;
+        bool invalidAssigned =
+            BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+                invalidContext.runtimeState,
+                invalidContext.allyB,
+                1,
+                invalidView.BoundOwner,
+                invalidView.BoundCardState,
+                invalidContext.enemy,
+                null,
+                out invalidResult
+            );
+        bool test12 =
+            !invalidAssigned &&
+            invalidSelection.IsSelected(invalidView) &&
+            BattleActionSlotManager.GetSlot(
+                invalidSlots,
+                invalidContext.allyA,
+                1
+            ).IsEmpty();
+
+        BattleEndedTestContext emptyContext =
+            CreateBattleEndedTestContext(
+                "click66_empty",
+                30,
+                30,
+                50,
+                10,
+                8,
+                5
+            );
+        List<BattleActionSlot> emptySlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                emptyContext.allyA,
+                emptyContext.allyB,
+                2
+            );
+        emptyContext.runtimeState.SetActionSlots(emptySlots);
+        emptyContext.runtimeState.SetIntentQueue(
+            new List<BattleEnemyIntent>()
+        );
+        BattleCardState emptyTargetCard =
+            CreateFixedAttackCardForCharacter(
+                emptyContext.allyA,
+                "click66_empty_card",
+                5
+            );
+        BattleActionAssignmentResult emptyResult;
+        bool emptyAssigned =
+            BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+                emptyContext.runtimeState,
+                emptyContext.allyA,
+                1,
+                emptyContext.allyA,
+                emptyTargetCard,
+                emptyContext.enemy,
+                null,
+                out emptyResult
+            );
+        bool test13 =
+            emptyAssigned &&
+            emptyResult != null &&
+            emptyResult.isSuccess &&
+            emptyResult.placementType ==
+                BattleActionPlacementType.SpecificEnemy;
+
+        bool test14 =
+            RunMode65HandAssignmentRegressionSubTest();
+
+        BattleEndedTestContext lowContext =
+            CreateBattleEndedTestContext(
+                "click66_low",
+                30,
+                30,
+                50,
+                3,
+                4,
+                8
+            );
+        List<BattleActionSlot> lowSlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                lowContext.allyA,
+                lowContext.allyB,
+                2
+            );
+        BattleEnemyIntent lowIntent =
+            CreatePreparedAssignmentIntent(
+                lowContext,
+                "click66_low_intent",
+                lowContext.allyB,
+                2,
+                1,
+                1
+            );
+        lowContext.runtimeState.SetActionSlots(lowSlots);
+        lowContext.runtimeState.SetIntentQueue(
+            BattleEnemyIntentManager.CreateIntentQueue(lowIntent)
+        );
+        BattleCardState lowCard =
+            CreateFixedAttackCardForCharacter(
+                lowContext.allyA,
+                "click66_low_card",
+                5
+            );
+        BattleActionAssignmentResult lowResult;
+        bool lowAssigned =
+            BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+                lowContext.runtimeState,
+                lowContext.allyA,
+                1,
+                lowContext.allyA,
+                lowCard,
+                lowContext.enemy,
+                lowIntent,
+                out lowResult
+            );
+        bool test15 =
+            lowAssigned &&
+            lowResult != null &&
+            lowResult.isSuccess &&
+            lowResult.wasAutoDowngraded;
+
+        BattleCardSelectionController lifecycleSelection =
+            new BattleCardSelectionController();
+        BattleCardUIView lifecycleView = CreatePrimaryPreviewCardView(
+            "Click66LifecycleView",
+            owner,
+            target,
+            firstCard
+        );
+        lifecycleView.BindCard(
+            owner,
+            firstCard,
+            BattleCardUIPreviewBuilder.Build(owner, target, firstCard),
+            null,
+            lifecycleSelection
+        );
+        lifecycleSelection.SelectCard(lifecycleView);
+        lifecycleView.gameObject.SetActive(false);
+        bool test16 = !lifecycleSelection.HasSelection;
+
+        lifecycleView.gameObject.SetActive(true);
+        lifecycleSelection.SelectCard(lifecycleView);
+        lifecycleSelection.ClearSelection();
+        bool test17 = !lifecycleSelection.HasSelection;
+
+        lifecycleSelection.SelectCard(lifecycleView);
+        lifecycleSelection.ClearSelection();
+        bool test18 = !lifecycleSelection.HasSelection;
+
+        bool test19 =
+            RunBattleCardPrimaryVisualPresetBasicTestSequence();
+        bool test20 =
+            executionPlan != null &&
+            executionPlan.isCompleted &&
+            test10 &&
+            test14;
+
+        Debug.Log("模式66 测试1 Hover回正并上移：" + hoverMovedUp);
+        Debug.Log("模式66 测试2 Hover不移动cardRoot：" + hoverRootStable);
+        Debug.Log("模式66 测试3 Pointer Exit恢复：" + hoverExitRestored);
+        Debug.Log("模式66 测试4 点击卡牌进入Selected：" + test4);
+        Debug.Log("模式66 测试5 Selected在Pointer Exit后持续：" + test5);
+        Debug.Log("模式66 测试6 再点同一卡牌取消选择：" + test6);
+        Debug.Log("模式66 测试7 点击另一张卡切换唯一选择：" + test7);
+        Debug.Log("模式66 测试8 CD卡可Hover但不可选择：" + test8);
+        Debug.Log("模式66 测试9 无选中卡时点击敌方槽位不安排：" + test9);
+        Debug.Log("模式66 测试10 选卡后点击合法敌方槽位成功指派：" + test10);
+        Debug.Log("模式66 测试11 指派成功后清除选择：" + test11);
+        Debug.Log("模式66 测试12 非法目标不指派并保留选择：" + test12);
+        Debug.Log("模式66 测试13 敌方空槽沿用原SpecificEnemy规则：" + test13);
+        Debug.Log("模式66 测试14 替换与取消逻辑继续通过：" + test14);
+        Debug.Log("模式66 测试15 速度不足沿用原自动降级判定：" + test15);
+        Debug.Log("模式66 测试16 卡牌隐藏时清除选择：" + test16);
+        Debug.Log("模式66 测试17 普通卡/罪卡切换清除选择：" + test17);
+        Debug.Log("模式66 测试18 回合执行开始清除选择：" + test18);
+        Debug.Log("模式66 测试19 模式64继续全部通过：" + test19);
+        Debug.Log("模式66 测试20 原指派与执行计划回归通过：" + test20);
+
+        Destroy(firstView.gameObject);
+        Destroy(secondView.gameObject);
+        Destroy(coolingView.gameObject);
+        Destroy(assignView.gameObject);
+        Destroy(enemySlotObject);
+        Destroy(invalidView.gameObject);
+        Destroy(lifecycleView.gameObject);
+
+        Debug.Log("===== BattleCardClickAssignBasic 聚合测试结束 =====");
+    }
+
+    void RunMode66HoverVisualSubTest(
+        out bool movedUp,
+        out bool rootStable,
+        out bool exitRestored
+    )
+    {
+        GameObject cardObject = new GameObject(
+            "Click66HoverCard",
+            typeof(RectTransform)
+        );
+        cardObject.SetActive(false);
+        RectTransform cardRoot =
+            cardObject.GetComponent<RectTransform>();
+        cardRoot.anchoredPosition = new Vector2(12f, 34f);
+
+        GameObject visualObject = new GameObject(
+            "VisualRoot",
+            typeof(RectTransform)
+        );
+        visualObject.transform.SetParent(cardObject.transform, false);
+        RectTransform visualRoot =
+            visualObject.GetComponent<RectTransform>();
+        visualRoot.anchoredPosition = new Vector2(2f, 3f);
+        visualRoot.localRotation = Quaternion.Euler(0f, 0f, -8f);
+
+        BattleCardMotionUIView motion =
+            cardObject.AddComponent<BattleCardMotionUIView>();
+        BattleCardUIView view =
+            cardObject.AddComponent<BattleCardUIView>();
+        SetMode64PrivateField(motion, "cardRoot", cardRoot);
+        SetMode64PrivateField(motion, "visualRoot", visualRoot);
+        SetMode64PrivateField(motion, "hoverLiftY", 100f);
+        SetMode64PrivateField(view, "motionView", motion);
+        cardObject.SetActive(true);
+
+        Vector2 rootBefore = cardRoot.anchoredPosition;
+        Vector2 visualBefore = visualRoot.anchoredPosition;
+        Quaternion rotationBefore = visualRoot.localRotation;
+        view.OnPointerEnter(null);
+        motion.CompleteCurrentTransitionImmediately();
+        movedUp =
+            visualRoot.anchoredPosition ==
+                visualBefore + Vector2.up * 100f &&
+            Mathf.Abs(
+                Mathf.DeltaAngle(
+                    visualRoot.localEulerAngles.z,
+                    0f
+                )
+            ) < 0.001f;
+        rootStable = cardRoot.anchoredPosition == rootBefore;
+
+        view.OnPointerExit(null);
+        motion.CompleteCurrentTransitionImmediately();
+        exitRestored =
+            visualRoot.anchoredPosition == visualBefore &&
+            Quaternion.Angle(
+                visualRoot.localRotation,
+                rotationBefore
+            ) < 0.001f;
+
+        Destroy(cardObject);
+    }
+
+    TMPro.TMP_Text CreateMode64Text(Transform parent, string objectName)
+    {
+        GameObject textObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(TMPro.TextMeshProUGUI)
+        );
+        textObject.transform.SetParent(parent, false);
+        return textObject.GetComponent<TMPro.TextMeshProUGUI>();
+    }
+
+    UnityEngine.UI.Image CreateMode64Image(
+        Transform parent,
+        string objectName
+    )
+    {
+        GameObject imageObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(UnityEngine.UI.Image)
+        );
+        imageObject.transform.SetParent(parent, false);
+        return imageObject.GetComponent<UnityEngine.UI.Image>();
+    }
+
+    Sprite CreateMode64Sprite(
+        Texture2D texture,
+        int pixelIndex,
+        string spriteName
+    )
+    {
+        Sprite sprite = Sprite.Create(
+            texture,
+            new Rect(pixelIndex, 0f, 1f, 1f),
+            new Vector2(0.5f, 0.5f)
+        );
+        sprite.name = "Visual64" + spriteName;
+        return sprite;
+    }
+
+    bool SetMode64PrivateField(
+        object target,
+        string fieldName,
+        object value
+    )
+    {
+        if (target == null || string.IsNullOrEmpty(fieldName))
+        {
+            return false;
+        }
+
+        System.Reflection.FieldInfo field = target.GetType().GetField(
+            fieldName,
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic
+        );
+
+        if (field == null)
+        {
+            return false;
+        }
+
+        field.SetValue(target, value);
+        return true;
+    }
+
+    T GetMode64PrivateField<T>(object target, string fieldName)
+        where T : class
+    {
+        if (target == null || string.IsNullOrEmpty(fieldName))
+        {
+            return null;
+        }
+
+        System.Reflection.FieldInfo field = target.GetType().GetField(
+            fieldName,
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic
+        );
+
+        return field != null ? field.GetValue(target) as T : null;
+    }
+
+    bool AreMode64ColorsEqual(Color left, Color right)
+    {
+        const float Tolerance = 0.001f;
+        return Mathf.Abs(left.r - right.r) <= Tolerance &&
+            Mathf.Abs(left.g - right.g) <= Tolerance &&
+            Mathf.Abs(left.b - right.b) <= Tolerance &&
+            Mathf.Abs(left.a - right.a) <= Tolerance;
+    }
+
+    bool AreMode64TextSettingsUnchanged(
+        TMPro.TMP_Text[] texts,
+        float[] fontSizes,
+        bool[] autoSizingStates,
+        Vector3[] localScales
+    )
+    {
+        if (texts == null ||
+            fontSizes == null ||
+            autoSizingStates == null ||
+            localScales == null ||
+            texts.Length != fontSizes.Length ||
+            texts.Length != autoSizingStates.Length ||
+            texts.Length != localScales.Length)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < texts.Length; i++)
+        {
+            TMPro.TMP_Text text = texts[i];
+
+            if (text == null ||
+                !Mathf.Approximately(text.fontSize, fontSizes[i]) ||
+                text.enableAutoSizing != autoSizingStates[i] ||
+                text.rectTransform.localScale != localScales[i])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool HasMode64BlackOutline(Material material)
+    {
+        return material != null &&
+            material.HasProperty(TMPro.ShaderUtilities.ID_OutlineColor) &&
+            AreMode64ColorsEqual(
+                material.GetColor(TMPro.ShaderUtilities.ID_OutlineColor),
+                Color.black
+            );
+    }
+
+    bool RunMode64HandFilterAndAssignmentRegressionSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "visual64_hand",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5
+        );
+        List<BattleActionSlot> slots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                context.allyA,
+                context.allyB,
+                2
+            );
+        context.runtimeState.SetActionSlots(slots);
+        context.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+        context.runtimeState.SetPhase("Prepare");
+
+        BattleCardState normalCard = CreateFixedAttackCardForCharacter(
+            context.allyA,
+            "visual64_normal_card",
+            5
+        );
+        CardTestData sinCardData = CreateFixedAttackCardData(
+            "visual64_sin_card_data",
+            "模式64攻击罪卡",
+            5
+        );
+        sinCardData.rarity = CardRarity.Gold;
+        sinCardData.isSinCard = true;
+        sinCardData.sinCardCategory = SinCardCategory.Clash;
+        sinCardData.sinCardUseRule = SinCardUseRule.Permanent;
+        BattleCardState sinCard = BattleCardManager.CreateBattleCard(
+            context.allyA,
+            sinCardData,
+            "visual64_sin_card"
+        );
+
+        List<BattleCardState> visibleBefore = GetMode60VisibleCards(
+            context.runtimeState,
+            normalCard,
+            sinCard
+        );
+        BattleActionAssignmentResult assignResult;
+        bool assigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            context.runtimeState,
+            context.allyA,
+            1,
+            context.allyA,
+            normalCard,
+            context.enemy,
+            null,
+            out assignResult
+        );
+        List<BattleCardState> visibleAfterAssign = GetMode60VisibleCards(
+            context.runtimeState,
+            normalCard,
+            sinCard
+        );
+        BattleActionAssignmentResult cancelResult;
+        bool cancelled = BattleCardDropAssignmentRouter.TryCancelSelectedSlot(
+            context.runtimeState,
+            context.allyA,
+            1,
+            out cancelResult
+        );
+        List<BattleCardState> visibleAfterCancel = GetMode60VisibleCards(
+            context.runtimeState,
+            normalCard,
+            sinCard
+        );
+
+        return visibleBefore.Contains(normalCard) &&
+            visibleBefore.Contains(sinCard) &&
+            assigned &&
+            assignResult != null &&
+            assignResult.isSuccess &&
+            !visibleAfterAssign.Contains(normalCard) &&
+            visibleAfterAssign.Contains(sinCard) &&
+            cancelled &&
+            cancelResult != null &&
+            cancelResult.isSuccess &&
+            visibleAfterCancel.Contains(normalCard) &&
+            visibleAfterCancel.Contains(sinCard);
+    }
+
+    void RunFutureTurnCooldownZeroSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "cooldown63_1",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5
+        );
+        BattleCardState card = CreateCooldownSemanticsCard(
+            context.allyA,
+            "cooldown63_1_card",
+            CardType.Attack,
+            0,
+            1
+        );
+
+        List<BattleActionSlot> actionSlots =
+            BattleActionSlotManager.CreateLivingPartyActionSlots(
+                context.allyA,
+                context.allyB,
+                2
+            );
+        context.runtimeState.SetActionSlots(actionSlots);
+        BattleActionSlotManager.AssignFreeAction(
+            actionSlots,
+            context.allyA,
+            1,
+            context.allyA,
+            card,
+            context.enemy
+        );
+        BattleExecutionPlan plan =
+            BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+                actionSlots,
+                new List<BattleEnemyIntent>()
+            );
+        ExecutePlanWithRuntimeStateAndCompleteTurn(
+            context.runtimeState,
+            plan
+        );
+        int cooldownAfterResolved = card.currentCooldown;
+        CompleteCooldownSemanticsTurn(context);
+
+        BattleCardUIView view = CreatePrimaryPreviewCardView(
+            "Cooldown63ZeroView",
+            context.allyA,
+            context.enemy,
+            card
+        );
+        CardEligibilityResult eligibility =
+            BattleCardManager.EvaluateCardEligibility(
+                context.allyA,
+                context.enemy,
+                card
+            );
+        bool passed =
+            cooldownAfterResolved == 0 &&
+            card.currentCooldown == 0 &&
+            view.CanBeginDrag &&
+            eligibility != null &&
+            eligibility.isEligible;
+
+        Debug.Log("模式63 测试1 CD0结算、回合末和下一回合均保持可用：" + passed);
+        Destroy(view.gameObject);
+    }
+
+    void RunFutureTurnCooldownOneSubTests()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "cooldown63_cd1",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5
+        );
+        BattleCardState card = CreateCooldownSemanticsCard(
+            context.allyA,
+            "cooldown63_cd1_card",
+            CardType.Attack,
+            1,
+            1
+        );
+
+        BattleCardManager.ApplyCooldownOnResolved(card);
+        bool test2 = card.currentCooldown == 2;
+
+        CompleteCooldownSemanticsTurn(context);
+        BattleCardUIView coolingView = CreatePrimaryPreviewCardView(
+            "Cooldown63OneCoolingView",
+            context.allyA,
+            context.enemy,
+            card
+        );
+        CardEligibilityResult coolingEligibility =
+            BattleCardManager.EvaluateCardEligibility(
+                context.allyA,
+                context.enemy,
+                card
+            );
+        bool test3 =
+            card.currentCooldown == 1 &&
+            context.allyA.battleCards.Contains(card) &&
+            BattleSimpleUIController.ShouldDisplayCardInHand(
+                context.runtimeState,
+                card
+            ) &&
+            !coolingView.CanBeginDrag &&
+            coolingEligibility != null &&
+            !coolingEligibility.isEligible &&
+            coolingEligibility.failureReason ==
+                CardEligibilityFailureReason.CardOnCooldown;
+
+        CompleteCooldownSemanticsTurn(context);
+        BattleCardUIView readyView = CreatePrimaryPreviewCardView(
+            "Cooldown63OneReadyView",
+            context.allyA,
+            context.enemy,
+            card
+        );
+        CardEligibilityResult readyEligibility =
+            BattleCardManager.EvaluateCardEligibility(
+                context.allyA,
+                context.enemy,
+                card
+            );
+        bool test4 =
+            card.currentCooldown == 0 &&
+            readyView.CanBeginDrag &&
+            readyEligibility != null &&
+            readyEligibility.isEligible;
+
+        Debug.Log("模式63 测试2 CD1在Resolved时补偿为2：" + test2);
+        Debug.Log("模式63 测试3 CD1下一回合剩余1且不可拖拽或安排：" + test3);
+        Debug.Log("模式63 测试4 CD1经过一个完整未来回合后恢复：" + test4);
+        Destroy(coolingView.gameObject);
+        Destroy(readyView.gameObject);
+    }
+
+    void RunFutureTurnCooldownTwoSubTest()
+    {
+        BattleEndedTestContext context = CreateBattleEndedTestContext(
+            "cooldown63_5",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5
+        );
+        BattleCardState card = CreateCooldownSemanticsCard(
+            context.allyA,
+            "cooldown63_5_card",
+            CardType.Attack,
+            2,
+            1
+        );
+
+        BattleCardManager.ApplyCooldownOnResolved(card);
+        int afterResolved = card.currentCooldown;
+        CompleteCooldownSemanticsTurn(context);
+        int firstFutureTurn = card.currentCooldown;
+        bool firstFutureBlocked =
+            !BattleCardManager.EvaluateCardEligibility(
+                context.allyA,
+                context.enemy,
+                card
+            ).isEligible;
+
+        CompleteCooldownSemanticsTurn(context);
+        int secondFutureTurn = card.currentCooldown;
+        bool secondFutureBlocked =
+            !BattleCardManager.EvaluateCardEligibility(
+                context.allyA,
+                context.enemy,
+                card
+            ).isEligible;
+
+        CompleteCooldownSemanticsTurn(context);
+        int thirdFutureTurn = card.currentCooldown;
+        bool thirdFutureReady =
+            BattleCardManager.EvaluateCardEligibility(
+                context.allyA,
+                context.enemy,
+                card
+            ).isEligible;
+
+        bool passed =
+            afterResolved == 3 &&
+            firstFutureTurn == 2 &&
+            firstFutureBlocked &&
+            secondFutureTurn == 1 &&
+            secondFutureBlocked &&
+            thirdFutureTurn == 0 &&
+            thirdFutureReady;
+
+        Debug.Log("模式63 测试5 CD2完整序列为3→2→1→0：" + passed);
+    }
+
+    void RunFutureTurnCooldownPreviewSubTests()
+    {
+        CharacterData owner = new CharacterData("cooldown63_preview_owner", 30, 10, 10);
+        CharacterData target = new CharacterData("cooldown63_preview_target", 50, 5, 5);
+        BattleCardState cooldownOne = CreateCooldownSemanticsCard(
+            owner,
+            "cooldown63_preview_one",
+            CardType.Attack,
+            1,
+            1
+        );
+        BattleCardState cooldownTwo = CreateCooldownSemanticsCard(
+            owner,
+            "cooldown63_preview_two",
+            CardType.Attack,
+            2,
+            1
+        );
+
+        bool test6 =
+            BattleCardUIPreviewBuilder.Build(
+                owner,
+                target,
+                cooldownOne
+            ).cooldownText == "1" &&
+            BattleCardUIPreviewBuilder.Build(
+                owner,
+                target,
+                cooldownTwo
+            ).cooldownText == "2";
+
+        cooldownOne.currentCooldown = 2;
+        string atTwo = BattleCardUIPreviewBuilder.Build(
+            owner,
+            target,
+            cooldownOne
+        ).cooldownText;
+        cooldownOne.currentCooldown = 1;
+        string atOne = BattleCardUIPreviewBuilder.Build(
+            owner,
+            target,
+            cooldownOne
+        ).cooldownText;
+        cooldownOne.currentCooldown = 0;
+        string atZero = BattleCardUIPreviewBuilder.Build(
+            owner,
+            target,
+            cooldownOne
+        ).cooldownText;
+        bool test7 = atTwo == "1" && atOne == "1" && atZero == "1";
+
+        Debug.Log("模式63 测试6 一级卡面显示基础CD1和2且不减1：" + test6);
+        Debug.Log("模式63 测试7 剩余CD不覆盖一级卡面基础CD：" + test7);
+    }
+
+    void RunFutureTurnCooldownAutomaticCycleSubTest()
+    {
+        AutomaticTurnTestContext context = CreateAutomaticTurnTestContext(
+            "cooldown63_8",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5,
+            1
+        );
+        BattleCardState card =
+            CreateFutureTurnCooldownAutomaticCycleCard(context.allyA);
+        int baseCooldown = BattleCardManager.GetBaseCooldown(card.cardData);
+        int beforeCurrentCooldown = card.currentCooldown;
+        int turnBefore = context.runtimeState.currentTurn;
+        string phaseBefore = context.runtimeState.currentPhase;
+        int resolvedCooldownByRule = GetExpectedResolvedCooldown(card);
+        bool fixtureValid =
+            card.cardData.cardType == CardType.Attack &&
+            !card.cardData.isSinCard &&
+            baseCooldown == 1 &&
+            resolvedCooldownByRule == 2 &&
+            beforeCurrentCooldown == 0;
+        bool assigned = fixtureValid &&
+            BattleActionSlotManager.AssignFreeAction(
+                context.runtimeState.actionSlots,
+                context.allyA,
+                1,
+                context.allyA,
+                card,
+                context.enemy
+            );
+        BattleActionSlot assignedSlot = BattleActionSlotManager.GetSlot(
+            context.runtimeState.actionSlots,
+            context.allyA,
+            1
+        );
+        bool assignedSlotValid =
+            assignedSlot != null &&
+            object.ReferenceEquals(assignedSlot.actor, context.allyA) &&
+            object.ReferenceEquals(assignedSlot.cardState, card);
+
+        if (!fixtureValid)
+        {
+            Debug.Log(
+                "模式63 测试8夹具错误：测试卡必须是基础CD为1的普通Attack"
+            );
+        }
+
+        BattleDebugSettings debugSettings = BattleDebugSettings.Instance;
+        bool previousShowDetailBattleLog =
+            debugSettings != null && debugSettings.showDetailBattleLog;
+        BattleAutomaticTurnCycleResult result = null;
+
+        try
+        {
+            if (debugSettings != null)
+            {
+                debugSettings.showDetailBattleLog = true;
+            }
+
+            result = RunAutomaticTurnCycle(context);
+        }
+        finally
+        {
+            if (debugSettings != null)
+            {
+                debugSettings.showDetailBattleLog =
+                    previousShowDetailBattleLog;
+            }
+        }
+
+        bool executionPlanNull =
+            context.runtimeState.currentExecutionPlan == null;
+        bool cardStillOwned =
+            card.owner != null &&
+            card.owner.battleCards != null &&
+            card.owner.battleCards.Contains(card);
+        bool newActionSlotsContainOldAssignment = false;
+
+        if (context.runtimeState.actionSlots != null)
+        {
+            foreach (BattleActionSlot slot in context.runtimeState.actionSlots)
+            {
+                if (slot != null &&
+                    object.ReferenceEquals(slot.cardState, card))
+                {
+                    newActionSlotsContainOldAssignment = true;
+                    break;
+                }
+            }
+        }
+
+        BattleCardUIView view = CreatePrimaryPreviewCardView(
+            "Cooldown63AutomaticCycleView",
+            context.allyA,
+            context.enemy,
+            card
+        );
+        CardEligibilityResult eligibility =
+            BattleCardManager.EvaluateCardEligibility(
+                context.allyA,
+                context.enemy,
+                card
+            );
+        bool passed =
+            turnBefore == 1 &&
+            phaseBefore == "Prepare" &&
+            fixtureValid &&
+            assigned &&
+            result != null &&
+            result.isSuccess &&
+            result.executionPlanCompleted &&
+            result.advancedToNextTurn &&
+            context.runtimeState.currentTurn == 2 &&
+            context.runtimeState.currentPhase == "Prepare" &&
+            executionPlanNull &&
+            card.currentCooldown == 1 &&
+            assignedSlotValid &&
+            assignedSlot.isUsed &&
+            cardStillOwned &&
+            !newActionSlotsContainOldAssignment &&
+            view != null &&
+            !view.CanBeginDrag &&
+            eligibility != null &&
+            !eligibility.isEligible &&
+            eligibility.failureReason ==
+                CardEligibilityFailureReason.CardOnCooldown;
+
+        Debug.Log(
+            "[模式63 测试8诊断]\n" +
+            "InstanceID: " + card.instanceID + "\n" +
+            "CardID: " + card.cardData.cardID + "\n" +
+            "IsSinCard: " + card.cardData.isSinCard + "\n" +
+            "BaseCooldown: " + baseCooldown + "\n" +
+            "ResolvedCooldownByRule: " + resolvedCooldownByRule + "\n" +
+            "BeforeCurrentCooldown: " + beforeCurrentCooldown + "\n" +
+            "Owner: " +
+                (card.owner != null ? card.owner.characterName : "null") + "\n" +
+            "TurnBefore: " + turnBefore + "\n" +
+            "PhaseBefore: " + phaseBefore + "\n" +
+            "Assigned: " + assigned + "\n" +
+            "TryRunResult: " +
+                (result != null
+                    ? result.isSuccess + " / " + result.message
+                    : "null") + "\n" +
+            "TurnAfter: " + context.runtimeState.currentTurn + "\n" +
+            "PhaseAfter: " + context.runtimeState.currentPhase + "\n" +
+            "AfterCurrentCooldown: " + card.currentCooldown + "\n" +
+            "ExecutionPlanNull: " + executionPlanNull + "\n" +
+            "CardStillOwned: " + cardStillOwned + "\n" +
+            "OldAssignedSlotUsed: " +
+                (assignedSlotValid && assignedSlot.isUsed) + "\n" +
+            "NewActionSlotsContainOldAssignment: " +
+                newActionSlotsContainOldAssignment + "\n" +
+            "DetailLogSettingFound: " + (debugSettings != null)
+        );
+        Debug.Log("模式63 测试8 自动完整回合对CD1只Tick一次（2→1）：" + passed);
+
+        if (view != null)
+        {
+            Destroy(view.gameObject);
+        }
+    }
+
+    void RunFutureTurnCooldownDodgeSubTests()
+    {
+        BattleEndedTestContext failedContext = CreateBattleEndedTestContext(
+            "cooldown63_9",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5
+        );
+        BattleActionSlot failedDodgeSlot = new BattleActionSlot(
+            failedContext.allyA,
+            1
+        );
+        failedDodgeSlot.AssignPassiveGuard(
+            failedContext.allyA,
+            CreateFixedDodgeCardForCharacter(
+                failedContext.allyA,
+                "cooldown63_9_dodge",
+                2,
+                1
+            )
+        );
+        BattleEnemyIntent failedIntent = CreateEnemyAttackIntent(
+            "cooldown63_9_intent",
+            failedContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(
+                failedContext.enemy,
+                "cooldown63_9_enemy",
+                8,
+                0
+            ),
+            failedContext.allyA,
+            1
+        );
+        ExecuteMode59Plan(
+            failedContext,
+            failedIntent,
+            new List<BattleActionSlot> { failedDodgeSlot }
+        );
+        CompleteCooldownSemanticsTurn(failedContext);
+        bool test9 = failedDodgeSlot.cardState.currentCooldown == 1;
+
+        BattleEndedTestContext successContext = CreateBattleEndedTestContext(
+            "cooldown63_10",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5
+        );
+        BattleActionSlot continuousDodgeSlot = CreateMode59ActiveDodgeSlot(
+            successContext.allyA,
+            1,
+            "cooldown63_10_dodge",
+            12,
+            1,
+            successContext.enemy
+        );
+        PrepareMode59CompletedRuntime(
+            successContext,
+            new List<BattleActionSlot> { continuousDodgeSlot }
+        );
+        CompleteCooldownSemanticsTurn(successContext);
+        bool test10 =
+            continuousDodgeSlot.isCardUseFinalized &&
+            continuousDodgeSlot.cardState.currentCooldown == 1;
+
+        Debug.Log("模式63 测试9 普通Dodge失败后下一回合CD1：" + test9);
+        Debug.Log("模式63 测试10 连续Dodge回合末收尾后下一回合CD1：" + test10);
+    }
+
+    void RunFutureTurnCooldownDefenseSubTests()
+    {
+        BattleEndedTestContext triggeredContext = CreateBattleEndedTestContext(
+            "cooldown63_11",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5
+        );
+        BattleActionSlot defenseSlot = new BattleActionSlot(
+            triggeredContext.allyA,
+            1
+        );
+        defenseSlot.AssignPassiveGuard(
+            triggeredContext.allyA,
+            CreateTestDefenseCardForCharacter(
+                triggeredContext.allyA,
+                "cooldown63_11_defense",
+                3,
+                1
+            )
+        );
+        BattleEnemyIntent defenseIntent = CreateEnemyAttackIntent(
+            "cooldown63_11_intent",
+            triggeredContext.enemy,
+            CreateFixedEnemyAttackCardForDodgeTest(
+                triggeredContext.enemy,
+                "cooldown63_11_enemy",
+                8,
+                0
+            ),
+            triggeredContext.allyA,
+            1
+        );
+        ExecuteMode59Plan(
+            triggeredContext,
+            defenseIntent,
+            new List<BattleActionSlot> { defenseSlot }
+        );
+        CompleteCooldownSemanticsTurn(triggeredContext);
+        CardEligibilityResult defenseEligibility =
+            BattleCardManager.EvaluateCardEligibility(
+                triggeredContext.allyA,
+                triggeredContext.allyA,
+                defenseSlot.cardState
+            );
+        bool test11 =
+            defenseSlot.cardState.currentCooldown == 1 &&
+            defenseEligibility != null &&
+            defenseEligibility.failureReason ==
+                CardEligibilityFailureReason.CardOnCooldown;
+
+        BattleEndedTestContext untouchedContext = CreateBattleEndedTestContext(
+            "cooldown63_12",
+            30,
+            30,
+            50,
+            10,
+            8,
+            5
+        );
+        BattleActionSlot untouchedDefense = new BattleActionSlot(
+            untouchedContext.allyA,
+            1
+        );
+        untouchedDefense.AssignPassiveGuard(
+            untouchedContext.allyA,
+            CreateTestDefenseCardForCharacter(
+                untouchedContext.allyA,
+                "cooldown63_12_defense",
+                3,
+                1
+            )
+        );
+        PrepareMode59CompletedRuntime(
+            untouchedContext,
+            new List<BattleActionSlot> { untouchedDefense }
+        );
+        CompleteCooldownSemanticsTurn(untouchedContext);
+        bool test12 =
+            !untouchedDefense.isUsed &&
+            untouchedDefense.cardState.currentCooldown == 0 &&
+            BattleCardManager.EvaluateCardEligibility(
+                untouchedContext.allyA,
+                untouchedContext.allyA,
+                untouchedDefense.cardState
+            ).isEligible;
+
+        Debug.Log("模式63 测试11 Defense正式触发后下一回合CD1且不可用：" + test11);
+        Debug.Log("模式63 测试12 未触发守备卡不进入CD且下一回合可用：" + test12);
+    }
+
+    void RunFutureTurnCooldownSinAndIdempotentSubTests()
+    {
+        List<CardTestData> cards = CardDataLoader.LoadCardData();
+        CardTestData sinCardData = CardDataLoader.FindCardByID(
+            cards,
+            BattleSimpleUIController.ClashSinTestCardID
+        );
+        CharacterData sinOwner = new CharacterData(
+            "cooldown63_13_owner",
+            30,
+            10,
+            10
+        );
+        BattleCardState sinCard = BattleCardManager.CreateBattleCard(
+            sinOwner,
+            sinCardData,
+            "cooldown63_13_sin"
+        );
+        int useCountBefore = sinCard.currentUseCount;
+        BattleCardManager.ApplyCooldownOnResolved(sinCard);
+        bool test13 =
+            sinCard.currentCooldown == 0 &&
+            sinCard.currentUseCount == useCountBefore + 1;
+
+        BattleCardState normalCard = CreateCooldownSemanticsCard(
+            sinOwner,
+            "cooldown63_14_normal",
+            CardType.Attack,
+            1,
+            1
+        );
+        BattleCardManager.ApplyCooldownOnResolved(normalCard);
+        int cooldownAfterFirstResolved = normalCard.currentCooldown;
+        BattleCardManager.ApplyCooldownOnResolved(normalCard);
+        bool test14 =
+            cooldownAfterFirstResolved == 2 &&
+            normalCard.currentCooldown == 2;
+
+        Debug.Log("模式63 测试13 罪卡继续走UseCount且不进入普通CD：" + test13);
+        Debug.Log("模式63 测试14 重复Resolved不会把CD累加为base+2：" + test14);
+    }
+
+    BattleCardState CreateCooldownSemanticsCard(
+        CharacterData owner,
+        string instanceID,
+        string cardType,
+        int cooldown,
+        int point
+    )
+    {
+        CardTestData cardData = new CardTestData
+        {
+            cardID = instanceID + "_data",
+            cardName = "模式63 CD语义测试卡",
+            rarity = "White",
+            cardType = cardType,
+            isClashable =
+                cardType == CardType.Attack ||
+                cardType == CardType.Dodge,
+            isSinCard = false,
+            minPoint = point,
+            maxPoint = point,
+            cooldown = cooldown,
+            damageFormula = cardType == CardType.Attack
+                ? "PointAsDamage"
+                : "",
+            defenseFormula = cardType == CardType.Defense
+                ? "PointAsDefense"
+                : "",
+            effects = new List<CardEffectData>()
+        };
+
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
+    }
+
+    BattleCardState CreateFutureTurnCooldownAutomaticCycleCard(
+        CharacterData owner
+    )
+    {
+        CardTestData cardData = new CardTestData
+        {
+            cardID = "cooldown63_8_cd1_attack_data",
+            cardName = "模式63自动回合CD1攻击",
+            description = "",
+            rarity = "White",
+            cardType = CardType.Attack,
+            isSinCard = false,
+            consumeOnUse = false,
+            useConditions = new CardUseConditionData[0],
+            resourceRule = null,
+            resourceRules = new CardResourceRuleData[0],
+            sinCardCategory = "",
+            sinCardUseRule = "",
+            maxUseCount = 0,
+            isClashable = true,
+            damageFormula = "PointAsDamage",
+            defenseFormula = "",
+            minPoint = 1,
+            maxPoint = 1,
+            cooldown = 1,
+            guiltCost = 0,
+            guiltGain = 0,
+            effects = new List<CardEffectData>()
+        };
+
+        return BattleCardManager.CreateBattleCard(
+            owner,
+            cardData,
+            "cooldown63_8_cd1_attack"
+        );
+    }
+
+    int GetExpectedResolvedCooldown(BattleCardState cardState)
+    {
+        int baseCooldown = cardState != null
+            ? BattleCardManager.GetBaseCooldown(cardState.cardData)
+            : 0;
+
+        return baseCooldown > 0 ? baseCooldown + 1 : 0;
+    }
+
+    void CompleteCooldownSemanticsTurn(BattleEndedTestContext context)
+    {
+        if (context == null || context.runtimeState == null)
+        {
+            return;
+        }
+
+        context.runtimeState.SetPhase("Completed");
+        context.runtimeState.EndCurrentTurnAndClearRuntimeObjects();
+
+        List<BattleActionSlot> nextSlots =
+            BattleActionSlotManager.CreateLivingPartyActionSlots(
+                context.allyA,
+                context.allyB,
+                2
+            );
+        context.runtimeState.PrepareNextTurnWithRuntimeObjects(
+            nextSlots,
+            new List<BattleEnemyIntent>()
+        );
     }
 
     void RunPrimaryPreviewCooldownContractSubTests()
@@ -6195,6 +8727,8 @@ public class CardLoadTest : MonoBehaviour
         int cooldownAfterSecond = cooldownCard.currentCooldown;
         BattleAutomaticTurnCycleResult third = RunAutomaticTurnCycle(context);
         int cooldownAfterThird = cooldownCard.currentCooldown;
+        BattleAutomaticTurnCycleResult fourth = RunAutomaticTurnCycle(context);
+        int cooldownAfterFourth = cooldownCard.currentCooldown;
 
         GameObject cardObject = new GameObject(
             "Auto61RecoveredCardView",
@@ -6218,9 +8752,11 @@ public class CardLoadTest : MonoBehaviour
             first.advancedToNextTurn &&
             second.advancedToNextTurn &&
             third.advancedToNextTurn &&
-            cooldownAfterFirst == 2 &&
-            cooldownAfterSecond == 1 &&
-            cooldownAfterThird == 0 &&
+            fourth.advancedToNextTurn &&
+            cooldownAfterFirst == 3 &&
+            cooldownAfterSecond == 2 &&
+            cooldownAfterThird == 1 &&
+            cooldownAfterFourth == 0 &&
             view.CanBeginDrag;
 
         Debug.Log("模式61 测试14 CD每回合只Tick一次并在归零后恢复拖拽：" + passed);
@@ -7901,7 +10437,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log(
             "模式58 L 同一Defense只处理两次攻击中的第一张：" +
             (singleGuard.isUsed &&
-             singleDefense.currentCooldown == singleDefense.cardData.cooldown &&
+             singleDefense.currentCooldown == GetExpectedResolvedCooldown(singleDefense) &&
              singleContext.allyB.currentHP == hpBefore - 5)
         );
 
@@ -8239,7 +10775,7 @@ public class CardLoadTest : MonoBehaviour
              !firstFailDodge.isContinuousDodgeActive &&
              firstFailDodge.isCardUseFinalized &&
              firstFailDodge.isUsed &&
-             firstFailDodge.cardState.currentCooldown == 2 &&
+             firstFailDodge.cardState.currentCooldown == 3 &&
              !followDefense.isUsed)
         );
 
@@ -8331,7 +10867,7 @@ public class CardLoadTest : MonoBehaviour
              turnEndSlot.isCardUseFinalized &&
              turnEndSlot.isUsed &&
              turnEndSlot.successfulDodgeCount == 3 &&
-             turnEndSlot.cardState.currentCooldown == 1)
+             turnEndSlot.cardState.currentCooldown == 2)
         );
 
         BattleEndedTestContext untouchedContext =
@@ -8369,8 +10905,8 @@ public class CardLoadTest : MonoBehaviour
              secondActive.isCardUseFinalized &&
              firstActive.isUsed &&
              secondActive.isUsed &&
-             firstActive.cardState.currentCooldown == 1 &&
-             secondActive.cardState.currentCooldown == 1)
+             firstActive.cardState.currentCooldown == 2 &&
+             secondActive.cardState.currentCooldown == 2)
         );
 
         BattleEndedTestContext battleEndedContext =
@@ -8388,7 +10924,7 @@ public class CardLoadTest : MonoBehaviour
             (battleEndedContext.runtimeState.IsBattleEnded &&
              battleEndedSlot.isCardUseFinalized &&
              battleEndedSlot.isUsed &&
-             battleEndedCooldown == 2 &&
+             battleEndedCooldown == 3 &&
              battleEndedSlot.cardState.currentCooldown == battleEndedCooldown)
         );
 
@@ -8427,8 +10963,8 @@ public class CardLoadTest : MonoBehaviour
         successCdContext.runtimeState.EndCurrentTurnAndClearRuntimeObjects();
         Debug.Log(
             "模式59 测试18 失败即时结算与成功回合末结算的下一回合CD一致：" +
-            (failureSlot.cardState.currentCooldown == 1 &&
-             successSlot.cardState.currentCooldown == 1)
+            (failureSlot.cardState.currentCooldown == 2 &&
+             successSlot.cardState.currentCooldown == 2)
         );
     }
 
@@ -13345,7 +15881,7 @@ public class CardLoadTest : MonoBehaviour
         ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
 
         bool afterKillCompleted = CountBuffStack(context.allyA, "BattleEndedAfterKillProof") > 0;
-        bool killCardUsed = killSlot != null && killSlot.isUsed && killAttack.currentCooldown == killAttack.cardData.cooldown;
+        bool killCardUsed = killSlot != null && killSlot.isUsed && killAttack.currentCooldown == GetExpectedResolvedCooldown(killAttack);
         bool followAbilityNotExecuted =
             followAbility.currentUseCount == abilityUseCountBefore &&
             followAbility.currentCooldown == abilityCooldownBefore &&
@@ -13767,7 +16303,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期主响应 B槽位1 MarkUsed：" + (responseSlot != null && responseSlot.isUsed));
         bool expectResponseAttackResolved = playerAttackPoint > enemyAttackPoint;
         int expectedResponseAttackCooldown = expectResponseAttackResolved
-            ? responseAttack.cardData.cooldown
+            ? GetExpectedResolvedCooldown(responseAttack)
             : responseAttackCooldownBefore;
         Debug.Log("预期玩家响应 Attack 是否Resolved：" + expectResponseAttackResolved + "，CD是否符合：" + (responseAttack.currentCooldown == expectedResponseAttackCooldown));
         Debug.Log("预期玩家响应 Attack UseCount 不重复变化：" + (responseAttack.currentUseCount == responseAttackUseCountBefore));
@@ -14968,7 +17504,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期 resultType 出现在 Defense Resolver 日志：" + expectedResultType);
         Debug.Log("预期最终伤害：" + expectedDamage + "，实际 HP 是否符合：" + (allyB.currentHP == hpBefore - expectedDamage));
         Debug.Log("预期只使用 B槽位1：" + BattleActionSlotManager.GetSlot(actionSlots, allyB, 1).isUsed);
-        Debug.Log("预期 Defense 进入 CD：" + (passiveGuard.currentCooldown == passiveGuard.cardData.cooldown));
+        Debug.Log("预期 Defense 进入 CD：" + (passiveGuard.currentCooldown == GetExpectedResolvedCooldown(passiveGuard)));
         Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
     }
 

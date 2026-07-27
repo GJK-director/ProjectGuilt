@@ -96,6 +96,8 @@ public class BattleSimpleUIController : MonoBehaviour
     private bool pendingCardDragRefresh;
     private bool pendingSuccessfulAssignment;
     private bool isRunningCompleteTurnCycle;
+    private readonly BattleCardSelectionController cardSelectionController =
+        new BattleCardSelectionController();
 
     private readonly string[] normalTestHandCardIDs =
     {
@@ -127,8 +129,10 @@ public class BattleSimpleUIController : MonoBehaviour
         if (testCardHandView != null)
         {
             testCardHandView.SetCardDragEndedHandler(null);
+            testCardHandView.SetSelectionController(null);
         }
 
+        cardSelectionController.ClearSelection();
         UnbindButtonEvents();
     }
 
@@ -564,6 +568,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void ToggleCardGroup()
     {
+        cardSelectionController.ClearSelection();
         showingSinCards = !showingSinCards;
         RefreshView();
     }
@@ -1084,6 +1089,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void ClearAllUISelectionState()
     {
+        cardSelectionController.ClearSelection();
         BattleCardDragRefreshUtility.ClearSelectedActionSlot(
             ref selectedCharacter,
             ref selectedActionSlotIndex,
@@ -1124,6 +1130,7 @@ public class BattleSimpleUIController : MonoBehaviour
         }
 
         isRunningCompleteTurnCycle = true;
+        cardSelectionController.ClearSelection();
         RefreshBattleStartButtonState();
 
         try
@@ -1567,11 +1574,17 @@ public class BattleSimpleUIController : MonoBehaviour
 
         if (enemy01StatusView != null)
         {
+            enemy01StatusView.SetEnemySlotClickHandler(
+                OnEnemyActionSlotClicked
+            );
             enemy01StatusView.SetEnemySlotDropHandler(OnEnemyActionSlotCardDropped);
         }
 
         if (enemy02StatusView != null)
         {
+            enemy02StatusView.SetEnemySlotClickHandler(
+                OnEnemyActionSlotClicked
+            );
             enemy02StatusView.SetEnemySlotDropHandler(OnEnemyActionSlotCardDropped);
         }
     }
@@ -1580,7 +1593,10 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         if (testCardHandView != null)
         {
-            testCardHandView.SetCardDragEndedHandler(OnCardDragEnded);
+            testCardHandView.SetCardDragEndedHandler(null);
+            testCardHandView.SetSelectionController(
+                cardSelectionController
+            );
         }
     }
 
@@ -1639,26 +1655,10 @@ public class BattleSimpleUIController : MonoBehaviour
         BattleCardUIView cardView
     )
     {
-        if (targetSlotView == null || !targetSlotView.IsEnemySlot)
-        {
-            lastLog = "卡牌拖放安排失败：目标不是敌方行动槽";
-            BattleCardDragRefreshUtility.MarkPending(
-                ref pendingCardDragRefresh,
-                ref pendingSuccessfulAssignment,
-                false
-            );
-            return;
-        }
-
         BattleActionAssignmentResult result;
-        bool assigned = BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
-            runtimeState,
-            selectedCharacter,
-            GetSelectedFormalActionSlotIndex(),
-            cardView != null ? cardView.BoundOwner : null,
-            cardView != null ? cardView.BoundCardState : null,
-            targetSlotView != null ? targetSlotView.BoundCharacter : null,
-            targetSlotView != null ? targetSlotView.BoundEnemyIntent : null,
+        bool assigned = TryAssignCardToEnemySlot(
+            targetSlotView,
+            cardView,
             out result
         );
 
@@ -1671,6 +1671,74 @@ public class BattleSimpleUIController : MonoBehaviour
             ref pendingCardDragRefresh,
             ref pendingSuccessfulAssignment,
             assigned && result != null && result.isSuccess
+        );
+    }
+
+    private void OnEnemyActionSlotClicked(
+        BattleActionSlotUIView targetSlotView
+    )
+    {
+        BattleCardUIView selectedCardView =
+            cardSelectionController.SelectedCardView;
+        if (selectedCardView == null)
+        {
+            return;
+        }
+
+        BattleActionAssignmentResult result;
+        bool assigned = TryAssignCardToEnemySlot(
+            targetSlotView,
+            selectedCardView,
+            out result
+        );
+        bool assignmentSucceeded =
+            assigned &&
+            result != null &&
+            result.isSuccess;
+
+        lastLog = result != null
+            ? result.message
+            : assignmentSucceeded
+                ? "卡牌点击安排成功"
+                : "卡牌点击安排失败";
+
+        if (!assignmentSucceeded)
+        {
+            SetText(logText, lastLog);
+            return;
+        }
+
+        cardSelectionController.ClearSelection();
+        BattleCardDragRefreshUtility.ClearSelectedActionSlot(
+            ref selectedCharacter,
+            ref selectedActionSlotIndex,
+            ref selectedActionSlotView
+        );
+        RefreshView();
+    }
+
+    private bool TryAssignCardToEnemySlot(
+        BattleActionSlotUIView targetSlotView,
+        BattleCardUIView cardView,
+        out BattleActionAssignmentResult result
+    )
+    {
+        result = null;
+
+        if (targetSlotView == null || !targetSlotView.IsEnemySlot)
+        {
+            return false;
+        }
+
+        return BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            runtimeState,
+            selectedCharacter,
+            GetSelectedFormalActionSlotIndex(),
+            cardView != null ? cardView.BoundOwner : null,
+            cardView != null ? cardView.BoundCardState : null,
+            targetSlotView.BoundCharacter,
+            targetSlotView.BoundEnemyIntent,
+            out result
         );
     }
 

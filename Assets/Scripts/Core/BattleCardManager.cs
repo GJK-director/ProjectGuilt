@@ -319,14 +319,13 @@ public static class BattleCardManager
         }
 
         // 普通卡：根据卡牌数据或品质计算基础 CD。
-        int cooldown = GetBaseCooldown(cardState.cardData);
+        int baseCooldown = GetBaseCooldown(cardState.cardData);
 
-        if (cooldown < 0)
-        {
-            cooldown = 0;
-        }
-
-        cardState.currentCooldown = cooldown;
+        // 本项目会在卡牌使用的同一回合末统一 Tick 一次 CD。
+        // 运行时先补 1，确保下一回合 Prepare 时剩余值仍等于策划填写的基础 CD。
+        cardState.currentCooldown = baseCooldown > 0
+            ? baseCooldown + 1
+            : 0;
 
         if (BattleDebugSettings.ShowDetailBattleLog)
         {

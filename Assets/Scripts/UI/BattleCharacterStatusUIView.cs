@@ -42,6 +42,14 @@ public class BattleCharacterStatusUIView : MonoBehaviour
         RefreshSlotInteractionBindings();
     }
 
+    public void SetEnemySlotClickHandler(
+        Action<BattleActionSlotUIView> onClicked
+    )
+    {
+        slotLeftClickHandler = onClicked;
+        RefreshSlotInteractionBindings();
+    }
+
     public void SetSelfCardDropHandler(
         Action<BattleSelfActionDropZone, BattleCardUIView> onCardDropped
     )
@@ -205,7 +213,7 @@ public class BattleCharacterStatusUIView : MonoBehaviour
                 boundCharacter,
                 0,
                 isEnemy,
-                isEnemy ? null : slotLeftClickHandler,
+                slotLeftClickHandler,
                 isEnemy ? null : slotRightClickHandler,
                 isEnemy ? enemySlotDropHandler : null
             );
@@ -217,7 +225,7 @@ public class BattleCharacterStatusUIView : MonoBehaviour
                 boundCharacter,
                 1,
                 isEnemy,
-                isEnemy ? null : slotLeftClickHandler,
+                slotLeftClickHandler,
                 isEnemy ? null : slotRightClickHandler,
                 isEnemy ? enemySlotDropHandler : null
             );
