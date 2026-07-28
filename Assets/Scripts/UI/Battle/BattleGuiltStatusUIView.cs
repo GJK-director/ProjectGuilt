@@ -60,17 +60,6 @@ public sealed class BattleGuiltStatusUIView : MonoBehaviour
     [SerializeField]
     private float minimumCellWidth = 1f;
 
-    [Header("Inspector 运行测试")]
-
-    [Tooltip("勾选后，可以在 Play Mode 中直接修改测试负罪感。")]
-    [SerializeField]
-    private bool useInspectorPreview = true;
-
-    [Tooltip("在 Play Mode 中直接修改这个数值测试 UI。")]
-    [Min(0)]
-    [SerializeField]
-    private int inspectorTotalGuilt;
-
     private readonly List<RectTransform> cellPool =
         new List<RectTransform>();
 
@@ -83,7 +72,6 @@ public sealed class BattleGuiltStatusUIView : MonoBehaviour
     private int currentStageIndex;
     private int currentStageProgress;
 
-    private int lastInspectorTotalGuilt = int.MinValue;
     private bool isInitialized;
 
     private void Awake()
@@ -103,44 +91,7 @@ public sealed class BattleGuiltStatusUIView : MonoBehaviour
         EnsurePoolSize(GetMaximumCapacity());
 
         isInitialized = true;
-    }
-
-    private void Start()
-    {
-        if (!isInitialized)
-        {
-            return;
-        }
-
-        if (useInspectorPreview)
-        {
-            ApplyInspectorPreview();
-        }
-        else
-        {
-            SetTotalGuilt(currentTotalGuilt);
-        }
-    }
-
-    private void Update()
-    {
-#if UNITY_EDITOR
-        if (!useInspectorPreview || !isInitialized)
-        {
-            return;
-        }
-
-        int correctedValue = Mathf.Max(0, inspectorTotalGuilt);
-
-        // Inspector数值没有变化时，不重复刷新。
-        if (correctedValue == lastInspectorTotalGuilt)
-        {
-            return;
-        }
-
-        inspectorTotalGuilt = correctedValue;
-        ApplyInspectorPreview();
-#endif
+        SetTotalGuilt(0);
     }
 
     private void OnRectTransformDimensionsChange()
@@ -168,14 +119,6 @@ public sealed class BattleGuiltStatusUIView : MonoBehaviour
         );
 
         RefreshDisplay();
-    }
-
-    private void ApplyInspectorPreview()
-    {
-        inspectorTotalGuilt = Mathf.Max(0, inspectorTotalGuilt);
-        lastInspectorTotalGuilt = inspectorTotalGuilt;
-
-        SetTotalGuilt(inspectorTotalGuilt);
     }
 
     /// <summary>

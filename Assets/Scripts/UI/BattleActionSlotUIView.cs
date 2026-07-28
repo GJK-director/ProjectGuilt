@@ -12,7 +12,7 @@ public enum BattleActionSlotUIState
     EnemyActionSet
 }
 
-public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler, IDropHandler
+public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler
 {
     [SerializeField] private Image slotImage;
 
@@ -33,7 +33,6 @@ public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler, IDrop
     private BattleEnemyIntent boundEnemyIntent;
     private Action<BattleActionSlotUIView> leftClickHandler;
     private Action<BattleActionSlotUIView> rightClickHandler;
-    private Action<BattleActionSlotUIView, BattleCardUIView> cardDropHandler;
 
     public CharacterData BoundCharacter => boundCharacter;
     public int SlotIndex => slotIndex;
@@ -81,7 +80,7 @@ public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler, IDrop
         Action<BattleActionSlotUIView> onClicked
     )
     {
-        BindInteraction(character, index, enemySlot, onClicked, null, null);
+        BindInteraction(character, index, enemySlot, onClicked, null);
     }
 
     public void BindInteraction(
@@ -89,8 +88,7 @@ public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler, IDrop
         int index,
         bool enemySlot,
         Action<BattleActionSlotUIView> onLeftClicked,
-        Action<BattleActionSlotUIView> onRightClicked,
-        Action<BattleActionSlotUIView, BattleCardUIView> onCardDropped
+        Action<BattleActionSlotUIView> onRightClicked
     )
     {
         boundCharacter = character;
@@ -98,7 +96,6 @@ public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler, IDrop
         isEnemySlot = enemySlot;
         leftClickHandler = onLeftClicked;
         rightClickHandler = onRightClicked;
-        cardDropHandler = onCardDropped;
     }
 
     public void SetBoundEnemyIntent(BattleEnemyIntent enemyIntent)
@@ -135,22 +132,6 @@ public class BattleActionSlotUIView : MonoBehaviour, IPointerClickHandler, IDrop
         {
             rightClickHandler?.Invoke(this);
         }
-    }
-
-    public void OnDrop(PointerEventData eventData)
-    {
-        if (!isEnemySlot || boundCharacter == null || eventData == null || eventData.pointerDrag == null)
-        {
-            return;
-        }
-
-        BattleCardUIView cardView = eventData.pointerDrag.GetComponent<BattleCardUIView>();
-        if (cardView == null || cardView.BoundCardState == null)
-        {
-            return;
-        }
-
-        cardDropHandler?.Invoke(this, cardView);
     }
 
     private void RefreshDisplayedSprite()

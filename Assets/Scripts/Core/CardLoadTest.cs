@@ -50,7 +50,8 @@ public enum BattleTestMode
     BattleCardCooldownFutureTurnSemanticsBasic = 63,
     BattleCardPrimaryVisualPresetBasic = 64,
     BattleCardHoverAndDragMotionBasic = 65,
-    BattleCardClickAssignBasic = 66
+    BattleCardClickAssignBasic = 66,
+    BattleCardClickInteractionIntegration = 67
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -293,6 +294,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleCardClickAssignBasic)
         {
             RunBattleCardClickAssignBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardClickInteractionIntegration)
+        {
+            RunBattleCardClickInteractionIntegrationTestSequence();
             return;
         }
 
@@ -5804,7 +5811,7 @@ public class CardLoadTest : MonoBehaviour
             cooldownPreview.cooldownText == "1" &&
             cardData.cooldown == 1 &&
             cardState.currentCooldown == 1 &&
-            !cardView.CanBeginDrag;
+            !cardView.CanSelect;
 
         TMPro.TMP_Text legacyCooldownText = CreateMode64Text(
             cardObject.transform,
@@ -5872,7 +5879,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("模式64 测试6 罪卡无条件覆盖为Sin底图：" + test6);
         Debug.Log("模式64 测试7 缺少品质图或非法品质时使用fallback：" + test7);
         Debug.Log("模式64 测试8 旧数据未填写rarity时默认White：" + test8);
-        Debug.Log("模式64 测试9 一级CD引用可空、旧对象隐藏且拖拽门禁保留：" + test9);
+        Debug.Log("模式64 测试9 一级CD引用可空、旧对象隐藏且选择门禁保留：" + test9);
         Debug.Log("模式64 测试10 固定点数完整显示10-10：" + test10);
         Debug.Log("模式64 测试11 描述保持策划原文且不拼接CD：" + test11);
         Debug.Log("模式64 测试12 重复Bind复用同一TMP材质实例：" + test12);
@@ -6034,7 +6041,6 @@ public class CardLoadTest : MonoBehaviour
             owner,
             cardState,
             preview,
-            null,
             selectionController
         );
 
@@ -6161,7 +6167,6 @@ public class CardLoadTest : MonoBehaviour
             owner,
             cardState,
             preview,
-            null,
             selectionController
         );
         motionView.RecalculateBaseVisualTransform();
@@ -6174,7 +6179,6 @@ public class CardLoadTest : MonoBehaviour
             owner,
             cardState,
             preview,
-            null,
             selectionController
         );
         bool test9CacheStableAfterRepeatedBind =
@@ -6415,7 +6419,7 @@ public class CardLoadTest : MonoBehaviour
             );
         BattleActionAssignmentResult firstAssignResult;
         bool firstAssigned =
-            BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            BattleCardAssignmentRouter.TryAssignToEnemySlot(
                 context.runtimeState,
                 context.allyA,
                 1,
@@ -6427,7 +6431,7 @@ public class CardLoadTest : MonoBehaviour
             );
         BattleActionAssignmentResult replaceResult;
         bool replaced =
-            BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
+            BattleCardAssignmentRouter.TryAssignToEnemySlot(
                 context.runtimeState,
                 context.allyA,
                 1,
@@ -6446,7 +6450,7 @@ public class CardLoadTest : MonoBehaviour
             );
         BattleActionAssignmentResult cancelResult;
         bool cancelled =
-            BattleCardDropAssignmentRouter.TryCancelSelectedSlot(
+            BattleCardAssignmentRouter.TryCancelSelectedSlot(
                 context.runtimeState,
                 context.allyA,
                 1,
@@ -6549,21 +6553,18 @@ public class CardLoadTest : MonoBehaviour
             owner,
             firstCard,
             BattleCardUIPreviewBuilder.Build(owner, target, firstCard),
-            null,
             selection
         );
         secondView.BindCard(
             owner,
             secondCard,
             BattleCardUIPreviewBuilder.Build(owner, target, secondCard),
-            null,
             selection
         );
         coolingView.BindCard(
             owner,
             coolingCard,
             BattleCardUIPreviewBuilder.Build(owner, target, coolingCard),
-            null,
             selection
         );
 
@@ -6648,57 +6649,57 @@ public class CardLoadTest : MonoBehaviour
                 assignContext.enemy,
                 assignCard
             ),
-            null,
             assignSelection
         );
+
+        GameObject sourceSlotObject = new GameObject(
+            "Click66SourceSlot",
+            typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView sourceSlotView =
+            sourceSlotObject.GetComponent<BattleActionSlotUIView>();
+        sourceSlotView.BindInteraction(
+            assignContext.allyA,
+            0,
+            false,
+            null
+        );
+        BattleCardInteractionCoordinator assignCoordinator =
+            new BattleCardInteractionCoordinator(assignSelection);
+        bool assignSourceSelected =
+            assignCoordinator.SelectSourceSlot(sourceSlotView);
 
         GameObject enemySlotObject = new GameObject(
             "Click66EnemySlot",
             typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
             typeof(BattleActionSlotUIView)
         );
         BattleActionSlotUIView enemySlotView =
             enemySlotObject.GetComponent<BattleActionSlotUIView>();
-        bool clickAssigned = false;
-        BattleActionAssignmentResult clickAssignResult = null;
+        BattleCardInteractionOutcome clickOutcome = null;
         enemySlotView.BindInteraction(
             assignContext.enemy,
             0,
             true,
             clickedSlot =>
             {
-                BattleCardUIView selectedView =
-                    assignSelection.SelectedCardView;
-                if (selectedView == null)
-                {
-                    return;
-                }
-
-                clickAssigned =
-                    BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
-                        assignContext.runtimeState,
-                        assignContext.allyA,
-                        1,
-                        selectedView.BoundOwner,
-                        selectedView.BoundCardState,
-                        clickedSlot.BoundCharacter,
-                        clickedSlot.BoundEnemyIntent,
-                        out clickAssignResult
-                    );
-
-                if (clickAssigned &&
-                    clickAssignResult != null &&
-                    clickAssignResult.isSuccess)
-                {
-                    assignSelection.ClearSelection();
-                }
+                clickOutcome = assignCoordinator.ClickEnemySlot(
+                    assignContext.runtimeState,
+                    clickedSlot
+                );
             }
         );
         enemySlotView.SetBoundEnemyIntent(assignIntent);
 
         enemySlotView.OnPointerClick(leftClick);
         bool test9 =
-            !clickAssigned &&
+            assignSourceSelected &&
+            clickOutcome != null &&
+            !clickOutcome.hadSelectedCard &&
+            !clickOutcome.isSuccess &&
             BattleActionSlotManager.GetSlot(
                 assignSlots,
                 assignContext.allyA,
@@ -6708,9 +6709,11 @@ public class CardLoadTest : MonoBehaviour
         assignView.OnPointerClick(leftClick);
         enemySlotView.OnPointerClick(leftClick);
         bool test10 =
-            clickAssigned &&
-            clickAssignResult != null &&
-            clickAssignResult.isSuccess &&
+            clickOutcome != null &&
+            clickOutcome.hadSelectedCard &&
+            clickOutcome.isSuccess &&
+            clickOutcome.assignmentResult != null &&
+            clickOutcome.assignmentResult.isSuccess &&
             object.ReferenceEquals(
                 BattleActionSlotManager.GetSlot(
                     assignSlots,
@@ -6719,7 +6722,11 @@ public class CardLoadTest : MonoBehaviour
                 ).cardState,
                 assignCard
             );
-        bool test11 = !assignSelection.HasSelection;
+        bool test11 =
+            !assignSelection.HasSelection &&
+            assignCoordinator.SelectedCharacter == null &&
+            assignCoordinator.SelectedActionSlotView == null &&
+            !sourceSlotView.IsSelected;
 
         BattleExecutionPlan executionPlan =
             BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
@@ -6775,25 +6782,62 @@ public class CardLoadTest : MonoBehaviour
                 invalidContext.enemy,
                 invalidCard
             ),
-            null,
             invalidSelection
         );
         invalidSelection.SelectCard(invalidView);
-        BattleActionAssignmentResult invalidResult;
-        bool invalidAssigned =
-            BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
-                invalidContext.runtimeState,
-                invalidContext.allyB,
-                1,
-                invalidView.BoundOwner,
-                invalidView.BoundCardState,
-                invalidContext.enemy,
-                null,
-                out invalidResult
-            );
+        GameObject invalidSourceObject = new GameObject(
+            "Click66InvalidSource",
+            typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView invalidSourceView =
+            invalidSourceObject.GetComponent<BattleActionSlotUIView>();
+        invalidSourceView.BindInteraction(
+            invalidContext.allyB,
+            0,
+            false,
+            null
+        );
+        GameObject invalidTargetObject = new GameObject(
+            "Click66InvalidTarget",
+            typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView invalidTargetView =
+            invalidTargetObject.GetComponent<BattleActionSlotUIView>();
+        BattleCardInteractionCoordinator invalidCoordinator =
+            new BattleCardInteractionCoordinator(invalidSelection);
+        invalidSourceView.BindInteraction(
+            invalidContext.allyB,
+            0,
+            false,
+            clickedSlot => invalidCoordinator.SelectSourceSlot(clickedSlot)
+        );
+        BattleCardInteractionOutcome invalidOutcome = null;
+        invalidTargetView.BindInteraction(
+            invalidContext.enemy,
+            0,
+            true,
+            clickedSlot =>
+            {
+                invalidOutcome = invalidCoordinator.ClickEnemySlot(
+                    invalidContext.runtimeState,
+                    clickedSlot
+                );
+            }
+        );
+        invalidSourceView.OnPointerClick(leftClick);
+        invalidTargetView.OnPointerClick(leftClick);
         bool test12 =
-            !invalidAssigned &&
+            invalidOutcome != null &&
+            !invalidOutcome.isSuccess &&
             invalidSelection.IsSelected(invalidView) &&
+            object.ReferenceEquals(
+                invalidCoordinator.SelectedActionSlotView,
+                invalidSourceView
+            ) &&
             BattleActionSlotManager.GetSlot(
                 invalidSlots,
                 invalidContext.allyA,
@@ -6826,23 +6870,70 @@ public class CardLoadTest : MonoBehaviour
                 "click66_empty_card",
                 5
             );
-        BattleActionAssignmentResult emptyResult;
-        bool emptyAssigned =
-            BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
-                emptyContext.runtimeState,
+        BattleCardSelectionController emptySelection =
+            new BattleCardSelectionController();
+        BattleCardInteractionCoordinator emptyCoordinator =
+            new BattleCardInteractionCoordinator(emptySelection);
+        BattleCardUIView emptyCardView = CreatePrimaryPreviewCardView(
+            "Click66EmptyCard",
+            emptyContext.allyA,
+            emptyContext.enemy,
+            emptyTargetCard
+        );
+        emptyCardView.BindCard(
+            emptyContext.allyA,
+            emptyTargetCard,
+            BattleCardUIPreviewBuilder.Build(
                 emptyContext.allyA,
-                1,
-                emptyContext.allyA,
-                emptyTargetCard,
                 emptyContext.enemy,
-                null,
-                out emptyResult
-            );
+                emptyTargetCard
+            ),
+            emptySelection
+        );
+        GameObject emptySourceObject = new GameObject(
+            "Click66EmptySource",
+            typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView emptySourceView =
+            emptySourceObject.GetComponent<BattleActionSlotUIView>();
+        emptySourceView.BindInteraction(
+            emptyContext.allyA,
+            0,
+            false,
+            clickedSlot => emptyCoordinator.SelectSourceSlot(clickedSlot)
+        );
+        GameObject emptyTargetObject = new GameObject(
+            "Click66EmptyTarget",
+            typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView emptyTargetView =
+            emptyTargetObject.GetComponent<BattleActionSlotUIView>();
+        BattleCardInteractionOutcome emptyOutcome = null;
+        emptyTargetView.BindInteraction(
+            emptyContext.enemy,
+            0,
+            true,
+            clickedSlot =>
+            {
+                emptyOutcome = emptyCoordinator.ClickEnemySlot(
+                    emptyContext.runtimeState,
+                    clickedSlot
+                );
+            }
+        );
+        emptySourceView.OnPointerClick(leftClick);
+        emptyCardView.OnPointerClick(leftClick);
+        emptyTargetView.OnPointerClick(leftClick);
         bool test13 =
-            emptyAssigned &&
-            emptyResult != null &&
-            emptyResult.isSuccess &&
-            emptyResult.placementType ==
+            emptyOutcome != null &&
+            emptyOutcome.isSuccess &&
+            emptyOutcome.assignmentResult != null &&
+            emptyOutcome.assignmentResult.isSuccess &&
+            emptyOutcome.assignmentResult.placementType ==
                 BattleActionPlacementType.SpecificEnemy;
 
         bool test14 =
@@ -6883,23 +6974,71 @@ public class CardLoadTest : MonoBehaviour
                 "click66_low_card",
                 5
             );
-        BattleActionAssignmentResult lowResult;
-        bool lowAssigned =
-            BattleCardDropAssignmentRouter.TryAssignToEnemySlot(
-                lowContext.runtimeState,
+        BattleCardSelectionController lowSelection =
+            new BattleCardSelectionController();
+        BattleCardInteractionCoordinator lowCoordinator =
+            new BattleCardInteractionCoordinator(lowSelection);
+        BattleCardUIView lowCardView = CreatePrimaryPreviewCardView(
+            "Click66LowCard",
+            lowContext.allyA,
+            lowContext.enemy,
+            lowCard
+        );
+        lowCardView.BindCard(
+            lowContext.allyA,
+            lowCard,
+            BattleCardUIPreviewBuilder.Build(
                 lowContext.allyA,
-                1,
-                lowContext.allyA,
-                lowCard,
                 lowContext.enemy,
-                lowIntent,
-                out lowResult
-            );
+                lowCard
+            ),
+            lowSelection
+        );
+        GameObject lowSourceObject = new GameObject(
+            "Click66LowSource",
+            typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView lowSourceView =
+            lowSourceObject.GetComponent<BattleActionSlotUIView>();
+        lowSourceView.BindInteraction(
+            lowContext.allyA,
+            0,
+            false,
+            clickedSlot => lowCoordinator.SelectSourceSlot(clickedSlot)
+        );
+        GameObject lowTargetObject = new GameObject(
+            "Click66LowTarget",
+            typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView lowTargetView =
+            lowTargetObject.GetComponent<BattleActionSlotUIView>();
+        lowTargetView.SetBoundEnemyIntent(lowIntent);
+        BattleCardInteractionOutcome lowOutcome = null;
+        lowTargetView.BindInteraction(
+            lowContext.enemy,
+            0,
+            true,
+            clickedSlot =>
+            {
+                lowOutcome = lowCoordinator.ClickEnemySlot(
+                    lowContext.runtimeState,
+                    clickedSlot
+                );
+            }
+        );
+        lowSourceView.OnPointerClick(leftClick);
+        lowCardView.OnPointerClick(leftClick);
+        lowTargetView.OnPointerClick(leftClick);
         bool test15 =
-            lowAssigned &&
-            lowResult != null &&
-            lowResult.isSuccess &&
-            lowResult.wasAutoDowngraded;
+            lowOutcome != null &&
+            lowOutcome.isSuccess &&
+            lowOutcome.assignmentResult != null &&
+            lowOutcome.assignmentResult.isSuccess &&
+            lowOutcome.assignmentResult.wasAutoDowngraded;
 
         BattleCardSelectionController lifecycleSelection =
             new BattleCardSelectionController();
@@ -6913,7 +7052,6 @@ public class CardLoadTest : MonoBehaviour
             owner,
             firstCard,
             BattleCardUIPreviewBuilder.Build(owner, target, firstCard),
-            null,
             lifecycleSelection
         );
         lifecycleSelection.SelectCard(lifecycleView);
@@ -6922,12 +7060,38 @@ public class CardLoadTest : MonoBehaviour
 
         lifecycleView.gameObject.SetActive(true);
         lifecycleSelection.SelectCard(lifecycleView);
-        lifecycleSelection.ClearSelection();
-        bool test17 = !lifecycleSelection.HasSelection;
+        BattleCardInteractionCoordinator lifecycleCoordinator =
+            new BattleCardInteractionCoordinator(lifecycleSelection);
+        GameObject lifecycleSourceObject = new GameObject(
+            "Click66LifecycleSource",
+            typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView lifecycleSourceView =
+            lifecycleSourceObject.GetComponent<BattleActionSlotUIView>();
+        lifecycleSourceView.BindInteraction(
+            owner,
+            0,
+            false,
+            clickedSlot =>
+                lifecycleCoordinator.SelectSourceSlot(clickedSlot)
+        );
+        bool modeBeforeToggle = false;
+        bool modeAfterToggle =
+            lifecycleCoordinator.ToggleCardMode(modeBeforeToggle);
+        bool test17 =
+            modeAfterToggle &&
+            !lifecycleSelection.HasSelection;
 
         lifecycleSelection.SelectCard(lifecycleView);
-        lifecycleSelection.ClearSelection();
-        bool test18 = !lifecycleSelection.HasSelection;
+        lifecycleSourceView.OnPointerClick(leftClick);
+        lifecycleCoordinator.PrepareForBattleStart();
+        bool test18 =
+            !lifecycleSelection.HasSelection &&
+            lifecycleCoordinator.SelectedCharacter == null &&
+            lifecycleCoordinator.SelectedActionSlotView == null &&
+            !lifecycleSourceView.IsSelected;
 
         bool test19 =
             RunBattleCardPrimaryVisualPresetBasicTestSequence();
@@ -6962,11 +7126,297 @@ public class CardLoadTest : MonoBehaviour
         Destroy(secondView.gameObject);
         Destroy(coolingView.gameObject);
         Destroy(assignView.gameObject);
+        Destroy(sourceSlotObject);
         Destroy(enemySlotObject);
         Destroy(invalidView.gameObject);
+        Destroy(invalidSourceObject);
+        Destroy(invalidTargetObject);
+        Destroy(emptyCardView.gameObject);
+        Destroy(emptySourceObject);
+        Destroy(emptyTargetObject);
+        Destroy(lowCardView.gameObject);
+        Destroy(lowSourceObject);
+        Destroy(lowTargetObject);
         Destroy(lifecycleView.gameObject);
+        Destroy(lifecycleSourceObject);
 
         Debug.Log("===== BattleCardClickAssignBasic 聚合测试结束 =====");
+    }
+
+    void RunBattleCardClickInteractionIntegrationTestSequence()
+    {
+        Debug.Log(
+            "===== BattleCardClickInteractionIntegration 聚合测试开始 ====="
+        );
+
+        BattleEndedTestContext emptyContext =
+            CreateBattleEndedTestContext(
+                "click67_empty",
+                30,
+                30,
+                50,
+                10,
+                8,
+                5
+            );
+        bool test1 = RunMode67SelfTargetClickSubTest(
+            emptyContext,
+            null,
+            false,
+            false
+        );
+
+        BattleEndedTestContext abilityContext =
+            CreateBattleEndedTestContext(
+                "click67_ability",
+                30,
+                30,
+                50,
+                10,
+                8,
+                5
+            );
+        BattleCardState abilityCard = CreateBattleEndedAbilityCard(
+            abilityContext.allyA,
+            "click67_ability_card",
+            "Click67Ability"
+        );
+        bool test2 = RunMode67SelfTargetClickSubTest(
+            abilityContext,
+            abilityCard,
+            true,
+            true
+        );
+
+        BattleEndedTestContext defenseContext =
+            CreateBattleEndedTestContext(
+                "click67_defense",
+                30,
+                30,
+                50,
+                10,
+                8,
+                5
+            );
+        BattleCardState defenseCard =
+            CreateTestDefenseCardForCharacter(
+                defenseContext.allyA,
+                "click67_defense_card",
+                4,
+                1
+            );
+        bool test3 = RunMode67SelfTargetClickSubTest(
+            defenseContext,
+            defenseCard,
+            true,
+            true
+        );
+
+        BattleEndedTestContext dodgeContext =
+            CreateBattleEndedTestContext(
+                "click67_dodge",
+                30,
+                30,
+                50,
+                10,
+                8,
+                5
+            );
+        BattleCardState dodgeCard =
+            CreateFixedDodgeCardForCharacter(
+                dodgeContext.allyA,
+                "click67_dodge_card",
+                4,
+                1
+            );
+        bool test4 = RunMode67SelfTargetClickSubTest(
+            dodgeContext,
+            dodgeCard,
+            true,
+            true
+        );
+
+        BattleEndedTestContext attackContext =
+            CreateBattleEndedTestContext(
+                "click67_attack",
+                30,
+                30,
+                50,
+                10,
+                8,
+                5
+            );
+        BattleCardState attackCard =
+            CreateFixedAttackCardForCharacter(
+                attackContext.allyA,
+                "click67_attack_card",
+                5
+            );
+        bool test5 = RunMode67SelfTargetClickSubTest(
+            attackContext,
+            attackCard,
+            true,
+            false
+        );
+
+        Debug.Log("模式67 测试1 未选卡点击自身目标不安排：" + test1);
+        Debug.Log("模式67 测试2 Ability点击自身目标成功：" + test2);
+        Debug.Log("模式67 测试3 Defense点击自身目标成功：" + test3);
+        Debug.Log("模式67 测试4 Dodge点击自身目标成功：" + test4);
+        Debug.Log("模式67 测试5 Attack点击自身目标失败并保留选择：" + test5);
+        Debug.Log(
+            "===== BattleCardClickInteractionIntegration 聚合测试结束 ====="
+        );
+    }
+
+    bool RunMode67SelfTargetClickSubTest(
+        BattleEndedTestContext context,
+        BattleCardState cardState,
+        bool selectCard,
+        bool expectSuccess
+    )
+    {
+        List<BattleActionSlot> slots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                context.allyA,
+                context.allyB,
+                2
+            );
+        context.runtimeState.SetActionSlots(slots);
+        context.runtimeState.SetIntentQueue(
+            new List<BattleEnemyIntent>()
+        );
+        context.runtimeState.SetPhase("Prepare");
+
+        BattleCardSelectionController selectionController =
+            new BattleCardSelectionController();
+        BattleCardInteractionCoordinator coordinator =
+            new BattleCardInteractionCoordinator(selectionController);
+
+        GameObject sourceObject = new GameObject(
+            "Click67Source",
+            typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView sourceView =
+            sourceObject.GetComponent<BattleActionSlotUIView>();
+        sourceView.BindInteraction(
+            context.allyA,
+            0,
+            false,
+            clickedSlot => coordinator.SelectSourceSlot(clickedSlot)
+        );
+
+        GameObject targetObject = new GameObject(
+            "Click67SelfTarget",
+            typeof(RectTransform),
+            typeof(BattleSelfActionDropZone)
+        );
+        BattleSelfActionDropZone targetView =
+            targetObject.GetComponent<BattleSelfActionDropZone>();
+        BattleCardInteractionOutcome outcome = null;
+        targetView.Bind(
+            context.allyA,
+            clickedTarget =>
+            {
+                outcome = coordinator.ClickSelfTarget(
+                    context.runtimeState,
+                    clickedTarget
+                );
+            }
+        );
+
+        BattleCardUIView cardView = null;
+        if (cardState != null)
+        {
+            cardView = CreatePrimaryPreviewCardView(
+                "Click67Card",
+                context.allyA,
+                context.allyA,
+                cardState
+            );
+            cardView.BindCard(
+                context.allyA,
+                cardState,
+                BattleCardUIPreviewBuilder.Build(
+                    context.allyA,
+                    context.allyA,
+                    cardState
+                ),
+                selectionController
+            );
+        }
+
+        PointerEventData leftClick = new PointerEventData(null)
+        {
+            button = PointerEventData.InputButton.Left
+        };
+        sourceView.OnPointerClick(leftClick);
+
+        if (selectCard && cardView != null)
+        {
+            cardView.OnPointerClick(leftClick);
+        }
+
+        targetView.OnPointerClick(leftClick);
+
+        BattleActionSlot assignedSlot =
+            BattleActionSlotManager.GetSlot(
+                slots,
+                context.allyA,
+                1
+            );
+        bool sourceWasSelected =
+            outcome != null &&
+            outcome.hadSelectedCard == selectCard;
+        bool passed;
+
+        if (expectSuccess)
+        {
+            passed =
+                sourceWasSelected &&
+                outcome.isSuccess &&
+                outcome.assignmentResult != null &&
+                outcome.assignmentResult.isSuccess &&
+                outcome.assignmentResult.placementType ==
+                    BattleActionPlacementType.Self &&
+                assignedSlot != null &&
+                object.ReferenceEquals(
+                    assignedSlot.cardState,
+                    cardState
+                ) &&
+                !selectionController.HasSelection &&
+                coordinator.SelectedCharacter == null &&
+                coordinator.SelectedActionSlotView == null &&
+                !sourceView.IsSelected;
+        }
+        else
+        {
+            bool shouldRetainSelection = selectCard && cardView != null;
+            passed =
+                sourceWasSelected &&
+                !outcome.isSuccess &&
+                assignedSlot != null &&
+                assignedSlot.IsEmpty() &&
+                selectionController.HasSelection ==
+                    shouldRetainSelection &&
+                coordinator.SelectedCharacter == context.allyA &&
+                object.ReferenceEquals(
+                    coordinator.SelectedActionSlotView,
+                    sourceView
+                ) &&
+                sourceView.IsSelected;
+        }
+
+        if (cardView != null)
+        {
+            Destroy(cardView.gameObject);
+        }
+
+        Destroy(sourceObject);
+        Destroy(targetObject);
+        return passed;
     }
 
     void RunMode66HoverVisualSubTest(
@@ -7320,7 +7770,7 @@ public class CardLoadTest : MonoBehaviour
         bool passed =
             cooldownAfterResolved == 0 &&
             card.currentCooldown == 0 &&
-            view.CanBeginDrag &&
+            view.CanSelect &&
             eligibility != null &&
             eligibility.isEligible;
 
@@ -7370,7 +7820,7 @@ public class CardLoadTest : MonoBehaviour
                 context.runtimeState,
                 card
             ) &&
-            !coolingView.CanBeginDrag &&
+            !coolingView.CanSelect &&
             coolingEligibility != null &&
             !coolingEligibility.isEligible &&
             coolingEligibility.failureReason ==
@@ -7391,12 +7841,12 @@ public class CardLoadTest : MonoBehaviour
             );
         bool test4 =
             card.currentCooldown == 0 &&
-            readyView.CanBeginDrag &&
+            readyView.CanSelect &&
             readyEligibility != null &&
             readyEligibility.isEligible;
 
         Debug.Log("模式63 测试2 CD1在Resolved时补偿为2：" + test2);
-        Debug.Log("模式63 测试3 CD1下一回合剩余1且不可拖拽或安排：" + test3);
+        Debug.Log("模式63 测试3 CD1下一回合剩余1且不可选择或安排：" + test3);
         Debug.Log("模式63 测试4 CD1经过一个完整未来回合后恢复：" + test4);
         Destroy(coolingView.gameObject);
         Destroy(readyView.gameObject);
@@ -7642,7 +8092,7 @@ public class CardLoadTest : MonoBehaviour
             cardStillOwned &&
             !newActionSlotsContainOldAssignment &&
             view != null &&
-            !view.CanBeginDrag &&
+            !view.CanSelect &&
             eligibility != null &&
             !eligibility.isEligible &&
             eligibility.failureReason ==
@@ -8055,7 +8505,7 @@ public class CardLoadTest : MonoBehaviour
         bool test5 =
             readyPreview.cooldownText == "2" &&
             readyView != null &&
-            readyView.CanBeginDrag;
+            readyView.CanSelect;
 
         cardState.currentCooldown = 1;
         BattleCardUIView coolingView = CreatePrimaryPreviewCardView(
@@ -8069,14 +8519,14 @@ public class CardLoadTest : MonoBehaviour
         bool test6 =
             blockedPreview.cooldownText == "2" &&
             coolingView != null &&
-            !coolingView.CanBeginDrag;
+            !coolingView.CanSelect;
 
         Debug.Log("模式62 测试1 基础CD为1且剩余CD为0时显示1：" + test1);
         Debug.Log("模式62 测试2 冷却中一级卡面仍显示基础CD2：" + test2);
         Debug.Log("模式62 测试3 剩余CD变化不改变一级卡面基础CD：" + test3);
         Debug.Log("模式62 测试4 基础CD为0时显示0：" + test4);
-        Debug.Log("模式62 测试5 基础CD2但剩余CD0时允许拖拽：" + test5);
-        Debug.Log("模式62 测试6 基础CD仍显示2但剩余CD1时禁止拖拽：" + test6);
+        Debug.Log("模式62 测试5 基础CD2但剩余CD0时允许选择：" + test5);
+        Debug.Log("模式62 测试6 基础CD仍显示2但剩余CD1时禁止选择：" + test6);
 
         if (readyView != null)
         {
@@ -8529,30 +8979,36 @@ public class CardLoadTest : MonoBehaviour
         GameObject slotObject = new GameObject(
             "Auto61SelectedSlot",
             typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
             typeof(BattleActionSlotUIView)
         );
         BattleActionSlotUIView selectedView =
             slotObject.GetComponent<BattleActionSlotUIView>();
-        selectedView.SetSelected(true);
-
-        CharacterData selectedCharacter = context.allyA;
-        int selectedSlotIndex = 0;
+        selectedView.BindInteraction(
+            context.allyA,
+            0,
+            false,
+            null
+        );
+        BattleCardSelectionController selectionController =
+            new BattleCardSelectionController();
+        BattleCardInteractionCoordinator coordinator =
+            new BattleCardInteractionCoordinator(selectionController);
+        bool sourceSelected = coordinator.SelectSourceSlot(selectedView);
 
         BattleAutomaticTurnCycleResult result = RunAutomaticTurnCycle(context);
         if (result.advancedToNextTurn)
         {
-            BattleCardDragRefreshUtility.ClearSelectedActionSlot(
-                ref selectedCharacter,
-                ref selectedSlotIndex,
-                ref selectedView
-            );
+            coordinator.ClearAllSelections();
         }
 
         bool passed =
+            sourceSelected &&
             result.advancedToNextTurn &&
-            selectedCharacter == null &&
-            selectedSlotIndex == -1 &&
-            selectedView == null;
+            coordinator.SelectedCharacter == null &&
+            coordinator.SelectedActionSlotView == null &&
+            !selectedView.IsSelected &&
+            !selectionController.HasSelection;
 
         Debug.Log("模式61 测试10 下一回合统一清除一级UI槽位选择：" + passed);
         Destroy(slotObject);
@@ -8630,12 +9086,13 @@ public class CardLoadTest : MonoBehaviour
 
         BattleCardUIView view = cardObject.GetComponent<BattleCardUIView>();
         CanvasGroup group = cardObject.GetComponent<CanvasGroup>();
-        bool dragEndedCalled = false;
+        BattleCardSelectionController selectionController =
+            new BattleCardSelectionController();
         view.BindCard(
             owner,
             cooldownCard,
             BattleCardUIPreviewBuilder.Build(owner, target, cooldownCard),
-            ignored => dragEndedCalled = true
+            selectionController
         );
 
         Transform parentBefore = cardObject.transform.parent;
@@ -8646,24 +9103,24 @@ public class CardLoadTest : MonoBehaviour
         bool interactableBefore = group.interactable;
         bool blocksBefore = group.blocksRaycasts;
 
-        PointerEventData eventData = new PointerEventData(null);
-        view.OnBeginDrag(eventData);
-        view.OnDrag(eventData);
-        view.OnEndDrag(eventData);
+        PointerEventData eventData = new PointerEventData(null)
+        {
+            button = PointerEventData.InputButton.Left
+        };
+        view.OnPointerClick(eventData);
 
         bool passed =
-            !view.CanBeginDrag &&
-            !view.IsDragging &&
+            !view.CanSelect &&
+            !selectionController.HasSelection &&
             object.ReferenceEquals(cardObject.transform.parent, parentBefore) &&
             cardObject.transform.GetSiblingIndex() == siblingBefore &&
             ((RectTransform)cardObject.transform).anchoredPosition ==
                 anchoredBefore &&
             group.alpha == alphaBefore &&
             group.interactable == interactableBefore &&
-            group.blocksRaycasts == blocksBefore &&
-            !dragEndedCalled;
+            group.blocksRaycasts == blocksBefore;
 
-        Debug.Log("模式61 测试12 CD卡不能开始拖拽且不改变任何拖拽视觉：" + passed);
+        Debug.Log("模式61 测试12 CD卡不能被选中且不改变任何视觉状态：" + passed);
         Destroy(cardObject);
         Destroy(parentObject);
     }
@@ -8691,7 +9148,7 @@ public class CardLoadTest : MonoBehaviour
             null
         );
 
-        Debug.Log("模式61 测试13 CD为0时正式拖拽门禁允许开始：" + view.CanBeginDrag);
+        Debug.Log("模式61 测试13 CD为0时正式选择门禁允许选中：" + view.CanSelect);
         Destroy(cardObject);
     }
 
@@ -8757,9 +9214,9 @@ public class CardLoadTest : MonoBehaviour
             cooldownAfterSecond == 2 &&
             cooldownAfterThird == 1 &&
             cooldownAfterFourth == 0 &&
-            view.CanBeginDrag;
+            view.CanSelect;
 
-        Debug.Log("模式61 测试14 CD每回合只Tick一次并在归零后恢复拖拽：" + passed);
+        Debug.Log("模式61 测试14 CD每回合只Tick一次并在归零后恢复选择：" + passed);
         Destroy(cardObject);
     }
 
@@ -9774,136 +10231,136 @@ public class CardLoadTest : MonoBehaviour
             out sourceAssignResult
         );
 
-        CharacterData selectedCharacter = cancelContext.allyA;
-        int selectedUISlotIndex = 0;
-        BattleActionSlotUIView selectedSlotView = slotView;
-        BattleActionAssignmentResult replacementResult;
-        bool replacementSucceeded = BattleCardDropAssignmentRouter.TryAssignToSelf(
-            cancelContext.runtimeState,
-            selectedCharacter,
-            selectedSlotView.FormalSlotIndex,
+        BattleCardSelectionController clickSelection =
+            new BattleCardSelectionController();
+        BattleCardInteractionCoordinator coordinator =
+            new BattleCardInteractionCoordinator(clickSelection);
+        BattleCardUIView replacementView = CreatePrimaryPreviewCardView(
+            "Mode60ReplacementDefense",
+            cancelContext.allyA,
+            cancelContext.allyA,
+            replacementDefense
+        );
+        replacementView.BindCard(
             cancelContext.allyA,
             replacementDefense,
-            cancelContext.allyA,
-            out replacementResult
-        );
-        bool pending = false;
-        bool pendingSuccess = false;
-        int refreshCount = 0;
-        BattleCardDragRefreshUtility.MarkPending(
-            ref pending,
-            ref pendingSuccess,
-            replacementSucceeded && replacementResult != null && replacementResult.isSuccess
-        );
-        bool delayedBeforeDragEnd =
-            sourceAssigned &&
-            replacementSucceeded &&
-            object.ReferenceEquals(
-                BattleActionSlotManager.GetSlot(cancelSlots, cancelContext.allyA, 1).cardState,
+            BattleCardUIPreviewBuilder.Build(
+                cancelContext.allyA,
+                cancelContext.allyA,
                 replacementDefense
-            ) &&
-            pending &&
-            pendingSuccess &&
-            refreshCount == 0 &&
-            slotObject != null &&
-            selectedSlotView.IsSelected;
-        int refreshCountBeforeDragEnd = refreshCount;
-
-        bool consumedAssignmentSucceeded;
-        if (BattleCardDragRefreshUtility.ConsumePending(
-                ref pending,
-                ref pendingSuccess,
-                out consumedAssignmentSucceeded))
-        {
-            if (consumedAssignmentSucceeded)
+            ),
+            clickSelection
+        );
+        GameObject selfTargetObject = new GameObject(
+            "Mode60SelfTarget",
+            typeof(RectTransform),
+            typeof(BattleSelfActionDropZone)
+        );
+        BattleSelfActionDropZone selfTarget =
+            selfTargetObject.GetComponent<BattleSelfActionDropZone>();
+        BattleCardInteractionOutcome replacementOutcome = null;
+        selfTarget.Bind(
+            cancelContext.allyA,
+            clickedTarget =>
             {
-                BattleCardDragRefreshUtility.ClearSelectedActionSlot(
-                    ref selectedCharacter,
-                    ref selectedUISlotIndex,
-                    ref selectedSlotView
+                replacementOutcome = coordinator.ClickSelfTarget(
+                    cancelContext.runtimeState,
+                    clickedTarget
                 );
             }
-
-            refreshCount++;
-        }
+        );
+        PointerEventData leftClick = new PointerEventData(null)
+        {
+            button = PointerEventData.InputButton.Left
+        };
+        bool replacementSourceSelected =
+            coordinator.SelectSourceSlot(slotView);
+        replacementView.OnPointerClick(leftClick);
+        selfTarget.OnPointerClick(leftClick);
+        bool replacementSucceeded =
+            replacementOutcome != null &&
+            replacementOutcome.isSuccess &&
+            replacementOutcome.assignmentResult != null &&
+            replacementOutcome.assignmentResult.isSuccess;
         slotView.SetState(BattleActionSlotUIState.AllyActionSet);
         bool successfulReplacementClearsSelection =
             sourceAssigned &&
+            replacementSourceSelected &&
             replacementSucceeded &&
             !slotView.IsSelected &&
             slotView.CurrentBaseState == BattleActionSlotUIState.AllyActionSet &&
-            selectedCharacter == null &&
-            selectedUISlotIndex == -1 &&
-            selectedSlotView == null;
-        bool refreshedAfterDragEnd =
-            !pending &&
-            !pendingSuccess &&
-            refreshCount == 1 &&
-            successfulReplacementClearsSelection;
+            coordinator.SelectedCharacter == null &&
+            coordinator.SelectedActionSlotView == null &&
+            !clickSelection.HasSelection &&
+            object.ReferenceEquals(
+                BattleActionSlotManager.GetSlot(
+                    cancelSlots,
+                    cancelContext.allyA,
+                    1
+                ).cardState,
+                replacementDefense
+            );
 
-        slotView.SetSelected(true);
-        selectedCharacter = cancelContext.allyA;
-        selectedUISlotIndex = 0;
-        selectedSlotView = slotView;
         BattleCardState illegalReplacement =
             CreateFixedAttackCardForCharacter(cancelContext.allyA, "drag60_13_illegal", 5);
-        BattleActionAssignmentResult illegalReplacementResult;
-        bool illegalReplacementSucceeded = BattleCardDropAssignmentRouter.TryAssignToSelf(
-            cancelContext.runtimeState,
-            selectedCharacter,
-            selectedSlotView.FormalSlotIndex,
+        BattleCardUIView illegalView = CreatePrimaryPreviewCardView(
+            "Mode60IllegalSelfAttack",
+            cancelContext.allyA,
+            cancelContext.allyA,
+            illegalReplacement
+        );
+        illegalView.BindCard(
             cancelContext.allyA,
             illegalReplacement,
+            BattleCardUIPreviewBuilder.Build(
+                cancelContext.allyA,
+                cancelContext.allyA,
+                illegalReplacement
+            ),
+            clickSelection
+        );
+        bool illegalSourceSelected = coordinator.SelectSourceSlot(slotView);
+        illegalView.OnPointerClick(leftClick);
+        BattleCardInteractionOutcome illegalOutcome = null;
+        selfTarget.Bind(
             cancelContext.allyA,
-            out illegalReplacementResult
-        );
-        bool failedPending = false;
-        bool failedPendingSuccess = false;
-        BattleCardDragRefreshUtility.MarkPending(
-            ref failedPending,
-            ref failedPendingSuccess,
-            illegalReplacementSucceeded &&
-                illegalReplacementResult != null &&
-                illegalReplacementResult.isSuccess
-        );
-        bool failedAssignmentSucceeded;
-        if (BattleCardDragRefreshUtility.ConsumePending(
-                ref failedPending,
-                ref failedPendingSuccess,
-                out failedAssignmentSucceeded))
-        {
-            if (failedAssignmentSucceeded)
+            clickedTarget =>
             {
-                BattleCardDragRefreshUtility.ClearSelectedActionSlot(
-                    ref selectedCharacter,
-                    ref selectedUISlotIndex,
-                    ref selectedSlotView
+                illegalOutcome = coordinator.ClickSelfTarget(
+                    cancelContext.runtimeState,
+                    clickedTarget
                 );
             }
-        }
+        );
+        selfTarget.OnPointerClick(leftClick);
+        bool illegalReplacementSucceeded =
+            illegalOutcome != null &&
+            illegalOutcome.isSuccess;
         bool failedReplacementKeepsSelection =
+            illegalSourceSelected &&
             !illegalReplacementSucceeded &&
             slotView.IsSelected &&
-            object.ReferenceEquals(selectedCharacter, cancelContext.allyA) &&
-            selectedUISlotIndex == 0 &&
-            object.ReferenceEquals(selectedSlotView, slotView) &&
+            object.ReferenceEquals(
+                coordinator.SelectedCharacter,
+                cancelContext.allyA
+            ) &&
+            object.ReferenceEquals(
+                coordinator.SelectedActionSlotView,
+                slotView
+            ) &&
+            clickSelection.IsSelected(illegalView) &&
             object.ReferenceEquals(
                 BattleActionSlotManager.GetSlot(cancelSlots, cancelContext.allyA, 1).cardState,
                 replacementDefense
             );
 
         LogMode60Diagnostic(
-            "测试14 Drop延迟刷新",
+            "测试14 点击式选择清理",
             cancelContext.runtimeState,
             cancelContext.allyA,
             1,
             replacementDefense,
             "业务安排立即成功 expected=True actual=" + replacementSucceeded,
-            "DragEnd前pending expected=True actual=" + delayedBeforeDragEnd,
-            "DragEnd前刷新次数 expected=0 actual=" + refreshCountBeforeDragEnd,
-            "DragEnd后pending expected=False actual=" + pending,
-            "DragEnd后pendingSuccess expected=False actual=" + pendingSuccess,
-            "DragEnd后刷新次数 expected=1 actual=" + refreshCount,
             "成功后逻辑选择清空 expected=True actual=" +
                 successfulReplacementClearsSelection,
             "失败后逻辑选择保留 expected=True actual=" +
@@ -9920,9 +10377,13 @@ public class CardLoadTest : MonoBehaviour
              failedReplacementKeepsSelection)
         );
         Debug.Log(
-            "模式60 测试14 Drop只标记待刷新且DragEnd后消费标记：" +
-            (delayedBeforeDragEnd && refreshedAfterDragEnd)
+            "模式60 测试14 点击指派成功立即清理且失败保留选择：" +
+            (successfulReplacementClearsSelection &&
+             failedReplacementKeepsSelection)
         );
+        Destroy(replacementView.gameObject);
+        Destroy(illegalView.gameObject);
+        Destroy(selfTargetObject);
         Destroy(slotObject);
         Destroy(testSprite);
         Destroy(testTexture);

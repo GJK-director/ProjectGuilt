@@ -1,5 +1,5 @@
-// 拖放路由只把 UI 语义转换为正式准备阶段 API 调用，不复制资格或速度规则。
-public static class BattleCardDropAssignmentRouter
+// 点击交互只把 UI 语义转换为正式准备阶段 API 调用，不复制资格或速度规则。
+public static class BattleCardAssignmentRouter
 {
     public static bool TryAssignToEnemySlot(
         BattleRuntimeState runtimeState,
@@ -67,7 +67,7 @@ public static class BattleCardDropAssignmentRouter
         if (selfTarget == null || !object.ReferenceEquals(selectedOwner, selfTarget))
         {
             result = CreateFailure(
-                "拖放安排失败：自身放置区不属于当前选中角色",
+                "卡牌安排失败：自身目标不属于当前选中角色",
                 CardEligibilityFailureReason.InvalidActor
             );
             return false;
@@ -149,7 +149,7 @@ public static class BattleCardDropAssignmentRouter
         if (selectedOwner == null || selectedFormalSlotIndex <= 0)
         {
             result = CreateFailure(
-                "拖放安排失败：请先选择友方行动槽",
+                "卡牌安排失败：请先选择友方行动槽",
                 CardEligibilityFailureReason.InvalidSlot
             );
             return false;
@@ -158,7 +158,7 @@ public static class BattleCardDropAssignmentRouter
         if (cardState == null)
         {
             result = CreateFailure(
-                "拖放安排失败：卡牌状态为空",
+                "卡牌安排失败：卡牌状态为空",
                 CardEligibilityFailureReason.InvalidCardState
             );
             return false;
@@ -169,7 +169,7 @@ public static class BattleCardDropAssignmentRouter
             !object.ReferenceEquals(cardState.owner, selectedOwner))
         {
             result = CreateFailure(
-                "拖放安排失败：卡牌不属于当前选中角色",
+                "卡牌安排失败：卡牌不属于当前选中角色",
                 CardEligibilityFailureReason.InvalidActor
             );
             return false;
@@ -197,51 +197,83 @@ public static class BattleCardDropAssignmentRouter
     }
 }
 
-// 仅封装拖放刷新标记，便于验证 Drop 与 DragEnd 之间不会提前重建手牌。
-public static class BattleCardDragRefreshUtility
+// 旧名称只保留给历史模式，所有业务实现都委托给中性 Router。
+public static class BattleCardDropAssignmentRouter
 {
-    public static void MarkPending(
-        ref bool pending,
-        ref bool pendingSuccessfulAssignment,
-        bool assignmentSucceeded
+    public static bool TryAssignToEnemySlot(
+        BattleRuntimeState runtimeState,
+        CharacterData selectedOwner,
+        int selectedFormalSlotIndex,
+        CharacterData cardOwner,
+        BattleCardState cardState,
+        CharacterData targetEnemy,
+        BattleEnemyIntent boundEnemyIntent,
+        out BattleActionAssignmentResult result
     )
     {
-        pending = true;
-        pendingSuccessfulAssignment = assignmentSucceeded;
+        return BattleCardAssignmentRouter.TryAssignToEnemySlot(
+            runtimeState,
+            selectedOwner,
+            selectedFormalSlotIndex,
+            cardOwner,
+            cardState,
+            targetEnemy,
+            boundEnemyIntent,
+            out result
+        );
     }
 
-    public static bool ConsumePending(
-        ref bool pending,
-        ref bool pendingSuccessfulAssignment,
-        out bool assignmentSucceeded
+    public static bool TryAssignToSelf(
+        BattleRuntimeState runtimeState,
+        CharacterData selectedOwner,
+        int selectedFormalSlotIndex,
+        CharacterData cardOwner,
+        BattleCardState cardState,
+        CharacterData selfTarget,
+        out BattleActionAssignmentResult result
     )
     {
-        assignmentSucceeded = false;
-
-        if (!pending)
-        {
-            return false;
-        }
-
-        assignmentSucceeded = pendingSuccessfulAssignment;
-        pending = false;
-        pendingSuccessfulAssignment = false;
-        return true;
+        return BattleCardAssignmentRouter.TryAssignToSelf(
+            runtimeState,
+            selectedOwner,
+            selectedFormalSlotIndex,
+            cardOwner,
+            cardState,
+            selfTarget,
+            out result
+        );
     }
 
-    public static void ClearSelectedActionSlot(
-        ref CharacterData selectedCharacter,
-        ref int selectedActionSlotIndex,
-        ref BattleActionSlotUIView selectedActionSlotView
+    public static bool TryCancelSelectedSlot(
+        BattleRuntimeState runtimeState,
+        CharacterData owner,
+        int formalSlotIndex,
+        out BattleActionAssignmentResult result
     )
     {
-        if (selectedActionSlotView != null)
-        {
-            selectedActionSlotView.SetSelected(false);
-        }
+        return BattleCardAssignmentRouter.TryCancelSelectedSlot(
+            runtimeState,
+            owner,
+            formalSlotIndex,
+            out result
+        );
+    }
 
-        selectedCharacter = null;
-        selectedActionSlotIndex = -1;
-        selectedActionSlotView = null;
+    public static bool IsCardAssigned(
+        BattleRuntimeState runtimeState,
+        BattleCardState cardState
+    )
+    {
+        return BattleCardAssignmentRouter.IsCardAssigned(
+            runtimeState,
+            cardState
+        );
+    }
+
+    public static int EnemySlotIndexToUIIndex(int enemySlotIndex)
+    {
+        return BattleCardAssignmentRouter.EnemySlotIndexToUIIndex(
+            enemySlotIndex
+        );
     }
 }

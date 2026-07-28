@@ -15,8 +15,7 @@ public class BattleCharacterStatusUIView : MonoBehaviour
     private CharacterData boundCharacter;
     private Action<BattleActionSlotUIView> slotLeftClickHandler;
     private Action<BattleActionSlotUIView> slotRightClickHandler;
-    private Action<BattleActionSlotUIView, BattleCardUIView> enemySlotDropHandler;
-    private Action<BattleSelfActionDropZone, BattleCardUIView> selfCardDropHandler;
+    private Action<BattleSelfActionDropZone> selfTargetClickHandler;
 
     public void SetSlotClickHandler(Action<BattleActionSlotUIView> handler)
     {
@@ -34,14 +33,6 @@ public class BattleCharacterStatusUIView : MonoBehaviour
         RefreshSlotInteractionBindings();
     }
 
-    public void SetEnemySlotDropHandler(
-        Action<BattleActionSlotUIView, BattleCardUIView> onCardDropped
-    )
-    {
-        enemySlotDropHandler = onCardDropped;
-        RefreshSlotInteractionBindings();
-    }
-
     public void SetEnemySlotClickHandler(
         Action<BattleActionSlotUIView> onClicked
     )
@@ -50,12 +41,12 @@ public class BattleCharacterStatusUIView : MonoBehaviour
         RefreshSlotInteractionBindings();
     }
 
-    public void SetSelfCardDropHandler(
-        Action<BattleSelfActionDropZone, BattleCardUIView> onCardDropped
+    public void SetSelfTargetClickHandler(
+        Action<BattleSelfActionDropZone> onClicked
     )
     {
-        selfCardDropHandler = onCardDropped;
-        RefreshSelfDropBinding();
+        selfTargetClickHandler = onClicked;
+        RefreshSelfTargetBinding();
     }
 
     public void ClearBoundEnemyIntents()
@@ -84,13 +75,13 @@ public class BattleCharacterStatusUIView : MonoBehaviour
 
     public bool IsEnemyView => isEnemy;
 
-    private void RefreshSelfDropBinding()
+    private void RefreshSelfTargetBinding()
     {
         if (selfActionDropZone != null)
         {
             selfActionDropZone.Bind(
                 isEnemy ? null : boundCharacter,
-                isEnemy ? null : selfCardDropHandler
+                isEnemy ? null : selfTargetClickHandler
             );
         }
     }
@@ -98,7 +89,7 @@ public class BattleCharacterStatusUIView : MonoBehaviour
     private void RefreshAllInteractionBindings()
     {
         RefreshSlotInteractionBindings();
-        RefreshSelfDropBinding();
+        RefreshSelfTargetBinding();
     }
 
     public void SetCharacter(CharacterData characterData)
@@ -214,8 +205,7 @@ public class BattleCharacterStatusUIView : MonoBehaviour
                 0,
                 isEnemy,
                 slotLeftClickHandler,
-                isEnemy ? null : slotRightClickHandler,
-                isEnemy ? enemySlotDropHandler : null
+                isEnemy ? null : slotRightClickHandler
             );
         }
 
@@ -226,8 +216,7 @@ public class BattleCharacterStatusUIView : MonoBehaviour
                 1,
                 isEnemy,
                 slotLeftClickHandler,
-                isEnemy ? null : slotRightClickHandler,
-                isEnemy ? enemySlotDropHandler : null
+                isEnemy ? null : slotRightClickHandler
             );
         }
     }

@@ -1,8 +1,6 @@
-using System;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.UI;
 
 public class BattleCardUIView : MonoBehaviour,
     IPointerEnterHandler,
@@ -19,31 +17,11 @@ public class BattleCardUIView : MonoBehaviour,
 
     private CharacterData boundOwner;
     private BattleCardState boundCardState;
-    private Action<BattleCardUIView> dragEndedHandler;
     private BattleCardSelectionController selectionController;
-
-    private RectTransform draggedRect;
-    private Canvas rootCanvas;
-    private CanvasGroup canvasGroup;
-    private Transform originalParent;
-    private int originalSiblingIndex;
-    private Vector2 originalAnchorMin;
-    private Vector2 originalAnchorMax;
-    private Vector2 originalPivot;
-    private Vector2 originalAnchoredPosition;
-    private Quaternion originalLocalRotation;
-    private Vector3 originalLocalScale;
-    private float originalAlpha;
-    private bool originalInteractable;
-    private bool originalBlocksRaycasts;
-    private Vector2 dragPointerOffset;
-    private bool hasDragPointerOffset;
-    private bool isDragging;
     private bool warnedMissingVisualStyle;
 
     public CharacterData BoundOwner => boundOwner;
     public BattleCardState BoundCardState => boundCardState;
-    public bool IsDragging => isDragging;
     public bool IsSelected =>
         selectionController != null &&
         selectionController.IsSelected(this);
@@ -54,8 +32,6 @@ public class BattleCardUIView : MonoBehaviour,
         boundCardState.cardData != null &&
         boundCardState.currentCooldown <= 0 &&
         boundOwner.battleCards.Contains(boundCardState);
-    public bool CanBeginDrag =>
-        CanSelect;
 
     void Awake()
     {
@@ -72,23 +48,11 @@ public class BattleCardUIView : MonoBehaviour,
         CharacterData owner,
         BattleCardState cardState,
         BattleCardUIPreviewData data,
-        Action<BattleCardUIView> onDragEnded
-    )
-    {
-        BindCard(owner, cardState, data, onDragEnded, null);
-    }
-
-    public void BindCard(
-        CharacterData owner,
-        BattleCardState cardState,
-        BattleCardUIPreviewData data,
-        Action<BattleCardUIView> onDragEnded,
-        BattleCardSelectionController cardSelectionController
+        BattleCardSelectionController cardSelectionController = null
     )
     {
         boundOwner = owner;
         boundCardState = cardState;
-        dragEndedHandler = onDragEnded;
         selectionController = cardSelectionController;
         motionView?.EnsureInitialized();
         SetCard(data);
@@ -127,7 +91,6 @@ public class BattleCardUIView : MonoBehaviour,
         selectionController?.ClearSelectionIfSelected(this);
         boundOwner = null;
         boundCardState = null;
-        dragEndedHandler = null;
         selectionController = null;
         SetText(cardNameText, "空");
         SetText(pointText, "—");
@@ -163,189 +126,18 @@ public class BattleCardUIView : MonoBehaviour,
         motionView?.SetSelected(selected);
     }
 
-    // 旧拖拽方法仅保留给历史测试和兼容调用，BattleCardUIView 不再注册拖拽接口。
-    public void OnBeginDrag(PointerEventData eventData)
-    {
-        isDragging = false;
-
-        if (!CanBeginDrag || eventData == null)
-        {
-            return;
-        }
-
-        draggedRect = transform as RectTransform;
-        Canvas nearestCanvas = GetComponentInParent<Canvas>();
-        rootCanvas = nearestCanvas != null ? nearestCanvas.rootCanvas : null;
-
-        if (draggedRect == null || rootCanvas == null)
-        {
-            Debug.LogWarning("BattleCardUIView 拖动失败：找不到 RectTransform 或根 Canvas。");
-            return;
-        }
-
-        originalParent = draggedRect.parent;
-        originalSiblingIndex = draggedRect.GetSiblingIndex();
-        originalAnchorMin = draggedRect.anchorMin;
-        originalAnchorMax = draggedRect.anchorMax;
-        originalPivot = draggedRect.pivot;
-        originalAnchoredPosition = draggedRect.anchoredPosition;
-        originalLocalRotation = draggedRect.localRotation;
-        originalLocalScale = draggedRect.localScale;
-
-        canvasGroup = GetComponent<CanvasGroup>();
-        if (canvasGroup == null)
-        {
-            canvasGroup = gameObject.AddComponent<CanvasGroup>();
-        }
-
-        originalAlpha = canvasGroup.alpha;
-        originalInteractable = canvasGroup.interactable;
-        originalBlocksRaycasts = canvasGroup.blocksRaycasts;
-
-        isDragging = true;
-        hasDragPointerOffset = false;
-        draggedRect.SetParent(rootCanvas.transform, true);
-
-        RectTransform canvasRect = rootCanvas.transform as RectTransform;
-        if (canvasRect != null)
-        {
-            Vector3 worldPosition = draggedRect.position;
-            draggedRect.anchorMin = canvasRect.pivot;
-            draggedRect.anchorMax = canvasRect.pivot;
-            draggedRect.position = worldPosition;
-        }
-
-        canvasGroup.alpha = 0.85f;
-        canvasGroup.interactable = false;
-        canvasGroup.blocksRaycasts = false;
-
-        Vector2 pointerAnchoredPosition;
-        if (TryGetPointerAnchoredPosition(
-                eventData,
-                out pointerAnchoredPosition))
-        {
-            dragPointerOffset =
-                draggedRect.anchoredPosition - pointerAnchoredPosition;
-            hasDragPointerOffset = true;
-        }
-
-        UpdateDragPosition(eventData);
-    }
-
-    public void OnDrag(PointerEventData eventData)
-    {
-        if (!isDragging || eventData == null)
-        {
-            return;
-        }
-
-        UpdateDragPosition(eventData);
-    }
-
-    public void OnEndDrag(PointerEventData eventData)
-    {
-        if (!isDragging)
-        {
-            return;
-        }
-
-        RestoreDragVisual();
-        dragEndedHandler?.Invoke(this);
-    }
-
     void OnDisable()
     {
-        if (isDragging)
-        {
-            RestoreDragVisual();
-        }
-
+        // Motion 组件独立负责视觉生命周期，这里只清理全局选择引用。
         selectionController?.ClearSelectionIfSelected(this);
-        motionView?.ResetVisualState();
-    }
-
-    private void UpdateDragPosition(PointerEventData eventData)
-    {
-        if (draggedRect == null)
-        {
-            return;
-        }
-
-        Vector2 pointerAnchoredPosition;
-        if (!TryGetPointerAnchoredPosition(
-                eventData,
-                out pointerAnchoredPosition))
-        {
-            return;
-        }
-
-        Vector2 targetPosition = pointerAnchoredPosition +
-            (hasDragPointerOffset ? dragPointerOffset : Vector2.zero);
-
-        draggedRect.anchoredPosition = targetPosition;
-    }
-
-    private bool TryGetPointerAnchoredPosition(
-        PointerEventData eventData,
-        out Vector2 anchoredPosition
-    )
-    {
-        anchoredPosition = Vector2.zero;
-        RectTransform canvasRect = rootCanvas != null
-            ? rootCanvas.transform as RectTransform
-            : null;
-
-        if (canvasRect == null || eventData == null)
-        {
-            return false;
-        }
-
-        Camera eventCamera = rootCanvas.renderMode ==
-            RenderMode.ScreenSpaceOverlay
-            ? null
-            : eventData.pressEventCamera;
-
-        return RectTransformUtility.ScreenPointToLocalPointInRectangle(
-            canvasRect,
-            eventData.position,
-            eventCamera,
-            out anchoredPosition
-        );
-    }
-
-    private void RestoreDragVisual()
-    {
-        isDragging = false;
-        hasDragPointerOffset = false;
-
-        if (draggedRect != null && originalParent != null)
-        {
-            draggedRect.SetParent(originalParent, false);
-            draggedRect.anchorMin = originalAnchorMin;
-            draggedRect.anchorMax = originalAnchorMax;
-            draggedRect.pivot = originalPivot;
-            draggedRect.anchoredPosition = originalAnchoredPosition;
-            draggedRect.localRotation = originalLocalRotation;
-            draggedRect.localScale = originalLocalScale;
-            draggedRect.SetSiblingIndex(originalSiblingIndex);
-        }
-
-        if (canvasGroup != null)
-        {
-            canvasGroup.alpha = originalAlpha;
-            canvasGroup.interactable = originalInteractable;
-            canvasGroup.blocksRaycasts = originalBlocksRaycasts;
-        }
     }
 
     void SetText(TMP_Text text, string value)
     {
-        if (text == null)
+        if (text != null)
         {
-            return;
+            text.text = value;
         }
-
-        text.text = value;
     }
 
     void HideLegacyCooldown()

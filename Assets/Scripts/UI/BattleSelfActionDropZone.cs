@@ -2,38 +2,33 @@ using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
-// 角色自身放置区只转发拖放事件，不负责判断卡牌是否合法。
-public sealed class BattleSelfActionDropZone : MonoBehaviour, IDropHandler
+// 保留类名以兼容现有场景引用；正式职责已经迁移为自身目标点击区。
+public sealed class BattleSelfActionDropZone : MonoBehaviour,
+    IPointerClickHandler
 {
     private CharacterData boundCharacter;
-    private Action<BattleSelfActionDropZone, BattleCardUIView> cardDropHandler;
+    private Action<BattleSelfActionDropZone> clickHandler;
 
     public CharacterData BoundCharacter => boundCharacter;
 
     public void Bind(
         CharacterData character,
-        Action<BattleSelfActionDropZone, BattleCardUIView> onCardDropped
+        Action<BattleSelfActionDropZone> onClicked
     )
     {
         boundCharacter = character;
-        cardDropHandler = onCardDropped;
+        clickHandler = onClicked;
     }
 
-    public void OnDrop(PointerEventData eventData)
+    public void OnPointerClick(PointerEventData eventData)
     {
         if (boundCharacter == null ||
             eventData == null ||
-            eventData.pointerDrag == null)
+            eventData.button != PointerEventData.InputButton.Left)
         {
             return;
         }
 
-        BattleCardUIView cardView = eventData.pointerDrag.GetComponent<BattleCardUIView>();
-        if (cardView == null || cardView.BoundCardState == null)
-        {
-            return;
-        }
-
-        cardDropHandler?.Invoke(this, cardView);
+        clickHandler?.Invoke(this);
     }
 }
