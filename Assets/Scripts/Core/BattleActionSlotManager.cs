@@ -208,6 +208,27 @@ public static class BattleActionSlotManager
         out BattleActionAssignmentResult result
     )
     {
+        return TryAssignToEnemy(
+            runtimeState,
+            owner,
+            slotIndex,
+            cardState,
+            enemy,
+            1,
+            out result
+        );
+    }
+
+    public static bool TryAssignToEnemy(
+        BattleRuntimeState runtimeState,
+        CharacterData owner,
+        int slotIndex,
+        BattleCardState cardState,
+        CharacterData enemy,
+        int targetEnemySlotIndex,
+        out BattleActionAssignmentResult result
+    )
+    {
         BattleActionSlot slot;
         CardEligibilityResult eligibility;
 
@@ -247,6 +268,8 @@ public static class BattleActionSlotManager
             null,
             enemy
         );
+        slot.requestedTargetSlotIndex =
+            Mathf.Max(1, targetEnemySlotIndex);
 
         result = CreateAssignmentSuccess(slot, eligibility, "已安排到指定敌人", false);
         return true;
@@ -1339,6 +1362,9 @@ public static class BattleActionSlotManager
         slot.placementType = placementType;
         slot.requestedEnemyIntent = requestedEnemyIntent;
         slot.requestedEnemy = requestedEnemy;
+        slot.requestedTargetSlotIndex = requestedEnemyIntent != null
+            ? requestedEnemyIntent.enemySlotIndex
+            : 0;
         slot.assignmentSequence = nextSequence;
         slot.target = null;
         slot.enemyIntent = null;

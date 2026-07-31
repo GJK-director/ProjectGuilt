@@ -12,6 +12,31 @@ public static class BattleCardAssignmentRouter
         out BattleActionAssignmentResult result
     )
     {
+        return TryAssignToEnemySlot(
+            runtimeState,
+            selectedOwner,
+            selectedFormalSlotIndex,
+            cardOwner,
+            cardState,
+            targetEnemy,
+            boundEnemyIntent,
+            1,
+            out result
+        );
+    }
+
+    public static bool TryAssignToEnemySlot(
+        BattleRuntimeState runtimeState,
+        CharacterData selectedOwner,
+        int selectedFormalSlotIndex,
+        CharacterData cardOwner,
+        BattleCardState cardState,
+        CharacterData targetEnemy,
+        BattleEnemyIntent boundEnemyIntent,
+        int targetEnemySlotIndex,
+        out BattleActionAssignmentResult result
+    )
+    {
         if (!ValidateSelectedCard(
                 selectedOwner,
                 selectedFormalSlotIndex,
@@ -40,6 +65,7 @@ public static class BattleCardAssignmentRouter
             selectedFormalSlotIndex,
             cardState,
             targetEnemy,
+            targetEnemySlotIndex,
             out result
         );
     }

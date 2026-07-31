@@ -13,7 +13,7 @@
     "initialBuffs": [
       {
         "buffID": "Bullet",
-        "stack": 3,
+        "stack": 6,
         "duration": -1
       }
     ],

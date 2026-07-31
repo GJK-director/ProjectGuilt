@@ -80,6 +80,7 @@ public sealed class BattleCardInteractionCoordinator
             selectedCardView.BoundCardState,
             targetSlotView.BoundCharacter,
             targetSlotView.BoundEnemyIntent,
+            targetSlotView.FormalSlotIndex,
             out outcome.assignmentResult
         );
 

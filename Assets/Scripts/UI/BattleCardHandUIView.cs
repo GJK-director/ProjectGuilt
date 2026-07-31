@@ -6,17 +6,31 @@ public class BattleCardHandUIView : MonoBehaviour
     [SerializeField] private BattleCardUIView cardViewPrefab;
     [SerializeField] private Transform cardContainer;
     [SerializeField] private BattleCardManualLayout manualLayout;
+    [SerializeField] private BattleCardHandSpreadAnimator spreadAnimator;
     [SerializeField] private bool hideTemplateOnAwake = true;
 
     private readonly List<BattleCardUIView> spawnedCardViews =
         new List<BattleCardUIView>();
     private BattleCardSelectionController selectionController;
+    private CharacterData lastDisplayedOwner;
+    private bool hasDisplayedAnyHand;
+
+    internal IReadOnlyList<BattleCardUIView> SpawnedCardViews =>
+        spawnedCardViews;
+    internal CharacterData LastDisplayedOwner => lastDisplayedOwner;
+    internal bool HasDisplayedAnyHand => hasDisplayedAnyHand;
 
     void Awake()
     {
         if (cardContainer == null)
         {
             cardContainer = transform;
+        }
+
+        if (spreadAnimator == null)
+        {
+            spreadAnimator =
+                GetComponent<BattleCardHandSpreadAnimator>();
         }
 
         if (hideTemplateOnAwake &&
@@ -45,6 +59,10 @@ public class BattleCardHandUIView : MonoBehaviour
         List<BattleCardState> cardStates
     )
     {
+        bool shouldPlaySpread =
+            !hasDisplayedAnyHand ||
+            !object.ReferenceEquals(lastDisplayedOwner, owner);
+
         ClearCards();
 
         if (cardViewPrefab == null)
@@ -56,51 +74,58 @@ public class BattleCardHandUIView : MonoBehaviour
         Transform targetContainer =
             cardContainer != null ? cardContainer : transform;
 
-        if (cardStates == null)
+        if (cardStates != null)
         {
-            return;
-        }
-
-        for (int i = 0; i < cardStates.Count; i++)
-        {
-            BattleCardState cardState = cardStates[i];
-            if (cardState == null || cardState.cardData == null)
+            for (int i = 0; i < cardStates.Count; i++)
             {
-                continue;
-            }
+                BattleCardState cardState = cardStates[i];
+                if (cardState == null || cardState.cardData == null)
+                {
+                    continue;
+                }
 
-            // 克隆体先保持不可见，完成绑定后才允许接收指针事件。
-            BattleCardUIView view = Instantiate(
-                cardViewPrefab,
-                targetContainer
-            );
-            view.gameObject.SetActive(false);
-
-            BattleCardUIPreviewData previewData =
-                BattleCardUIPreviewBuilder.Build(
-                    owner,
-                    defaultTarget,
-                    cardState
+                // 克隆体先保持不可见，完成绑定后才允许接收指针事件。
+                BattleCardUIView view = Instantiate(
+                    cardViewPrefab,
+                    targetContainer
                 );
+                view.gameObject.SetActive(false);
 
-            view.BindCard(
-                owner,
-                cardState,
-                previewData,
-                selectionController
-            );
-            spawnedCardViews.Add(view);
-            view.gameObject.SetActive(true);
+                BattleCardUIPreviewData previewData =
+                    BattleCardUIPreviewBuilder.Build(
+                        owner,
+                        defaultTarget,
+                        cardState
+                    );
+
+                view.BindCard(
+                    owner,
+                    cardState,
+                    previewData,
+                    selectionController
+                );
+                spawnedCardViews.Add(view);
+                view.gameObject.SetActive(true);
+            }
         }
 
         if (manualLayout != null)
         {
             manualLayout.ApplyLayout(spawnedCardViews);
         }
+
+        if (shouldPlaySpread)
+        {
+            spreadAnimator?.PlaySpread(spawnedCardViews);
+        }
+
+        lastDisplayedOwner = owner;
+        hasDisplayedAnyHand = owner != null;
     }
 
     public void ClearCards()
     {
+        spreadAnimator?.StopAndClear();
         selectionController?.ClearSelection();
 
         for (int i = spawnedCardViews.Count - 1; i >= 0; i--)

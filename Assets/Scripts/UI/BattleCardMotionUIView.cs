@@ -10,9 +10,36 @@ public sealed class BattleCardMotionUIView : MonoBehaviour
     [SerializeField] private Canvas sortingCanvas;
 
     [Header("悬停与选中")]
+    [Tooltip("卡牌悬停或选中展开后的目标世界Z轴角度。0代表无论手牌基础旋转多少，展开后都朝正。")]
+    [SerializeField] private float expandedWorldRotationZ = 0f;
+
+    [Tooltip("卡牌悬停或选中时，相对基础位置向上抬升的UI距离。")]
     [SerializeField] private float hoverLiftY = 100f;
-    [SerializeField] private float hoverDuration = 0.12f;
-    [SerializeField] private float returnDuration = 0.10f;
+
+    [Header("指数平滑")]
+    [Tooltip("位置贴近目标的速度。13.3886在60 FPS下约等于每帧移动剩余距离20%。")]
+    [Min(0f)]
+    [SerializeField] private float positionSharpness = 13.3886f;
+
+    [Tooltip("旋转贴近目标的速度。13.3886在60 FPS下约等于每帧移动剩余距离20%。")]
+    [Min(0f)]
+    [SerializeField] private float rotationSharpness = 13.3886f;
+
+    [Tooltip("缩放贴近目标的速度。13.3886在60 FPS下约等于每帧移动剩余距离20%。")]
+    [Min(0f)]
+    [SerializeField] private float scaleSharpness = 13.3886f;
+
+    [Tooltip("位置进入该距离后精确吸附到目标，避免协程永久运行。")]
+    [Min(0f)]
+    [SerializeField] private float positionSnapDistance = 0.1f;
+
+    [Tooltip("旋转进入该角度后精确吸附到目标，避免协程永久运行。")]
+    [Min(0f)]
+    [SerializeField] private float rotationSnapAngle = 0.05f;
+
+    [Tooltip("缩放进入该距离后精确吸附到目标，避免协程永久运行。")]
+    [Min(0f)]
+    [SerializeField] private float scaleSnapDistance = 0.001f;
 
     [Header("显示层级")]
     [SerializeField] private int normalSortingOrder;
@@ -170,6 +197,24 @@ public sealed class BattleCardMotionUIView : MonoBehaviour
         );
     }
 
+    internal bool AdvanceCurrentTransitionForTesting(
+        float unscaledDeltaTime
+    )
+    {
+        if (!hasCachedBaseTransform || visualRoot == null)
+        {
+            return false;
+        }
+
+        bool completed = AdvanceTransition(unscaledDeltaTime);
+        if (completed)
+        {
+            StopTransition();
+        }
+
+        return completed;
+    }
+
     public void ResetVisualState()
     {
         RestoreVisualImmediately();
@@ -183,6 +228,9 @@ public sealed class BattleCardMotionUIView : MonoBehaviour
 
         if (hasCachedBaseTransform && visualRoot != null)
         {
+            transitionTargetPosition = baseVisualAnchoredPosition;
+            transitionTargetScale = baseVisualScale;
+            transitionTargetRotation = baseVisualRotation;
             visualRoot.anchoredPosition = baseVisualAnchoredPosition;
             visualRoot.localScale = baseVisualScale;
             visualRoot.localRotation = baseVisualRotation;
@@ -213,11 +261,10 @@ public sealed class BattleCardMotionUIView : MonoBehaviour
         if (isSelected)
         {
             ApplySorting(selectedSortingOrder);
-            StartTransition(
+            SetTransitionTarget(
                 HoverTargetAnchoredPosition,
                 baseVisualScale,
-                GetDisplayRotation(),
-                hoverDuration
+                GetDisplayRotation()
             );
             return;
         }
@@ -225,21 +272,19 @@ public sealed class BattleCardMotionUIView : MonoBehaviour
         if (isHovered)
         {
             ApplySorting(hoverSortingOrder);
-            StartTransition(
+            SetTransitionTarget(
                 HoverTargetAnchoredPosition,
                 baseVisualScale,
-                GetDisplayRotation(),
-                hoverDuration
+                GetDisplayRotation()
             );
             return;
         }
 
         RestoreNormalSorting();
-        StartTransition(
+        SetTransitionTarget(
             baseVisualAnchoredPosition,
             baseVisualScale,
-            baseVisualRotation,
-            returnDuration
+            baseVisualRotation
         );
     }
 
@@ -266,71 +311,105 @@ public sealed class BattleCardMotionUIView : MonoBehaviour
         hasCachedOriginalCanvasState = true;
     }
 
-    private void StartTransition(
+    private void SetTransitionTarget(
         Vector2 targetPosition,
         Vector3 targetScale,
-        Quaternion targetRotation,
-        float duration
+        Quaternion targetRotation
     )
     {
         transitionTargetPosition = targetPosition;
         transitionTargetScale = targetScale;
         transitionTargetRotation = targetRotation;
-        StopTransition();
 
-        if (!isActiveAndEnabled || duration <= 0f)
+        if (!isActiveAndEnabled || !gameObject.activeInHierarchy)
         {
             ApplyVisualTransform(targetPosition, targetScale, targetRotation);
             return;
         }
 
-        transitionCoroutine = StartCoroutine(
-            AnimateVisualTransform(
-                targetPosition,
-                targetScale,
-                targetRotation,
-                duration
-            )
-        );
+        if (transitionCoroutine == null)
+        {
+            transitionCoroutine = StartCoroutine(
+                TrackTransition()
+            );
+        }
     }
 
-    private IEnumerator AnimateVisualTransform(
-        Vector2 targetPosition,
-        Vector3 targetScale,
-        Quaternion targetRotation,
-        float duration
-    )
+    private IEnumerator TrackTransition()
     {
-        Vector2 startPosition = visualRoot.anchoredPosition;
-        Vector3 startScale = visualRoot.localScale;
-        Quaternion startRotation = visualRoot.localRotation;
-        float elapsed = 0f;
-
-        while (elapsed < duration)
+        while (true)
         {
-            elapsed += Time.unscaledDeltaTime;
-            float normalizedTime = Mathf.Clamp01(elapsed / duration);
-            float smoothTime = Mathf.SmoothStep(0f, 1f, normalizedTime);
-
-            ApplyVisualTransform(
-                Vector2.Lerp(startPosition, targetPosition, smoothTime),
-                Vector3.Lerp(startScale, targetScale, smoothTime),
-                Quaternion.Euler(
-                    0f,
-                    0f,
-                    Mathf.LerpAngle(
-                        startRotation.eulerAngles.z,
-                        targetRotation.eulerAngles.z,
-                        smoothTime
-                    )
-                )
-            );
-
             yield return null;
+
+            if (AdvanceTransition(Time.unscaledDeltaTime))
+            {
+                transitionCoroutine = null;
+                yield break;
+            }
+        }
+    }
+
+    private bool AdvanceTransition(float unscaledDeltaTime)
+    {
+        Vector2 nextPosition = BattleUIExponentialSmoothing.Smooth(
+            visualRoot.anchoredPosition,
+            transitionTargetPosition,
+            positionSharpness,
+            unscaledDeltaTime
+        );
+        Vector3 nextScale = BattleUIExponentialSmoothing.Smooth(
+            visualRoot.localScale,
+            transitionTargetScale,
+            scaleSharpness,
+            unscaledDeltaTime
+        );
+        Quaternion nextRotation = BattleUIExponentialSmoothing.Smooth(
+            visualRoot.localRotation,
+            transitionTargetRotation,
+            rotationSharpness,
+            unscaledDeltaTime
+        );
+
+        bool positionReached =
+            Vector2.Distance(
+                nextPosition,
+                transitionTargetPosition
+            ) <= Mathf.Max(0f, positionSnapDistance);
+        bool scaleReached =
+            Vector3.Distance(
+                nextScale,
+                transitionTargetScale
+            ) <= Mathf.Max(0f, scaleSnapDistance);
+        bool rotationReached =
+            Quaternion.Angle(
+                nextRotation,
+                transitionTargetRotation
+            ) <= Mathf.Max(0f, rotationSnapAngle);
+
+        if (positionReached)
+        {
+            nextPosition = transitionTargetPosition;
         }
 
-        ApplyVisualTransform(targetPosition, targetScale, targetRotation);
-        transitionCoroutine = null;
+        if (scaleReached)
+        {
+            nextScale = transitionTargetScale;
+        }
+
+        if (rotationReached)
+        {
+            nextRotation = transitionTargetRotation;
+        }
+
+        ApplyVisualTransform(
+            nextPosition,
+            nextScale,
+            nextRotation
+        );
+
+        return positionReached &&
+            scaleReached &&
+            rotationReached;
     }
 
     private void ApplyVisualTransform(
@@ -351,7 +430,22 @@ public sealed class BattleCardMotionUIView : MonoBehaviour
 
     private Quaternion GetDisplayRotation()
     {
-        return Quaternion.Euler(0f, 0f, 0f);
+        if (visualRoot == null)
+        {
+            return Quaternion.identity;
+        }
+
+        Quaternion targetWorldRotation =
+            Quaternion.Euler(0f, 0f, expandedWorldRotationZ);
+        Transform parent = visualRoot.parent;
+
+        if (parent == null)
+        {
+            return targetWorldRotation;
+        }
+
+        return Quaternion.Inverse(parent.rotation) *
+            targetWorldRotation;
     }
 
     private void ApplySorting(int sortingOrder)

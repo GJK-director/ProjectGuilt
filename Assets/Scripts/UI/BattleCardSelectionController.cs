@@ -1,9 +1,12 @@
+using System;
+
 public sealed class BattleCardSelectionController
 {
     private BattleCardUIView selectedCardView;
 
     public BattleCardUIView SelectedCardView => selectedCardView;
     public bool HasSelection => selectedCardView != null;
+    public event Action<BattleCardUIView> SelectionChanged;
 
     public bool ToggleCardSelection(BattleCardUIView cardView)
     {
@@ -35,6 +38,7 @@ public sealed class BattleCardSelectionController
 
         selectedCardView = cardView;
         selectedCardView.SetSelected(true);
+        SelectionChanged?.Invoke(selectedCardView);
         return true;
     }
 
@@ -46,6 +50,7 @@ public sealed class BattleCardSelectionController
         if (previousSelection != null)
         {
             previousSelection.SetSelected(false);
+            SelectionChanged?.Invoke(null);
         }
     }
 

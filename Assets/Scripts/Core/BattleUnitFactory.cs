@@ -63,7 +63,7 @@ public static class BattleUnitFactory
         );
 
         CreateBattleCards(unit, definition.characterID, resolvedCards);
-        AddInitialBuffs(unit, definition.initialBuffs);
+        ApplyInitialBuffs(unit, definition.initialBuffs);
 
         return BattleUnitFactoryResult.Success(unit);
     }
@@ -97,7 +97,7 @@ public static class BattleUnitFactory
         );
 
         CreateBattleCards(unit, definition.enemyID, resolvedCards);
-        AddInitialBuffs(unit, definition.initialBuffs);
+        ApplyInitialBuffs(unit, definition.initialBuffs);
 
         return BattleUnitFactoryResult.Success(unit);
     }
@@ -213,7 +213,10 @@ public static class BattleUnitFactory
         }
     }
 
-    static void AddInitialBuffs(CharacterData unit, InitialBuffDefinitionData[] initialBuffs)
+    internal static void ApplyInitialBuffs(
+        CharacterData unit,
+        InitialBuffDefinitionData[] initialBuffs
+    )
     {
         if (unit == null || initialBuffs == null)
         {
@@ -222,6 +225,12 @@ public static class BattleUnitFactory
 
         foreach (InitialBuffDefinitionData initialBuff in initialBuffs)
         {
+            if (initialBuff == null ||
+                unit.GetBuffStack(initialBuff.buffID) > 0)
+            {
+                continue;
+            }
+
             unit.AddBuff(initialBuff.buffID, initialBuff.stack, initialBuff.duration);
         }
     }

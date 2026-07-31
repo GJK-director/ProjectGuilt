@@ -51,7 +51,13 @@ public enum BattleTestMode
     BattleCardPrimaryVisualPresetBasic = 64,
     BattleCardHoverAndDragMotionBasic = 65,
     BattleCardClickAssignBasic = 66,
-    BattleCardClickInteractionIntegration = 67
+    BattleCardClickInteractionIntegration = 67,
+    BattleCardExponentialMotionAndSpreadBasic = 68,
+    BattleActionSlotVisualInteractionBasic = 69,
+    BattleBuffGridLayoutBasic = 70,
+    BattleBuffInspectorPreviewBasic = 71,
+    BattlePermanentBulletBuffBasic = 72,
+    BattleActionRelationLineBasic = 73
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -300,6 +306,42 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleCardClickInteractionIntegration)
         {
             RunBattleCardClickInteractionIntegrationTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardExponentialMotionAndSpreadBasic)
+        {
+            RunBattleCardExponentialMotionAndSpreadBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleActionSlotVisualInteractionBasic)
+        {
+            RunBattleActionSlotVisualInteractionBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleBuffGridLayoutBasic)
+        {
+            RunBattleBuffGridLayoutBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleBuffInspectorPreviewBasic)
+        {
+            RunBattleBuffInspectorPreviewBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattlePermanentBulletBuffBasic)
+        {
+            RunBattlePermanentBulletBuffBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleActionRelationLineBasic)
+        {
+            RunBattleActionRelationLineBasicTestSequence();
             return;
         }
 
@@ -5912,9 +5954,12 @@ public class CardLoadTest : MonoBehaviour
             test14;
     }
 
-    void RunBattleCardHoverAndDragMotionBasicTestSequence()
+    bool RunBattleCardHoverAndDragMotionBasicTestSequence()
     {
         Debug.Log("===== BattleCardHoverAndDragMotionBasic 聚合测试开始 =====");
+
+        const float testHoverLiftY = 260f;
+        const float testExpandedWorldRotationZ = 0f;
 
         GameObject rootCanvasObject = new GameObject(
             "Motion65RootCanvas",
@@ -5937,7 +5982,7 @@ public class CardLoadTest : MonoBehaviour
         RectTransform cardRoot = cardObject.GetComponent<RectTransform>();
         cardRoot.anchoredPosition = new Vector2(30f, 40f);
         cardRoot.localScale = new Vector3(0.8f, 0.9f, 1f);
-        cardRoot.localRotation = Quaternion.Euler(0f, 0f, -6f);
+        cardRoot.localRotation = Quaternion.Euler(0f, 0f, -5f);
 
         GameObject visualObject = new GameObject(
             "VisualRoot",
@@ -5976,9 +6021,46 @@ public class CardLoadTest : MonoBehaviour
                 "sortingCanvas",
                 sortingCanvas
             ) &&
-            SetMode64PrivateField(motionView, "hoverLiftY", 100f) &&
-            SetMode64PrivateField(motionView, "hoverDuration", 0.12f) &&
-            SetMode64PrivateField(motionView, "returnDuration", 0.10f) &&
+            SetMode64PrivateField(
+                motionView,
+                "expandedWorldRotationZ",
+                testExpandedWorldRotationZ
+            ) &&
+            SetMode64PrivateField(
+                motionView,
+                "hoverLiftY",
+                testHoverLiftY
+            ) &&
+            SetMode64PrivateField(
+                motionView,
+                "positionSharpness",
+                13.3886f
+            ) &&
+            SetMode64PrivateField(
+                motionView,
+                "rotationSharpness",
+                13.3886f
+            ) &&
+            SetMode64PrivateField(
+                motionView,
+                "scaleSharpness",
+                13.3886f
+            ) &&
+            SetMode64PrivateField(
+                motionView,
+                "positionSnapDistance",
+                0.1f
+            ) &&
+            SetMode64PrivateField(
+                motionView,
+                "rotationSnapAngle",
+                0.05f
+            ) &&
+            SetMode64PrivateField(
+                motionView,
+                "scaleSnapDistance",
+                0.001f
+            ) &&
             SetMode64PrivateField(
                 motionView,
                 "normalSortingOrder",
@@ -6058,7 +6140,36 @@ public class CardLoadTest : MonoBehaviour
             motionView.OriginalSortingOrder ==
                 cachedOriginalSortingOrder;
         cardView.OnPointerEnter(null);
-        motionView.CompleteCurrentTransitionImmediately();
+        Vector2 hoverStartPosition = visualRoot.anchoredPosition;
+        motionView.AdvanceCurrentTransitionForTesting(1f / 60f);
+        Vector2 hoverAfterFirstStep = visualRoot.anchoredPosition;
+        float hoverFirstStepDistance = Vector2.Distance(
+            hoverStartPosition,
+            hoverAfterFirstStep
+        );
+        float distanceAfterFirstStep = Vector2.Distance(
+            hoverAfterFirstStep,
+            motionView.HoverTargetAnchoredPosition
+        );
+        motionView.AdvanceCurrentTransitionForTesting(1f / 60f);
+        Vector2 hoverAfterSecondStep = visualRoot.anchoredPosition;
+        float hoverSecondStepDistance = Vector2.Distance(
+            hoverAfterFirstStep,
+            hoverAfterSecondStep
+        );
+        float distanceAfterSecondStep = Vector2.Distance(
+            hoverAfterSecondStep,
+            motionView.HoverTargetAnchoredPosition
+        );
+        bool hoverReachedSnap = false;
+        for (int step = 0; step < 240; step++)
+        {
+            if (motionView.AdvanceCurrentTransitionForTesting(1f / 60f))
+            {
+                hoverReachedSnap = true;
+                break;
+            }
+        }
         bool test9CacheStableAfterHover =
             sortingCanvas.overrideSorting &&
             motionView.OriginalOverrideSorting ==
@@ -6068,28 +6179,72 @@ public class CardLoadTest : MonoBehaviour
         bool test1 =
             referencesConfigured &&
             motionView.HasCachedBaseTransform &&
+            hoverFirstStepDistance > 0f &&
+            hoverAfterFirstStep.y <
+                motionView.HoverTargetAnchoredPosition.y &&
             cardRoot.anchoredPosition == rootPositionBeforeHover &&
             cardRoot.localScale == rootScaleBeforeHover &&
             Quaternion.Angle(
                 cardRoot.localRotation,
                 rootRotationBeforeHover
+            ) < 0.001f &&
+            Mathf.Abs(
+                Mathf.DeltaAngle(
+                    cardRoot.localEulerAngles.z,
+                    -5f
+                )
             ) < 0.001f;
         bool test2 =
+            hoverFirstStepDistance > hoverSecondStepDistance &&
+            distanceAfterSecondStep < distanceAfterFirstStep &&
+            hoverReachedSnap &&
+            motionView.ActiveTransitionCount == 0 &&
             visualRoot.anchoredPosition ==
                 motionView.HoverTargetAnchoredPosition &&
+            Mathf.Abs(
+                visualRoot.anchoredPosition.y -
+                motionView.BaseVisualAnchoredPosition.y -
+                testHoverLiftY
+            ) < 0.001f &&
             visualRoot.localScale == motionView.BaseVisualScale &&
             Mathf.Abs(
                 Mathf.DeltaAngle(
-                    visualRoot.localEulerAngles.z,
-                    0f
+                    visualRoot.eulerAngles.z,
+                    testExpandedWorldRotationZ
                 )
+            ) < 0.001f &&
+            cardRoot.anchoredPosition == rootPositionBeforeHover &&
+            cardRoot.localScale == rootScaleBeforeHover &&
+            Quaternion.Angle(
+                cardRoot.localRotation,
+                rootRotationBeforeHover
             ) < 0.001f &&
             sortingCanvas.overrideSorting &&
             sortingCanvas.sortingOrder == 10;
 
         cardView.OnPointerExit(null);
+        Vector2 returnStartPosition = visualRoot.anchoredPosition;
+        motionView.AdvanceCurrentTransitionForTesting(1f / 60f);
+        Vector2 returnAfterFirstStep = visualRoot.anchoredPosition;
+        bool returnMovedTowardBase =
+            returnAfterFirstStep.y < returnStartPosition.y &&
+            returnAfterFirstStep.y >
+                motionView.BaseVisualAnchoredPosition.y;
+        int transitionCountBeforeRedirect =
+            motionView.ActiveTransitionCount;
+        cardView.OnPointerEnter(null);
+        Vector2 redirectStartPosition = visualRoot.anchoredPosition;
+        motionView.AdvanceCurrentTransitionForTesting(1f / 60f);
+        bool redirectedFromCurrentPosition =
+            visualRoot.anchoredPosition.y >
+                redirectStartPosition.y &&
+            transitionCountBeforeRedirect == 1 &&
+            motionView.ActiveTransitionCount == 1;
+        cardView.OnPointerExit(null);
         motionView.CompleteCurrentTransitionImmediately();
         bool test3 =
+            returnMovedTowardBase &&
+            redirectedFromCurrentPosition &&
             visualRoot.anchoredPosition ==
                 motionView.BaseVisualAnchoredPosition &&
             visualRoot.localScale == motionView.BaseVisualScale &&
@@ -6113,7 +6268,13 @@ public class CardLoadTest : MonoBehaviour
         bool test4 =
             noAccumulatedTransitions &&
             motionView.ActiveTransitionCount == 0 &&
-            visualRoot.localScale == motionView.BaseVisualScale;
+            visualRoot.anchoredPosition ==
+                motionView.BaseVisualAnchoredPosition &&
+            visualRoot.localScale == motionView.BaseVisualScale &&
+            Quaternion.Angle(
+                visualRoot.localRotation,
+                motionView.BaseVisualRotation
+            ) < 0.001f;
 
         cardView.OnPointerEnter(null);
         selectionController.SelectCard(cardView);
@@ -6127,6 +6288,16 @@ public class CardLoadTest : MonoBehaviour
         bool test5 =
             motionView.IsSelected &&
             cardView.IsSelected &&
+            Mathf.Abs(
+                Mathf.DeltaAngle(
+                    visualRoot.eulerAngles.z,
+                    testExpandedWorldRotationZ
+                )
+            ) < 0.001f &&
+            Quaternion.Angle(
+                cardRoot.localRotation,
+                rootRotationBeforeHover
+            ) < 0.001f &&
             sortingCanvas.overrideSorting &&
             sortingCanvas.sortingOrder == 20;
 
@@ -6136,6 +6307,12 @@ public class CardLoadTest : MonoBehaviour
             motionView.IsSelected &&
             visualRoot.anchoredPosition ==
                 motionView.HoverTargetAnchoredPosition &&
+            Mathf.Abs(
+                Mathf.DeltaAngle(
+                    visualRoot.eulerAngles.z,
+                    testExpandedWorldRotationZ
+                )
+            ) < 0.001f &&
             sortingCanvas.sortingOrder == 20;
 
         selectionController.ClearSelection();
@@ -6143,7 +6320,11 @@ public class CardLoadTest : MonoBehaviour
         bool test7 =
             !motionView.IsSelected &&
             visualRoot.anchoredPosition ==
-                motionView.BaseVisualAnchoredPosition;
+                motionView.BaseVisualAnchoredPosition &&
+            Quaternion.Angle(
+                visualRoot.localRotation,
+                motionView.BaseVisualRotation
+            ) < 0.001f;
 
         cardState.currentCooldown = 1;
         cardView.OnPointerEnter(null);
@@ -6222,66 +6403,71 @@ public class CardLoadTest : MonoBehaviour
 
         cardView.OnPointerEnter(null);
         selectionController.SelectCard(cardView);
+        motionView.CompleteCurrentTransitionImmediately();
         cardObject.SetActive(false);
-        bool test9OverrideAfterDisable =
+        bool test9InactiveOverrideSortingDiagnostic =
             sortingCanvas.overrideSorting;
-        motionView.SetSelected(false);
-        bool test9OverrideAfterDisabledSetSelected =
-            sortingCanvas.overrideSorting;
-        bool test9PositionRestored =
+        int test9InactiveSortingOrderDiagnostic =
+            sortingCanvas.sortingOrder;
+        bool test9DisabledPositionRestored =
             visualRoot.anchoredPosition == cachedBasePosition;
-        bool test9ScaleRestored =
+        bool test9DisabledScaleRestored =
             visualRoot.localScale == cachedBaseScale;
-        bool test9RotationRestored =
+        bool test9DisabledRotationRestored =
             Quaternion.Angle(
                 visualRoot.localRotation,
                 cachedBaseRotation
             ) < 0.001f;
-        bool test9OverrideSortingRestored =
-            sortingCanvas.overrideSorting ==
-                cachedOriginalOverrideSorting;
-        bool test9SortingOrderRestored =
-            sortingCanvas.sortingOrder ==
-                cachedOriginalSortingOrder;
-        bool test9HoverCleared = !motionView.IsHovered;
-        bool test9SelectedCleared =
+        bool test9DisabledHoverCleared = !motionView.IsHovered;
+        bool test9DisabledSelectedCleared =
             !motionView.IsSelected &&
             !selectionController.HasSelection;
-        bool test9CoroutineCleared =
+        bool test9DisabledCoroutineCleared =
             motionView.ActiveTransitionCount == 0;
-        bool test9LifecycleOrderA =
-            test9OverrideAfterDisable ==
-                cachedOriginalOverrideSorting &&
-            test9OverrideAfterDisabledSetSelected ==
-                cachedOriginalOverrideSorting;
 
         cardObject.SetActive(true);
-        motionView.SetSelected(true);
-        motionView.CompleteCurrentTransitionImmediately();
-        motionView.SetSelected(false);
-        motionView.CompleteCurrentTransitionImmediately();
-        motionView.RestoreVisualImmediately();
-        bool test9LifecycleOrderB =
+        bool test9ReenabledOverrideSortingRestored =
             sortingCanvas.overrideSorting ==
                 cachedOriginalOverrideSorting;
-        cardObject.SetActive(false);
+        bool test9ReenabledSortingOrderRestored =
+            sortingCanvas.sortingOrder ==
+                cachedOriginalSortingOrder;
+        bool test9ReenabledPositionRestored =
+            visualRoot.anchoredPosition == cachedBasePosition;
+        bool test9ReenabledScaleRestored =
+            visualRoot.localScale == cachedBaseScale;
+        bool test9ReenabledRotationRestored =
+            Quaternion.Angle(
+                visualRoot.localRotation,
+                cachedBaseRotation
+            ) < 0.001f;
+        bool test9ReenabledHoverCleared = !motionView.IsHovered;
+        bool test9ReenabledSelectedCleared =
+            !motionView.IsSelected &&
+            !selectionController.HasSelection;
+        bool test9ReenabledCoroutineCleared =
+            motionView.ActiveTransitionCount == 0;
 
         bool test9 =
-            test9PositionRestored &&
-            test9ScaleRestored &&
-            test9RotationRestored &&
-            test9OverrideSortingRestored &&
-            test9SortingOrderRestored &&
-            test9HoverCleared &&
-            test9SelectedCleared &&
-            test9CoroutineCleared &&
+            test9DisabledPositionRestored &&
+            test9DisabledScaleRestored &&
+            test9DisabledRotationRestored &&
+            test9DisabledHoverCleared &&
+            test9DisabledSelectedCleared &&
+            test9DisabledCoroutineCleared &&
+            test9ReenabledOverrideSortingRestored &&
+            test9ReenabledSortingOrderRestored &&
+            test9ReenabledPositionRestored &&
+            test9ReenabledScaleRestored &&
+            test9ReenabledRotationRestored &&
+            test9ReenabledHoverCleared &&
+            test9ReenabledSelectedCleared &&
+            test9ReenabledCoroutineCleared &&
             test9InitialCanvasCacheMatches &&
             test9CacheStableAfterHover &&
             test9CacheStableAfterSelected &&
             test9CacheStableAfterRecalculate &&
-            test9CacheStableAfterRepeatedBind &&
-            test9LifecycleOrderA &&
-            test9LifecycleOrderB;
+            test9CacheStableAfterRepeatedBind;
 
         Destroy(rootCanvasObject);
 
@@ -6290,22 +6476,20 @@ public class CardLoadTest : MonoBehaviour
         bool test15 =
             RunMode65HandAssignmentRegressionSubTest();
 
-        Debug.Log("模式65 测试1 Hover不修改cardRoot基础布局：" + test1);
-        Debug.Log("模式65 测试2 Hover上移、回正且不修改基础缩放：" + test2);
-        Debug.Log("模式65 测试3 Pointer Exit恢复初始Transform：" + test3);
-        Debug.Log("模式65 测试4 快速Enter/Exit不累积协程或缩放：" + test4);
+        Debug.Log("模式65 测试1 Hover指数平滑第一步移动且不修改cardRoot：" + test1);
+        Debug.Log("模式65 测试2 指数步长递减并在Snap后精确到达：" + test2);
+        Debug.Log("模式65 测试3 动画中途改向并恢复初始Transform：" + test3);
+        Debug.Log("模式65 测试4 快速Enter/Exit仅保留一个协程且可精确完成：" + test4);
         Debug.Log("模式65 测试5 Selected优先于Hovered并使用选中排序：" + test5);
         Debug.Log("模式65 测试6 Selected在Pointer Exit后持续展开：" + test6);
         Debug.Log("模式65 测试7 取消Selected后恢复Resting：" + test7);
         Debug.Log("模式65 测试8 CD卡可Hover但不可Selected：" + test8);
-        Debug.Log("模式65 测试9诊断 Position恢复：" + test9PositionRestored);
-        Debug.Log("模式65 测试9诊断 Scale恢复：" + test9ScaleRestored);
-        Debug.Log("模式65 测试9诊断 Rotation恢复：" + test9RotationRestored);
-        Debug.Log("模式65 测试9诊断 OverrideSorting恢复：" + test9OverrideSortingRestored);
-        Debug.Log("模式65 测试9诊断 SortingOrder恢复：" + test9SortingOrderRestored);
-        Debug.Log("模式65 测试9诊断 Hover状态清除：" + test9HoverCleared);
-        Debug.Log("模式65 测试9诊断 Selected状态清除：" + test9SelectedCleared);
-        Debug.Log("模式65 测试9诊断 Coroutine清理：" + test9CoroutineCleared);
+        Debug.Log("模式65 测试9诊断 禁用时Position恢复：" + test9DisabledPositionRestored);
+        Debug.Log("模式65 测试9诊断 禁用时Scale恢复：" + test9DisabledScaleRestored);
+        Debug.Log("模式65 测试9诊断 禁用时Rotation恢复：" + test9DisabledRotationRestored);
+        Debug.Log("模式65 测试9诊断 禁用时Hover清除：" + test9DisabledHoverCleared);
+        Debug.Log("模式65 测试9诊断 禁用时Selected清除：" + test9DisabledSelectedCleared);
+        Debug.Log("模式65 测试9诊断 禁用时Coroutine清理：" + test9DisabledCoroutineCleared);
         Debug.Log(
             "模式65 测试9诊断 Canvas初始化OverrideSorting：" +
             cachedOriginalOverrideSorting
@@ -6335,22 +6519,28 @@ public class CardLoadTest : MonoBehaviour
             test9CacheStableAfterRepeatedBind
         );
         Debug.Log(
-            "模式65 测试9诊断 禁用恢复后OverrideSorting：" +
-            test9OverrideAfterDisable
+            "模式65 测试9诊断 禁用期间OverrideSorting（仅诊断）：" +
+            test9InactiveOverrideSortingDiagnostic
         );
         Debug.Log(
-            "模式65 测试9诊断 禁用后再次SetSelected(false)的OverrideSorting：" +
-            test9OverrideAfterDisabledSetSelected
+            "模式65 测试9诊断 禁用期间SortingOrder（仅诊断）：" +
+            test9InactiveSortingOrderDiagnostic
         );
         Debug.Log(
-            "模式65 测试9诊断 生命周期顺序A恢复：" +
-            test9LifecycleOrderA
+            "模式65 测试9诊断 重新启用后OverrideSorting恢复：" +
+            test9ReenabledOverrideSortingRestored
         );
         Debug.Log(
-            "模式65 测试9诊断 生命周期顺序B恢复：" +
-            test9LifecycleOrderB
+            "模式65 测试9诊断 重新启用后SortingOrder恢复：" +
+            test9ReenabledSortingOrderRestored
         );
-        Debug.Log("模式65 测试9 OnDisable恢复Transform与排序：" + test9);
+        Debug.Log("模式65 测试9诊断 重新启用后Position恢复：" + test9ReenabledPositionRestored);
+        Debug.Log("模式65 测试9诊断 重新启用后Scale恢复：" + test9ReenabledScaleRestored);
+        Debug.Log("模式65 测试9诊断 重新启用后Rotation恢复：" + test9ReenabledRotationRestored);
+        Debug.Log("模式65 测试9诊断 重新启用后Hover清除：" + test9ReenabledHoverCleared);
+        Debug.Log("模式65 测试9诊断 重新启用后Selected清除：" + test9ReenabledSelectedCleared);
+        Debug.Log("模式65 测试9诊断 重新启用后Coroutine清理：" + test9ReenabledCoroutineCleared);
+        Debug.Log("模式65 测试9 禁用清理且重新启用后恢复Transform与排序：" + test9);
         Debug.Log("模式65 测试10 多次Bind不改变动画缓存：" + test10);
         Debug.Log("模式65 测试11 BattleCardUIView不再注册拖拽接口：" + test11);
         Debug.Log("模式65 测试12 嵌套Canvas与GraphicRaycaster结构有效：" + test12);
@@ -6359,6 +6549,3970 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("模式65 测试15 手牌过滤、指派、替换与取消继续通过：" + test15);
 
         Debug.Log("===== BattleCardHoverAndDragMotionBasic 聚合测试结束 =====");
+        return
+            test1 && test2 && test3 && test4 && test5 &&
+            test6 && test7 && test8 && test9 && test10 &&
+            test11 && test12 && test13 && test14 && test15;
+    }
+
+    sealed class Mode68HandTestContext
+    {
+        public GameObject rootObject;
+        public BattleCardHandUIView handView;
+        public BattleCardHandSpreadAnimator spreadAnimator;
+        public CharacterData ownerA;
+        public CharacterData ownerB;
+        public CharacterData target;
+        public List<BattleCardState> ownerACards;
+        public List<BattleCardState> ownerBCards;
+        public List<RectTransform> placementSlots;
+        public bool referencesConfigured;
+    }
+
+    void RunBattleCardExponentialMotionAndSpreadBasicTestSequence()
+    {
+        Debug.Log(
+            "===== BattleCardExponentialMotionAndSpreadBasic 聚合测试开始 ====="
+        );
+
+        const float sharpness = 13.3886f;
+        float factorAt60Fps =
+            BattleUIExponentialSmoothing.CalculateFactor(
+                sharpness,
+                1f / 60f
+            );
+        bool test1 = Mathf.Abs(factorAt60Fps - 0.2f) < 0.0001f;
+
+        Vector2 smoothingTarget = new Vector2(100f, 0f);
+        Vector2 smoothingStep0 = Vector2.zero;
+        Vector2 smoothingStep1 =
+            BattleUIExponentialSmoothing.Smooth(
+                smoothingStep0,
+                smoothingTarget,
+                sharpness,
+                1f / 60f
+            );
+        Vector2 smoothingStep2 =
+            BattleUIExponentialSmoothing.Smooth(
+                smoothingStep1,
+                smoothingTarget,
+                sharpness,
+                1f / 60f
+            );
+        Vector2 smoothingStep3 =
+            BattleUIExponentialSmoothing.Smooth(
+                smoothingStep2,
+                smoothingTarget,
+                sharpness,
+                1f / 60f
+            );
+        float firstStepDistance =
+            Vector2.Distance(smoothingStep0, smoothingStep1);
+        float secondStepDistance =
+            Vector2.Distance(smoothingStep1, smoothingStep2);
+        float thirdStepDistance =
+            Vector2.Distance(smoothingStep2, smoothingStep3);
+        bool test2 =
+            firstStepDistance > secondStepDistance &&
+            secondStepDistance > thirdStepDistance &&
+            Vector2.Distance(smoothingStep3, smoothingTarget) <
+                Vector2.Distance(smoothingStep2, smoothingTarget);
+
+        Vector2 positionAt30Fps =
+            SimulateMode68ExponentialPosition(sharpness, 30, 1f);
+        Vector2 positionAt60Fps =
+            SimulateMode68ExponentialPosition(sharpness, 60, 1f);
+        Vector2 positionAt120Fps =
+            SimulateMode68ExponentialPosition(sharpness, 120, 1f);
+        bool test3 =
+            Vector2.Distance(positionAt30Fps, positionAt60Fps) <
+                0.001f &&
+            Vector2.Distance(positionAt60Fps, positionAt120Fps) <
+                0.001f;
+
+        Mode68HandTestContext context =
+            CreateMode68HandTestContext();
+        context.handView.SetCards(
+            context.ownerA,
+            context.target,
+            context.ownerACards
+        );
+
+        List<BattleCardUIView> firstOwnerViews =
+            CopyMode68CardViews(context.handView.SpawnedCardViews);
+        Vector2 firstOwnerCenter =
+            GetMode68PlacementCenter(
+                context.placementSlots,
+                firstOwnerViews.Count
+            );
+        bool test4 =
+            context.referencesConfigured &&
+            context.handView.HasDisplayedAnyHand &&
+            object.ReferenceEquals(
+                context.handView.LastDisplayedOwner,
+                context.ownerA
+            ) &&
+            context.spreadAnimator.ActiveTransitionCount == 1 &&
+            context.spreadAnimator.CachedCardCount ==
+                firstOwnerViews.Count;
+        bool test5 =
+            AreMode68CardsAtSpreadStart(
+                firstOwnerViews,
+                context.placementSlots,
+                firstOwnerCenter,
+                0f
+            );
+
+        RectTransform firstCardVisualRoot =
+            firstOwnerViews.Count > 0
+                ? firstOwnerViews[0].transform.Find(
+                    "VisualRoot"
+                ) as RectTransform
+                : null;
+        Vector2 visualPositionBeforeSpread =
+            firstCardVisualRoot != null
+                ? firstCardVisualRoot.anchoredPosition
+                : Vector2.zero;
+        Vector3 visualScaleBeforeSpread =
+            firstCardVisualRoot != null
+                ? firstCardVisualRoot.localScale
+                : Vector3.zero;
+        Quaternion visualRotationBeforeSpread =
+            firstCardVisualRoot != null
+                ? firstCardVisualRoot.localRotation
+                : Quaternion.identity;
+        context.spreadAnimator.AdvanceSpreadForTesting(1f / 60f);
+        bool anyCardRootMoved =
+            HasAnyMode68CardRootMoved(
+                firstOwnerViews,
+                firstOwnerCenter
+            );
+        bool test11 =
+            anyCardRootMoved &&
+            firstCardVisualRoot != null &&
+            firstCardVisualRoot.anchoredPosition ==
+                visualPositionBeforeSpread &&
+            firstCardVisualRoot.localScale ==
+                visualScaleBeforeSpread &&
+            Quaternion.Angle(
+                firstCardVisualRoot.localRotation,
+                visualRotationBeforeSpread
+            ) < 0.001f;
+
+        context.spreadAnimator.CompleteSpreadImmediatelyForTesting();
+        bool test6 =
+            DoMode68CardsMatchPlacementSlots(
+                firstOwnerViews,
+                context.placementSlots
+            ) &&
+            context.spreadAnimator.ActiveTransitionCount == 0 &&
+            context.spreadAnimator.CachedCardCount == 0;
+
+        context.handView.SetCards(
+            context.ownerB,
+            context.target,
+            context.ownerBCards
+        );
+        bool test7 =
+            object.ReferenceEquals(
+                context.handView.LastDisplayedOwner,
+                context.ownerB
+            ) &&
+            context.spreadAnimator.ActiveTransitionCount == 1 &&
+            context.spreadAnimator.CachedCardCount ==
+                context.ownerBCards.Count;
+        context.spreadAnimator.CompleteSpreadImmediatelyForTesting();
+
+        context.handView.SetCards(
+            context.ownerB,
+            context.target,
+            context.ownerBCards
+        );
+        bool test8 =
+            context.spreadAnimator.ActiveTransitionCount == 0 &&
+            context.spreadAnimator.CachedCardCount == 0 &&
+            DoMode68CardsMatchPlacementSlots(
+                context.handView.SpawnedCardViews,
+                context.placementSlots
+            );
+
+        List<BattleCardState> sameOwnerFilteredCards =
+            new List<BattleCardState>
+            {
+                context.ownerBCards[0]
+            };
+        context.handView.SetCards(
+            context.ownerB,
+            context.target,
+            sameOwnerFilteredCards
+        );
+        bool test9 =
+            context.spreadAnimator.ActiveTransitionCount == 0 &&
+            context.spreadAnimator.CachedCardCount == 0 &&
+            context.handView.SpawnedCardViews.Count == 1 &&
+            DoMode68CardsMatchPlacementSlots(
+                context.handView.SpawnedCardViews,
+                context.placementSlots
+            );
+
+        context.handView.SetCards(
+            context.ownerA,
+            context.target,
+            context.ownerACards
+        );
+        context.handView.ClearCards();
+        bool test10 =
+            context.spreadAnimator.ActiveTransitionCount == 0 &&
+            context.spreadAnimator.CachedCardCount == 0 &&
+            context.handView.SpawnedCardViews.Count == 0;
+
+        bool spreadDisabledConfigured =
+            SetMode64PrivateField(
+                context.spreadAnimator,
+                "enableSpreadAnimation",
+                false
+            );
+        context.handView.SetCards(
+            context.ownerB,
+            context.target,
+            context.ownerBCards
+        );
+        bool test12 =
+            spreadDisabledConfigured &&
+            context.spreadAnimator.ActiveTransitionCount == 0 &&
+            context.spreadAnimator.CachedCardCount == 0 &&
+            DoMode68CardsMatchPlacementSlots(
+                context.handView.SpawnedCardViews,
+                context.placementSlots
+            );
+
+        bool spreadEnabledConfigured =
+            SetMode64PrivateField(
+                context.spreadAnimator,
+                "enableSpreadAnimation",
+                true
+            );
+        context.handView.SetCards(
+            context.ownerA,
+            context.target,
+            new List<BattleCardState>()
+        );
+        bool zeroCardsSafe =
+            context.handView.SpawnedCardViews.Count == 0 &&
+            context.spreadAnimator.ActiveTransitionCount == 0 &&
+            context.spreadAnimator.CachedCardCount == 0;
+        context.handView.SetCards(
+            context.ownerB,
+            context.target,
+            sameOwnerFilteredCards
+        );
+        bool oneCardStarted =
+            context.handView.SpawnedCardViews.Count == 1 &&
+            context.spreadAnimator.ActiveTransitionCount == 1 &&
+            context.spreadAnimator.CachedCardCount == 1;
+        context.spreadAnimator.CompleteSpreadImmediatelyForTesting();
+        bool test13 =
+            spreadEnabledConfigured &&
+            zeroCardsSafe &&
+            oneCardStarted &&
+            DoMode68CardsMatchPlacementSlots(
+                context.handView.SpawnedCardViews,
+                context.placementSlots
+            );
+
+        context.handView.SetCards(
+            context.ownerA,
+            context.target,
+            context.ownerACards
+        );
+        List<BattleCardUIView> interruptedOwnerViews =
+            CopyMode68CardViews(context.handView.SpawnedCardViews);
+        context.handView.SetCards(
+            context.ownerB,
+            context.target,
+            context.ownerBCards
+        );
+        List<BattleCardUIView> replacementOwnerViews =
+            CopyMode68CardViews(context.handView.SpawnedCardViews);
+        bool oldCardsDisabled =
+            AreMode68CardViewsInactive(interruptedOwnerViews);
+        bool oldReferencesRemoved =
+            HaveNoMode68SharedReferences(
+                interruptedOwnerViews,
+                replacementOwnerViews
+            );
+        bool test14 =
+            oldCardsDisabled &&
+            oldReferencesRemoved &&
+            context.spreadAnimator.ActiveTransitionCount == 1 &&
+            context.spreadAnimator.CachedCardCount ==
+                replacementOwnerViews.Count &&
+            replacementOwnerViews.Count == context.ownerBCards.Count;
+
+        Destroy(context.rootObject);
+
+        Debug.Log("模式68 测试1 60FPS指数因子约为0.2：" + test1);
+        Debug.Log("模式68 测试2 指数平滑单步位移逐次减小：" + test2);
+        Debug.Log("模式68 测试3 30/60/120FPS同总时长结果一致：" + test3);
+        Debug.Log("模式68 测试4 首次SetCards播放散开：" + test4);
+        Debug.Log("模式68 测试5 所有卡牌从最终布局中心开始：" + test5);
+        Debug.Log("模式68 测试6 最终精确恢复ManualLayout Transform：" + test6);
+        Debug.Log("模式68 测试7 切换不同owner重新播放：" + test7);
+        Debug.Log("模式68 测试8 同owner刷新不重新播放：" + test8);
+        Debug.Log("模式68 测试9 同owner内容切换不重新播放：" + test9);
+        Debug.Log("模式68 测试10 ClearCards停止动画并清理引用：" + test10);
+        Debug.Log("模式68 测试11 Spread只修改cardRoot不修改VisualRoot：" + test11);
+        Debug.Log("模式68 测试12 Spread禁用时保留最终布局：" + test12);
+        Debug.Log("模式68 测试13 0张和1张卡安全：" + test13);
+        Debug.Log("模式68 测试14 中途切换owner不保留旧引用或协程：" + test14);
+        Debug.Log(
+            "===== BattleCardExponentialMotionAndSpreadBasic 聚合测试结束 ====="
+        );
+    }
+
+    Vector2 SimulateMode68ExponentialPosition(
+        float sharpness,
+        int framesPerSecond,
+        float duration
+    )
+    {
+        Vector2 current = Vector2.zero;
+        Vector2 target = new Vector2(100f, -40f);
+        int stepCount = Mathf.RoundToInt(
+            framesPerSecond * duration
+        );
+        float deltaTime = 1f / framesPerSecond;
+
+        for (int step = 0; step < stepCount; step++)
+        {
+            current = BattleUIExponentialSmoothing.Smooth(
+                current,
+                target,
+                sharpness,
+                deltaTime
+            );
+        }
+
+        return current;
+    }
+
+    Mode68HandTestContext CreateMode68HandTestContext()
+    {
+        Mode68HandTestContext context =
+            new Mode68HandTestContext();
+        context.rootObject = new GameObject(
+            "Mode68HandRoot",
+            typeof(RectTransform)
+        );
+        context.rootObject.SetActive(false);
+
+        BattleCardManualLayout manualLayout =
+            context.rootObject.AddComponent<BattleCardManualLayout>();
+        context.spreadAnimator =
+            context.rootObject.AddComponent<
+                BattleCardHandSpreadAnimator
+            >();
+        context.handView =
+            context.rootObject.AddComponent<BattleCardHandUIView>();
+
+        List<RectTransform> slots = new List<RectTransform>();
+        for (int slotIndex = 0; slotIndex < 5; slotIndex++)
+        {
+            GameObject slotObject = new GameObject(
+                "Mode68Slot" + (slotIndex + 1),
+                typeof(RectTransform)
+            );
+            slotObject.transform.SetParent(
+                context.rootObject.transform,
+                false
+            );
+            RectTransform slotRect =
+                slotObject.GetComponent<RectTransform>();
+            slotRect.anchoredPosition = new Vector2(
+                -200f + slotIndex * 100f,
+                Mathf.Abs(2 - slotIndex) * -20f
+            );
+            slotRect.localRotation = Quaternion.Euler(
+                0f,
+                0f,
+                -10f + slotIndex * 5f
+            );
+            slotRect.localScale = new Vector3(
+                0.9f + slotIndex * 0.02f,
+                0.9f + slotIndex * 0.02f,
+                1f
+            );
+            slots.Add(slotRect);
+        }
+
+        context.placementSlots = new List<RectTransform>
+        {
+            slots[2],
+            slots[3],
+            slots[1],
+            slots[4],
+            slots[0]
+        };
+
+        GameObject templateObject = new GameObject(
+            "Mode68CardTemplate",
+            typeof(RectTransform)
+        );
+        templateObject.transform.SetParent(
+            context.rootObject.transform,
+            false
+        );
+        BattleCardUIView templateView =
+            templateObject.AddComponent<BattleCardUIView>();
+        BattleCardVisualStyle templateVisualStyle =
+            templateObject.AddComponent<BattleCardVisualStyle>();
+        GameObject visualObject = new GameObject(
+            "VisualRoot",
+            typeof(RectTransform)
+        );
+        visualObject.transform.SetParent(
+            templateObject.transform,
+            false
+        );
+        RectTransform templateVisualRoot =
+            visualObject.GetComponent<RectTransform>();
+        templateVisualRoot.anchoredPosition =
+            new Vector2(11f, 13f);
+        templateVisualRoot.localScale =
+            new Vector3(0.91f, 0.93f, 1f);
+        templateVisualRoot.localRotation =
+            Quaternion.Euler(0f, 0f, 7f);
+        UnityEngine.UI.Image templateFrame =
+            CreateMode64Image(
+                templateVisualRoot,
+                "Mode68Frame"
+            );
+        bool templateConfigured =
+            SetMode64PrivateField(
+                templateView,
+                "visualStyle",
+                templateVisualStyle
+            ) &&
+            SetMode64PrivateField(
+                templateVisualStyle,
+                "frameImage",
+                templateFrame
+            );
+
+        bool layoutConfigured =
+            SetMode64PrivateField(
+                manualLayout,
+                "normal01",
+                slots[0]
+            ) &&
+            SetMode64PrivateField(
+                manualLayout,
+                "normal02",
+                slots[1]
+            ) &&
+            SetMode64PrivateField(
+                manualLayout,
+                "normal03",
+                slots[2]
+            ) &&
+            SetMode64PrivateField(
+                manualLayout,
+                "normal04",
+                slots[3]
+            ) &&
+            SetMode64PrivateField(
+                manualLayout,
+                "normal05",
+                slots[4]
+            );
+        bool handConfigured =
+            SetMode64PrivateField(
+                context.handView,
+                "cardViewPrefab",
+                templateView
+            ) &&
+            SetMode64PrivateField(
+                context.handView,
+                "cardContainer",
+                context.rootObject.transform
+            ) &&
+            SetMode64PrivateField(
+                context.handView,
+                "manualLayout",
+                manualLayout
+            ) &&
+            SetMode64PrivateField(
+                context.handView,
+                "spreadAnimator",
+                context.spreadAnimator
+            ) &&
+            SetMode64PrivateField(
+                context.handView,
+                "hideTemplateOnAwake",
+                true
+            );
+        context.referencesConfigured =
+            layoutConfigured &&
+            handConfigured &&
+            templateConfigured;
+
+        context.ownerA = new CharacterData(
+            "mode68_owner_a",
+            30,
+            10,
+            10
+        );
+        context.ownerB = new CharacterData(
+            "mode68_owner_b",
+            30,
+            9,
+            9
+        );
+        context.target = new CharacterData(
+            "mode68_target",
+            50,
+            5,
+            5
+        );
+        context.ownerACards = new List<BattleCardState>
+        {
+            CreateFixedAttackCardForCharacter(
+                context.ownerA,
+                "mode68_a_1",
+                1
+            ),
+            CreateFixedAttackCardForCharacter(
+                context.ownerA,
+                "mode68_a_2",
+                2
+            ),
+            CreateFixedAttackCardForCharacter(
+                context.ownerA,
+                "mode68_a_3",
+                3
+            )
+        };
+        context.ownerBCards = new List<BattleCardState>
+        {
+            CreateFixedAttackCardForCharacter(
+                context.ownerB,
+                "mode68_b_1",
+                4
+            ),
+            CreateFixedAttackCardForCharacter(
+                context.ownerB,
+                "mode68_b_2",
+                5
+            )
+        };
+
+        context.rootObject.SetActive(true);
+        return context;
+    }
+
+    List<BattleCardUIView> CopyMode68CardViews(
+        IReadOnlyList<BattleCardUIView> source
+    )
+    {
+        List<BattleCardUIView> copy =
+            new List<BattleCardUIView>();
+        if (source == null)
+        {
+            return copy;
+        }
+
+        for (int index = 0; index < source.Count; index++)
+        {
+            copy.Add(source[index]);
+        }
+
+        return copy;
+    }
+
+    Vector2 GetMode68PlacementCenter(
+        IReadOnlyList<RectTransform> placementSlots,
+        int count
+    )
+    {
+        Vector2 sum = Vector2.zero;
+        int validCount = Mathf.Min(
+            count,
+            placementSlots != null ? placementSlots.Count : 0
+        );
+
+        for (int index = 0; index < validCount; index++)
+        {
+            sum += placementSlots[index].anchoredPosition;
+        }
+
+        return validCount > 0
+            ? sum / validCount
+            : Vector2.zero;
+    }
+
+    bool AreMode68CardsAtSpreadStart(
+        IReadOnlyList<BattleCardUIView> cardViews,
+        IReadOnlyList<RectTransform> placementSlots,
+        Vector2 expectedCenter,
+        float expectedRotationZ
+    )
+    {
+        if (cardViews == null ||
+            placementSlots == null ||
+            cardViews.Count == 0 ||
+            cardViews.Count > placementSlots.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < cardViews.Count; index++)
+        {
+            RectTransform cardRoot =
+                cardViews[index].transform as RectTransform;
+            if (cardRoot == null ||
+                Vector2.Distance(
+                    cardRoot.anchoredPosition,
+                    expectedCenter
+                ) > 0.001f ||
+                Mathf.Abs(
+                    Mathf.DeltaAngle(
+                        cardRoot.localEulerAngles.z,
+                        expectedRotationZ
+                    )
+                ) > 0.001f ||
+                Vector3.Distance(
+                    cardRoot.localScale,
+                    placementSlots[index].localScale
+                ) > 0.001f)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool DoMode68CardsMatchPlacementSlots(
+        IReadOnlyList<BattleCardUIView> cardViews,
+        IReadOnlyList<RectTransform> placementSlots
+    )
+    {
+        if (cardViews == null ||
+            placementSlots == null ||
+            cardViews.Count > placementSlots.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < cardViews.Count; index++)
+        {
+            RectTransform cardRoot =
+                cardViews[index].transform as RectTransform;
+            RectTransform slot = placementSlots[index];
+            if (cardRoot == null ||
+                slot == null ||
+                Vector2.Distance(
+                    cardRoot.anchoredPosition,
+                    slot.anchoredPosition
+                ) > 0.001f ||
+                Quaternion.Angle(
+                    cardRoot.localRotation,
+                    slot.localRotation
+                ) > 0.001f ||
+                Vector3.Distance(
+                    cardRoot.localScale,
+                    slot.localScale
+                ) > 0.001f)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool HasAnyMode68CardRootMoved(
+        IReadOnlyList<BattleCardUIView> cardViews,
+        Vector2 startPosition
+    )
+    {
+        if (cardViews == null)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < cardViews.Count; index++)
+        {
+            RectTransform cardRoot =
+                cardViews[index].transform as RectTransform;
+            if (cardRoot != null &&
+                Vector2.Distance(
+                    cardRoot.anchoredPosition,
+                    startPosition
+                ) > 0.001f)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool AreMode68CardViewsInactive(
+        IReadOnlyList<BattleCardUIView> cardViews
+    )
+    {
+        if (cardViews == null)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < cardViews.Count; index++)
+        {
+            BattleCardUIView cardView = cardViews[index];
+            if (cardView == null || cardView.gameObject.activeSelf)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool HaveNoMode68SharedReferences(
+        IReadOnlyList<BattleCardUIView> oldViews,
+        IReadOnlyList<BattleCardUIView> newViews
+    )
+    {
+        if (oldViews == null || newViews == null)
+        {
+            return false;
+        }
+
+        for (int oldIndex = 0;
+            oldIndex < oldViews.Count;
+            oldIndex++)
+        {
+            for (int newIndex = 0;
+                newIndex < newViews.Count;
+                newIndex++)
+            {
+                if (object.ReferenceEquals(
+                    oldViews[oldIndex],
+                    newViews[newIndex]
+                ))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    sealed class Mode69SlotTestContext
+    {
+        public GameObject rootObject;
+        public BattleActionSlotUIView slotView;
+        public UnityEngine.UI.Image baseImage;
+        public BattleActionSlotSelectionEffectUIView effectView;
+        public RectTransform effectRoot;
+        public UnityEngine.UI.Image effectImage;
+        public CharacterData character;
+        public Texture2D spriteTexture;
+        public Sprite allyEmptySprite;
+        public Sprite allyTargetedSprite;
+        public Sprite allyActionSprite;
+        public Sprite enemyEmptySprite;
+        public Sprite enemyActionSprite;
+        public bool referencesConfigured;
+    }
+
+    bool RunBattleActionSlotVisualInteractionBasicTestSequence()
+    {
+        Debug.Log(
+            "===== BattleActionSlotVisualInteractionBasic 聚合测试开始 ====="
+        );
+
+        Mode69SlotTestContext allyContext =
+            CreateMode69SlotTestContext("Mode69Ally", false);
+        BattleActionSlotUIView allySlot = allyContext.slotView;
+        BattleActionSlotSelectionEffectUIView allyEffect =
+            allyContext.effectView;
+        PointerEventData leftClick = new PointerEventData(null)
+        {
+            button = PointerEventData.InputButton.Left
+        };
+        PointerEventData rightClick = new PointerEventData(null)
+        {
+            button = PointerEventData.InputButton.Right
+        };
+
+        bool test1 =
+            allyContext.referencesConfigured &&
+            allySlot.CurrentBaseState ==
+                BattleActionSlotUIState.AllyEmpty &&
+            allyContext.baseImage.sprite ==
+                allyContext.allyEmptySprite;
+        allySlot.CommitStateFeedbackForTesting();
+
+        allySlot.SetState(
+            BattleActionSlotUIState.AllyTargetedNoAction
+        );
+        allySlot.CommitStateFeedbackForTesting();
+        bool test2 =
+            allyContext.baseImage.sprite ==
+                allyContext.allyTargetedSprite &&
+            !allyEffect.IsVisible &&
+            !allyEffect.IsPulsePlaying;
+
+        allySlot.OnPointerEnter(null);
+        bool test3 =
+            allySlot.IsHovered &&
+            allyContext.baseImage.sprite ==
+                allyContext.allyEmptySprite;
+        bool test4 =
+            allyEffect.IsVisible &&
+            !allyEffect.IsPulsePlaying &&
+            allyContext.effectImage.raycastTarget == false &&
+            Vector3.Distance(
+                allyContext.effectRoot.localScale,
+                allyEffect.TargetScale
+            ) < 0.001f;
+
+        allySlot.OnPointerExit(null);
+        bool test5 =
+            !allySlot.IsHovered &&
+            allyContext.baseImage.sprite ==
+                allyContext.allyTargetedSprite &&
+            !allyEffect.IsVisible;
+
+        allySlot.SetState(BattleActionSlotUIState.AllyActionSet);
+        allySlot.CommitStateFeedbackForTesting();
+        allyEffect.CompletePulseImmediately();
+        allySlot.OnPointerEnter(null);
+        bool test6 =
+            allyContext.baseImage.sprite ==
+                allyContext.allyActionSprite &&
+            allyEffect.IsVisible &&
+            !allyEffect.IsPulsePlaying;
+        allySlot.OnPointerExit(null);
+
+        int allyLeftClickCount = 0;
+        int allyRightClickCount = 0;
+        allySlot.BindInteraction(
+            allyContext.character,
+            0,
+            false,
+            clickedSlot =>
+            {
+                allyLeftClickCount++;
+                clickedSlot.SetSelected(true);
+            },
+            clickedSlot => allyRightClickCount++
+        );
+        allySlot.SetSelected(false);
+        allyEffect.StopAndReset();
+        allySlot.OnPointerClick(leftClick);
+        Vector3 pulseStartScale =
+            allyEffect.TargetScale * 0.15f;
+        bool test7 =
+            allyLeftClickCount == 1 &&
+            allySlot.IsSelected &&
+            allyEffect.IsPersistentVisible &&
+            allyEffect.IsPulsePlaying &&
+            allyEffect.ActivePulseCount == 1 &&
+            Vector3.Distance(
+                allyContext.effectRoot.localScale,
+                pulseStartScale
+            ) < 0.001f;
+
+        Vector3 pulseStep0 = allyContext.effectRoot.localScale;
+        allyEffect.AdvancePulseForTesting(1f / 60f);
+        Vector3 pulseStep1 = allyContext.effectRoot.localScale;
+        allyEffect.AdvancePulseForTesting(1f / 60f);
+        Vector3 pulseStep2 = allyContext.effectRoot.localScale;
+        float pulseFirstStep =
+            Vector3.Distance(pulseStep0, pulseStep1);
+        float pulseSecondStep =
+            Vector3.Distance(pulseStep1, pulseStep2);
+        bool test8 =
+            pulseFirstStep > pulseSecondStep &&
+            Vector3.Distance(
+                pulseStep2,
+                allyEffect.TargetScale
+            ) <
+            Vector3.Distance(
+                pulseStep1,
+                allyEffect.TargetScale
+            );
+
+        bool pulseReachedSnap = false;
+        for (int step = 0; step < 240; step++)
+        {
+            if (allyEffect.AdvancePulseForTesting(1f / 60f))
+            {
+                pulseReachedSnap = true;
+                break;
+            }
+        }
+        bool test9 =
+            pulseReachedSnap &&
+            !allyEffect.IsPulsePlaying &&
+            Vector3.Distance(
+                allyContext.effectRoot.localScale,
+                allyEffect.TargetScale
+            ) < 0.001f;
+
+        allySlot.OnPointerEnter(null);
+        allySlot.OnPointerExit(null);
+        bool test10 =
+            allySlot.IsSelected &&
+            !allySlot.IsHovered &&
+            allyEffect.IsVisible &&
+            allyEffect.IsPersistentVisible;
+
+        allySlot.SetSelected(false);
+        bool test11 =
+            !allySlot.IsSelected &&
+            !allySlot.IsHovered &&
+            !allyEffect.IsPersistentVisible &&
+            !allyEffect.IsVisible;
+
+        allySlot.OnPointerClick(leftClick);
+        allyEffect.CompletePulseImmediately();
+        allySlot.OnPointerClick(leftClick);
+        bool repeatedClickStartedPulse =
+            allySlot.IsSelected &&
+            allyEffect.ActivePulseCount == 1 &&
+            Vector3.Distance(
+                allyContext.effectRoot.localScale,
+                pulseStartScale
+            ) < 0.001f;
+        allyEffect.AdvancePulseForTesting(1f / 60f);
+        allySlot.OnPointerClick(leftClick);
+        bool test12 =
+            repeatedClickStartedPulse &&
+            allyEffect.ActivePulseCount == 1 &&
+            Vector3.Distance(
+                allyContext.effectRoot.localScale,
+                pulseStartScale
+            ) < 0.001f;
+
+        Mode69SlotTestContext fillContext =
+            CreateMode69SlotTestContext("Mode69Fill", false);
+        fillContext.slotView.SetState(
+            BattleActionSlotUIState.AllyActionSet
+        );
+        fillContext.slotView.CommitStateFeedbackForTesting();
+        bool test13 =
+            !fillContext.effectView.IsPulsePlaying &&
+            !fillContext.effectView.IsVisible;
+
+        fillContext.slotView.SetState(
+            BattleActionSlotUIState.AllyEmpty
+        );
+        fillContext.slotView.CommitStateFeedbackForTesting();
+        fillContext.slotView.SetState(
+            BattleActionSlotUIState.AllyActionSet
+        );
+        fillContext.slotView.CommitStateFeedbackForTesting();
+        bool test14 =
+            fillContext.effectView.IsPulsePlaying &&
+            fillContext.effectView.ActivePulseCount == 1;
+        fillContext.effectView.AdvancePulseForTesting(1f / 60f);
+        Vector3 fillScaleBeforeRepeatedState =
+            fillContext.effectRoot.localScale;
+        fillContext.slotView.SetState(
+            BattleActionSlotUIState.AllyActionSet
+        );
+        fillContext.slotView.CommitStateFeedbackForTesting();
+        bool test15 =
+            fillContext.effectView.ActivePulseCount == 1 &&
+            Vector3.Distance(
+                fillContext.effectRoot.localScale,
+                fillScaleBeforeRepeatedState
+            ) < 0.001f;
+        fillContext.effectView.CompletePulseImmediately();
+        bool test16 =
+            !fillContext.effectView.IsPulsePlaying &&
+            !fillContext.effectView.IsVisible &&
+            !fillContext.slotView.IsSelected &&
+            !fillContext.slotView.IsHovered;
+        fillContext.slotView.SetState(
+            BattleActionSlotUIState.AllyEmpty
+        );
+        fillContext.slotView.SetState(
+            BattleActionSlotUIState.AllyActionSet
+        );
+        fillContext.slotView.CommitStateFeedbackForTesting();
+        test15 &=
+            !fillContext.effectView.IsPulsePlaying &&
+            !fillContext.effectView.IsVisible;
+
+        allyEffect.CompletePulseImmediately();
+        allySlot.SetState(BattleActionSlotUIState.AllyEmpty);
+        allySlot.CommitStateFeedbackForTesting();
+        allySlot.SetState(BattleActionSlotUIState.AllyActionSet);
+        allySlot.CommitStateFeedbackForTesting();
+        allyEffect.CompletePulseImmediately();
+        bool test17 =
+            allySlot.IsSelected &&
+            allyEffect.IsPersistentVisible &&
+            allyEffect.IsVisible;
+
+        Mode69SlotTestContext enemyContext =
+            CreateMode69SlotTestContext("Mode69Enemy", true);
+        enemyContext.slotView.SetState(
+            BattleActionSlotUIState.EnemyEmpty
+        );
+        enemyContext.slotView.CommitStateFeedbackForTesting();
+        bool enemyEmptyDisplayed =
+            enemyContext.baseImage.sprite ==
+                enemyContext.enemyEmptySprite;
+        enemyContext.slotView.SetState(
+            BattleActionSlotUIState.EnemyActionSet
+        );
+        enemyContext.slotView.CommitStateFeedbackForTesting();
+        bool test18 =
+            enemyEmptyDisplayed &&
+            enemyContext.baseImage.sprite ==
+                enemyContext.enemyActionSprite &&
+            !enemyContext.effectView.IsVisible &&
+            !enemyContext.effectView.IsPulsePlaying;
+
+        int enemyLeftClickCount = 0;
+        enemyContext.slotView.BindInteraction(
+            enemyContext.character,
+            0,
+            true,
+            clickedSlot => enemyLeftClickCount++
+        );
+        enemyContext.slotView.OnPointerEnter(null);
+        enemyContext.slotView.OnPointerExit(null);
+        enemyContext.slotView.OnPointerClick(leftClick);
+        bool test19 =
+            enemyLeftClickCount == 1 &&
+            !enemyContext.slotView.IsHovered &&
+            !enemyContext.slotView.IsSelected &&
+            !enemyContext.effectView.IsVisible &&
+            !enemyContext.effectView.IsPulsePlaying;
+
+        allySlot.SetSelected(false);
+        allyEffect.StopAndReset();
+        allySlot.OnPointerClick(rightClick);
+        bool test20 =
+            allyRightClickCount == 1 &&
+            !allyEffect.IsPulsePlaying &&
+            !allyEffect.IsVisible;
+
+        allySlot.SetSelected(true);
+        bool pulseBeforeDisable = allyEffect.IsPulsePlaying;
+        allyContext.rootObject.SetActive(false);
+        bool test21 =
+            pulseBeforeDisable &&
+            !allyEffect.IsPulsePlaying &&
+            !allyEffect.IsVisible &&
+            !allySlot.IsHovered;
+        allyContext.rootObject.SetActive(true);
+        allySlot.SetSelected(false);
+        allyEffect.StopAndReset();
+
+        bool noAccumulatedPulse = true;
+        for (int cycle = 0; cycle < 6; cycle++)
+        {
+            allySlot.OnPointerEnter(null);
+            noAccumulatedPulse &=
+                allyEffect.ActivePulseCount <= 1;
+            allySlot.OnPointerClick(leftClick);
+            noAccumulatedPulse &=
+                allyEffect.ActivePulseCount <= 1;
+            allySlot.OnPointerExit(null);
+            allySlot.OnPointerClick(leftClick);
+            noAccumulatedPulse &=
+                allyEffect.ActivePulseCount <= 1;
+            allySlot.SetSelected(false);
+        }
+        bool test22 =
+            noAccumulatedPulse &&
+            allyEffect.ActivePulseCount <= 1;
+        allyEffect.StopAndReset();
+
+        bool test23 =
+            RunBattleCardClickAssignBasicTestSequence();
+        bool test24 =
+            RunBattleCardClickInteractionIntegrationTestSequence();
+
+        Debug.Log("模式69 测试1 默认AllyEmpty显示空底图：" + test1);
+        Debug.Log("模式69 测试2 AllyTargeted无交互显示被指定底图：" + test2);
+        Debug.Log("模式69 测试3 AllyTargeted Hover临时切为空底图：" + test3);
+        Debug.Log("模式69 测试4 Hover特效立即完整显示且不播放Pulse：" + test4);
+        Debug.Log("模式69 测试5 PointerExit恢复被指定底图并隐藏特效：" + test5);
+        Debug.Log("模式69 测试6 AllyActionSet Hover保留有行动底图：" + test6);
+        Debug.Log("模式69 测试7 点击选择播放中心扩散Pulse：" + test7);
+        Debug.Log("模式69 测试8 Pulse首步最大且后续步长递减：" + test8);
+        Debug.Log("模式69 测试9 Pulse进入Snap后精确恢复目标Scale：" + test9);
+        Debug.Log("模式69 测试10 Selected时PointerExit仍保持特效：" + test10);
+        Debug.Log("模式69 测试11 取消Selected且未Hover时隐藏特效：" + test11);
+        Debug.Log("模式69 测试12 重复点击Selected重新Pulse且仅一个协程：" + test12);
+        Debug.Log("模式69 测试13 首次状态初始化不误触发填入Pulse：" + test13);
+        Debug.Log("模式69 测试14 真实进入AllyActionSet播放一次Pulse：" + test14);
+        Debug.Log("模式69 测试15 重复AllyActionSet不重新播放Pulse：" + test15);
+        Debug.Log("模式69 测试16 未交互填入Pulse完成后自动隐藏：" + test16);
+        Debug.Log("模式69 测试17 Selected时填入Pulse完成后保持显示：" + test17);
+        Debug.Log("模式69 测试18 敌方两态只切基础图：" + test18);
+        Debug.Log("模式69 测试19 敌方Hover与点击不触发我方特效：" + test19);
+        Debug.Log("模式69 测试20 右键只调用原右键回调：" + test20);
+        Debug.Log("模式69 测试21 Disable停止协程并隐藏特效：" + test21);
+        Debug.Log("模式69 测试22 快速Enter/Exit/Click不累积协程：" + test22);
+        Debug.Log("模式69 测试23 模式66点击与敌方槽位指派继续通过：" + test23);
+        Debug.Log("模式69 测试24 模式67自身目标指派继续通过：" + test24);
+        Debug.Log(
+            "===== BattleActionSlotVisualInteractionBasic 聚合测试结束 ====="
+        );
+
+        DestroyMode69SlotTestContext(allyContext);
+        DestroyMode69SlotTestContext(fillContext);
+        DestroyMode69SlotTestContext(enemyContext);
+        return test1 &&
+            test2 &&
+            test3 &&
+            test4 &&
+            test5 &&
+            test6 &&
+            test7 &&
+            test8 &&
+            test9 &&
+            test10 &&
+            test11 &&
+            test12 &&
+            test13 &&
+            test14 &&
+            test15 &&
+            test16 &&
+            test17 &&
+            test18 &&
+            test19 &&
+            test20 &&
+            test21 &&
+            test22 &&
+            test23 &&
+            test24;
+    }
+
+    Mode69SlotTestContext CreateMode69SlotTestContext(
+        string namePrefix,
+        bool enemySlot
+    )
+    {
+        Mode69SlotTestContext context =
+            new Mode69SlotTestContext();
+        context.rootObject = new GameObject(
+            namePrefix + "Root",
+            typeof(RectTransform)
+        );
+        context.rootObject.SetActive(false);
+        context.baseImage =
+            context.rootObject.AddComponent<UnityEngine.UI.Image>();
+        context.slotView =
+            context.rootObject.AddComponent<BattleActionSlotUIView>();
+
+        GameObject effectObject = new GameObject(
+            namePrefix + "SelectionEffect",
+            typeof(RectTransform)
+        );
+        effectObject.transform.SetParent(
+            context.rootObject.transform,
+            false
+        );
+        context.effectRoot =
+            effectObject.GetComponent<RectTransform>();
+        context.effectRoot.localScale =
+            new Vector3(1.2f, 1.1f, 1f);
+        context.effectImage =
+            effectObject.AddComponent<UnityEngine.UI.Image>();
+        context.effectView =
+            effectObject.AddComponent<
+                BattleActionSlotSelectionEffectUIView
+            >();
+        context.effectView.ConfigureTestVisuals(
+            context.effectRoot,
+            context.effectImage
+        );
+
+        context.spriteTexture = new Texture2D(5, 1);
+        context.allyEmptySprite = CreateMode64Sprite(
+            context.spriteTexture,
+            0,
+            namePrefix + "AllyEmpty"
+        );
+        context.allyTargetedSprite = CreateMode64Sprite(
+            context.spriteTexture,
+            1,
+            namePrefix + "AllyTargeted"
+        );
+        context.allyActionSprite = CreateMode64Sprite(
+            context.spriteTexture,
+            2,
+            namePrefix + "AllyAction"
+        );
+        context.enemyEmptySprite = CreateMode64Sprite(
+            context.spriteTexture,
+            3,
+            namePrefix + "EnemyEmpty"
+        );
+        context.enemyActionSprite = CreateMode64Sprite(
+            context.spriteTexture,
+            4,
+            namePrefix + "EnemyAction"
+        );
+
+        context.slotView.ConfigureTestVisuals(
+            context.baseImage,
+            context.allyEmptySprite
+        );
+        bool slotConfigured =
+            SetMode64PrivateField(
+                context.slotView,
+                "slotAllyTargetedNoActionSprite",
+                context.allyTargetedSprite
+            ) &&
+            SetMode64PrivateField(
+                context.slotView,
+                "slotAllyActionSetSprite",
+                context.allyActionSprite
+            ) &&
+            SetMode64PrivateField(
+                context.slotView,
+                "slotEnemyEmptySprite",
+                context.enemyEmptySprite
+            ) &&
+            SetMode64PrivateField(
+                context.slotView,
+                "slotEnemyActionSetSprite",
+                context.enemyActionSprite
+            ) &&
+            SetMode64PrivateField(
+                context.slotView,
+                "selectionEffectView",
+                context.effectView
+            ) &&
+            SetMode64PrivateField(
+                context.slotView,
+                "defaultState",
+                enemySlot
+                    ? BattleActionSlotUIState.EnemyEmpty
+                    : BattleActionSlotUIState.AllyEmpty
+            );
+        bool effectConfigured =
+            SetMode64PrivateField(
+                context.effectView,
+                "pulseStartScale",
+                0.15f
+            ) &&
+            SetMode64PrivateField(
+                context.effectView,
+                "pulseSharpness",
+                18f
+            ) &&
+            SetMode64PrivateField(
+                context.effectView,
+                "pulseSnapDistance",
+                0.001f
+            ) &&
+            SetMode64PrivateField(
+                context.effectView,
+                "hideWhenIdle",
+                true
+            );
+        context.referencesConfigured =
+            slotConfigured && effectConfigured;
+
+        context.character = new CharacterData(
+            namePrefix + "Character",
+            30,
+            5,
+            5
+        );
+        context.rootObject.SetActive(true);
+        context.slotView.BindInteraction(
+            context.character,
+            0,
+            enemySlot,
+            null,
+            null
+        );
+        return context;
+    }
+
+    void DestroyMode69SlotTestContext(
+        Mode69SlotTestContext context
+    )
+    {
+        if (context == null)
+        {
+            return;
+        }
+
+        Destroy(context.rootObject);
+        Destroy(context.allyEmptySprite);
+        Destroy(context.allyTargetedSprite);
+        Destroy(context.allyActionSprite);
+        Destroy(context.enemyEmptySprite);
+        Destroy(context.enemyActionSprite);
+        Destroy(context.spriteTexture);
+    }
+
+    sealed class Mode70BuffTestContext
+    {
+        public GameObject rootObject;
+        public RectTransform slotsRoot;
+        public BattleBuffGroupUIView groupView;
+        public BattleBuffIconUIView firstOriginalSlot;
+        public BattleBuffIconUIView secondOriginalSlot;
+        public BattleBuffIconBinding[] bindings;
+        public CharacterData character;
+        public Texture2D spriteTexture;
+        public Sprite strengthSprite;
+        public Sprite guardSprite;
+        public Sprite defaultSprite;
+        public Sprite overflowSprite;
+        public bool referencesConfigured;
+    }
+
+    sealed class Mode70HierarchyTestResult
+    {
+        public bool templateExcluded;
+        public bool directSlotsCollected;
+        public bool nestedSlotExcluded;
+        public bool clonesUseSlotsRoot;
+        public bool repeatedSetStable;
+        public bool clearKeepsPool;
+        public bool rebindReusesInstances;
+        public bool incompleteTemplateRejected;
+        public bool warningOnlyOnce;
+    }
+
+    sealed class Mode70GridNormalizationTestResult
+    {
+        public bool uniformSize;
+        public bool anchorMinNormalized;
+        public bool anchorMaxNormalized;
+        public bool pivotNormalized;
+        public bool scaleNormalized;
+        public bool firstRowHorizontal;
+        public bool secondRowHorizontal;
+        public bool firstColumnAligned;
+        public bool secondColumnAligned;
+        public bool secondRowStartsAtExpectedPosition;
+        public bool overflowUsesLastGridCell;
+        public bool mixedSizesDoNotShiftLayout;
+        public bool mixedTransformsNormalized;
+        public bool inactiveSlotsDoNotCreateHoles;
+        public bool repeatedSetKeepsPositions;
+        public bool countSequenceKeepsGridStable;
+    }
+
+    sealed class Mode71WrongHierarchyTestResult
+    {
+        public bool fixtureDetected;
+        public bool repeatedApplyStable;
+    }
+
+    bool RunBattleBuffGridLayoutBasicTestSequence()
+    {
+        Debug.Log("===== BattleBuffGridLayoutBasic 聚合测试开始 =====");
+
+        Mode70BuffTestContext context =
+            CreateMode70BuffTestContext();
+        BattleBuffGroupUIView group = context.groupView;
+        CharacterData character = context.character;
+
+        bool test1 =
+            context.referencesConfigured &&
+            context.bindings != null &&
+            context.bindings.Length == 3 &&
+            context.bindings[0].buffID == "Strength" &&
+            context.bindings[0].displayName == "强壮" &&
+            context.bindings[0].iconSprite ==
+                context.strengthSprite &&
+            context.bindings[0].iconView ==
+                context.firstOriginalSlot;
+        bool test2 =
+            group.SlotPoolCount == 2 &&
+            group.GetSlotForTesting(0) ==
+                context.firstOriginalSlot &&
+            group.GetSlotForTesting(1) ==
+                context.secondOriginalSlot;
+        bool test3 = group.SlotPoolCount == 2;
+
+        SetMode70ActiveBuffs(character);
+        group.SetCharacter(character);
+        bool fallbackTemplateExpandedPool =
+            group.SlotPoolCount == 8;
+        bool test4 =
+            fallbackTemplateExpandedPool &&
+            CountMode70ActiveSlots(group) == 0;
+
+        SetMode70ActiveBuffs(
+            character,
+            CreateMode70Buff("UnknownOne", 1)
+        );
+        group.SetCharacter(character);
+        bool test5 =
+            CountMode70ActiveSlots(group) == 1 &&
+            GetMode70StackText(group.GetSlotForTesting(0)).text ==
+                "1";
+
+        SetMode70ActiveBuffs(
+            character,
+            CreateMode70Buff("Strength", 2)
+        );
+        group.SetCharacter(character);
+        bool test6 =
+            GetMode70IconImage(group.GetSlotForTesting(0)).sprite ==
+                context.strengthSprite;
+
+        SetMode70ActiveBuffs(
+            character,
+            CreateMode70Buff("UnknownDefault", 3)
+        );
+        group.SetCharacter(character);
+        bool test7 =
+            GetMode70IconImage(group.GetSlotForTesting(0)).sprite ==
+                context.defaultSprite;
+
+        bool clearedDefaultIcon = SetMode64PrivateField(
+            group,
+            "defaultBuffIcon",
+            null
+        );
+        SetMode70ActiveBuffs(
+            character,
+            CreateMode70Buff("UnknownWithoutIcon", 4)
+        );
+        group.SetCharacter(character);
+        UnityEngine.UI.Image missingIconImage =
+            GetMode70IconImage(group.GetSlotForTesting(0));
+        bool test8 =
+            clearedDefaultIcon &&
+            group.GetSlotForTesting(0).gameObject.activeSelf &&
+            missingIconImage != null &&
+            !missingIconImage.enabled &&
+            GetMode70StackText(group.GetSlotForTesting(0)).text ==
+                "4";
+        SetMode64PrivateField(
+            group,
+            "defaultBuffIcon",
+            context.defaultSprite
+        );
+
+        SetMode70ActiveBuffs(
+            character,
+            CreateMode70Buff("Strength", 2),
+            CreateMode70Buff("Strength", 3)
+        );
+        group.SetCharacter(character);
+        bool test9 =
+            CountMode70ActiveSlots(group) == 1 &&
+            GetMode70StackText(group.GetSlotForTesting(0)).text ==
+                "5";
+
+        SetMode70ActiveBuffs(
+            character,
+            CreateMode70Buff("GuardUp", 1),
+            CreateMode70Buff("Strength", 1),
+            CreateMode70Buff("GuardUp", 2)
+        );
+        group.SetCharacter(character);
+        bool test10 =
+            CountMode70ActiveSlots(group) == 2 &&
+            GetMode70IconImage(group.GetSlotForTesting(0)).sprite ==
+                context.guardSprite &&
+            GetMode70IconImage(group.GetSlotForTesting(1)).sprite ==
+                context.strengthSprite;
+
+        SetMode70ActiveBuffs(character);
+        character.pendingBuffs.Clear();
+        character.pendingBuffs.Add(
+            new PendingBuffData(
+                "PendingOnly",
+                "待生效状态",
+                "UpBuff",
+                5,
+                2,
+                "TurnEnd",
+                "DurationDown",
+                1,
+                1,
+                1
+            )
+        );
+        group.SetCharacter(character);
+        bool test11 = CountMode70ActiveSlots(group) == 0;
+        character.pendingBuffs.Clear();
+
+        SetMode70DistinctBuffs(character, 5);
+        group.SetCharacter(character);
+        RectTransform slot0Rect =
+            group.GetSlotForTesting(0).transform as RectTransform;
+        RectTransform slot1Rect =
+            group.GetSlotForTesting(1).transform as RectTransform;
+        RectTransform slot4Rect =
+            group.GetSlotForTesting(4).transform as RectTransform;
+        bool test12 =
+            slot0Rect != null &&
+            slot4Rect != null &&
+            Mathf.Abs(
+                slot4Rect.anchoredPosition.x -
+                slot0Rect.anchoredPosition.x
+            ) < 0.001f &&
+            slot4Rect.anchoredPosition.y <
+                slot0Rect.anchoredPosition.y;
+        bool test13 =
+            slot0Rect != null &&
+            slot1Rect != null &&
+            Vector2.Distance(
+                slot1Rect.anchoredPosition,
+                group.GetExpectedSlotPosition(1)
+            ) < 0.001f;
+        bool test14 =
+            slot0Rect != null &&
+            slot4Rect != null &&
+            Vector2.Distance(
+                slot4Rect.anchoredPosition,
+                group.GetExpectedSlotPosition(4)
+            ) < 0.001f;
+        bool test15 =
+            slot0Rect != null &&
+            Vector2.Distance(
+                slot0Rect.anchoredPosition,
+                new Vector2(10f, 20f)
+            ) < 0.001f;
+
+        SetMode70DistinctBuffs(character, 12);
+        group.SetCharacter(character);
+        float secondRowY =
+            group.GetExpectedSlotPosition(4).y;
+        bool noThirdRow = true;
+        for (int index = 0;
+            index < group.SlotPoolCount;
+            index++)
+        {
+            BattleBuffIconUIView slot =
+                group.GetSlotForTesting(index);
+            RectTransform slotRect =
+                slot != null
+                    ? slot.transform as RectTransform
+                    : null;
+            if (slot != null &&
+                slot.gameObject.activeSelf &&
+                slotRect != null &&
+                slotRect.anchoredPosition.y < secondRowY - 0.001f)
+            {
+                noThirdRow = false;
+            }
+        }
+        bool test16 =
+            group.SlotPoolCount == 8 &&
+            CountMode70ActiveSlots(group) == 8 &&
+            noThirdRow;
+
+        SetMode70DistinctBuffs(character, 8);
+        group.SetCharacter(character);
+        bool test17 =
+            CountMode70ActiveSlots(group) == 8 &&
+            !HasMode70OverflowSlot(group);
+
+        SetMode70DistinctBuffs(character, 9);
+        group.SetCharacter(character);
+        BattleBuffIconUIView overflowSlot =
+            group.GetSlotForTesting(7);
+        bool test18 =
+            CountMode70ActiveSlots(group) == 8 &&
+            CountMode70NormalSlots(group) == 7 &&
+            overflowSlot != null &&
+            overflowSlot.IsOverflow &&
+            GetMode70StackText(overflowSlot).text == "...+2";
+        bool test19 =
+            overflowSlot != null &&
+            overflowSlot.OverflowHiddenCount == 2;
+
+        CharacterData clickedCharacter = null;
+        int clickedHiddenCount = 0;
+        int overflowClickCount = 0;
+        group.SetOverflowClickHandler(
+            (clickedOwner, hiddenCount) =>
+            {
+                clickedCharacter = clickedOwner;
+                clickedHiddenCount = hiddenCount;
+                overflowClickCount++;
+            }
+        );
+        overflowSlot.OnPointerClick(
+            new PointerEventData(null)
+            {
+                button = PointerEventData.InputButton.Left
+            }
+        );
+        bool test23 =
+            overflowClickCount == 1 &&
+            clickedCharacter == character &&
+            clickedHiddenCount == 2;
+        group.GetSlotForTesting(0).OnPointerClick(
+            new PointerEventData(null)
+            {
+                button = PointerEventData.InputButton.Left
+            }
+        );
+        bool test24 = overflowClickCount == 1;
+
+        bool capacityOneConfigured =
+            SetMode64PrivateField(group, "columnsPerRow", 1) &&
+            SetMode64PrivateField(group, "maxRows", 1);
+        SetMode70DistinctBuffs(character, 3);
+        group.SetCharacter(character);
+        bool test20 =
+            capacityOneConfigured &&
+            CountMode70ActiveSlots(group) == 1 &&
+            group.GetSlotForTesting(0).IsOverflow &&
+            group.GetSlotForTesting(0).OverflowHiddenCount == 3;
+
+        BattleBuffIconUIView directSlot =
+            group.GetSlotForTesting(0);
+        TMPro.TMP_Text directDecayText =
+            GetMode70DecayText(directSlot);
+        directSlot.SetBuff(context.defaultSprite, 2, -1);
+        bool decayWasVisible =
+            directDecayText != null &&
+            directDecayText.gameObject.activeSelf;
+        directSlot.SetOverflow(context.overflowSprite, 2, "...+");
+        bool test21 =
+            decayWasVisible &&
+            directSlot.IsOverflow &&
+            directDecayText != null &&
+            !directDecayText.gameObject.activeSelf;
+        directSlot.SetBuff(context.strengthSprite, 1);
+        bool test22 =
+            !directSlot.IsOverflow &&
+            directSlot.OverflowHiddenCount == 0;
+
+        SetMode70ActiveBuffs(
+            character,
+            CreateMode70Buff("Repeat", 1)
+        );
+        group.SetCharacter(character);
+        int poolCountBeforeRepeat = group.SlotPoolCount;
+        group.SetCharacter(character);
+        bool test25 =
+            group.SlotPoolCount == poolCountBeforeRepeat;
+        group.Clear();
+        bool test26 =
+            group.SlotPoolCount == poolCountBeforeRepeat &&
+            CountMode70ActiveSlots(group) == 0;
+        bool test27 =
+            fallbackTemplateExpandedPool &&
+            context.firstOriginalSlot != null &&
+            group.SlotPoolCount == 8;
+
+        bool test28 =
+            RunMode70MissingTemplateSafetySubTest();
+
+        SetMode64PrivateField(group, "columnsPerRow", 4);
+        SetMode64PrivateField(group, "maxRows", 2);
+        SetMode70ActiveBuffs(
+            character,
+            CreateMode70Buff("Strength", 1)
+        );
+        GameObject statusObject = new GameObject(
+            "Mode70CharacterStatus",
+            typeof(RectTransform)
+        );
+        BattleCharacterStatusUIView statusView =
+            statusObject.AddComponent<BattleCharacterStatusUIView>();
+        bool statusConfigured = SetMode64PrivateField(
+            statusView,
+            "buffGroupView",
+            group
+        );
+        statusView.SetCharacter(character);
+        bool statusSetForwarded =
+            group.BoundCharacter == character;
+        statusView.Clear();
+        bool test29 =
+            statusConfigured &&
+            statusSetForwarded &&
+            group.BoundCharacter == null &&
+            CountMode70ActiveSlots(group) == 0;
+
+        bool test30 =
+            RunBattleActionSlotVisualInteractionBasicTestSequence();
+        bool test31 =
+            RunBattleCardClickAssignBasicTestSequence() &&
+            RunBattleCardClickInteractionIntegrationTestSequence();
+        Mode70HierarchyTestResult hierarchyResult =
+            RunMode70HierarchySafetySubTests();
+        Mode70GridNormalizationTestResult gridResult =
+            RunMode70GridNormalizationSubTests();
+
+        Debug.Log("模式70 测试1 旧buffBindings序列化结构仍可配置：" + test1);
+        Debug.Log("模式70 测试2 旧iconView收集到槽位池：" + test2);
+        Debug.Log("模式70 测试3 重复iconView不会重复入池：" + test3);
+        Debug.Log("模式70 测试4 零Buff时全部槽位隐藏：" + test4);
+        Debug.Log("模式70 测试5 单Buff正常显示：" + test5);
+        Debug.Log("模式70 测试6 Strength使用专属Sprite：" + test6);
+        Debug.Log("模式70 测试7 未配置图标使用默认图：" + test7);
+        Debug.Log("模式70 测试8 默认图为空仍显示Buff槽位：" + test8);
+        Debug.Log("模式70 测试9 同ID多批次聚合层数：" + test9);
+        Debug.Log("模式70 测试10 保持Buff第一次出现顺序：" + test10);
+        Debug.Log("模式70 测试11 pendingBuff不显示：" + test11);
+        Debug.Log("模式70 测试12 columnsPerRow控制换行：" + test12);
+        Debug.Log("模式70 测试13 horizontalSpacing影响X位置：" + test13);
+        Debug.Log("模式70 测试14 verticalSpacing影响第二行Y位置：" + test14);
+        Debug.Log("模式70 测试15 startOffset应用正确：" + test15);
+        Debug.Log("模式70 测试16 maxRows为2时不生成第三行：" + test16);
+        Debug.Log("模式70 测试17 Buff数等于容量时无Overflow：" + test17);
+        Debug.Log("模式70 测试18 九Buff显示七普通与...+2：" + test18);
+        Debug.Log("模式70 测试19 Overflow隐藏数量正确：" + test19);
+        Debug.Log("模式70 测试20 容量一时多Buff只显示Overflow：" + test20);
+        Debug.Log("模式70 测试21 Overflow隐藏decayText：" + test21);
+        Debug.Log("模式70 测试22 SetBuff清除Overflow状态：" + test22);
+        Debug.Log("模式70 测试23 Overflow左键回传角色与数量：" + test23);
+        Debug.Log("模式70 测试24 普通Buff点击不触发Overflow回调：" + test24);
+        Debug.Log("模式70 测试25 重复SetCharacter不扩张槽位池：" + test25);
+        Debug.Log("模式70 测试26 Clear隐藏但不销毁槽位池：" + test26);
+        Debug.Log("模式70 测试27 无模板时复用旧iconView克隆：" + test27);
+        Debug.Log("模式70 测试28 全部模板缺失时安全返回：" + test28);
+        Debug.Log("模式70 测试29 角色状态UI原调用方式保持：" + test29);
+        Debug.Log("模式70 测试30 模式69行动槽视觉回归：" + test30);
+        Debug.Log("模式70 测试31 模式66与67卡牌指派回归：" + test31);
+        Debug.Log("模式70 测试32 SlotTemplate不进入slotPool：" +
+            hierarchyResult.templateExcluded);
+        Debug.Log("模式70 测试33 只收集SlotsRoot直接子槽位：" +
+            hierarchyResult.directSlotsCollected);
+        Debug.Log("模式70 测试34 嵌套槽位不会进入池：" +
+            hierarchyResult.nestedSlotExcluded);
+        Debug.Log("模式70 测试35 动态克隆父级始终为SlotsRoot：" +
+            hierarchyResult.clonesUseSlotsRoot);
+        Debug.Log("模式70 测试36 连续SetCharacter十次池稳定：" +
+            hierarchyResult.repeatedSetStable);
+        Debug.Log("模式70 测试37 Clear后池数量保持：" +
+            hierarchyResult.clearKeepsPool);
+        Debug.Log("模式70 测试38 再绑定复用相同槽位实例：" +
+            hierarchyResult.rebindReusesInstances);
+        Debug.Log("模式70 测试39 不完整模板不会用于克隆：" +
+            hierarchyResult.incompleteTemplateRejected);
+        Debug.Log("模式70 测试40 配置错误只记录一次警告：" +
+            hierarchyResult.warningOnlyOnce);
+        Debug.Log("模式70 测试41 所有可见槽位尺寸统一：" +
+            gridResult.uniformSize);
+        Debug.Log("模式70 测试42 AnchorMin统一为左上：" +
+            gridResult.anchorMinNormalized);
+        Debug.Log("模式70 测试43 AnchorMax统一为左上：" +
+            gridResult.anchorMaxNormalized);
+        Debug.Log("模式70 测试44 Pivot统一为左上：" +
+            gridResult.pivotNormalized);
+        Debug.Log("模式70 测试45 Scale统一且不继承旧变形：" +
+            gridResult.scaleNormalized);
+        Debug.Log("模式70 测试46 第一行严格水平排列：" +
+            gridResult.firstRowHorizontal);
+        Debug.Log("模式70 测试47 第二行严格水平排列：" +
+            gridResult.secondRowHorizontal);
+        Debug.Log("模式70 测试48 第一列上下严格对齐：" +
+            gridResult.firstColumnAligned);
+        Debug.Log("模式70 测试49 第二列上下严格对齐：" +
+            gridResult.secondColumnAligned);
+        Debug.Log("模式70 测试50 第二行从统一公式位置开始：" +
+            gridResult.secondRowStartsAtExpectedPosition);
+        Debug.Log("模式70 测试51 Overflow占据最后一个网格格子：" +
+            gridResult.overflowUsesLastGridCell);
+        Debug.Log("模式70 测试52 混合旧尺寸不会造成位置偏移：" +
+            gridResult.mixedSizesDoNotShiftLayout);
+        Debug.Log("模式70 测试53 混合Anchor Pivot旋转已规范化：" +
+            gridResult.mixedTransformsNormalized);
+        Debug.Log("模式70 测试54 隐藏槽位不会产生索引空洞：" +
+            gridResult.inactiveSlotsDoNotCreateHoles);
+        Debug.Log("模式70 测试55 重复SetCharacter位置不漂移：" +
+            gridResult.repeatedSetKeepsPositions);
+        Debug.Log("模式70 测试56 九十二四九切换网格稳定：" +
+            gridResult.countSequenceKeepsGridStable);
+        Debug.Log("===== BattleBuffGridLayoutBasic 聚合测试结束 =====");
+
+        Destroy(statusObject);
+        DestroyMode70BuffTestContext(context);
+
+        return test1 &&
+            test2 &&
+            test3 &&
+            test4 &&
+            test5 &&
+            test6 &&
+            test7 &&
+            test8 &&
+            test9 &&
+            test10 &&
+            test11 &&
+            test12 &&
+            test13 &&
+            test14 &&
+            test15 &&
+            test16 &&
+            test17 &&
+            test18 &&
+            test19 &&
+            test20 &&
+            test21 &&
+            test22 &&
+            test23 &&
+            test24 &&
+            test25 &&
+            test26 &&
+            test27 &&
+            test28 &&
+            test29 &&
+            test30 &&
+            test31 &&
+            hierarchyResult.templateExcluded &&
+            hierarchyResult.directSlotsCollected &&
+            hierarchyResult.nestedSlotExcluded &&
+            hierarchyResult.clonesUseSlotsRoot &&
+            hierarchyResult.repeatedSetStable &&
+            hierarchyResult.clearKeepsPool &&
+            hierarchyResult.rebindReusesInstances &&
+            hierarchyResult.incompleteTemplateRejected &&
+            hierarchyResult.warningOnlyOnce &&
+            gridResult.uniformSize &&
+            gridResult.anchorMinNormalized &&
+            gridResult.anchorMaxNormalized &&
+            gridResult.pivotNormalized &&
+            gridResult.scaleNormalized &&
+            gridResult.firstRowHorizontal &&
+            gridResult.secondRowHorizontal &&
+            gridResult.firstColumnAligned &&
+            gridResult.secondColumnAligned &&
+            gridResult.secondRowStartsAtExpectedPosition &&
+            gridResult.overflowUsesLastGridCell &&
+            gridResult.mixedSizesDoNotShiftLayout &&
+            gridResult.mixedTransformsNormalized &&
+            gridResult.inactiveSlotsDoNotCreateHoles &&
+            gridResult.repeatedSetKeepsPositions &&
+            gridResult.countSequenceKeepsGridStable;
+    }
+
+    Mode70GridNormalizationTestResult
+        RunMode70GridNormalizationSubTests()
+    {
+        Mode70GridNormalizationTestResult result =
+            new Mode70GridNormalizationTestResult();
+        GameObject rootObject = new GameObject(
+            "Mode70GridNormalizationRoot",
+            typeof(RectTransform)
+        );
+        rootObject.SetActive(false);
+        RectTransform slotsRoot =
+            rootObject.GetComponent<RectTransform>();
+        BattleBuffGroupUIView group =
+            rootObject.AddComponent<BattleBuffGroupUIView>();
+        BattleBuffIconUIView template =
+            CreateMode70BuffIconView(
+                slotsRoot,
+                "Mode70GridTemplate"
+            );
+        RectTransform templateRect =
+            template.transform as RectTransform;
+        templateRect.sizeDelta = new Vector2(24f, 24f);
+
+        BattleBuffIconUIView firstSlot =
+            CreateMode70BuffIconView(
+                slotsRoot,
+                "Mode70MixedSlot_1"
+            );
+        RectTransform firstRect =
+            firstSlot.transform as RectTransform;
+        firstRect.sizeDelta = new Vector2(10f, 48f);
+        firstRect.anchorMin = new Vector2(0.5f, 0.5f);
+        firstRect.anchorMax = new Vector2(0.5f, 0.5f);
+        firstRect.pivot = new Vector2(0.5f, 0.5f);
+        firstRect.localScale = new Vector3(1.5f, 0.75f, 1f);
+        firstRect.localRotation =
+            Quaternion.Euler(0f, 0f, 12f);
+
+        BattleBuffIconUIView secondSlot =
+            CreateMode70BuffIconView(
+                slotsRoot,
+                "Mode70MixedSlot_2"
+            );
+        RectTransform secondRect =
+            secondSlot.transform as RectTransform;
+        secondRect.sizeDelta = new Vector2(72f, 14f);
+        secondRect.anchorMin = new Vector2(1f, 0f);
+        secondRect.anchorMax = new Vector2(1f, 0f);
+        secondRect.pivot = new Vector2(1f, 0f);
+        secondRect.localScale = new Vector3(0.6f, 1.8f, 1f);
+        secondRect.localRotation =
+            Quaternion.Euler(0f, 0f, -18f);
+
+        SetMode64PrivateField(group, "slotsRoot", slotsRoot);
+        SetMode64PrivateField(group, "slotTemplate", template);
+        SetMode64PrivateField(group, "columnsPerRow", 4);
+        SetMode64PrivateField(group, "maxRows", 2);
+        SetMode64PrivateField(
+            group,
+            "startOffset",
+            new Vector2(11f, 23f)
+        );
+        SetMode64PrivateField(
+            group,
+            "horizontalSpacing",
+            5f
+        );
+        SetMode64PrivateField(
+            group,
+            "verticalSpacing",
+            7f
+        );
+        SetMode64PrivateField(
+            group,
+            "useTemplateSlotSize",
+            true
+        );
+        SetMode64PrivateField(
+            group,
+            "slotSize",
+            new Vector2(99f, 99f)
+        );
+        rootObject.SetActive(true);
+
+        CharacterData character = new CharacterData(
+            "mode70_grid_normalization_owner",
+            30,
+            5,
+            5
+        );
+        SetMode70DistinctBuffs(character, 9);
+        group.SetCharacter(character);
+
+        result.uniformSize =
+            Vector2.Distance(
+                group.ResolvedSlotSize,
+                new Vector2(24f, 24f)
+            ) < 0.001f &&
+            AreMode70VisibleSlotSizesEqual(
+                group,
+                8,
+                group.ResolvedSlotSize
+            );
+        result.anchorMinNormalized =
+            AreMode70VisibleAnchorsEqual(
+                group,
+                8,
+                true,
+                new Vector2(0f, 1f)
+            );
+        result.anchorMaxNormalized =
+            AreMode70VisibleAnchorsEqual(
+                group,
+                8,
+                false,
+                new Vector2(0f, 1f)
+            );
+        result.pivotNormalized =
+            AreMode70VisiblePivotsEqual(
+                group,
+                8,
+                new Vector2(0f, 1f)
+            );
+        result.scaleNormalized =
+            AreMode70VisibleScalesAndRotationsNormalized(
+                group,
+                8
+            );
+        result.firstRowHorizontal =
+            AreMode70SlotsOnSameRow(group, 0, 4);
+        result.secondRowHorizontal =
+            AreMode70SlotsOnSameRow(group, 4, 4);
+        result.firstColumnAligned =
+            AreMode70SlotsOnSameColumn(group, 0, 4);
+        result.secondColumnAligned =
+            AreMode70SlotsOnSameColumn(group, 1, 5);
+        result.secondRowStartsAtExpectedPosition =
+            IsMode70SlotAtExpectedPosition(group, 4);
+        result.overflowUsesLastGridCell =
+            group.GetSlotForTesting(7).IsOverflow &&
+            IsMode70SlotAtExpectedPosition(group, 7);
+        result.mixedSizesDoNotShiftLayout =
+            AreMode70VisibleSlotsAtExpectedPositions(group, 8);
+        result.mixedTransformsNormalized =
+            result.anchorMinNormalized &&
+            result.anchorMaxNormalized &&
+            result.pivotNormalized &&
+            result.scaleNormalized;
+
+        group.Clear();
+        SetMode70DistinctBuffs(character, 5);
+        group.SetCharacter(character);
+        result.inactiveSlotsDoNotCreateHoles =
+            CountMode70ActiveSlots(group) == 5 &&
+            AreMode70VisibleSlotsAtExpectedPositions(group, 5) &&
+            !group.GetSlotForTesting(5).gameObject.activeSelf;
+
+        List<Vector2> stablePositions =
+            CaptureMode70VisibleSlotPositions(group, 5);
+        group.SetCharacter(character);
+        result.repeatedSetKeepsPositions =
+            HaveSameMode70VisibleSlotPositions(
+                group,
+                stablePositions
+            );
+
+        int[] counts = { 9, 12, 4, 9 };
+        bool sequenceStable = true;
+        for (int index = 0; index < counts.Length; index++)
+        {
+            SetMode70DistinctBuffs(character, counts[index]);
+            group.SetCharacter(character);
+            int visibleCount = Mathf.Min(counts[index], 8);
+            sequenceStable &=
+                CountMode70ActiveSlots(group) == visibleCount &&
+                AreMode70VisibleSlotsAtExpectedPositions(
+                    group,
+                    visibleCount
+                );
+        }
+        result.countSequenceKeepsGridStable =
+            sequenceStable &&
+            group.RuntimeSlotCount == 8 &&
+            group.GetSlotForTesting(7).IsOverflow;
+
+        Destroy(rootObject);
+        return result;
+    }
+
+    Mode70HierarchyTestResult RunMode70HierarchySafetySubTests()
+    {
+        Mode70HierarchyTestResult result =
+            new Mode70HierarchyTestResult();
+
+        GameObject rootObject = new GameObject(
+            "Mode70HierarchyRoot",
+            typeof(RectTransform)
+        );
+        rootObject.SetActive(false);
+        BattleBuffGroupUIView group =
+            rootObject.AddComponent<BattleBuffGroupUIView>();
+        GameObject slotsRootObject = new GameObject(
+            "Mode70SlotsRoot",
+            typeof(RectTransform)
+        );
+        slotsRootObject.transform.SetParent(
+            rootObject.transform,
+            false
+        );
+        RectTransform slotsRoot =
+            slotsRootObject.GetComponent<RectTransform>();
+        BattleBuffIconUIView template =
+            CreateMode70BuffIconView(
+                slotsRoot,
+                "Mode70Template"
+            );
+        BattleBuffIconUIView directSlot1 =
+            CreateMode70BuffIconView(
+                slotsRoot,
+                "Mode70Direct_1"
+            );
+        BattleBuffIconUIView directSlot2 =
+            CreateMode70BuffIconView(
+                slotsRoot,
+                "Mode70Direct_2"
+            );
+        BattleBuffIconUIView nestedSlot =
+            CreateMode70BuffIconView(
+                template.transform,
+                "Mode70Nested"
+            );
+        BattleBuffIconBinding[] bindings =
+        {
+            new BattleBuffIconBinding
+            {
+                buffID = "Mode70DirectA",
+                displayName = "直接槽位A",
+                iconView = directSlot1
+            },
+            new BattleBuffIconBinding
+            {
+                buffID = "Mode70DirectB",
+                displayName = "直接槽位B",
+                iconView = directSlot2
+            }
+        };
+        SetMode64PrivateField(group, "buffBindings", bindings);
+        SetMode64PrivateField(group, "slotsRoot", slotsRoot);
+        SetMode64PrivateField(group, "slotTemplate", template);
+        SetMode64PrivateField(group, "columnsPerRow", 4);
+        SetMode64PrivateField(group, "maxRows", 2);
+        rootObject.SetActive(true);
+
+        result.templateExcluded =
+            !ContainsMode70RuntimeSlot(group, template);
+        result.directSlotsCollected =
+            group.RuntimeSlotCount == 2 &&
+            ContainsMode70RuntimeSlot(group, directSlot1) &&
+            ContainsMode70RuntimeSlot(group, directSlot2);
+        result.nestedSlotExcluded =
+            !ContainsMode70RuntimeSlot(group, nestedSlot);
+
+        CharacterData character = new CharacterData(
+            "mode70_hierarchy_owner",
+            30,
+            5,
+            5
+        );
+        SetMode70DistinctBuffs(character, 9);
+        group.SetCharacter(character);
+        result.clonesUseSlotsRoot =
+            group.RuntimeSlotCount == 8 &&
+            AreAllMode70RuntimeSlotsDirectChildren(
+                group,
+                slotsRoot
+            );
+
+        List<BattleBuffIconUIView> stableSlots =
+            new List<BattleBuffIconUIView>();
+        for (int index = 0;
+            index < group.RuntimeSlots.Count;
+            index++)
+        {
+            stableSlots.Add(group.RuntimeSlots[index]);
+        }
+
+        for (int iteration = 0; iteration < 10; iteration++)
+        {
+            group.SetCharacter(character);
+        }
+        result.repeatedSetStable =
+            HaveSameMode70RuntimeSlots(group, stableSlots);
+
+        group.Clear();
+        result.clearKeepsPool =
+            HaveSameMode70RuntimeSlots(group, stableSlots);
+        group.SetCharacter(character);
+        result.rebindReusesInstances =
+            HaveSameMode70RuntimeSlots(group, stableSlots);
+
+        GameObject invalidRootObject = new GameObject(
+            "Mode70InvalidTemplateRoot",
+            typeof(RectTransform)
+        );
+        invalidRootObject.SetActive(false);
+        BattleBuffGroupUIView invalidGroup =
+            invalidRootObject.AddComponent<BattleBuffGroupUIView>();
+        GameObject invalidSlotsRootObject = new GameObject(
+            "Mode70InvalidSlotsRoot",
+            typeof(RectTransform)
+        );
+        invalidSlotsRootObject.transform.SetParent(
+            invalidRootObject.transform,
+            false
+        );
+        RectTransform invalidSlotsRoot =
+            invalidSlotsRootObject.GetComponent<RectTransform>();
+        GameObject invalidTemplateObject = new GameObject(
+            "Mode70IncompleteTemplate",
+            typeof(RectTransform)
+        );
+        invalidTemplateObject.transform.SetParent(
+            invalidSlotsRoot,
+            false
+        );
+        BattleBuffIconUIView invalidTemplate =
+            invalidTemplateObject.AddComponent<
+                BattleBuffIconUIView
+            >();
+        BattleBuffIconUIView validFallback =
+            CreateMode70BuffIconView(
+                invalidSlotsRoot,
+                "Mode70ValidFallback"
+            );
+        SetMode64PrivateField(
+            invalidGroup,
+            "slotsRoot",
+            invalidSlotsRoot
+        );
+        SetMode64PrivateField(
+            invalidGroup,
+            "slotTemplate",
+            invalidTemplate
+        );
+        SetMode64PrivateField(
+            invalidGroup,
+            "columnsPerRow",
+            4
+        );
+        SetMode64PrivateField(
+            invalidGroup,
+            "maxRows",
+            2
+        );
+        invalidRootObject.SetActive(true);
+
+        CharacterData invalidCharacter = new CharacterData(
+            "mode70_invalid_template_owner",
+            30,
+            5,
+            5
+        );
+        SetMode70DistinctBuffs(invalidCharacter, 9);
+        invalidGroup.SetCharacter(invalidCharacter);
+        bool allFallbackClonesValid = true;
+        for (int index = 0;
+            index < invalidGroup.RuntimeSlots.Count;
+            index++)
+        {
+            BattleBuffIconUIView slot =
+                invalidGroup.RuntimeSlots[index];
+            allFallbackClonesValid &=
+                slot != null &&
+                slot != invalidTemplate &&
+                slot.HasRequiredVisualReferences &&
+                slot.transform.parent == invalidSlotsRoot;
+        }
+        result.incompleteTemplateRejected =
+            validFallback != null &&
+            invalidGroup.RuntimeSlotCount == 8 &&
+            allFallbackClonesValid;
+
+        int warningCountAfterFirstUse =
+            invalidGroup.ConfigurationWarningCount;
+        for (int iteration = 0; iteration < 5; iteration++)
+        {
+            invalidGroup.SetCharacter(invalidCharacter);
+        }
+        result.warningOnlyOnce =
+            warningCountAfterFirstUse > 0 &&
+            invalidGroup.ConfigurationWarningCount ==
+                warningCountAfterFirstUse;
+
+        Destroy(rootObject);
+        Destroy(invalidRootObject);
+        return result;
+    }
+
+    bool ContainsMode70RuntimeSlot(
+        BattleBuffGroupUIView group,
+        BattleBuffIconUIView expectedSlot
+    )
+    {
+        for (int index = 0;
+            index < group.RuntimeSlots.Count;
+            index++)
+        {
+            if (group.RuntimeSlots[index] == expectedSlot)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool AreAllMode70RuntimeSlotsDirectChildren(
+        BattleBuffGroupUIView group,
+        RectTransform slotsRoot
+    )
+    {
+        for (int index = 0;
+            index < group.RuntimeSlots.Count;
+            index++)
+        {
+            BattleBuffIconUIView slot =
+                group.RuntimeSlots[index];
+            if (slot == null ||
+                slot.transform.parent != slotsRoot)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool HaveSameMode70RuntimeSlots(
+        BattleBuffGroupUIView group,
+        List<BattleBuffIconUIView> expectedSlots
+    )
+    {
+        if (group.RuntimeSlots.Count != expectedSlots.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0;
+            index < expectedSlots.Count;
+            index++)
+        {
+            if (group.RuntimeSlots[index] != expectedSlots[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    Mode70BuffTestContext CreateMode70BuffTestContext()
+    {
+        Mode70BuffTestContext context =
+            new Mode70BuffTestContext();
+        context.rootObject = new GameObject(
+            "Mode70BuffGroup",
+            typeof(RectTransform)
+        );
+        context.slotsRoot =
+            context.rootObject.GetComponent<RectTransform>();
+        context.rootObject.SetActive(false);
+        context.groupView =
+            context.rootObject.AddComponent<BattleBuffGroupUIView>();
+        context.firstOriginalSlot = CreateMode70BuffIconView(
+            context.rootObject.transform,
+            "Mode70Buff_1"
+        );
+        context.secondOriginalSlot = CreateMode70BuffIconView(
+            context.rootObject.transform,
+            "Mode70Buff_2"
+        );
+
+        context.spriteTexture = new Texture2D(4, 1);
+        context.strengthSprite = CreateMode64Sprite(
+            context.spriteTexture,
+            0,
+            "Mode70Strength"
+        );
+        context.guardSprite = CreateMode64Sprite(
+            context.spriteTexture,
+            1,
+            "Mode70Guard"
+        );
+        context.defaultSprite = CreateMode64Sprite(
+            context.spriteTexture,
+            2,
+            "Mode70Default"
+        );
+        context.overflowSprite = CreateMode64Sprite(
+            context.spriteTexture,
+            3,
+            "Mode70Overflow"
+        );
+
+        context.bindings = new[]
+        {
+            new BattleBuffIconBinding
+            {
+                buffID = "Strength",
+                displayName = "强壮",
+                iconSprite = context.strengthSprite,
+                iconView = context.firstOriginalSlot
+            },
+            new BattleBuffIconBinding
+            {
+                buffID = "GuardUp",
+                displayName = "防御提升",
+                iconSprite = context.guardSprite,
+                iconView = context.secondOriginalSlot
+            },
+            new BattleBuffIconBinding
+            {
+                buffID = "UnboundMapping",
+                displayName = "无独立槽位映射",
+                iconSprite = null,
+                iconView = context.firstOriginalSlot
+            }
+        };
+
+        context.referencesConfigured =
+            SetMode64PrivateField(
+                context.groupView,
+                "buffBindings",
+                context.bindings
+            ) &&
+            SetMode64PrivateField(
+                context.groupView,
+                "slotsRoot",
+                context.slotsRoot
+            ) &&
+            SetMode64PrivateField(
+                context.groupView,
+                "slotTemplate",
+                null
+            ) &&
+            SetMode64PrivateField(
+                context.groupView,
+                "defaultBuffIcon",
+                context.defaultSprite
+            ) &&
+            SetMode64PrivateField(
+                context.groupView,
+                "overflowIcon",
+                context.overflowSprite
+            ) &&
+            SetMode64PrivateField(
+                context.groupView,
+                "columnsPerRow",
+                4
+            ) &&
+            SetMode64PrivateField(
+                context.groupView,
+                "maxRows",
+                2
+            ) &&
+            SetMode64PrivateField(
+                context.groupView,
+                "startOffset",
+                new Vector2(10f, 20f)
+            ) &&
+            SetMode64PrivateField(
+                context.groupView,
+                "horizontalSpacing",
+                6f
+            ) &&
+            SetMode64PrivateField(
+                context.groupView,
+                "verticalSpacing",
+                8f
+            ) &&
+            SetMode64PrivateField(
+                context.groupView,
+                "useTemplateSlotSize",
+                false
+            ) &&
+            SetMode64PrivateField(
+                context.groupView,
+                "slotSize",
+                new Vector2(20f, 30f)
+            ) &&
+            SetMode64PrivateField(
+                context.groupView,
+                "overflowPrefix",
+                "...+"
+            );
+        context.character = new CharacterData(
+            "mode70_buff_owner",
+            30,
+            5,
+            5
+        );
+        context.rootObject.SetActive(true);
+        return context;
+    }
+
+    BattleBuffIconUIView CreateMode70BuffIconView(
+        Transform parent,
+        string objectName
+    )
+    {
+        GameObject slotObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(UnityEngine.UI.Image)
+        );
+        slotObject.transform.SetParent(parent, false);
+        RectTransform slotRect =
+            slotObject.GetComponent<RectTransform>();
+        slotRect.sizeDelta = new Vector2(20f, 30f);
+        UnityEngine.UI.Image iconImage =
+            slotObject.GetComponent<UnityEngine.UI.Image>();
+        TMPro.TMP_Text stackText = CreateMode64Text(
+            slotObject.transform,
+            objectName + "Stack"
+        );
+        TMPro.TMP_Text decayText = CreateMode64Text(
+            slotObject.transform,
+            objectName + "Decay"
+        );
+        BattleBuffIconUIView iconView =
+            slotObject.AddComponent<BattleBuffIconUIView>();
+        iconView.ConfigureTestVisuals(
+            iconImage,
+            stackText,
+            decayText
+        );
+        return iconView;
+    }
+
+    BuffData CreateMode70Buff(string buffID, int stack)
+    {
+        return new BuffData(
+            buffID,
+            buffID + "显示名",
+            "UpBuff",
+            stack,
+            -1,
+            "None",
+            "Permanent"
+        );
+    }
+
+    void SetMode70ActiveBuffs(
+        CharacterData character,
+        params BuffData[] buffs
+    )
+    {
+        character.buffs.Clear();
+        if (buffs == null)
+        {
+            return;
+        }
+
+        for (int index = 0; index < buffs.Length; index++)
+        {
+            character.buffs.Add(buffs[index]);
+        }
+    }
+
+    void SetMode70DistinctBuffs(
+        CharacterData character,
+        int count
+    )
+    {
+        character.buffs.Clear();
+        for (int index = 0; index < count; index++)
+        {
+            character.buffs.Add(
+                CreateMode70Buff(
+                    "Mode70Distinct_" + index,
+                    index + 1
+                )
+            );
+        }
+    }
+
+    int CountMode70ActiveSlots(BattleBuffGroupUIView group)
+    {
+        int activeCount = 0;
+        for (int index = 0;
+            index < group.SlotPoolCount;
+            index++)
+        {
+            BattleBuffIconUIView slot =
+                group.GetSlotForTesting(index);
+            if (slot != null && slot.gameObject.activeSelf)
+            {
+                activeCount++;
+            }
+        }
+
+        return activeCount;
+    }
+
+    bool AreMode70VisibleSlotSizesEqual(
+        BattleBuffGroupUIView group,
+        int visibleCount,
+        Vector2 expectedSize
+    )
+    {
+        for (int index = 0; index < visibleCount; index++)
+        {
+            RectTransform slotRect =
+                group.GetSlotForTesting(index).transform
+                    as RectTransform;
+            if (slotRect == null ||
+                Vector2.Distance(
+                    slotRect.sizeDelta,
+                    expectedSize
+                ) >= 0.001f)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool AreMode70VisibleAnchorsEqual(
+        BattleBuffGroupUIView group,
+        int visibleCount,
+        bool useMin,
+        Vector2 expectedAnchor
+    )
+    {
+        for (int index = 0; index < visibleCount; index++)
+        {
+            RectTransform slotRect =
+                group.GetSlotForTesting(index).transform
+                    as RectTransform;
+            if (slotRect == null)
+            {
+                return false;
+            }
+
+            Vector2 actualAnchor = useMin
+                ? slotRect.anchorMin
+                : slotRect.anchorMax;
+            if (Vector2.Distance(
+                    actualAnchor,
+                    expectedAnchor
+                ) >= 0.001f)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool AreMode70VisiblePivotsEqual(
+        BattleBuffGroupUIView group,
+        int visibleCount,
+        Vector2 expectedPivot
+    )
+    {
+        for (int index = 0; index < visibleCount; index++)
+        {
+            RectTransform slotRect =
+                group.GetSlotForTesting(index).transform
+                    as RectTransform;
+            if (slotRect == null ||
+                Vector2.Distance(
+                    slotRect.pivot,
+                    expectedPivot
+                ) >= 0.001f)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool AreMode70VisibleScalesAndRotationsNormalized(
+        BattleBuffGroupUIView group,
+        int visibleCount
+    )
+    {
+        for (int index = 0; index < visibleCount; index++)
+        {
+            RectTransform slotRect =
+                group.GetSlotForTesting(index).transform
+                    as RectTransform;
+            if (slotRect == null ||
+                Vector3.Distance(
+                    slotRect.localScale,
+                    Vector3.one
+                ) >= 0.001f ||
+                Quaternion.Angle(
+                    slotRect.localRotation,
+                    Quaternion.identity
+                ) >= 0.001f)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool AreMode70SlotsOnSameRow(
+        BattleBuffGroupUIView group,
+        int startIndex,
+        int count
+    )
+    {
+        RectTransform firstRect =
+            group.GetSlotForTesting(startIndex).transform
+                as RectTransform;
+        if (firstRect == null)
+        {
+            return false;
+        }
+
+        for (int offset = 0; offset < count; offset++)
+        {
+            int index = startIndex + offset;
+            RectTransform slotRect =
+                group.GetSlotForTesting(index).transform
+                    as RectTransform;
+            if (slotRect == null ||
+                Mathf.Abs(
+                    slotRect.anchoredPosition.y -
+                    firstRect.anchoredPosition.y
+                ) >= 0.001f ||
+                !IsMode70SlotAtExpectedPosition(group, index))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool AreMode70SlotsOnSameColumn(
+        BattleBuffGroupUIView group,
+        int firstIndex,
+        int secondIndex
+    )
+    {
+        RectTransform firstRect =
+            group.GetSlotForTesting(firstIndex).transform
+                as RectTransform;
+        RectTransform secondRect =
+            group.GetSlotForTesting(secondIndex).transform
+                as RectTransform;
+        return firstRect != null &&
+            secondRect != null &&
+            Mathf.Abs(
+                firstRect.anchoredPosition.x -
+                secondRect.anchoredPosition.x
+            ) < 0.001f &&
+            IsMode70SlotAtExpectedPosition(group, firstIndex) &&
+            IsMode70SlotAtExpectedPosition(group, secondIndex);
+    }
+
+    bool IsMode70SlotAtExpectedPosition(
+        BattleBuffGroupUIView group,
+        int index
+    )
+    {
+        BattleBuffIconUIView slot =
+            group.GetSlotForTesting(index);
+        RectTransform slotRect =
+            slot != null
+                ? slot.transform as RectTransform
+                : null;
+        return slotRect != null &&
+            Vector2.Distance(
+                slotRect.anchoredPosition,
+                group.GetExpectedSlotPosition(index)
+            ) < 0.001f;
+    }
+
+    bool AreMode70VisibleSlotsAtExpectedPositions(
+        BattleBuffGroupUIView group,
+        int visibleCount
+    )
+    {
+        for (int index = 0; index < visibleCount; index++)
+        {
+            BattleBuffIconUIView slot =
+                group.GetSlotForTesting(index);
+            if (slot == null ||
+                !slot.gameObject.activeSelf ||
+                !IsMode70SlotAtExpectedPosition(group, index))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    List<Vector2> CaptureMode70VisibleSlotPositions(
+        BattleBuffGroupUIView group,
+        int visibleCount
+    )
+    {
+        List<Vector2> positions = new List<Vector2>();
+        for (int index = 0; index < visibleCount; index++)
+        {
+            RectTransform slotRect =
+                group.GetSlotForTesting(index).transform
+                    as RectTransform;
+            positions.Add(slotRect.anchoredPosition);
+        }
+
+        return positions;
+    }
+
+    bool HaveSameMode70VisibleSlotPositions(
+        BattleBuffGroupUIView group,
+        List<Vector2> expectedPositions
+    )
+    {
+        for (int index = 0;
+            index < expectedPositions.Count;
+            index++)
+        {
+            RectTransform slotRect =
+                group.GetSlotForTesting(index).transform
+                    as RectTransform;
+            if (slotRect == null ||
+                Vector2.Distance(
+                    slotRect.anchoredPosition,
+                    expectedPositions[index]
+                ) >= 0.001f)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    int CountMode70NormalSlots(BattleBuffGroupUIView group)
+    {
+        int normalCount = 0;
+        for (int index = 0;
+            index < group.SlotPoolCount;
+            index++)
+        {
+            BattleBuffIconUIView slot =
+                group.GetSlotForTesting(index);
+            if (slot != null &&
+                slot.gameObject.activeSelf &&
+                !slot.IsOverflow)
+            {
+                normalCount++;
+            }
+        }
+
+        return normalCount;
+    }
+
+    bool HasMode70OverflowSlot(BattleBuffGroupUIView group)
+    {
+        for (int index = 0;
+            index < group.SlotPoolCount;
+            index++)
+        {
+            BattleBuffIconUIView slot =
+                group.GetSlotForTesting(index);
+            if (slot != null &&
+                slot.gameObject.activeSelf &&
+                slot.IsOverflow)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    UnityEngine.UI.Image GetMode70IconImage(
+        BattleBuffIconUIView slot
+    )
+    {
+        return GetMode64PrivateField<UnityEngine.UI.Image>(
+            slot,
+            "iconImage"
+        );
+    }
+
+    TMPro.TMP_Text GetMode70StackText(
+        BattleBuffIconUIView slot
+    )
+    {
+        return GetMode64PrivateField<TMPro.TMP_Text>(
+            slot,
+            "stackText"
+        );
+    }
+
+    TMPro.TMP_Text GetMode70DecayText(
+        BattleBuffIconUIView slot
+    )
+    {
+        return GetMode64PrivateField<TMPro.TMP_Text>(
+            slot,
+            "decayText"
+        );
+    }
+
+    bool RunMode70MissingTemplateSafetySubTest()
+    {
+        GameObject rootObject = new GameObject(
+            "Mode70MissingTemplate",
+            typeof(RectTransform)
+        );
+        rootObject.SetActive(false);
+        BattleBuffGroupUIView group =
+            rootObject.AddComponent<BattleBuffGroupUIView>();
+        SetMode64PrivateField(
+            group,
+            "buffBindings",
+            new BattleBuffIconBinding[0]
+        );
+        SetMode64PrivateField(group, "slotTemplate", null);
+        rootObject.SetActive(true);
+
+        CharacterData character = new CharacterData(
+            "mode70_missing_template_owner",
+            30,
+            5,
+            5
+        );
+        character.buffs.Add(CreateMode70Buff("MissingTemplate", 1));
+
+        bool safe = true;
+        try
+        {
+            group.SetCharacter(character);
+            safe =
+                group.SlotPoolCount == 0 &&
+                group.BoundCharacter == character;
+        }
+        catch (System.Exception exception)
+        {
+            Debug.LogError(
+                "模式70 缺失模板不应抛异常：" + exception
+            );
+            safe = false;
+        }
+
+        Destroy(rootObject);
+        return safe;
+    }
+
+    void DestroyMode70BuffTestContext(
+        Mode70BuffTestContext context
+    )
+    {
+        if (context == null)
+        {
+            return;
+        }
+
+        Destroy(context.rootObject);
+        Destroy(context.strengthSprite);
+        Destroy(context.guardSprite);
+        Destroy(context.defaultSprite);
+        Destroy(context.overflowSprite);
+        Destroy(context.spriteTexture);
+    }
+
+    bool RunBattleBuffInspectorPreviewBasicTestSequence()
+    {
+        Debug.Log(
+            "===== BattleBuffInspectorPreviewBasic 聚合测试开始 ====="
+        );
+
+        Mode70BuffTestContext context =
+            CreateMode70BuffTestContext();
+        BattleBuffGroupUIView group = context.groupView;
+        BattleBuffGroupDebugPreview preview =
+            context.rootObject.AddComponent<
+                BattleBuffGroupDebugPreview
+            >();
+        bool previewFieldsConfigured =
+            SetMode64PrivateField(
+                preview,
+                "enableRuntimePreview",
+                false
+            ) &&
+            SetMode64PrivateField(
+                preview,
+                "previewBuffCount",
+                9
+            ) &&
+            SetMode64PrivateField(
+                preview,
+                "defaultStack",
+                1
+            ) &&
+            SetMode64PrivateField(
+                preview,
+                "useIncreasingStacks",
+                true
+            ) &&
+            SetMode64PrivateField(
+                preview,
+                "applyOnStart",
+                false
+            ) &&
+            SetMode64PrivateField(
+                preview,
+                "refreshWhenInspectorChanges",
+                true
+            );
+        bool targetResolvedFromSameObject =
+            GetMode64PrivateField<BattleBuffGroupUIView>(
+                preview,
+                "targetBuffGroup"
+            ) == group;
+
+        preview.ApplyPreview();
+        bool test1 =
+            previewFieldsConfigured &&
+            targetResolvedFromSameObject &&
+            preview.PreviewCharacter == null &&
+            preview.PreviewBuffCount == 0;
+
+        CharacterData previousDisplay = new CharacterData(
+            "mode71_previous_display",
+            30,
+            1,
+            1
+        );
+        previousDisplay.AddBuff(
+            "Mode71Previous",
+            "原显示Buff",
+            "UpBuff",
+            1,
+            2,
+            "TurnEnd",
+            "DurationDown"
+        );
+        group.SetCharacter(previousDisplay);
+        bool hadPreviousDisplay =
+            CountMode70ActiveSlots(group) == 1;
+        SetMode64PrivateField(
+            preview,
+            "enableRuntimePreview",
+            true
+        );
+        SetMode64PrivateField(preview, "previewBuffCount", 0);
+        preview.ApplyPreview();
+        bool test2 =
+            hadPreviousDisplay &&
+            preview.PreviewCharacter != null &&
+            preview.PreviewBuffCount == 0 &&
+            group.BoundCharacter == preview.PreviewCharacter &&
+            CountMode70ActiveSlots(group) == 0;
+
+        SetMode64PrivateField(preview, "previewBuffCount", 1);
+        preview.ApplyPreview();
+        bool test3 =
+            preview.PreviewBuffCount == 1 &&
+            preview.PreviewCharacter.buffs[0].buffID ==
+                "DebugPreviewBuff_01" &&
+            CountMode70ActiveSlots(group) == 1;
+
+        SetMode64PrivateField(preview, "previewBuffCount", 9);
+        SetMode64PrivateField(
+            preview,
+            "useIncreasingStacks",
+            true
+        );
+        preview.ApplyPreview();
+        bool test4 =
+            preview.PreviewBuffCount == 9 &&
+            preview.PreviewCharacter.buffs[8].buffID ==
+                "DebugPreviewBuff_09";
+        HashSet<string> uniqueIDs =
+            new HashSet<string>(System.StringComparer.Ordinal);
+        bool increasingStacksCorrect = true;
+        for (int index = 0;
+            index < preview.PreviewCharacter.buffs.Count;
+            index++)
+        {
+            BuffData buff = preview.PreviewCharacter.buffs[index];
+            uniqueIDs.Add(buff.buffID);
+            increasingStacksCorrect &=
+                buff.stack == index + 1;
+        }
+        bool test5 = uniqueIDs.Count == 9;
+        bool test6 = increasingStacksCorrect;
+
+        SetMode64PrivateField(
+            preview,
+            "useIncreasingStacks",
+            false
+        );
+        SetMode64PrivateField(preview, "defaultStack", 3);
+        SetMode64PrivateField(preview, "previewBuffCount", 4);
+        preview.ApplyPreview();
+        bool test7 = true;
+        for (int index = 0;
+            index < preview.PreviewCharacter.buffs.Count;
+            index++)
+        {
+            test7 &=
+                preview.PreviewCharacter.buffs[index].stack == 3;
+        }
+        test7 &= preview.PreviewBuffCount == 4;
+
+        SetMode64PrivateField(preview, "previewBuffCount", -5);
+        preview.ApplyPreview();
+        bool test8 =
+            preview.PreviewCharacter != null &&
+            preview.PreviewBuffCount == 0 &&
+            CountMode70ActiveSlots(group) == 0;
+
+        SetMode64PrivateField(preview, "previewBuffCount", 2);
+        SetMode64PrivateField(preview, "defaultStack", 0);
+        preview.ApplyPreview();
+        bool test9 =
+            preview.PreviewBuffCount == 2 &&
+            preview.PreviewCharacter.buffs[0].stack == 1 &&
+            preview.PreviewCharacter.buffs[1].stack == 1;
+
+        CharacterData firstPreviewCharacter =
+            preview.PreviewCharacter;
+        SetMode64PrivateField(preview, "previewBuffCount", 3);
+        preview.ApplyPreview();
+        CharacterData secondPreviewCharacter =
+            preview.PreviewCharacter;
+        bool test10 =
+            firstPreviewCharacter != secondPreviewCharacter &&
+            firstPreviewCharacter.buffs.Count == 2 &&
+            secondPreviewCharacter.buffs.Count == 3;
+        bool test11 =
+            group.BoundCharacter == secondPreviewCharacter;
+
+        SetMode64PrivateField(
+            preview,
+            "useIncreasingStacks",
+            true
+        );
+        SetMode64PrivateField(preview, "previewBuffCount", 9);
+        preview.ApplyPreview();
+        BattleBuffIconUIView overflowSlot =
+            group.GetSlotForTesting(7);
+        bool test12 =
+            CountMode70ActiveSlots(group) == 8 &&
+            CountMode70NormalSlots(group) == 7 &&
+            overflowSlot != null &&
+            overflowSlot.IsOverflow &&
+            overflowSlot.OverflowHiddenCount == 2;
+
+        int poolCountBeforeResize = group.SlotPoolCount;
+        SetMode64PrivateField(preview, "previewBuffCount", 5);
+        preview.ApplyPreview();
+        bool test13 =
+            preview.PreviewBuffCount == 5 &&
+            CountMode70ActiveSlots(group) == 5 &&
+            !HasMode70OverflowSlot(group) &&
+            group.SlotPoolCount == poolCountBeforeResize;
+        CharacterData previewBeforeRepeat =
+            preview.PreviewCharacter;
+        preview.ApplyPreview();
+        bool test14 =
+            preview.PreviewCharacter != previewBeforeRepeat &&
+            preview.PreviewBuffCount == 5 &&
+            group.SlotPoolCount == poolCountBeforeResize;
+
+        preview.ClearPreview();
+        bool test15 =
+            preview.PreviewCharacter == null &&
+            preview.PreviewBuffCount == 0 &&
+            group.BoundCharacter == null &&
+            CountMode70ActiveSlots(group) == 0 &&
+            group.SlotPoolCount == poolCountBeforeResize;
+
+        CharacterData formalCharacter = new CharacterData(
+            "mode71_formal_character",
+            30,
+            4,
+            4
+        );
+        formalCharacter.AddBuff(
+            "Mode71FormalKeep",
+            "正式角色保留Buff",
+            "UpBuff",
+            4,
+            2,
+            "TurnEnd",
+            "DurationDown"
+        );
+        BuffData formalBuff = formalCharacter.buffs[0];
+        group.SetCharacter(formalCharacter);
+        SetMode64PrivateField(preview, "previewBuffCount", 3);
+        preview.ApplyPreview();
+        bool test16 =
+            preview.PreviewCharacter != formalCharacter &&
+            formalCharacter.buffs.Count == 1 &&
+            formalCharacter.buffs[0] == formalBuff &&
+            formalBuff.buffID == "Mode71FormalKeep" &&
+            formalBuff.stack == 4;
+
+        Mode71WrongHierarchyTestResult wrongHierarchyResult =
+            RunMode71WrongHierarchySubTest();
+        bool test20 = wrongHierarchyResult.fixtureDetected;
+
+        preview.ClearPreview();
+        group.SetCharacter(formalCharacter);
+        SetMode64PrivateField(preview, "previewBuffCount", 9);
+        SetMode64PrivateField(preview, "applyOnStart", true);
+        int applyCountBeforeInitial =
+            preview.ApplyInvocationCount;
+        preview.ScheduleInitialApplyForTesting();
+        bool initialDidNotApplyImmediately =
+            preview.HasPendingInitialApply &&
+            preview.ApplyInvocationCount ==
+                applyCountBeforeInitial &&
+            group.BoundCharacter == formalCharacter;
+        preview.CompleteInitialApplyForTesting();
+        bool test21 =
+            initialDidNotApplyImmediately &&
+            !preview.HasPendingInitialApply &&
+            preview.ApplyInvocationCount ==
+                applyCountBeforeInitial + 1 &&
+            group.BoundCharacter == preview.PreviewCharacter &&
+            preview.PreviewBuffCount == 9;
+        SetMode64PrivateField(preview, "applyOnStart", false);
+
+        int applyCountBeforeRefresh =
+            preview.ApplyInvocationCount;
+        SetMode64PrivateField(preview, "previewBuffCount", 4);
+        preview.RequestRefreshForTesting();
+        preview.RequestRefreshForTesting();
+        preview.RequestRefreshForTesting();
+        bool refreshWasMerged =
+            preview.HasPendingRefresh &&
+            preview.ApplyInvocationCount ==
+                applyCountBeforeRefresh;
+        preview.CompleteRefreshForTesting();
+        bool test22 =
+            refreshWasMerged &&
+            !preview.HasPendingRefresh &&
+            preview.ApplyInvocationCount ==
+                applyCountBeforeRefresh + 1 &&
+            preview.PreviewBuffCount == 4;
+
+        int stablePoolCount = group.RuntimeSlotCount;
+        List<BattleBuffIconUIView> stablePreviewSlots =
+            new List<BattleBuffIconUIView>();
+        for (int index = 0;
+            index < group.RuntimeSlots.Count;
+            index++)
+        {
+            stablePreviewSlots.Add(group.RuntimeSlots[index]);
+        }
+        for (int iteration = 0; iteration < 10; iteration++)
+        {
+            preview.ApplyPreview();
+        }
+        bool test23 =
+            group.RuntimeSlotCount == stablePoolCount &&
+            HaveSameMode70RuntimeSlots(
+                group,
+                stablePreviewSlots
+            );
+
+        int[] previewCounts = { 9, 12, 4, 9 };
+        bool sequenceStable = true;
+        for (int index = 0;
+            index < previewCounts.Length;
+            index++)
+        {
+            SetMode64PrivateField(
+                preview,
+                "previewBuffCount",
+                previewCounts[index]
+            );
+            preview.ApplyPreview();
+            sequenceStable &=
+                group.RuntimeSlotCount == stablePoolCount &&
+                HaveSameMode70RuntimeSlots(
+                    group,
+                    stablePreviewSlots
+                );
+        }
+        BattleBuffIconUIView finalOverflow =
+            group.GetSlotForTesting(7);
+        bool test24 =
+            sequenceStable &&
+            stablePoolCount == 8 &&
+            finalOverflow != null &&
+            finalOverflow.IsOverflow &&
+            finalOverflow.OverflowHiddenCount == 2;
+        bool test25 =
+            AreAllMode70RuntimeSlotsDirectChildren(
+                group,
+                context.slotsRoot
+            );
+        bool test26 =
+            HasUniqueMode70RuntimeSlotsAndNames(group);
+
+        preview.ClearPreview();
+        bool test27 =
+            group.RuntimeSlotCount == stablePoolCount &&
+            HaveSameMode70RuntimeSlots(
+                group,
+                stablePreviewSlots
+            );
+        bool test28 =
+            wrongHierarchyResult.repeatedApplyStable;
+
+        SetMode64PrivateField(preview, "previewBuffCount", 9);
+        preview.ApplyPreview();
+        bool test29 =
+            CountMode70NormalSlots(group) == 7 &&
+            HasMode70OverflowSlot(group) &&
+            AreMode70VisibleSlotsAtExpectedPositions(group, 8);
+        bool test30 =
+            AreMode70SlotsOnSameRow(group, 0, 4) &&
+            AreMode70SlotsOnSameRow(group, 4, 4);
+        bool test31 =
+            AreMode70SlotsOnSameColumn(group, 0, 4) &&
+            AreMode70SlotsOnSameColumn(group, 1, 5);
+        BattleBuffIconUIView previewOverflow =
+            group.GetSlotForTesting(7);
+        bool test32 =
+            previewOverflow != null &&
+            previewOverflow.IsOverflow &&
+            IsMode70SlotAtExpectedPosition(group, 7);
+
+        bool previewGridSequenceStable = true;
+        int[] gridPreviewCounts = { 9, 12, 4, 9 };
+        for (int index = 0;
+            index < gridPreviewCounts.Length;
+            index++)
+        {
+            int previewCount = gridPreviewCounts[index];
+            SetMode64PrivateField(
+                preview,
+                "previewBuffCount",
+                previewCount
+            );
+            preview.ApplyPreview();
+            int visibleCount = Mathf.Min(previewCount, 8);
+            previewGridSequenceStable &=
+                group.RuntimeSlotCount == stablePoolCount &&
+                CountMode70ActiveSlots(group) == visibleCount &&
+                AreMode70VisibleSlotsAtExpectedPositions(
+                    group,
+                    visibleCount
+                );
+        }
+        bool test33 =
+            previewGridSequenceStable &&
+            group.GetSlotForTesting(7).IsOverflow;
+
+        bool test17 =
+            RunBattleBuffGridLayoutBasicTestSequence();
+        bool test18 =
+            RunBattleActionSlotVisualInteractionBasicTestSequence();
+        bool test19 =
+            RunBattleCardClickAssignBasicTestSequence() &&
+            RunBattleCardClickInteractionIntegrationTestSequence();
+
+        Debug.Log("模式71 测试1 预览关闭时不生成角色：" + test1);
+        Debug.Log("模式71 测试2 零Buff清空正式Buff栏显示：" + test2);
+        Debug.Log("模式71 测试3 生成一个唯一预览Buff：" + test3);
+        Debug.Log("模式71 测试4 生成九个预览Buff：" + test4);
+        Debug.Log("模式71 测试5 预览buffID全部唯一：" + test5);
+        Debug.Log("模式71 测试6 递增层数为一至N：" + test6);
+        Debug.Log("模式71 测试7 固定层数使用defaultStack：" + test7);
+        Debug.Log("模式71 测试8 负数量按零处理：" + test8);
+        Debug.Log("模式71 测试9 非法固定层数按一处理：" + test9);
+        Debug.Log("模式71 测试10 重复应用替换临时角色：" + test10);
+        Debug.Log("模式71 测试11 调用正式SetCharacter绑定：" + test11);
+        Debug.Log("模式71 测试12 九Buff显示七普通与...+2：" + test12);
+        Debug.Log("模式71 测试13 修改数量后复用正式槽位池：" + test13);
+        Debug.Log("模式71 测试14 重复应用不增加槽位对象：" + test14);
+        Debug.Log("模式71 测试15 ClearPreview清空预览与显示：" + test15);
+        Debug.Log("模式71 测试16 不修改正式CharacterData：" + test16);
+        Debug.Log("模式71 测试17 模式70 Buff网格回归：" + test17);
+        Debug.Log("模式71 测试18 模式69行动槽视觉回归：" + test18);
+        Debug.Log("模式71 测试19 模式66与67卡牌指派回归：" + test19);
+        Debug.Log("模式71 测试20 正式错误层级夹具被识别：" + test20);
+        Debug.Log("模式71 测试21 初次预览帧末覆盖正式绑定：" + test21);
+        Debug.Log("模式71 测试22 连续OnValidate请求合并一次：" + test22);
+        Debug.Log("模式71 测试23 ApplyPreview十次池不增长：" + test23);
+        Debug.Log("模式71 测试24 九十二四九切换池稳定：" + test24);
+        Debug.Log("模式71 测试25 动态槽位均为SlotsRoot直接子项：" + test25);
+        Debug.Log("模式71 测试26 无重复槽位实例和名称：" + test26);
+        Debug.Log("模式71 测试27 ClearPreview不销毁槽位池：" + test27);
+        Debug.Log("模式71 测试28 错误层级重复刷新不扩容：" + test28);
+        Debug.Log("模式71 测试29 九Buff严格显示七普通加Overflow：" +
+            test29);
+        Debug.Log("模式71 测试30 预览网格两行各自严格水平：" +
+            test30);
+        Debug.Log("模式71 测试31 预览网格上下列严格对齐：" +
+            test31);
+        Debug.Log("模式71 测试32 Overflow位于第二行最后一格：" +
+            test32);
+        Debug.Log("模式71 测试33 九十二四九切换无斜线与漂移：" +
+            test33);
+        Debug.Log(
+            "===== BattleBuffInspectorPreviewBasic 聚合测试结束 ====="
+        );
+
+        DestroyMode70BuffTestContext(context);
+
+        return test1 &&
+            test2 &&
+            test3 &&
+            test4 &&
+            test5 &&
+            test6 &&
+            test7 &&
+            test8 &&
+            test9 &&
+            test10 &&
+            test11 &&
+            test12 &&
+            test13 &&
+            test14 &&
+            test15 &&
+            test16 &&
+            test17 &&
+            test18 &&
+            test19 &&
+            test20 &&
+            test21 &&
+            test22 &&
+            test23 &&
+            test24 &&
+            test25 &&
+            test26 &&
+            test27 &&
+            test28 &&
+            test29 &&
+            test30 &&
+            test31 &&
+            test32 &&
+            test33;
+    }
+
+    bool RunBattlePermanentBulletBuffBasicTestSequence()
+    {
+        Debug.Log(
+            "===== BattlePermanentBulletBuffBasic 聚合测试开始 ====="
+        );
+
+        List<CardTestData> cards = CardDataLoader.LoadCardData();
+        List<CharacterDefinitionData> characterDefinitions =
+            CharacterDefinitionLoader.LoadDefinitions();
+        List<EnemyDefinitionData> enemyDefinitions =
+            EnemyDefinitionLoader.LoadDefinitions();
+        CharacterDefinitionData allyADefinition =
+            CharacterDefinitionLoader.FindByID(
+                characterDefinitions,
+                "ally_001"
+            );
+        CharacterDefinitionData allyBDefinition =
+            CharacterDefinitionLoader.FindByID(
+                characterDefinitions,
+                "ally_002"
+            );
+        EnemyDefinitionData enemyDefinition =
+            EnemyDefinitionLoader.FindByID(
+                enemyDefinitions,
+                "enemy_001"
+            );
+
+        BattleUnitFactoryResult allyAResult =
+            BattleUnitFactory.CreatePlayer(
+                allyADefinition,
+                cards
+            );
+        BattleUnitFactoryResult allyBResult =
+            BattleUnitFactory.CreatePlayer(
+                allyBDefinition,
+                cards
+            );
+        BattleUnitFactoryResult enemyResult =
+            BattleUnitFactory.CreateEnemy(
+                enemyDefinition,
+                cards
+            );
+        CharacterData allyA = allyAResult.unit;
+        CharacterData allyB = allyBResult.unit;
+        CharacterData enemy = enemyResult.unit;
+        BuffData initialBullet =
+            FindMode72ActiveBuff(allyA, "Bullet");
+
+        bool test1 =
+            allyAResult.isSuccess &&
+            allyA != null &&
+            allyA.GetBuffStack("Bullet") == 6;
+        bool test2 =
+            allyBResult.isSuccess &&
+            allyB != null &&
+            allyB.GetBuffStack("Bullet") == 0;
+        bool test3 =
+            enemyResult.isSuccess &&
+            enemy != null &&
+            enemy.GetBuffStack("Bullet") == 0;
+        bool test4 =
+            initialBullet != null &&
+            initialBullet.buffName == "子弹" &&
+            initialBullet.buffCategory == "AbilityBuff" &&
+            initialBullet.checkTiming == "None" &&
+            initialBullet.expireRule == "Permanent";
+        bool test5 = initialBullet != null &&
+            initialBullet.stack == 6;
+        bool test6 = initialBullet != null &&
+            initialBullet.duration == -1;
+        bool test7 =
+            CountMode72BuffBatches(allyA, "Bullet") == 1;
+
+        BattleUnitFactory.ApplyInitialBuffs(
+            allyA,
+            allyADefinition.initialBuffs
+        );
+        bool test8 = allyA.GetBuffStack("Bullet") == 6;
+        bool test9 =
+            CountMode72BuffBatches(allyA, "Bullet") == 1;
+
+        Mode70BuffTestContext uiContext =
+            CreateMode70BuffTestContext();
+        BattleBuffGroupUIView group = uiContext.groupView;
+        BattleBuffIconBinding[] bulletBindings =
+        {
+            new BattleBuffIconBinding
+            {
+                buffID = "Bullet",
+                displayName = "子弹",
+                iconSprite = uiContext.strengthSprite,
+                iconView = null
+            }
+        };
+        SetMode64PrivateField(
+            group,
+            "buffBindings",
+            bulletBindings
+        );
+        group.SetCharacter(allyA);
+        BattleBuffIconUIView bulletSlot =
+            group.GetSlotForTesting(0);
+        TMPro.TMP_Text bulletStackText =
+            GetMode70StackText(bulletSlot);
+        TMPro.TMP_Text bulletDecayText =
+            GetMode70DecayText(bulletSlot);
+        bool test10 =
+            CountMode70ActiveSlots(group) == 1 &&
+            CountMode70NormalSlots(group) == 1;
+        bool test11 =
+            bulletStackText != null &&
+            bulletStackText.text == "6";
+        bool test12 =
+            bulletSlot != null &&
+            !bulletSlot.IsOverflow;
+        bool test13 =
+            bulletDecayText != null &&
+            !bulletDecayText.gameObject.activeSelf &&
+            bulletDecayText.text != "-1";
+        bool test14 =
+            GetMode70IconImage(bulletSlot).sprite ==
+                uiContext.strengthSprite;
+
+        SetMode64PrivateField(
+            group,
+            "buffBindings",
+            new BattleBuffIconBinding[0]
+        );
+        group.SetCharacter(allyA);
+        bool test15 =
+            GetMode70IconImage(group.GetSlotForTesting(0)).sprite ==
+                uiContext.defaultSprite;
+
+        BattleBuffGroupDebugPreview preview =
+            uiContext.rootObject.AddComponent<
+                BattleBuffGroupDebugPreview
+            >();
+        group.SetCharacter(allyA);
+        preview.SetRuntimePreviewEnabledForTesting(true);
+        preview.ScheduleInitialApplyForTesting();
+        bool previewWasScheduled =
+            preview.HasPendingInitialApply;
+        preview.SetRuntimePreviewEnabledForTesting(false);
+        preview.ApplyPreview();
+        bool test16 =
+            previewWasScheduled &&
+            !preview.HasPendingInitialApply &&
+            !preview.HasPendingRefresh &&
+            preview.PreviewCharacter == null;
+        bool test17 =
+            group.BoundCharacter == allyA &&
+            CountMode70ActiveSlots(group) == 1 &&
+            GetMode70StackText(
+                group.GetSlotForTesting(0)
+            ).text == "6";
+
+        allyA.AddBuff(
+            "Mode72Temporary",
+            "模式72限时Buff",
+            "UpBuff",
+            1,
+            1,
+            "TurnEnd",
+            "DurationDown"
+        );
+        List<CharacterData> turnParticipants =
+            new List<CharacterData> { allyA };
+        for (int iteration = 0; iteration < 3; iteration++)
+        {
+            BattleTurnProcessor.EndTurn(turnParticipants);
+        }
+        BuffData bulletAfterThreeTurns =
+            FindMode72ActiveBuff(allyA, "Bullet");
+        bool test18 = bulletAfterThreeTurns != null;
+        bool test19 =
+            bulletAfterThreeTurns != null &&
+            bulletAfterThreeTurns.duration == -1;
+        bool test20 =
+            bulletAfterThreeTurns != null &&
+            bulletAfterThreeTurns.stack == 6;
+        bool test21 =
+            allyA.GetBuffStack("Mode72Temporary") == 0;
+
+        int poolCountBeforeRemoval = group.RuntimeSlotCount;
+        BattleBuffIconUIView reusableSlot =
+            group.GetSlotForTesting(0);
+        int consumedBullet;
+        bool bulletRemovedThroughDataLayer =
+            allyA.TryConsumeBuffStackAsResource(
+                "Bullet",
+                6,
+                out consumedBullet
+            );
+        group.SetCharacter(allyA);
+        bool test22 =
+            bulletRemovedThroughDataLayer &&
+            consumedBullet == 6 &&
+            allyA.GetBuffStack("Bullet") == 0 &&
+            CountMode70ActiveSlots(group) == 0;
+        bool test23 =
+            group.RuntimeSlotCount == poolCountBeforeRemoval;
+
+        allyA.AddBuff("Bullet", 6, -1);
+        group.SetCharacter(allyA);
+        bool test24 =
+            group.GetSlotForTesting(0) == reusableSlot &&
+            reusableSlot.gameObject.activeSelf &&
+            GetMode70StackText(reusableSlot).text == "6";
+
+        CharacterData pendingOnlyCharacter = new CharacterData(
+            "mode72_pending_only",
+            30,
+            1,
+            1
+        );
+        pendingOnlyCharacter.AddPendingBuff(
+            "Bullet",
+            6,
+            -1,
+            1,
+            1,
+            1
+        );
+        group.SetCharacter(pendingOnlyCharacter);
+        bool test25 =
+            pendingOnlyCharacter.GetBuffStack("Bullet") == 0 &&
+            CountMode70ActiveSlots(group) == 0;
+
+        DestroyMode70BuffTestContext(uiContext);
+
+        bool test26 =
+            RunBattleBuffInspectorPreviewBasicTestSequence();
+        bool test27 =
+            RunBattleBuffGridLayoutBasicTestSequence();
+        bool test28 =
+            RunBattleActionSlotVisualInteractionBasicTestSequence();
+        bool test29 =
+            RunBattleCardClickAssignBasicTestSequence() &&
+            RunBattleCardClickInteractionIntegrationTestSequence();
+
+        Debug.Log("模式72 测试1 正式入口只给Ally01添加Bullet：" + test1);
+        Debug.Log("模式72 测试2 Ally02不获得Bullet：" + test2);
+        Debug.Log("模式72 测试3 敌人不获得Bullet：" + test3);
+        Debug.Log("模式72 测试4 Factory通过AddBuff生成完整正式批次：" + test4);
+        Debug.Log("模式72 测试5 Bullet层数为6：" + test5);
+        Debug.Log("模式72 测试6 Bullet持续时间为-1：" + test6);
+        Debug.Log("模式72 测试7 Bullet只有一个有效批次：" + test7);
+        Debug.Log("模式72 测试8 重复初始化不会叠到12层：" + test8);
+        Debug.Log("模式72 测试9 重复初始化不增加第二批Bullet：" + test9);
+        Debug.Log("模式72 测试10 UI只显示一个普通Buff槽位：" + test10);
+        Debug.Log("模式72 测试11 StackText显示6：" + test11);
+        Debug.Log("模式72 测试12 Bullet不是Overflow：" + test12);
+        Debug.Log("模式72 测试13 永久Buff不显示负数倒计时：" + test13);
+        Debug.Log("模式72 测试14 Bullet Binding使用专属图：" + test14);
+        Debug.Log("模式72 测试15 Bullet缺少Binding时回退默认图：" + test15);
+        Debug.Log("模式72 测试16 DebugPreview关闭并取消待执行预览：" + test16);
+        Debug.Log("模式72 测试17 DebugPreview关闭不覆盖正式Bullet：" + test17);
+        Debug.Log("模式72 测试18 三次回合生命周期后Bullet仍存在：" + test18);
+        Debug.Log("模式72 测试19 三次处理后duration仍为-1：" + test19);
+        Debug.Log("模式72 测试20 三次处理后stack仍为6：" + test20);
+        Debug.Log("模式72 测试21 duration1普通Buff正常过期：" + test21);
+        Debug.Log("模式72 测试22 移除Bullet并刷新后槽位隐藏：" + test22);
+        Debug.Log("模式72 测试23 槽位隐藏后slotPool数量不减少：" + test23);
+        Debug.Log("模式72 测试24 再添加Bullet复用原槽位实例：" + test24);
+        Debug.Log("模式72 测试25 pending Bullet不会提前显示：" + test25);
+        Debug.Log("模式72 测试26 模式71 Buff预览回归：" + test26);
+        Debug.Log("模式72 测试27 模式70 Buff网格回归：" + test27);
+        Debug.Log("模式72 测试28 模式69行动槽视觉回归：" + test28);
+        Debug.Log("模式72 测试29 模式66与67卡牌指派回归：" + test29);
+        Debug.Log(
+            "===== BattlePermanentBulletBuffBasic 聚合测试结束 ====="
+        );
+
+        return test1 &&
+            test2 &&
+            test3 &&
+            test4 &&
+            test5 &&
+            test6 &&
+            test7 &&
+            test8 &&
+            test9 &&
+            test10 &&
+            test11 &&
+            test12 &&
+            test13 &&
+            test14 &&
+            test15 &&
+            test16 &&
+            test17 &&
+            test18 &&
+            test19 &&
+            test20 &&
+            test21 &&
+            test22 &&
+            test23 &&
+            test24 &&
+            test25 &&
+            test26 &&
+            test27 &&
+            test28 &&
+            test29;
+    }
+
+    BuffData FindMode72ActiveBuff(
+        CharacterData character,
+        string buffID
+    )
+    {
+        if (character == null || character.buffs == null)
+        {
+            return null;
+        }
+
+        for (int index = 0;
+            index < character.buffs.Count;
+            index++)
+        {
+            BuffData buff = character.buffs[index];
+            if (buff != null &&
+                buff.buffID == buffID &&
+                buff.stack > 0)
+            {
+                return buff;
+            }
+        }
+
+        return null;
+    }
+
+    int CountMode72BuffBatches(
+        CharacterData character,
+        string buffID
+    )
+    {
+        if (character == null || character.buffs == null)
+        {
+            return 0;
+        }
+
+        int count = 0;
+        for (int index = 0;
+            index < character.buffs.Count;
+            index++)
+        {
+            BuffData buff = character.buffs[index];
+            if (buff != null &&
+                buff.buffID == buffID &&
+                buff.stack > 0)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
+    Mode71WrongHierarchyTestResult
+        RunMode71WrongHierarchySubTest()
+    {
+        Mode71WrongHierarchyTestResult result =
+            new Mode71WrongHierarchyTestResult();
+        GameObject rootObject = new GameObject(
+            "Mode71WrongHierarchyBuffGroup",
+            typeof(RectTransform)
+        );
+        rootObject.SetActive(false);
+        RectTransform slotsRoot =
+            rootObject.GetComponent<RectTransform>();
+        BattleBuffGroupUIView group =
+            rootObject.AddComponent<BattleBuffGroupUIView>();
+
+        GameObject templateObject = new GameObject(
+            "BuffTemplate",
+            typeof(RectTransform)
+        );
+        templateObject.transform.SetParent(slotsRoot, false);
+        templateObject.AddComponent<BattleBuffIconUIView>();
+        BattleBuffIconUIView nestedSlot1 =
+            CreateMode70BuffIconView(
+                templateObject.transform,
+                "Buff_1"
+            );
+        BattleBuffIconUIView nestedSlot2 =
+            CreateMode70BuffIconView(
+                templateObject.transform,
+                "Buff_2"
+            );
+        BattleBuffIconBinding[] bindings =
+        {
+            new BattleBuffIconBinding
+            {
+                buffID = "Strength",
+                displayName = "强壮",
+                iconView = nestedSlot1
+            },
+            new BattleBuffIconBinding
+            {
+                buffID = "GuardUp",
+                displayName = "防护",
+                iconView = nestedSlot2
+            }
+        };
+        SetMode64PrivateField(group, "buffBindings", bindings);
+        SetMode64PrivateField(group, "slotsRoot", slotsRoot);
+        SetMode64PrivateField(group, "slotTemplate", null);
+        SetMode64PrivateField(group, "columnsPerRow", 4);
+        SetMode64PrivateField(group, "maxRows", 2);
+        rootObject.SetActive(true);
+
+        CharacterData formalCharacter = new CharacterData(
+            "mode71_wrong_formal",
+            30,
+            1,
+            1
+        );
+        formalCharacter.AddBuff(
+            "Mode71WrongFormalBuff",
+            "正式Buff",
+            "UpBuff",
+            1,
+            2,
+            "TurnEnd",
+            "DurationDown"
+        );
+        BattleBuffGroupDebugPreview preview =
+            rootObject.AddComponent<
+                BattleBuffGroupDebugPreview
+            >();
+        SetMode64PrivateField(
+            preview,
+            "enableRuntimePreview",
+            true
+        );
+        SetMode64PrivateField(
+            preview,
+            "previewBuffCount",
+            9
+        );
+        SetMode64PrivateField(
+            preview,
+            "useIncreasingStacks",
+            true
+        );
+        SetMode64PrivateField(
+            preview,
+            "applyOnStart",
+            false
+        );
+
+        int instanceCountBefore =
+            rootObject.GetComponentsInChildren<
+                BattleBuffIconUIView
+            >(true).Length;
+        int warningCountBefore =
+            group.ConfigurationWarningCount;
+
+        group.SetCharacter(formalCharacter);
+        preview.ApplyPreview();
+        group.SetCharacter(formalCharacter);
+        preview.ApplyPreview();
+
+        int[] previewCounts = { 9, 12, 4, 9 };
+        for (int index = 0;
+            index < previewCounts.Length;
+            index++)
+        {
+            SetMode64PrivateField(
+                preview,
+                "previewBuffCount",
+                previewCounts[index]
+            );
+            preview.ApplyPreview();
+        }
+        for (int iteration = 0; iteration < 10; iteration++)
+        {
+            preview.ApplyPreview();
+        }
+
+        BattleBuffIconUIView[] allViews =
+            rootObject.GetComponentsInChildren<
+                BattleBuffIconUIView
+            >(true);
+        int directIconViewCount = 0;
+        for (int index = 0; index < allViews.Length; index++)
+        {
+            if (allViews[index].transform.parent == slotsRoot)
+            {
+                directIconViewCount++;
+            }
+        }
+
+        result.fixtureDetected =
+            instanceCountBefore == 3 &&
+            directIconViewCount == 1 &&
+            group.RuntimeSlotCount == 0 &&
+            !ContainsMode70RuntimeSlot(group, nestedSlot1) &&
+            !ContainsMode70RuntimeSlot(group, nestedSlot2) &&
+            warningCountBefore > 0;
+        result.repeatedApplyStable =
+            allViews.Length == instanceCountBefore &&
+            group.RuntimeSlotCount == 0 &&
+            group.ConfigurationWarningCount >=
+                warningCountBefore &&
+            HasUniqueMode70ViewInstancesAndNames(allViews);
+
+        Destroy(rootObject);
+        return result;
+    }
+
+    bool HasUniqueMode70RuntimeSlotsAndNames(
+        BattleBuffGroupUIView group
+    )
+    {
+        HashSet<BattleBuffIconUIView> instances =
+            new HashSet<BattleBuffIconUIView>();
+        HashSet<string> names =
+            new HashSet<string>(
+                System.StringComparer.Ordinal
+            );
+        for (int index = 0;
+            index < group.RuntimeSlots.Count;
+            index++)
+        {
+            BattleBuffIconUIView slot =
+                group.RuntimeSlots[index];
+            if (slot == null ||
+                !instances.Add(slot) ||
+                !names.Add(slot.name))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool HasUniqueMode70ViewInstancesAndNames(
+        BattleBuffIconUIView[] views
+    )
+    {
+        HashSet<BattleBuffIconUIView> instances =
+            new HashSet<BattleBuffIconUIView>();
+        HashSet<string> names =
+            new HashSet<string>(
+                System.StringComparer.Ordinal
+            );
+        for (int index = 0; index < views.Length; index++)
+        {
+            BattleBuffIconUIView view = views[index];
+            if (view == null ||
+                !instances.Add(view) ||
+                !names.Add(view.name))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     bool RunMode65HandAssignmentRegressionSubTest()
@@ -6484,7 +10638,7 @@ public class CardLoadTest : MonoBehaviour
             visibleAfterCancel.Contains(sinCard);
     }
 
-    void RunBattleCardClickAssignBasicTestSequence()
+    bool RunBattleCardClickAssignBasicTestSequence()
     {
         Debug.Log("===== BattleCardClickAssignBasic 聚合测试开始 =====");
 
@@ -7141,9 +11295,29 @@ public class CardLoadTest : MonoBehaviour
         Destroy(lifecycleSourceObject);
 
         Debug.Log("===== BattleCardClickAssignBasic 聚合测试结束 =====");
+        return hoverMovedUp &&
+            hoverRootStable &&
+            hoverExitRestored &&
+            test4 &&
+            test5 &&
+            test6 &&
+            test7 &&
+            test8 &&
+            test9 &&
+            test10 &&
+            test11 &&
+            test12 &&
+            test13 &&
+            test14 &&
+            test15 &&
+            test16 &&
+            test17 &&
+            test18 &&
+            test19 &&
+            test20;
     }
 
-    void RunBattleCardClickInteractionIntegrationTestSequence()
+    bool RunBattleCardClickInteractionIntegrationTestSequence()
     {
         Debug.Log(
             "===== BattleCardClickInteractionIntegration 聚合测试开始 ====="
@@ -7267,6 +11441,11 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log(
             "===== BattleCardClickInteractionIntegration 聚合测试结束 ====="
         );
+        return test1 &&
+            test2 &&
+            test3 &&
+            test4 &&
+            test5;
     }
 
     bool RunMode67SelfTargetClickSubTest(
@@ -11814,7 +15993,7 @@ public class CardLoadTest : MonoBehaviour
             result != null &&
             result.isSuccess &&
             bullet != null &&
-            bullet.stack == 3 &&
+            bullet.stack == 6 &&
             bullet.duration == -1 &&
             definitionFound &&
             bullet.buffName == bulletDefinition.buffName &&
@@ -18319,5 +22498,32 @@ public class CardLoadTest : MonoBehaviour
 
         // 执行实际战斗结算
         BattleResolver.TestClash(enemy, enemyAttackCardState, actualAlly, actualAllyCardState);
+    }
+
+    bool RunBattleActionRelationLineBasicTestSequence()
+    {
+        bool coreRelationsPassed = BattleActionRelationMode73Tests.Run();
+        bool test75 = RunBattlePermanentBulletBuffBasicTestSequence();
+        bool test76 = RunBattleBuffInspectorPreviewBasicTestSequence();
+        bool test77 = RunBattleBuffGridLayoutBasicTestSequence();
+        bool test78 = RunBattleActionSlotVisualInteractionBasicTestSequence();
+        bool test79 =
+            RunBattleCardClickAssignBasicTestSequence() &&
+            RunBattleCardClickInteractionIntegrationTestSequence();
+        bool test80 = RunBattleCardHoverAndDragMotionBasicTestSequence();
+
+        Debug.Log("模式73 测试75 模式72永久Bullet回归：" + test75);
+        Debug.Log("模式73 测试76 模式71 Buff预览回归：" + test76);
+        Debug.Log("模式73 测试77 模式70 Buff网格回归：" + test77);
+        Debug.Log("模式73 测试78 模式69行动槽视觉回归：" + test78);
+        Debug.Log("模式73 测试79 模式66与67卡牌指派回归：" + test79);
+        Debug.Log("模式73 测试80 模式65卡牌动效回归：" + test80);
+
+        bool allPassed =
+            coreRelationsPassed &&
+            test75 && test76 && test77 &&
+            test78 && test79 && test80;
+        Debug.Log("模式73 80项聚合结果：" + allPassed);
+        return allPassed;
     }
 }

@@ -352,7 +352,7 @@ MonoBehaviour:
   descriptionText: {fileID: 7229708746003783090}
   cooldownText: {fileID: 0}
   visualStyle: {fileID: 4339292013884297875}
-  motionView: {fileID: 0}
+  motionView: {fileID: 8533283622046652624}
 --- !u!114 &4339292013884297875
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -398,20 +398,18 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleCardMotionUIView
   cardRoot: {fileID: 7258371670874613263}
   visualRoot: {fileID: 5827451055868880756}
-  cardCanvasGroup: {fileID: 6186863987028614888}
   sortingCanvas: {fileID: 6342786782311096433}
-  hoverLiftY: 100
-  hoverScale: 1.15
-  hoverDuration: 0.12
-  returnDuration: 0.1
-  dragScale: 1.05
-  dragFollowSharpness: 22
-  maximumDragTilt: 7
-  dragTiltSharpness: 15
-  dragTiltVelocityMultiplier: 0.02
+  expandedWorldRotationZ: 0
+  hoverLiftY: 450
+  positionSharpness: 13.3886
+  rotationSharpness: 13.3886
+  scaleSharpness: 13.3886
+  positionSnapDistance: 0.1
+  rotationSnapAngle: 0.05
+  scaleSnapDistance: 0.001
   normalSortingOrder: 0
   hoverSortingOrder: 10
-  dragSortingOrder: 20
+  selectedSortingOrder: 20
 --- !u!225 &6186863987028614888
 CanvasGroup:
   m_ObjectHideFlags: 0

@@ -84,6 +84,9 @@ public class BattleActionSlot
     // requestedEnemy = 精确意图或指定敌人放置所针对的敌人
     public CharacterData requestedEnemy;
 
+    // 指定敌人放置时记录玩家点击的敌方UI槽位，仅用于稳定表现该正式放置关系。
+    public int requestedTargetSlotIndex;
+
     // assignmentSequence = 本回合安排顺序，越大表示越晚放置
     public long assignmentSequence;
 
@@ -145,6 +148,9 @@ public class BattleActionSlot
         placementType = BattleActionPlacementType.ExactEnemyIntent;
         requestedEnemyIntent = enemyIntent;
         requestedEnemy = enemyIntent != null ? enemyIntent.enemy : null;
+        requestedTargetSlotIndex = enemyIntent != null
+            ? enemyIntent.enemySlotIndex
+            : 0;
 
         if (assignmentSequence <= 0)
         {
@@ -188,6 +194,7 @@ public class BattleActionSlot
         this.target = target;
         enemyIntent = null;
         requestedEnemyIntent = null;
+        requestedTargetSlotIndex = 0;
 
         if (object.ReferenceEquals(actor, target))
         {
@@ -226,6 +233,7 @@ public class BattleActionSlot
         placementType = BattleActionPlacementType.Self;
         requestedEnemyIntent = null;
         requestedEnemy = null;
+        requestedTargetSlotIndex = 0;
 
         if (assignmentSequence <= 0)
         {
@@ -252,6 +260,7 @@ public class BattleActionSlot
         placementType = BattleActionPlacementType.SpecificEnemy;
         requestedEnemyIntent = null;
         requestedEnemy = enemy;
+        requestedTargetSlotIndex = 0;
 
         if (assignmentSequence <= 0)
         {
@@ -359,6 +368,7 @@ public class BattleActionSlot
         placementType = BattleActionPlacementType.None;
         requestedEnemyIntent = null;
         requestedEnemy = null;
+        requestedTargetSlotIndex = 0;
         assignmentSequence = 0;
         isUsed = false;
         ResetContinuousDodgeState();

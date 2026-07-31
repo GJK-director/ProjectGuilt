@@ -30,6 +30,8 @@ public class BattleSimpleUIController : MonoBehaviour
     [SerializeField] private BattleCharacterStatusUIView enemy02StatusView;
     [SerializeField] private BattleRoundUIView roundView;
     [SerializeField] private BattleGuiltUIView guiltView;
+    [SerializeField]
+    private BattleActionRelationLineController actionRelationLineController;
 
     [SerializeField] private Button assignA1FreeAttackButton;
     [SerializeField] private Button assignA1AbilityButton;
@@ -114,6 +116,8 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         cardInteractionCoordinator =
             new BattleCardInteractionCoordinator(cardSelectionController);
+        cardSelectionController.SelectionChanged +=
+            OnCardSelectionChanged;
     }
 
     void Start()
@@ -127,6 +131,9 @@ public class BattleSimpleUIController : MonoBehaviour
 
     void OnDestroy()
     {
+        cardSelectionController.SelectionChanged -=
+            OnCardSelectionChanged;
+        actionRelationLineController?.ClearAll();
         if (testCardHandView != null)
         {
             testCardHandView.SetSelectionController(null);
@@ -139,7 +146,7 @@ public class BattleSimpleUIController : MonoBehaviour
     void InitializeTestBattleData()
     {
         CreateTestCharacters();
-        AddTestBuffs();
+        ApplyAlly01InitialBuffsFromDefinition();
 
         List<CardTestData> cards = CardDataLoader.LoadCardData();
         if (cards == null)
@@ -169,14 +176,33 @@ public class BattleSimpleUIController : MonoBehaviour
         enemy02 = new CharacterData("敌人2", 50, 5, 8);
     }
 
-    void AddTestBuffs()
+    void ApplyAlly01InitialBuffsFromDefinition()
     {
         if (ally01 == null)
         {
             return;
         }
 
-        ally01.AddBuff("Bullet", "子弹", "AbilityBuff", 6, -1, "None", "Permanent");
+        List<CharacterDefinitionData> definitions =
+            CharacterDefinitionLoader.LoadDefinitions();
+        CharacterDefinitionData ally01Definition =
+            CharacterDefinitionLoader.FindByID(
+                definitions,
+                "ally_001"
+            );
+        if (ally01Definition == null)
+        {
+            Debug.LogWarning(
+                "Simple UI 初始化失败：找不到角色定义 ally_001"
+            );
+            return;
+        }
+
+        // v0.1原型继续手工创建角色；初始Buff已统一走正式Definition与Factory入口。
+        BattleUnitFactory.ApplyInitialBuffs(
+            ally01,
+            ally01Definition.initialBuffs
+        );
     }
 
     void CreateTestBattleCards(List<CardTestData> cards)
@@ -1124,6 +1150,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
         isRunningCompleteTurnCycle = true;
         cardInteractionCoordinator.PrepareForBattleStart();
+        actionRelationLineController?.ClearAll();
         RefreshBattleStartButtonState();
 
         try
@@ -1339,6 +1366,7 @@ public class BattleSimpleUIController : MonoBehaviour
         RefreshFixedStatusViews();
         RefreshCharacterStatusViews();
         RefreshActionSlotIntentViews();
+        RefreshActionRelations();
         RefreshTestCardView();
         RefreshTestCardHandView();
         RefreshBattleStartButtonState();
@@ -1606,6 +1634,7 @@ public class BattleSimpleUIController : MonoBehaviour
         if (cardInteractionCoordinator.SelectSourceSlot(clickedSlotView))
         {
             RefreshTestCardHandView();
+            RefreshCardTargetingPreview();
         }
     }
 
@@ -1663,6 +1692,68 @@ public class BattleSimpleUIController : MonoBehaviour
         }
 
         RefreshView();
+    }
+
+    private void OnCardSelectionChanged(BattleCardUIView selectedCardView)
+    {
+        RefreshCardTargetingPreview();
+    }
+
+    private void RefreshCardTargetingPreview()
+    {
+        if (actionRelationLineController == null)
+        {
+            return;
+        }
+
+        BattleActionSlotUIView sourceSlot =
+            cardInteractionCoordinator != null
+                ? cardInteractionCoordinator.SelectedActionSlotView
+                : null;
+        if (!cardSelectionController.HasSelection ||
+            sourceSlot == null ||
+            !CanEditActionSlots())
+        {
+            actionRelationLineController.EndCardTargetingPreview();
+            return;
+        }
+
+        string sourceSlotID =
+            actionRelationLineController.GetSlotID(sourceSlot);
+        actionRelationLineController.BeginCardTargetingPreview(sourceSlotID);
+    }
+
+    private void RefreshActionRelations()
+    {
+        if (actionRelationLineController == null)
+        {
+            return;
+        }
+
+        actionRelationLineController.BindRuntimeState(runtimeState);
+        RegisterStatusViewRelationSlots(ally01StatusView);
+        RegisterStatusViewRelationSlots(ally02StatusView);
+        RegisterStatusViewRelationSlots(enemy01StatusView);
+        RegisterStatusViewRelationSlots(enemy02StatusView);
+        actionRelationLineController.RefreshRelations();
+        RefreshCardTargetingPreview();
+    }
+
+    private void RegisterStatusViewRelationSlots(
+        BattleCharacterStatusUIView statusView
+    )
+    {
+        if (statusView == null || actionRelationLineController == null)
+        {
+            return;
+        }
+
+        actionRelationLineController.RegisterSlotView(
+            statusView.GetSlotView(0)
+        );
+        actionRelationLineController.RegisterSlotView(
+            statusView.GetSlotView(1)
+        );
     }
 
     private void OnSelfActionTargetClicked(
