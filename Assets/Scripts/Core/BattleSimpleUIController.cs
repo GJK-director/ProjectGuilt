@@ -32,6 +32,7 @@ public class BattleSimpleUIController : MonoBehaviour
     [SerializeField] private BattleGuiltUIView guiltView;
     [SerializeField]
     private BattleActionRelationLineController actionRelationLineController;
+    [SerializeField] private BattleUnitViewSpawner unitViewSpawner;
 
     [SerializeField] private Button assignA1FreeAttackButton;
     [SerializeField] private Button assignA1AbilityButton;
@@ -80,6 +81,7 @@ public class BattleSimpleUIController : MonoBehaviour
     private BattleCardState allyBClashSinCardState;
 
     private BattleCardState enemyAttackCardState;
+    private BattleCardState enemy02AttackCardState;
 
     private const string ActionModeFreeAttack = "FreeAttack";
     private const string ActionModeRespondIntent1 = "RespondIntent1";
@@ -116,6 +118,8 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         cardInteractionCoordinator =
             new BattleCardInteractionCoordinator(cardSelectionController);
+        cardInteractionCoordinator.SourceSlotSelectionChanged +=
+            OnSourceSlotSelectionChanged;
         cardSelectionController.SelectionChanged +=
             OnCardSelectionChanged;
     }
@@ -123,6 +127,7 @@ public class BattleSimpleUIController : MonoBehaviour
     void Start()
     {
         InitializeTestBattleData();
+        SpawnRuntimeUnitViewsOnce();
         BindCharacterStatusSlotInteractions();
         BindCardHandInteractions();
         BindButtonEvents();
@@ -133,13 +138,19 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         cardSelectionController.SelectionChanged -=
             OnCardSelectionChanged;
-        actionRelationLineController?.ClearAll();
+        if (cardInteractionCoordinator != null)
+        {
+            cardInteractionCoordinator.SourceSlotSelectionChanged -=
+                OnSourceSlotSelectionChanged;
+        }
         if (testCardHandView != null)
         {
             testCardHandView.SetSelectionController(null);
         }
 
         cardInteractionCoordinator?.ClearAllSelections();
+        unitViewSpawner?.ClearGeneratedViews();
+        actionRelationLineController?.ClearAll();
         UnbindButtonEvents();
     }
 
@@ -159,7 +170,7 @@ public class BattleSimpleUIController : MonoBehaviour
         CreateTestBattleCards(cards);
 
         runtimeState = new BattleRuntimeState();
-        runtimeState.SetCharacters(ally01, ally02, enemy01);
+        runtimeState.SetCharacters(ally01, ally02, enemy01, enemy02);
         List<BattleActionSlot> initialActionSlots = BattleActionSlotManager.CreatePartyActionSlots(ally01, ally02, 2);
         runtimeState.SetActionSlots(initialActionSlots);
         runtimeState.SetIntentQueue(CreateFixedEnemyIntentQueue(initialActionSlots));
@@ -170,10 +181,18 @@ public class BattleSimpleUIController : MonoBehaviour
 
     void CreateTestCharacters()
     {
-        ally01 = new CharacterData("我方角色A", 30, 20, 20);
-        ally02 = new CharacterData("我方角色B", 30, 3, 5);
-        enemy01 = new CharacterData("敌人", 50, 5, 8);
-        enemy02 = new CharacterData("敌人2", 50, 5, 8);
+        ally01 = new CharacterData(
+            "我方角色A", 30, 20, 20, "ui_ally_01"
+        );
+        ally02 = new CharacterData(
+            "我方角色B", 30, 3, 5, "ui_ally_02"
+        );
+        enemy01 = new CharacterData(
+            "敌人", 50, 5, 8, "ui_enemy_01"
+        );
+        enemy02 = new CharacterData(
+            "敌人2", 50, 5, 8, "ui_enemy_02"
+        );
     }
 
     void ApplyAlly01InitialBuffsFromDefinition()
@@ -219,6 +238,11 @@ public class BattleSimpleUIController : MonoBehaviour
             enemy01,
             enemyCard,
             "ui_enemy_atk_001_copy_0"
+        );
+        enemy02AttackCardState = BattleCardManager.CreateBattleCard(
+            enemy02,
+            enemyCard,
+            "ui_enemy02_atk_001_copy_0"
         );
 
         allyAAttackCardState = BattleCardManager.CreateBattleCard(
@@ -320,11 +344,50 @@ public class BattleSimpleUIController : MonoBehaviour
         return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
     }
 
+    void SpawnRuntimeUnitViewsOnce()
+    {
+        if (unitViewSpawner == null || runtimeState == null)
+        {
+            return;
+        }
+
+        if (!unitViewSpawner.Spawn(runtimeState))
+        {
+            lastLog = "运行时角色表现生成失败，请检查Spawner配置";
+            return;
+        }
+
+        // 动态生成成功后，现有控制器继续复用原StatusView交互和刷新流程。
+        BattleUnitViewHandle ally01Handle =
+            unitViewSpawner.GetHandle(ally01);
+        BattleUnitViewHandle ally02Handle =
+            unitViewSpawner.GetHandle(ally02);
+        BattleUnitViewHandle enemy01Handle =
+            unitViewSpawner.GetHandle(enemy01);
+        BattleUnitViewHandle enemy02Handle =
+            unitViewSpawner.GetHandle(enemy02);
+
+        ally01StatusView = ally01Handle != null
+            ? ally01Handle.StatusView
+            : ally01StatusView;
+        ally02StatusView = ally02Handle != null
+            ? ally02Handle.StatusView
+            : ally02StatusView;
+        enemy01StatusView = enemy01Handle != null
+            ? enemy01Handle.StatusView
+            : enemy01StatusView;
+        enemy02StatusView = enemy02Handle != null
+            ? enemy02Handle.StatusView
+            : enemy02StatusView;
+    }
+
     List<BattleEnemyIntent> CreateFixedEnemyIntentQueue(List<BattleActionSlot> actionSlots)
     {
         return BattleAutomaticTurnCycle.CreateFixedEnemyIntentQueue(
             enemy01,
             enemyAttackCardState,
+            enemy02,
+            enemy02AttackCardState,
             ally01,
             ally02,
             actionSlots
@@ -1160,7 +1223,9 @@ public class BattleSimpleUIController : MonoBehaviour
                 ally01,
                 ally02,
                 enemy01,
-                enemyAttackCardState
+                enemyAttackCardState,
+                enemy02,
+                enemy02AttackCardState
             );
 
             lastLog = result.message;
@@ -1395,6 +1460,12 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void RefreshCharacterStatusViews()
     {
+        if (unitViewSpawner != null && unitViewSpawner.IsSpawned)
+        {
+            unitViewSpawner.RefreshGeneratedViews();
+            return;
+        }
+
         if (ally01StatusView != null)
         {
             ally01StatusView.SetCharacter(ally01);
@@ -1631,6 +1702,33 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        if (object.ReferenceEquals(
+                cardInteractionCoordinator.SelectedActionSlotView,
+                clickedSlotView) &&
+            IsSelectedDefenseOrDodgeCard())
+        {
+            BattleCardInteractionOutcome outcome =
+                cardInteractionCoordinator.ClickSelectedSourceSlotAsSelf(
+                    runtimeState,
+                    clickedSlotView
+                );
+            lastLog = outcome.assignmentResult != null
+                ? outcome.assignmentResult.message
+                : outcome.isSuccess
+                    ? "卡牌点击安排成功"
+                    : "卡牌点击安排失败";
+
+            if (outcome.isSuccess)
+            {
+                RefreshView();
+            }
+            else
+            {
+                SetText(logText, lastLog);
+            }
+            return;
+        }
+
         if (cardInteractionCoordinator.SelectSourceSlot(clickedSlotView))
         {
             RefreshTestCardHandView();
@@ -1699,6 +1797,37 @@ public class BattleSimpleUIController : MonoBehaviour
         RefreshCardTargetingPreview();
     }
 
+    private void OnSourceSlotSelectionChanged(
+        BattleActionSlotUIView selectedSlotView
+    )
+    {
+        if (actionRelationLineController == null)
+        {
+            return;
+        }
+
+        if (selectedSlotView == null)
+        {
+            actionRelationLineController.ClearSelectedSlot();
+        }
+        else
+        {
+            actionRelationLineController.SetSelectedSlot(selectedSlotView);
+        }
+    }
+
+    private bool IsSelectedDefenseOrDodgeCard()
+    {
+        BattleCardUIView cardView = cardSelectionController.SelectedCardView;
+        BattleCardState cardState = cardView != null
+            ? cardView.BoundCardState
+            : null;
+        return cardState != null &&
+            cardState.cardData != null &&
+            (cardState.cardData.cardType == CardType.Defense ||
+             cardState.cardData.cardType == CardType.Dodge);
+    }
+
     private void RefreshCardTargetingPreview()
     {
         if (actionRelationLineController == null)
@@ -1736,6 +1865,13 @@ public class BattleSimpleUIController : MonoBehaviour
         RegisterStatusViewRelationSlots(enemy01StatusView);
         RegisterStatusViewRelationSlots(enemy02StatusView);
         actionRelationLineController.RefreshRelations();
+        if (cardInteractionCoordinator != null &&
+            cardInteractionCoordinator.SelectedActionSlotView != null)
+        {
+            actionRelationLineController.SetSelectedSlot(
+                cardInteractionCoordinator.SelectedActionSlotView
+            );
+        }
         RefreshCardTargetingPreview();
     }
 
@@ -2355,6 +2491,27 @@ public static class BattleAutomaticTurnCycle
         BattleCardState enemyAttackCardState
     )
     {
+        return TryRun(
+            runtimeState,
+            ally01,
+            ally02,
+            enemy01,
+            enemyAttackCardState,
+            null,
+            null
+        );
+    }
+
+    public static BattleAutomaticTurnCycleResult TryRun(
+        BattleRuntimeState runtimeState,
+        CharacterData ally01,
+        CharacterData ally02,
+        CharacterData enemy01,
+        BattleCardState enemyAttackCardState,
+        CharacterData enemy02,
+        BattleCardState enemy02AttackCardState
+    )
+    {
         BattleAutomaticTurnCycleResult result = new BattleAutomaticTurnCycleResult
         {
             startingTurn = runtimeState != null ? runtimeState.currentTurn : 0,
@@ -2443,6 +2600,8 @@ public static class BattleAutomaticTurnCycle
         List<BattleEnemyIntent> newIntentQueue = CreateFixedEnemyIntentQueue(
             enemy01,
             enemyAttackCardState,
+            enemy02,
+            enemy02AttackCardState,
             ally01,
             ally02,
             newActionSlots
@@ -2472,23 +2631,78 @@ public static class BattleAutomaticTurnCycle
         List<BattleActionSlot> actionSlots
     )
     {
-        List<BattleEnemyIntent> intentQueue = new List<BattleEnemyIntent>();
+        return CreateFixedEnemyIntentQueue(
+            enemy01,
+            enemyAttackCardState,
+            null,
+            null,
+            ally01,
+            ally02,
+            actionSlots
+        );
+    }
 
-        if (enemy01 == null ||
-            enemyAttackCardState == null ||
-            enemyAttackCardState.cardData == null)
+    public static List<BattleEnemyIntent> CreateFixedEnemyIntentQueue(
+        CharacterData enemy01,
+        BattleCardState enemy01AttackCardState,
+        CharacterData enemy02,
+        BattleCardState enemy02AttackCardState,
+        CharacterData ally01,
+        CharacterData ally02,
+        List<BattleActionSlot> actionSlots
+    )
+    {
+        List<BattleEnemyIntent> intents = new List<BattleEnemyIntent>();
+        TryAddFixedEnemyIntent(
+            intents,
+            enemy01,
+            enemy01AttackCardState,
+            "Enemy01",
+            ally01,
+            ally02,
+            actionSlots
+        );
+        if (enemy02 != null || enemy02AttackCardState != null)
         {
-            Debug.LogWarning("创建固定敌人意图失败：Enemy01或敌人卡牌数据不完整");
-            return intentQueue;
+            TryAddFixedEnemyIntent(
+                intents,
+                enemy02,
+                enemy02AttackCardState,
+                "Enemy02",
+                ally01,
+                ally02,
+                actionSlots
+            );
         }
+        return BattleEnemyIntentManager.CreateIntentQueue(intents.ToArray());
+    }
 
-        if (enemyAttackCardState.cardData.cardID != FixedEnemyAttackCardID)
+    static bool TryAddFixedEnemyIntent(
+        List<BattleEnemyIntent> intents,
+        CharacterData enemy,
+        BattleCardState attackCardState,
+        string enemyLabel,
+        CharacterData ally01,
+        CharacterData ally02,
+        List<BattleActionSlot> actionSlots
+    )
+    {
+        if (intents == null || enemy == null || attackCardState == null ||
+            attackCardState.cardData == null)
+        {
+            Debug.LogWarning(
+                "创建固定敌人意图失败：" + enemyLabel +
+                "或敌人卡牌数据不完整"
+            );
+            return false;
+        }
+        if (attackCardState.cardData.cardID != FixedEnemyAttackCardID)
         {
             Debug.LogWarning(
                 "创建固定敌人意图失败：固定敌人卡必须是 " +
                 FixedEnemyAttackCardID
             );
-            return intentQueue;
+            return false;
         }
 
         int targetSlotIndex;
@@ -2498,49 +2712,45 @@ public static class BattleAutomaticTurnCycle
             actionSlots,
             out targetSlotIndex
         );
-
         if (target == null)
         {
             Debug.LogWarning("创建固定敌人意图失败：没有可用的存活目标槽位");
-            return intentQueue;
+            return false;
         }
 
         CardEligibilityResult eligibility =
             BattleCardManager.EvaluateCardEligibility(
-                enemy01,
+                enemy,
                 target,
-                enemyAttackCardState
+                attackCardState
             );
-
         if (eligibility == null || !eligibility.isEligible)
         {
             Debug.LogWarning(
-                "固定敌人攻击当前不可用，不生成意图：" +
-                (eligibility != null ? eligibility.failureMessage : "资格检查失败")
+                enemyLabel + "固定攻击当前不可用，不生成意图：" +
+                (eligibility != null
+                    ? eligibility.failureMessage
+                    : "资格检查失败")
             );
-            return intentQueue;
+            return false;
         }
 
-        BattleEnemyIntent enemyIntent = new BattleEnemyIntent(
-            "ui_fixed_enemy_intent_001",
-            enemy01,
-            enemyAttackCardState,
+        int intentOrder = intents.Count + 1;
+        intents.Add(new BattleEnemyIntent(
+            "ui_fixed_enemy_intent_" + intentOrder.ToString("000"),
+            enemy,
+            attackCardState,
             target,
             targetSlotIndex,
-            1,
+            intentOrder,
             1
-        );
-
+        ));
         Debug.Log(
-            "固定敌人意图：Enemy01 使用 " +
-            FixedEnemyAttackCardID +
-            " 攻击 " +
-            target.characterName +
-            " 槽位" +
-            targetSlotIndex
+            "固定敌人意图：" + enemyLabel + " 使用 " +
+            FixedEnemyAttackCardID + " 攻击 " +
+            target.characterName + " 槽位" + targetSlotIndex
         );
-
-        return BattleEnemyIntentManager.CreateIntentQueue(enemyIntent);
+        return true;
     }
 
     public static CharacterData SelectFixedEnemyIntentTarget(

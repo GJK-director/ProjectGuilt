@@ -1,3 +1,5 @@
+using System;
+
 public sealed class BattleCardInteractionOutcome
 {
     public bool hadSelectedCard;
@@ -11,6 +13,8 @@ public sealed class BattleCardInteractionCoordinator
     private readonly BattleCardSelectionController cardSelectionController;
     private CharacterData selectedCharacter;
     private BattleActionSlotUIView selectedActionSlotView;
+
+    public event Action<BattleActionSlotUIView> SourceSlotSelectionChanged;
 
     public BattleCardInteractionCoordinator(
         BattleCardSelectionController selectionController
@@ -50,7 +54,43 @@ public sealed class BattleCardInteractionCoordinator
         selectedCharacter = slotView.BoundCharacter;
         selectedActionSlotView = slotView;
         selectedActionSlotView.SetSelected(true);
+        SourceSlotSelectionChanged?.Invoke(selectedActionSlotView);
         return true;
+    }
+
+    public BattleCardInteractionOutcome ClickSelectedSourceSlotAsSelf(
+        BattleRuntimeState runtimeState,
+        BattleActionSlotUIView clickedSlotView
+    )
+    {
+        BattleCardUIView selectedCardView =
+            cardSelectionController != null
+                ? cardSelectionController.SelectedCardView
+                : null;
+        BattleCardInteractionOutcome outcome =
+            CreateOutcome(selectedCardView);
+
+        if (selectedCardView == null ||
+            clickedSlotView == null ||
+            !object.ReferenceEquals(clickedSlotView, selectedActionSlotView) ||
+            clickedSlotView.IsEnemySlot ||
+            !IsDefenseOrDodge(selectedCardView.BoundCardState))
+        {
+            return outcome;
+        }
+
+        outcome.isSuccess = BattleCardAssignmentRouter.TryAssignToSelf(
+            runtimeState,
+            selectedCharacter,
+            SelectedFormalSlotIndex,
+            selectedCardView.BoundOwner,
+            selectedCardView.BoundCardState,
+            selectedCharacter,
+            out outcome.assignmentResult
+        );
+
+        CompleteSuccessfulAssignment(outcome);
+        return outcome;
     }
 
     public BattleCardInteractionOutcome ClickEnemySlot(
@@ -145,6 +185,7 @@ public sealed class BattleCardInteractionCoordinator
 
         selectedCharacter = null;
         selectedActionSlotView = null;
+        SourceSlotSelectionChanged?.Invoke(null);
     }
 
     private static BattleCardInteractionOutcome CreateOutcome(
@@ -169,6 +210,13 @@ public sealed class BattleCardInteractionCoordinator
         }
 
         cardSelectionController?.ClearSelection();
-        ClearSourceSlot();
+    }
+
+    private static bool IsDefenseOrDodge(BattleCardState cardState)
+    {
+        return cardState != null &&
+            cardState.cardData != null &&
+            (cardState.cardData.cardType == CardType.Defense ||
+             cardState.cardData.cardType == CardType.Dodge);
     }
 }

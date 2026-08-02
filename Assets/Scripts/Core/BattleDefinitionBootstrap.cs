@@ -159,12 +159,31 @@ public static class BattleDefinitionBootstrap
             return BattleDefinitionBootstrapResult.Failure(enemyResult.errorMessage);
         }
 
+        // 固定2+2第一版复用同一敌人定义，但创建独立运行时实例、卡牌和Buff状态。
+        BattleUnitFactoryResult enemy2Result = BattleUnitFactory.CreateEnemy(
+            enemyDefinition,
+            cards,
+            enemyDefinition.enemyID + "_02"
+        );
+
+        if (!enemy2Result.isSuccess)
+        {
+            return BattleDefinitionBootstrapResult.Failure(
+                enemy2Result.errorMessage
+            );
+        }
+
         Dictionary<string, CharacterData> allyByID = new Dictionary<string, CharacterData>();
         allyByID.Add(allyADefinition.characterID, allyAResult.unit);
         allyByID.Add(allyBDefinition.characterID, allyBResult.unit);
 
         BattleRuntimeState runtimeState = new BattleRuntimeState();
-        runtimeState.SetCharacters(allyAResult.unit, allyBResult.unit, enemyResult.unit);
+        runtimeState.SetCharacters(
+            allyAResult.unit,
+            allyBResult.unit,
+            enemyResult.unit,
+            enemy2Result.unit
+        );
         runtimeState.SetActionSlots(BattleActionSlotManager.CreatePartyActionSlots(allyAResult.unit, allyBResult.unit, 2));
 
         BattleDefinitionIntentQueueResult intentResult = CreateIntentQueueForTurn(
@@ -234,75 +253,103 @@ public static class BattleDefinitionBootstrap
 
         string errorMessage;
 
-        if (!ValidateIntentPatternAgainstEnemy(encounterDefinition, runtimeState.enemy, out errorMessage))
+        if (runtimeState.enemyUnits == null ||
+            runtimeState.enemyUnits.Count < 2)
         {
-            return BattleDefinitionIntentQueueResult.Failure(errorMessage);
+            return BattleDefinitionIntentQueueResult.Failure(
+                "创建敌人意图失败：固定2+2战斗缺少两名正式敌人"
+            );
         }
 
         List<BattleEnemyIntent> intents = new List<BattleEnemyIntent>();
-        HashSet<int> usedEnemyCardIndexes = new HashSet<int>();
 
-        foreach (EnemyIntentDefinitionData intentDefinition in encounterDefinition.intentPattern)
+        for (int enemyIndex = 0;
+            enemyIndex < runtimeState.enemyUnits.Count;
+            enemyIndex++)
         {
-            // 一个敌人BattleCardState在同一回合最多绑定一个意图。
-            // enemyCardIndex使用从1开始的JSON编号。
-            int enemyCardIndex = intentDefinition.enemyCardIndex;
-
-            if (usedEnemyCardIndexes.Contains(enemyCardIndex))
+            CharacterData enemyUnit = runtimeState.enemyUnits[enemyIndex];
+            if (!ValidateIntentPatternAgainstEnemy(
+                    encounterDefinition,
+                    enemyUnit,
+                    out errorMessage))
             {
-                return BattleDefinitionIntentQueueResult.Failure("创建敌人意图失败：同一回合重复使用 enemyCardIndex " + enemyCardIndex);
+                return BattleDefinitionIntentQueueResult.Failure(errorMessage);
             }
 
-            usedEnemyCardIndexes.Add(enemyCardIndex);
-
-            BattleCardState enemyCardState = runtimeState.enemy.battleCards[enemyCardIndex - 1];
-            CharacterData targetCharacter;
-            int targetSlotIndex;
-
-            if (!TryResolveTarget(
-                runtimeState,
-                encounterDefinition,
-                allyByID,
-                intentDefinition,
-                out targetCharacter,
-                out targetSlotIndex,
-                result.warningMessages
-            ))
+            HashSet<int> usedEnemyCardIndexes = new HashSet<int>();
+            int enemySlotIndex = 0;
+            foreach (EnemyIntentDefinitionData intentDefinition in
+                encounterDefinition.intentPattern)
             {
-                continue;
+                enemySlotIndex++;
+                // 每名敌人的同一BattleCardState在一回合最多绑定一个意图。
+                int enemyCardIndex = intentDefinition.enemyCardIndex;
+
+                if (usedEnemyCardIndexes.Contains(enemyCardIndex))
+                {
+                    return BattleDefinitionIntentQueueResult.Failure(
+                        "创建敌人意图失败：同一敌人同一回合重复使用 enemyCardIndex " +
+                        enemyCardIndex
+                    );
+                }
+
+                usedEnemyCardIndexes.Add(enemyCardIndex);
+
+                BattleCardState enemyCardState =
+                    enemyUnit.battleCards[enemyCardIndex - 1];
+                CharacterData targetCharacter;
+                int targetSlotIndex;
+
+                if (!TryResolveTarget(
+                    runtimeState,
+                    encounterDefinition,
+                    allyByID,
+                    intentDefinition,
+                    out targetCharacter,
+                    out targetSlotIndex,
+                    result.warningMessages
+                ))
+                {
+                    continue;
+                }
+
+                CardEligibilityResult eligibility =
+                    BattleCardManager.EvaluateCardEligibility(
+                        enemyUnit,
+                        targetCharacter,
+                        enemyCardState
+                    );
+
+                if (!eligibility.isEligible)
+                {
+                    string warningMessage =
+                        "敌人意图跳过：敌人 " +
+                        enemyUnit.runtimeUnitID +
+                        " 的卡牌 " +
+                        enemyCardState.GetCardName() +
+                        " 当前不可用，原因：" +
+                        eligibility.failureMessage;
+
+                    result.warningMessages.Add(warningMessage);
+                    Debug.LogWarning(warningMessage);
+                    continue;
+                }
+
+                int intentOrder = intents.Count + 1;
+                BattleEnemyIntent intent = new BattleEnemyIntent(
+                    encounterDefinition.encounterID +
+                        "_enemy_" + (enemyIndex + 1) +
+                        "_intent_" + intentOrder,
+                    enemyUnit,
+                    enemyCardState,
+                    targetCharacter,
+                    targetSlotIndex,
+                    intentOrder,
+                    enemySlotIndex
+                );
+
+                intents.Add(intent);
             }
-
-            CardEligibilityResult eligibility = BattleCardManager.EvaluateCardEligibility(
-                runtimeState.enemy,
-                targetCharacter,
-                enemyCardState
-            );
-
-            if (!eligibility.isEligible)
-            {
-                string warningMessage =
-                    "敌人意图跳过：敌人卡牌 " +
-                    enemyCardState.GetCardName() +
-                    " 当前不可用，原因：" +
-                    eligibility.failureMessage;
-
-                result.warningMessages.Add(warningMessage);
-                Debug.LogWarning(warningMessage);
-                continue;
-            }
-
-            int intentOrder = intents.Count + 1;
-
-            BattleEnemyIntent intent = new BattleEnemyIntent(
-                encounterDefinition.encounterID + "_intent_" + intentOrder,
-                runtimeState.enemy,
-                enemyCardState,
-                targetCharacter,
-                targetSlotIndex,
-                intentOrder
-            );
-
-            intents.Add(intent);
         }
 
         result.intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intents.ToArray());

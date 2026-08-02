@@ -7,8 +7,13 @@ using UnityEngine;
 // 用来保存角色的血量、速度、身上的状态等信息
 public class CharacterData
 {
+    private static int nextGeneratedRuntimeUnitID = 1;
+
     //角色名称characterName
     public string characterName;
+
+    // runtimeUnitID = 本场运行时单位的唯一标识，不使用角色定义ID代替可变实例。
+    public string runtimeUnitID { get; private set; }
     
     public int maxHP;
     //currentHP当前hp
@@ -63,9 +68,33 @@ public class CharacterData
     // 如果只传一个速度，就让最低速度和最高速度都等于它
 
     // 新版构造函数：速度范围
-    public CharacterData(string name, int hp, int characterMinSpeed, int characterMaxSpeed)
+    public CharacterData(
+        string name,
+        int hp,
+        int characterMinSpeed,
+        int characterMaxSpeed
+    ) : this(
+        name,
+        hp,
+        characterMinSpeed,
+        characterMaxSpeed,
+        null
+    )
+    {
+    }
+
+    public CharacterData(
+        string name,
+        int hp,
+        int characterMinSpeed,
+        int characterMaxSpeed,
+        string explicitRuntimeUnitID
+    )
     {
         characterName = name;
+        runtimeUnitID = string.IsNullOrEmpty(explicitRuntimeUnitID)
+            ? "runtime_unit_" + nextGeneratedRuntimeUnitID++
+            : explicitRuntimeUnitID;
         maxHP = hp;
         currentHP = hp;
 

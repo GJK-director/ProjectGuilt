@@ -32,6 +32,19 @@ public static class BattleUnitFactory
     // Factory先完成跨文件引用校验，再创建运行时对象，避免cardID或buffID错误时留下半完成角色。
     public static BattleUnitFactoryResult CreatePlayer(CharacterDefinitionData definition, List<CardTestData> cards)
     {
+        return CreatePlayer(
+            definition,
+            cards,
+            definition != null ? definition.characterID : null
+        );
+    }
+
+    public static BattleUnitFactoryResult CreatePlayer(
+        CharacterDefinitionData definition,
+        List<CardTestData> cards,
+        string runtimeUnitID
+    )
+    {
         if (definition == null)
         {
             return BattleUnitFactoryResult.Failure("角色定义为空");
@@ -59,10 +72,11 @@ public static class BattleUnitFactory
             definition.characterName,
             definition.maxHP,
             definition.minSpeed,
-            definition.maxSpeed
+            definition.maxSpeed,
+            runtimeUnitID
         );
 
-        CreateBattleCards(unit, definition.characterID, resolvedCards);
+        CreateBattleCards(unit, runtimeUnitID, resolvedCards);
         ApplyInitialBuffs(unit, definition.initialBuffs);
 
         return BattleUnitFactoryResult.Success(unit);
@@ -70,6 +84,19 @@ public static class BattleUnitFactory
 
     // Factory先完成跨文件引用校验，再创建运行时对象，避免cardID或buffID错误时留下半完成角色。
     public static BattleUnitFactoryResult CreateEnemy(EnemyDefinitionData definition, List<CardTestData> cards)
+    {
+        return CreateEnemy(
+            definition,
+            cards,
+            definition != null ? definition.enemyID : null
+        );
+    }
+
+    public static BattleUnitFactoryResult CreateEnemy(
+        EnemyDefinitionData definition,
+        List<CardTestData> cards,
+        string runtimeUnitID
+    )
     {
         if (definition == null)
         {
@@ -93,10 +120,11 @@ public static class BattleUnitFactory
             definition.enemyName,
             definition.maxHP,
             definition.minSpeed,
-            definition.maxSpeed
+            definition.maxSpeed,
+            runtimeUnitID
         );
 
-        CreateBattleCards(unit, definition.enemyID, resolvedCards);
+        CreateBattleCards(unit, runtimeUnitID, resolvedCards);
         ApplyInitialBuffs(unit, definition.initialBuffs);
 
         return BattleUnitFactoryResult.Success(unit);

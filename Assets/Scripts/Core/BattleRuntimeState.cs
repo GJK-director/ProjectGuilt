@@ -17,6 +17,11 @@ public class BattleRuntimeState
     public CharacterData allyA;
     public CharacterData allyB;
     public CharacterData enemy;
+    public CharacterData enemy2;
+
+    // 固定2+2第一版的阵营集合。旧字段继续代表A/B与第一名敌人。
+    public List<CharacterData> allyUnits;
+    public List<CharacterData> enemyUnits;
 
     // battleUnits = 当前战斗中的全部角色。
     public List<CharacterData> battleUnits;
@@ -49,6 +54,8 @@ public class BattleRuntimeState
     public BattleRuntimeState()
     {
         battleUnits = new List<CharacterData>();
+        allyUnits = new List<CharacterData>();
+        enemyUnits = new List<CharacterData>();
         actionSlots = new List<BattleActionSlot>();
         intentQueue = new List<BattleEnemyIntent>();
         currentExecutionPlan = null;
@@ -61,20 +68,49 @@ public class BattleRuntimeState
     // SetCharacters = 设置当前战斗主要角色，并重建 battleUnits。
     public void SetCharacters(CharacterData allyA, CharacterData allyB, CharacterData enemy)
     {
+        SetCharacters(allyA, allyB, enemy, null);
+    }
+
+    public void SetCharacters(
+        CharacterData allyA,
+        CharacterData allyB,
+        CharacterData enemy,
+        CharacterData enemy2
+    )
+    {
         UnbindSharedGuiltFromCurrentAllies();
 
         this.allyA = allyA;
         this.allyB = allyB;
         this.enemy = enemy;
+        this.enemy2 = enemy2;
 
         BindSharedGuiltToAlly(allyA);
         BindSharedGuiltToAlly(allyB);
 
         battleUnits.Clear();
+        allyUnits.Clear();
+        enemyUnits.Clear();
 
-        AddUnitIfNotNull(allyA);
-        AddUnitIfNotNull(allyB);
-        AddUnitIfNotNull(enemy);
+        AddUnitIfNotNull(allyUnits, allyA);
+        AddUnitIfNotNull(allyUnits, allyB);
+        AddUnitIfNotNull(enemyUnits, enemy);
+        AddUnitIfNotNull(enemyUnits, enemy2);
+
+        AddUnitIfNotNull(battleUnits, allyA);
+        AddUnitIfNotNull(battleUnits, allyB);
+        AddUnitIfNotNull(battleUnits, enemy);
+        AddUnitIfNotNull(battleUnits, enemy2);
+    }
+
+    public bool ContainsEnemy(CharacterData character)
+    {
+        return GetCharacterReferenceIndex(enemyUnits, character) >= 0;
+    }
+
+    public int GetEnemyIndex(CharacterData character)
+    {
+        return GetCharacterReferenceIndex(enemyUnits, character);
     }
 
     // AddGuilt = 增加本场战斗的公共负罪感。
@@ -275,11 +311,26 @@ public class BattleRuntimeState
     {
         List<CharacterData> participants = new List<CharacterData>();
 
-        AddLivingTurnParticipant(participants, allyA);
-        AddLivingTurnParticipant(participants, allyB);
-        AddLivingTurnParticipant(participants, enemy);
+        AddLivingTurnParticipants(participants, allyUnits);
+        AddLivingTurnParticipants(participants, enemyUnits);
 
         return participants;
+    }
+
+    void AddLivingTurnParticipants(
+        List<CharacterData> participants,
+        List<CharacterData> characters
+    )
+    {
+        if (characters == null)
+        {
+            return;
+        }
+
+        foreach (CharacterData character in characters)
+        {
+            AddLivingTurnParticipant(participants, character);
+        }
     }
 
     void AddLivingTurnParticipant(List<CharacterData> participants, CharacterData character)
@@ -327,7 +378,7 @@ public class BattleRuntimeState
         bool allyADead = allyA != null && allyA.IsDead();
         bool allyBDead = allyB != null && allyB.IsDead();
         bool playerAllDead = allyADead && allyBDead;
-        bool enemyDead = enemy != null && enemy.IsDead();
+        bool allEnemiesDead = AreAllRegisteredUnitsDead(enemyUnits);
 
         if (playerAllDead)
         {
@@ -335,7 +386,7 @@ public class BattleRuntimeState
             return battleResult;
         }
 
-        if (enemyDead)
+        if (allEnemiesDead)
         {
             SetBattleEnded(BattleResult.Victory);
             return battleResult;
@@ -363,6 +414,9 @@ public class BattleRuntimeState
         Debug.Log("allyA：" + GetCharacterSummary(allyA));
         Debug.Log("allyB：" + GetCharacterSummary(allyB));
         Debug.Log("enemy：" + GetCharacterSummary(enemy));
+        Debug.Log("enemy2：" + GetCharacterSummary(enemy2));
+        Debug.Log("allyUnits 数量：" + GetListCount(allyUnits));
+        Debug.Log("enemyUnits 数量：" + GetListCount(enemyUnits));
         Debug.Log("battleUnits 数量：" + GetListCount(battleUnits));
         Debug.Log("actionSlots 数量：" + GetListCount(actionSlots));
         Debug.Log("intentQueue 数量：" + GetListCount(intentQueue));
@@ -379,12 +433,58 @@ public class BattleRuntimeState
         }
     }
 
-    void AddUnitIfNotNull(CharacterData unit)
+    void AddUnitIfNotNull(List<CharacterData> units, CharacterData unit)
     {
-        if (unit != null)
+        if (units != null && unit != null)
         {
-            battleUnits.Add(unit);
+            units.Add(unit);
         }
+    }
+
+    bool AreAllRegisteredUnitsDead(List<CharacterData> units)
+    {
+        if (units == null || units.Count == 0)
+        {
+            return false;
+        }
+
+        bool foundUnit = false;
+        foreach (CharacterData unit in units)
+        {
+            if (unit == null)
+            {
+                continue;
+            }
+
+            foundUnit = true;
+            if (!unit.IsDead())
+            {
+                return false;
+            }
+        }
+
+        return foundUnit;
+    }
+
+    int GetCharacterReferenceIndex(
+        List<CharacterData> units,
+        CharacterData target
+    )
+    {
+        if (units == null || target == null)
+        {
+            return -1;
+        }
+
+        for (int index = 0; index < units.Count; index++)
+        {
+            if (object.ReferenceEquals(units[index], target))
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     void BindSharedGuiltToAlly(CharacterData ally)

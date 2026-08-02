@@ -1605,8 +1605,7 @@ public static class BattleActionSlotManager
             return false;
         }
 
-        return object.ReferenceEquals(runtimeState.enemy, enemy) ||
-            (runtimeState.battleUnits != null && ContainsCharacterReference(runtimeState.battleUnits, enemy));
+        return runtimeState.ContainsEnemy(enemy);
     }
 
     static bool ContainsCharacterReference(List<CharacterData> characters, CharacterData target)

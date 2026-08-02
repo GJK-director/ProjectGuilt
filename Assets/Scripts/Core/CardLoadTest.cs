@@ -57,7 +57,9 @@ public enum BattleTestMode
     BattleBuffGridLayoutBasic = 70,
     BattleBuffInspectorPreviewBasic = 71,
     BattlePermanentBulletBuffBasic = 72,
-    BattleActionRelationLineBasic = 73
+    BattleActionRelationLineBasic = 73,
+    BattleCharacterStatusWorldFollowBasic = 74,
+    BattleActionRelationInteractionFix = 75
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -342,6 +344,18 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleActionRelationLineBasic)
         {
             RunBattleActionRelationLineBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCharacterStatusWorldFollowBasic)
+        {
+            RunBattleCharacterStatusWorldFollowBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleActionRelationInteractionFix)
+        {
+            RunBattleActionRelationInteractionFixTestSequence();
             return;
         }
 
@@ -10878,9 +10892,15 @@ public class CardLoadTest : MonoBehaviour
             );
         bool test11 =
             !assignSelection.HasSelection &&
-            assignCoordinator.SelectedCharacter == null &&
-            assignCoordinator.SelectedActionSlotView == null &&
-            !sourceSlotView.IsSelected;
+            object.ReferenceEquals(
+                assignCoordinator.SelectedCharacter,
+                assignContext.allyA
+            ) &&
+            object.ReferenceEquals(
+                assignCoordinator.SelectedActionSlotView,
+                sourceSlotView
+            ) &&
+            sourceSlotView.IsSelected;
 
         BattleExecutionPlan executionPlan =
             BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
@@ -11265,7 +11285,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("模式66 测试8 CD卡可Hover但不可选择：" + test8);
         Debug.Log("模式66 测试9 无选中卡时点击敌方槽位不安排：" + test9);
         Debug.Log("模式66 测试10 选卡后点击合法敌方槽位成功指派：" + test10);
-        Debug.Log("模式66 测试11 指派成功后清除选择：" + test11);
+        Debug.Log("模式66 测试11 指派成功后清卡牌并保留槽位选择：" + test11);
         Debug.Log("模式66 测试12 非法目标不指派并保留选择：" + test12);
         Debug.Log("模式66 测试13 敌方空槽沿用原SpecificEnemy规则：" + test13);
         Debug.Log("模式66 测试14 替换与取消逻辑继续通过：" + test14);
@@ -11566,9 +11586,15 @@ public class CardLoadTest : MonoBehaviour
                     cardState
                 ) &&
                 !selectionController.HasSelection &&
-                coordinator.SelectedCharacter == null &&
-                coordinator.SelectedActionSlotView == null &&
-                !sourceView.IsSelected;
+                object.ReferenceEquals(
+                    coordinator.SelectedCharacter,
+                    context.allyA
+                ) &&
+                object.ReferenceEquals(
+                    coordinator.SelectedActionSlotView,
+                    sourceView
+                ) &&
+                sourceView.IsSelected;
         }
         else
         {
@@ -14462,14 +14488,20 @@ public class CardLoadTest : MonoBehaviour
             replacementOutcome.assignmentResult != null &&
             replacementOutcome.assignmentResult.isSuccess;
         slotView.SetState(BattleActionSlotUIState.AllyActionSet);
-        bool successfulReplacementClearsSelection =
+        bool successfulReplacementKeepsSlotSelection =
             sourceAssigned &&
             replacementSourceSelected &&
             replacementSucceeded &&
-            !slotView.IsSelected &&
+            slotView.IsSelected &&
             slotView.CurrentBaseState == BattleActionSlotUIState.AllyActionSet &&
-            coordinator.SelectedCharacter == null &&
-            coordinator.SelectedActionSlotView == null &&
+            object.ReferenceEquals(
+                coordinator.SelectedCharacter,
+                cancelContext.allyA
+            ) &&
+            object.ReferenceEquals(
+                coordinator.SelectedActionSlotView,
+                slotView
+            ) &&
             !clickSelection.HasSelection &&
             object.ReferenceEquals(
                 BattleActionSlotManager.GetSlot(
@@ -14540,8 +14572,8 @@ public class CardLoadTest : MonoBehaviour
             1,
             replacementDefense,
             "业务安排立即成功 expected=True actual=" + replacementSucceeded,
-            "成功后逻辑选择清空 expected=True actual=" +
-                successfulReplacementClearsSelection,
+            "成功后卡牌选择清空且槽位选择保留 expected=True actual=" +
+                successfulReplacementKeepsSlotSelection,
             "失败后逻辑选择保留 expected=True actual=" +
                 failedReplacementKeepsSelection
         );
@@ -14549,15 +14581,15 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("模式60 测试11 enemySlotIndex 2映射到UI索引1：" + enemySlotMapping);
         Debug.Log("模式60 测试12 UI索引0使用正式槽位1执行右键取消：" + formalIndexCancel);
         Debug.Log(
-            "模式60 测试13 安排成功清除选择且失败保持选择：" +
+            "模式60 测试13 安排成功保留槽位选择且失败保持选择：" +
             (assignedNotSelected &&
              clickedAssignedSlotSelected &&
-             successfulReplacementClearsSelection &&
+             successfulReplacementKeepsSlotSelection &&
              failedReplacementKeepsSelection)
         );
         Debug.Log(
-            "模式60 测试14 点击指派成功立即清理且失败保留选择：" +
-            (successfulReplacementClearsSelection &&
+            "模式60 测试14 点击指派成功清卡牌并保留槽位：" +
+            (successfulReplacementKeepsSlotSelection &&
              failedReplacementKeepsSelection)
         );
         Destroy(replacementView.gameObject);
@@ -15904,17 +15936,25 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
         CharacterData enemyUnit = result != null && result.runtimeState != null ? result.runtimeState.enemy : null;
+        CharacterData enemyUnit2 = result != null && result.runtimeState != null ? result.runtimeState.enemy2 : null;
 
         bool enemyCreated =
             result != null &&
             result.isSuccess &&
             enemyUnit != null &&
+            enemyUnit2 != null &&
+            !object.ReferenceEquals(enemyUnit, enemyUnit2) &&
+            enemyUnit.runtimeUnitID != enemyUnit2.runtimeUnitID &&
             enemyUnit.characterName == result.enemyDefinition.enemyName &&
+            enemyUnit2.characterName == result.enemyDefinition.enemyName &&
             enemyUnit.maxHP == result.enemyDefinition.maxHP &&
+            enemyUnit2.maxHP == result.enemyDefinition.maxHP &&
             enemyUnit.minSpeed == result.enemyDefinition.minSpeed &&
-            enemyUnit.maxSpeed == result.enemyDefinition.maxSpeed;
+            enemyUnit.maxSpeed == result.enemyDefinition.maxSpeed &&
+            enemyUnit2.minSpeed == result.enemyDefinition.minSpeed &&
+            enemyUnit2.maxSpeed == result.enemyDefinition.maxSpeed;
 
-        Debug.Log("模式56 D 敌人按JSON名称HP速度创建：" + enemyCreated);
+        Debug.Log("模式56 D 两名敌人按同一JSON定义创建且实例独立：" + enemyCreated);
     }
 
     void RunBattleDefinitionDataRuntimeBaseStateSubTest()
@@ -15923,13 +15963,15 @@ public class CardLoadTest : MonoBehaviour
         CharacterData allyAUnit = result != null && result.runtimeState != null ? result.runtimeState.allyA : null;
         CharacterData allyBUnit = result != null && result.runtimeState != null ? result.runtimeState.allyB : null;
         CharacterData enemyUnit = result != null && result.runtimeState != null ? result.runtimeState.enemy : null;
+        CharacterData enemyUnit2 = result != null && result.runtimeState != null ? result.runtimeState.enemy2 : null;
 
         bool baseState =
             result != null &&
             result.isSuccess &&
             IsRuntimeBaseState(allyAUnit) &&
             IsRuntimeBaseState(allyBUnit) &&
-            IsRuntimeBaseState(enemyUnit);
+            IsRuntimeBaseState(enemyUnit) &&
+            IsRuntimeBaseState(enemyUnit2);
 
         Debug.Log("模式56 E 角色运行时HP负罪感速度初始状态正确：" + baseState);
     }
@@ -16008,6 +16050,7 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
         CharacterData enemyUnit = result != null && result.runtimeState != null ? result.runtimeState.enemy : null;
+        CharacterData enemyUnit2 = result != null && result.runtimeState != null ? result.runtimeState.enemy2 : null;
 
         bool enemyCards =
             result != null &&
@@ -16020,9 +16063,22 @@ public class CardLoadTest : MonoBehaviour
             enemyUnit.battleCards[0].instanceID == "enemy_001_enemy_atk_001_copy_0" &&
             enemyUnit.battleCards[1].instanceID == "enemy_001_enemy_atk_001_copy_1" &&
             enemyUnit.battleCards[0].owner == enemyUnit &&
-            enemyUnit.battleCards[1].owner == enemyUnit;
+            enemyUnit.battleCards[1].owner == enemyUnit &&
+            enemyUnit2 != null &&
+            enemyUnit2.battleCards != null &&
+            enemyUnit2.battleCards.Count == 2 &&
+            enemyUnit2.battleCards[0].instanceID ==
+                "enemy_001_02_enemy_atk_001_copy_0" &&
+            enemyUnit2.battleCards[1].instanceID ==
+                "enemy_001_02_enemy_atk_001_copy_1" &&
+            enemyUnit2.battleCards[0].owner == enemyUnit2 &&
+            enemyUnit2.battleCards[1].owner == enemyUnit2 &&
+            !object.ReferenceEquals(
+                enemyUnit.battleCards[0],
+                enemyUnit2.battleCards[0]
+            );
 
-        Debug.Log("模式56 I 敌人重复卡牌按实例列表创建且互相独立：" + enemyCards);
+        Debug.Log("模式56 I 两名敌人卡牌实例与owner彼此独立：" + enemyCards);
     }
 
     void RunBattleDefinitionDataActionSlotsSubTest()
@@ -16049,18 +16105,30 @@ public class CardLoadTest : MonoBehaviour
         BattleEnemyIntent intent = runtimeState != null && runtimeState.intentQueue != null && runtimeState.intentQueue.Count > 0
             ? runtimeState.intentQueue[0]
             : null;
+        BattleEnemyIntent intent2 = runtimeState != null && runtimeState.intentQueue != null && runtimeState.intentQueue.Count > 1
+            ? runtimeState.intentQueue[1]
+            : null;
 
         bool intents =
             runtimeState != null &&
             runtimeState.intentQueue != null &&
-            runtimeState.intentQueue.Count == result.encounterDefinition.intentPattern.Length &&
+            runtimeState.intentQueue.Count ==
+                result.encounterDefinition.intentPattern.Length * 2 &&
             intent != null &&
+            intent2 != null &&
             intent.intentOrder == 1 &&
+            intent2.intentOrder == 2 &&
+            intent.enemySlotIndex == 1 &&
+            intent2.enemySlotIndex == 1 &&
             intent.enemy == runtimeState.enemy &&
             intent.enemyCardState == runtimeState.enemy.battleCards[0] &&
-            !intent.isResponded;
+            intent2.enemy == runtimeState.enemy2 &&
+            intent2.enemyCardState == runtimeState.enemy2.battleCards[0] &&
+            !object.ReferenceEquals(intent.enemy, intent2.enemy) &&
+            !intent.isResponded &&
+            !intent2.isResponded;
 
-        Debug.Log("模式56 K 敌人意图从真实pattern生成且intentOrder连续：" + intents);
+        Debug.Log("模式56 K 两名敌人分别从真实pattern生成独立意图：" + intents);
     }
 
     void RunBattleDefinitionDataTargetMappingSubTest()
@@ -16070,14 +16138,23 @@ public class CardLoadTest : MonoBehaviour
         BattleEnemyIntent intent = runtimeState != null && runtimeState.intentQueue != null && runtimeState.intentQueue.Count > 0
             ? runtimeState.intentQueue[0]
             : null;
+        BattleEnemyIntent intent2 = runtimeState != null && runtimeState.intentQueue != null && runtimeState.intentQueue.Count > 1
+            ? runtimeState.intentQueue[1]
+            : null;
 
         bool targetMapping =
             intent != null &&
+            intent2 != null &&
             intent.originalTargetCharacter == runtimeState.allyB &&
             intent.actualTargetCharacter == runtimeState.allyB &&
             intent.originalTargetSlotIndex == 1 &&
             intent.actualTargetSlotIndex == 1 &&
-            !intent.isResponded;
+            intent2.originalTargetCharacter == runtimeState.allyB &&
+            intent2.actualTargetCharacter == runtimeState.allyB &&
+            intent2.originalTargetSlotIndex == 1 &&
+            intent2.actualTargetSlotIndex == 1 &&
+            !intent.isResponded &&
+            !intent2.isResponded;
 
         Debug.Log("模式56 L FixedCharacterSlot目标映射到ally_002槽位1：" + targetMapping);
     }
@@ -16090,11 +16167,15 @@ public class CardLoadTest : MonoBehaviour
         bool runtime =
             runtimeState != null &&
             runtimeState.battleUnits != null &&
-            runtimeState.battleUnits.Count == 3 &&
+            runtimeState.battleUnits.Count == 4 &&
+            runtimeState.allyUnits != null &&
+            runtimeState.allyUnits.Count == 2 &&
+            runtimeState.enemyUnits != null &&
+            runtimeState.enemyUnits.Count == 2 &&
             runtimeState.actionSlots != null &&
             runtimeState.actionSlots.Count == 4 &&
             runtimeState.intentQueue != null &&
-            runtimeState.intentQueue.Count == 1 &&
+            runtimeState.intentQueue.Count == 2 &&
             runtimeState.currentExecutionPlan == null &&
             runtimeState.currentTurn == 1 &&
             runtimeState.battleResult == BattleResult.None &&
@@ -16123,15 +16204,23 @@ public class CardLoadTest : MonoBehaviour
         BattleEnemyIntent intent = intentResult != null && intentResult.intentQueue != null && intentResult.intentQueue.Count > 0
             ? intentResult.intentQueue[0]
             : null;
+        BattleEnemyIntent intent2 = intentResult != null && intentResult.intentQueue != null && intentResult.intentQueue.Count > 1
+            ? intentResult.intentQueue[1]
+            : null;
 
         bool fallback =
             intentResult != null &&
             intentResult.isSuccess &&
             intent != null &&
+            intent2 != null &&
             intent.originalTargetCharacter == result.runtimeState.allyA &&
             intent.actualTargetCharacter == result.runtimeState.allyA &&
             intent.originalTargetSlotIndex == 1 &&
-            intent.actualTargetSlotIndex == 1;
+            intent.actualTargetSlotIndex == 1 &&
+            intent2.originalTargetCharacter == result.runtimeState.allyA &&
+            intent2.actualTargetCharacter == result.runtimeState.allyA &&
+            intent2.originalTargetSlotIndex == 1 &&
+            intent2.actualTargetSlotIndex == 1;
 
         Debug.Log("模式56 N 固定死亡目标在意图创建时回落到第一存活角色：" + fallback);
     }
@@ -16140,10 +16229,15 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
         BattleCardState enemyCard = result != null && result.runtimeState != null ? result.runtimeState.enemy.battleCards[0] : null;
+        BattleCardState enemyCard2 = result != null && result.runtimeState != null ? result.runtimeState.enemy2.battleCards[0] : null;
 
         if (enemyCard != null)
         {
             enemyCard.currentCooldown = 2;
+        }
+        if (enemyCard2 != null)
+        {
+            enemyCard2.currentCooldown = 2;
         }
 
         BattleDefinitionIntentQueueResult intentResult = BattleDefinitionBootstrap.CreateIntentQueueForTurn(
@@ -16162,11 +16256,15 @@ public class CardLoadTest : MonoBehaviour
             intentResult.warningMessages != null &&
             intentResult.warningMessages.Count > 0 &&
             enemyCard != null &&
+            enemyCard2 != null &&
             enemyCard.currentCooldown == 2 &&
+            enemyCard2.currentCooldown == 2 &&
             enemyCard.currentUseCount == 0 &&
-            !enemyCard.isConsumed;
+            enemyCard2.currentUseCount == 0 &&
+            !enemyCard.isConsumed &&
+            !enemyCard2.isConsumed;
 
-        Debug.Log("模式56 O 敌人卡CD阻止意图创建且不改卡状态：" + skipped);
+        Debug.Log("模式56 O 两名敌人卡CD阻止意图创建且不改卡状态：" + skipped);
     }
 
     void RunBattleDefinitionDataDuplicateEnemyCardIndexFailSubTest()
@@ -22525,5 +22623,37 @@ public class CardLoadTest : MonoBehaviour
             test78 && test79 && test80;
         Debug.Log("模式73 80项聚合结果：" + allPassed);
         return allPassed;
+    }
+
+    bool RunBattleCharacterStatusWorldFollowBasicTestSequence()
+    {
+        bool followerTestsPassed =
+            BattleCharacterStatusWorldFollowMode74Tests.Run();
+        bool test31 = RunBattleActionRelationLineBasicTestSequence();
+        bool test32 = RunBattlePermanentBulletBuffBasicTestSequence();
+        bool test33 =
+            RunBattleBuffInspectorPreviewBasicTestSequence() &&
+            RunBattleBuffGridLayoutBasicTestSequence();
+        bool test34 = RunBattleActionSlotVisualInteractionBasicTestSequence();
+        bool test35 =
+            RunBattleCardClickAssignBasicTestSequence() &&
+            RunBattleCardClickInteractionIntegrationTestSequence();
+
+        Debug.Log("模式74 测试31 模式73关系线回归：" + test31);
+        Debug.Log("模式74 测试32 模式72永久Bullet回归：" + test32);
+        Debug.Log("模式74 测试33 模式71和70 Buff回归：" + test33);
+        Debug.Log("模式74 测试34 模式69行动槽视觉回归：" + test34);
+        Debug.Log("模式74 测试35 模式66和67卡牌指派回归：" + test35);
+
+        bool allPassed =
+            followerTestsPassed &&
+            test31 && test32 && test33 && test34 && test35;
+        Debug.Log("模式74 35项聚合结果：" + allPassed);
+        return allPassed;
+    }
+
+    bool RunBattleActionRelationInteractionFixTestSequence()
+    {
+        return BattleActionRelationInteractionMode75Tests.Run();
     }
 }

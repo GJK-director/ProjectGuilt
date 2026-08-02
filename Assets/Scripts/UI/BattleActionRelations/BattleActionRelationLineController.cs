@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public sealed class BattleActionRelationLineController : MonoBehaviour
 {
@@ -11,6 +12,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     [SerializeField] private RectTransform previewRoot;
     [SerializeField] private BattleActionRelationUIView relationViewTemplate;
     [SerializeField] private BattleBezierRelationLineUIView previewCurve;
+    [SerializeField] private CanvasGroup relationLayerCanvasGroup;
 
     [Header("坐标")]
     [SerializeField] private Canvas targetCanvas;
@@ -27,9 +29,19 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     [SerializeField] private float maxCurveHeight = 320f;
     [SerializeField] private float laneSpacing = 28f;
 
+    [Header("线条尺寸")]
+    [SerializeField] private Vector2 segmentSize = new Vector2(12f, 4f);
+    [SerializeField] private Vector2 arrowSize = new Vector2(18f, 12f);
+    [SerializeField, Min(0f)] private float dashedGap = 8f;
+    [SerializeField, Min(0f)] private float solidOverlap = 1f;
+    [SerializeField, Min(1f)] private float underlayScale = 1.35f;
+    [SerializeField, Min(0f)] private float previewArrowScale = 1f;
+    [SerializeField, Min(0f)] private float clashArrowScale = 1f;
+
     [Header("拼点")]
-    [SerializeField] private float clashCurveHeight = 190f;
-    [SerializeField] private float clashArrowGap = 30f;
+    [SerializeField, Min(0f)]
+    [Tooltip("只控制两支拼点箭头尖端之间的屏幕空间间隔；拼点与普通关系线共用曲线高度。")]
+    private float clashArrowGap = 10f;
 
     [Header("卡牌目标预览")]
     [SerializeField] private float previewCurveHeight = 75f;
@@ -50,21 +62,28 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     private BattleRuntimeState runtimeState;
     private BattleActionRelationQueryService queryService;
     private string hoveredSlotID;
+    private string selectedSlotID;
     private string previewSourceSlotID;
     private bool revealAllHeld;
     private bool previewActive;
     private Vector2 previewPointerScreenPosition;
+    private bool isShuttingDown;
 
     public int VisibleRelationCount => activeViews.Count;
     public string HoveredSlotID => hoveredSlotID;
+    public string SelectedSlotID => selectedSlotID;
     public bool RevealAllHeld => revealAllHeld;
     public bool PreviewActive => previewActive;
     public int RelationViewPoolCount => relationViewPool.Count;
     public IReadOnlyList<BattleActionRelationDescriptor> CachedRelations =>
         cachedRelations;
+    internal CanvasGroup RelationLayerCanvasGroup =>
+        relationLayerCanvasGroup;
+    internal bool IsShuttingDown => isShuttingDown;
 
     private void Awake()
     {
+        isShuttingDown = false;
         if (targetCanvas == null)
         {
             targetCanvas = GetComponentInParent<Canvas>();
@@ -72,8 +91,18 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         if (relationViewTemplate != null)
         {
             relationViewTemplate.gameObject.SetActive(false);
+            relationViewTemplate.PrepareForReuse();
         }
+        EnsureRelationLayerRaycastSafety();
+        ApplyPreviewVisualSettings();
         previewCurve?.Clear();
+    }
+
+    private void OnEnable()
+    {
+        isShuttingDown = false;
+        EnsureRelationLayerRaycastSafety();
+        ApplyPreviewVisualSettings();
     }
 
     private void Update()
@@ -87,7 +116,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             return;
         }
 
-        bool tabHeld = Input.GetKey(KeyCode.Tab);
+        bool tabHeld = IsRevealAllInputHeld(Keyboard.current);
         if (tabHeld != revealAllHeld)
         {
             SetRevealAllHeld(tabHeld);
@@ -95,7 +124,11 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
 
         if (previewActive)
         {
-            UpdateCardTargetingPointer(Input.mousePosition);
+            Vector2 pointerScreenPosition;
+            if (TryReadPointerScreenPosition(out pointerScreenPosition))
+            {
+                UpdateCardTargetingPointer(pointerScreenPosition);
+            }
         }
     }
 
@@ -145,6 +178,54 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         }
     }
 
+    public void UnregisterSlotView(BattleActionSlotUIView slotView)
+    {
+        if (slotView == null || queryService == null)
+        {
+            return;
+        }
+
+        string slotID = GetSlotID(slotView);
+        BattleActionSlotUIView registeredView;
+        if (string.IsNullOrEmpty(slotID) ||
+            !slotViews.TryGetValue(slotID, out registeredView) ||
+            !object.ReferenceEquals(registeredView, slotView))
+        {
+            return;
+        }
+
+        slotViews.Remove(slotID);
+        slotAnchors.Remove(slotID);
+        if (hoveredSlotID == slotID)
+        {
+            hoveredSlotID = string.Empty;
+        }
+        if (selectedSlotID == slotID)
+        {
+            selectedSlotID = string.Empty;
+        }
+    }
+
+    public void UnregisterSlotViews(
+        IEnumerable<BattleActionSlotUIView> views
+    )
+    {
+        if (views == null)
+        {
+            return;
+        }
+
+        foreach (BattleActionSlotUIView view in views)
+        {
+            UnregisterSlotView(view);
+        }
+
+        if (!isShuttingDown)
+        {
+            RefreshRelations();
+        }
+    }
+
     public string GetSlotID(BattleActionSlotUIView slotView)
     {
         return slotView != null && queryService != null
@@ -155,12 +236,26 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             : string.Empty;
     }
 
+    public bool IsSlotViewRegistered(BattleActionSlotUIView slotView)
+    {
+        string slotID = GetSlotID(slotView);
+        BattleActionSlotUIView registeredView;
+        return !string.IsNullOrEmpty(slotID) &&
+            slotViews.TryGetValue(slotID, out registeredView) &&
+            object.ReferenceEquals(registeredView, slotView);
+    }
+
     public void RefreshRelations()
     {
+        if (isShuttingDown)
+        {
+            return;
+        }
         RecycleActiveViews();
         cachedRelations.Clear();
         if (!IsPlanningState() || queryService == null)
         {
+            selectedSlotID = string.Empty;
             EndCardTargetingPreview();
             return;
         }
@@ -176,7 +271,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
 
     public void SetHoveredSlot(string slotID)
     {
-        if (!IsPlanningState())
+        if (isShuttingDown || !IsPlanningState())
         {
             return;
         }
@@ -195,15 +290,44 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         RefreshVisibleRelations();
     }
 
+    public void SetSelectedSlot(BattleActionSlotUIView slotView)
+    {
+        SetSelectedSlot(GetSlotID(slotView));
+    }
+
+    public void SetSelectedSlot(string slotID)
+    {
+        if (isShuttingDown || !IsPlanningState())
+        {
+            return;
+        }
+        selectedSlotID = slotID ?? string.Empty;
+        RefreshVisibleRelations();
+    }
+
+    public void ClearSelectedSlot()
+    {
+        selectedSlotID = string.Empty;
+        if (!isShuttingDown)
+        {
+            RefreshVisibleRelations();
+        }
+    }
+
     public void SetRevealAllHeld(bool held)
     {
+        if (isShuttingDown)
+        {
+            revealAllHeld = false;
+            return;
+        }
         revealAllHeld = IsPlanningState() && held;
         RefreshVisibleRelations();
     }
 
     public bool BeginCardTargetingPreview(string sourceSlotID)
     {
-        if (!IsPlanningState() || previewCurve == null ||
+        if (isShuttingDown || !IsPlanningState() || previewCurve == null ||
             string.IsNullOrEmpty(sourceSlotID) ||
             !slotAnchors.ContainsKey(sourceSlotID))
         {
@@ -217,7 +341,11 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         {
             previewCurve.transform.SetParent(previewRoot, false);
         }
-        UpdateCardTargetingPointer(Input.mousePosition);
+        Vector2 pointerScreenPosition;
+        if (TryReadPointerScreenPosition(out pointerScreenPosition))
+        {
+            UpdateCardTargetingPointer(pointerScreenPosition);
+        }
         return true;
     }
 
@@ -262,6 +390,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
                 previewMaxCurveHeight,
                 0f
             );
+        ApplyPreviewVisualSettings();
         previewCurve.Render(
             start,
             control,
@@ -276,7 +405,10 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     {
         previewActive = false;
         previewSourceSlotID = string.Empty;
-        previewCurve?.Clear();
+        if (previewCurve != null)
+        {
+            previewCurve.Clear();
+        }
     }
 
     public void ClearAll()
@@ -284,6 +416,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         RecycleActiveViews();
         cachedRelations.Clear();
         hoveredSlotID = string.Empty;
+        selectedSlotID = string.Empty;
         revealAllHeld = false;
         EndCardTargetingPreview();
     }
@@ -407,6 +540,11 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     internal Vector2 PreviewPointerScreenPosition =>
         previewPointerScreenPosition;
 
+    internal static bool IsRevealAllInputHeld(Keyboard keyboard)
+    {
+        return keyboard != null && keyboard.tabKey.isPressed;
+    }
+
     internal void ConfigureForTesting(
         RectTransform testLineLayer,
         RectTransform dashedRoot,
@@ -429,7 +567,10 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         if (relationViewTemplate != null)
         {
             relationViewTemplate.gameObject.SetActive(false);
+            relationViewTemplate.PrepareForReuse();
         }
+        EnsureRelationLayerRaycastSafety();
+        ApplyPreviewVisualSettings();
     }
 
     internal BattleActionRelationUIView GetVisibleView(int index)
@@ -441,6 +582,10 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
 
     private void RefreshVisibleRelations()
     {
+        if (isShuttingDown)
+        {
+            return;
+        }
         RecycleActiveViews();
         if (!IsPlanningState())
         {
@@ -450,9 +595,16 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         for (int index = 0; index < cachedRelations.Count; index++)
         {
             BattleActionRelationDescriptor relation = cachedRelations[index];
-            bool highlighted = !string.IsNullOrEmpty(hoveredSlotID) &&
+            bool hovered = !string.IsNullOrEmpty(hoveredSlotID) &&
                 relation.InvolvesSlot(hoveredSlotID);
-            if (!revealAllHeld && !highlighted)
+            bool selected = !string.IsNullOrEmpty(selectedSlotID) &&
+                relation.InvolvesSlot(selectedSlotID);
+            bool highlighted = revealAllHeld
+                ? !string.IsNullOrEmpty(hoveredSlotID)
+                    ? hovered
+                    : selected
+                : hovered || selected;
+            if (!revealAllHeld && !hovered && !selected)
             {
                 continue;
             }
@@ -475,7 +627,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
 
         RectTransform root = highlighted
             ? highlightRoot
-            : relation.Kind == BattleActionRelationKind.Clash
+            : relation.UsesMutualSolidVisual
                 ? normalClashRoot
                 : normalDashedRoot;
         BattleActionRelationUIView view = GetPooledView(root);
@@ -484,7 +636,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             return;
         }
 
-        if (relation.Kind == BattleActionRelationKind.Clash)
+        if (relation.UsesMutualSolidVisual)
         {
             Vector2 playerStart = relation.SourceSide ==
                     BattleActionRelationSide.Player
@@ -494,6 +646,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
                     BattleActionRelationSide.Enemy
                 ? source
                 : target;
+            ApplyRelationVisualSettings(view, clashArrowScale);
             view.ShowClash(
                 relation,
                 playerStart,
@@ -501,7 +654,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
                 playerColor,
                 enemyColor,
                 highlighted,
-                clashCurveHeight,
+                baseCurveHeight,
                 distanceCurveFactor,
                 minCurveHeight,
                 maxCurveHeight,
@@ -515,6 +668,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
                     BattleActionRelationSide.Player
                 ? playerColor
                 : enemyColor;
+            ApplyRelationVisualSettings(view, 1f);
             view.ShowUnilateral(
                 relation,
                 source,
@@ -533,14 +687,16 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
 
     private BattleActionRelationUIView GetPooledView(RectTransform root)
     {
-        if (relationViewTemplate == null || root == null)
+        if (isShuttingDown || relationViewTemplate == null || root == null)
         {
             return null;
         }
+        RemoveDestroyedViewReferences();
         BattleActionRelationUIView view = null;
         for (int index = 0; index < relationViewPool.Count; index++)
         {
-            if (!relationViewPool[index].gameObject.activeSelf)
+            if (relationViewPool[index] != null &&
+                !relationViewPool[index].gameObject.activeSelf)
             {
                 view = relationViewPool[index];
                 break;
@@ -552,6 +708,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             view.name = "RelationView_" + relationViewPool.Count;
             relationViewPool.Add(view);
         }
+        view.gameObject.SetActive(false);
         view.transform.SetParent(root, false);
         RectTransform rect = view.transform as RectTransform;
         if (rect != null)
@@ -563,7 +720,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             rect.localScale = Vector3.one;
             rect.localRotation = Quaternion.identity;
         }
-        view.gameObject.SetActive(true);
+        view.PrepareForReuse();
         return view;
     }
 
@@ -571,9 +728,24 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     {
         for (int index = 0; index < activeViews.Count; index++)
         {
-            activeViews[index]?.ClearView();
+            if (activeViews[index] != null)
+            {
+                activeViews[index].ClearView();
+            }
         }
         activeViews.Clear();
+        RemoveDestroyedViewReferences();
+    }
+
+    private void RemoveDestroyedViewReferences()
+    {
+        for (int index = relationViewPool.Count - 1; index >= 0; index--)
+        {
+            if (relationViewPool[index] == null)
+            {
+                relationViewPool.RemoveAt(index);
+            }
+        }
     }
 
     private bool TryGetSlotLocalPoint(
@@ -584,6 +756,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         localPoint = Vector2.zero;
         RectTransform anchor;
         return slotAnchors.TryGetValue(slotID, out anchor) &&
+            anchor != null &&
             TryConvertRectAnchorToLayerLocal(
                 anchor,
                 lineLayer,
@@ -608,6 +781,75 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             return null;
         }
         return canvas.worldCamera != null ? canvas.worldCamera : fallback;
+    }
+
+    private static bool TryReadPointerScreenPosition(
+        out Vector2 screenPosition
+    )
+    {
+        screenPosition = Vector2.zero;
+        Pointer pointer = Pointer.current;
+        if (pointer == null)
+        {
+            return false;
+        }
+        screenPosition = pointer.position.ReadValue();
+        return true;
+    }
+
+    private void EnsureRelationLayerRaycastSafety()
+    {
+        if (isShuttingDown || lineLayer == null)
+        {
+            return;
+        }
+        if (relationLayerCanvasGroup == null)
+        {
+            relationLayerCanvasGroup =
+                lineLayer.GetComponent<CanvasGroup>();
+            if (relationLayerCanvasGroup == null)
+            {
+                relationLayerCanvasGroup =
+                    lineLayer.gameObject.AddComponent<CanvasGroup>();
+            }
+        }
+        relationLayerCanvasGroup.interactable = false;
+        relationLayerCanvasGroup.blocksRaycasts = false;
+    }
+
+    private void ApplyRelationVisualSettings(
+        BattleActionRelationUIView view,
+        float resolvedArrowScale
+    )
+    {
+        if (isShuttingDown || view == null)
+        {
+            return;
+        }
+        view.ApplyVisualSettings(
+            segmentSize,
+            arrowSize,
+            dashedGap,
+            solidOverlap,
+            underlayScale,
+            resolvedArrowScale
+        );
+    }
+
+    private void ApplyPreviewVisualSettings()
+    {
+        if (isShuttingDown || previewCurve == null)
+        {
+            return;
+        }
+        previewCurve.ApplyVisualSettings(
+            segmentSize,
+            arrowSize,
+            dashedGap,
+            solidOverlap,
+            underlayScale,
+            previewArrowScale
+        );
     }
 
     private bool ValidateReference(Object value, string label)
@@ -636,6 +878,17 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
 
     private void OnDisable()
     {
+        isShuttingDown = true;
         ClearAll();
+    }
+
+    private void OnDestroy()
+    {
+        isShuttingDown = true;
+        ClearAll();
+        slotAnchors.Clear();
+        slotViews.Clear();
+        relationViewPool.Clear();
+        activeViews.Clear();
     }
 }

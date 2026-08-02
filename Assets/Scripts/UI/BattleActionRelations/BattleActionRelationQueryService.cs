@@ -64,9 +64,16 @@ public sealed class BattleActionRelationQueryService
             return "AllyB:" + oneBasedSlotIndex;
         }
 
-        if (object.ReferenceEquals(character, runtimeState.enemy))
+        int enemyIndex = runtimeState.GetEnemyIndex(character);
+        if (enemyIndex == 0)
         {
             return "Enemy:" + oneBasedSlotIndex;
+        }
+
+        if (enemyIndex > 0)
+        {
+            return "Enemy" + (enemyIndex + 1) + ":" +
+                oneBasedSlotIndex;
         }
 
         return string.Empty;
@@ -116,9 +123,13 @@ public sealed class BattleActionRelationQueryService
                 MathfMaxOne(intent.enemySlotIndex)
             );
             BattleActionSlot responseSlot = FindResponseSlot(intent);
-            if (responseSlot != null)
+            if (responseSlot != null &&
+                IsMutualTarget(responseSlot, intent))
             {
-                if (IsAttackCard(responseSlot.cardState))
+                BattleActionRelationKind mutualKind;
+                if (TryGetMutualRelationKind(
+                        responseSlot.cardState,
+                        out mutualKind))
                 {
                     string playerSlotID = GetSlotID(
                         responseSlot.owner,
@@ -128,19 +139,20 @@ public sealed class BattleActionRelationQueryService
                         relationIDs,
                         new BattleActionRelationDescriptor(
                             playerSlotID + "<->" + enemySlotID,
-                            BattleActionRelationKind.Clash,
+                            mutualKind,
                             playerSlotID,
                             enemySlotID,
                             playerSlotID,
                             enemySlotID,
                             BattleActionRelationSide.Player,
                             GetPlayerOrder(responseSlot.owner, responseSlot.slotIndex),
-                            intent.intentOrder
+                            intent.intentOrder,
+                            responseSlot.cardState.cardData.cardType,
+                            intent.enemyCardState.cardData.cardType,
+                            true
                         )
                     );
                 }
-
-                // Defense/Dodge直接响应已经处理该攻击，但不属于线条关系。
                 continue;
             }
 
@@ -157,7 +169,7 @@ public sealed class BattleActionRelationQueryService
                 relationIDs,
                 new BattleActionRelationDescriptor(
                     enemySlotID + "->" + allySlotID,
-                    BattleActionRelationKind.EnemyUnilateralAttack,
+                    BattleActionRelationKind.EnemyUnilateralTarget,
                     enemySlotID,
                     allySlotID,
                     allySlotID,
@@ -167,7 +179,10 @@ public sealed class BattleActionRelationQueryService
                     GetPlayerOrder(
                         intent.actualTargetCharacter,
                         intent.actualTargetSlotIndex
-                    )
+                    ),
+                    string.Empty,
+                    intent.enemyCardState.cardData.cardType,
+                    false
                 )
             );
         }
@@ -186,30 +201,46 @@ public sealed class BattleActionRelationQueryService
         {
             BattleActionSlot slot = runtimeState.actionSlots[index];
             if (slot == null || slot.IsEmpty() || slot.isUsed ||
-                slot.slotType != BattleActionSlotType.FreeAction ||
-                slot.placementType != BattleActionPlacementType.SpecificEnemy ||
-                !IsAttackCard(slot.cardState) || slot.target == null)
+                slot.placementType == BattleActionPlacementType.Self ||
+                !IsPlayerTargetCard(slot.cardState) ||
+                slot.requestedEnemy == null)
+            {
+                continue;
+            }
+
+            if (slot.slotType == BattleActionSlotType.RespondToEnemyIntent &&
+                slot.enemyIntent != null &&
+                IsMutualTarget(slot, slot.enemyIntent))
             {
                 continue;
             }
 
             string playerSlotID = GetSlotID(slot.owner, slot.slotIndex);
-            int targetSlotIndex = slot.requestedTargetSlotIndex > 0
-                ? slot.requestedTargetSlotIndex
-                : 1;
-            string enemySlotID = GetSlotID(slot.target, targetSlotIndex);
+            int targetSlotIndex = slot.requestedEnemyIntent != null
+                ? MathfMaxOne(slot.requestedEnemyIntent.enemySlotIndex)
+                : MathfMaxOne(slot.requestedTargetSlotIndex);
+            string enemySlotID = GetSlotID(
+                slot.requestedEnemy,
+                targetSlotIndex
+            );
             AddRelation(
                 relationIDs,
                 new BattleActionRelationDescriptor(
                     playerSlotID + "->" + enemySlotID,
-                    BattleActionRelationKind.PlayerUnilateralAttack,
+                    BattleActionRelationKind.PlayerUnilateralTarget,
                     playerSlotID,
                     enemySlotID,
                     playerSlotID,
                     enemySlotID,
                     BattleActionRelationSide.Player,
                     GetPlayerOrder(slot.owner, slot.slotIndex),
-                    targetSlotIndex
+                    targetSlotIndex,
+                    slot.cardState.cardData.cardType,
+                    GetEnemyActionType(
+                        slot.requestedEnemy,
+                        targetSlotIndex
+                    ),
+                    false
                 )
             );
         }
@@ -248,6 +279,88 @@ public sealed class BattleActionRelationQueryService
     {
         return cardState != null && cardState.cardData != null &&
             cardState.cardData.cardType == CardType.Attack;
+    }
+
+    private static bool IsPlayerTargetCard(BattleCardState cardState)
+    {
+        if (cardState == null || cardState.cardData == null)
+        {
+            return false;
+        }
+
+        string cardType = cardState.cardData.cardType;
+        return cardType == CardType.Attack ||
+            cardType == CardType.Defense ||
+            cardType == CardType.Dodge;
+    }
+
+    private static bool IsMutualTarget(
+        BattleActionSlot playerSlot,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        return playerSlot != null &&
+            enemyIntent != null &&
+            object.ReferenceEquals(
+                enemyIntent.actualTargetCharacter,
+                playerSlot.owner
+            ) &&
+            enemyIntent.actualTargetSlotIndex == playerSlot.slotIndex;
+    }
+
+    private static bool TryGetMutualRelationKind(
+        BattleCardState playerCardState,
+        out BattleActionRelationKind kind
+    )
+    {
+        kind = BattleActionRelationKind.AttackClash;
+        if (playerCardState == null || playerCardState.cardData == null)
+        {
+            return false;
+        }
+
+        string cardType = playerCardState.cardData.cardType;
+        if (cardType == CardType.Attack)
+        {
+            kind = BattleActionRelationKind.AttackClash;
+            return true;
+        }
+        if (cardType == CardType.Defense)
+        {
+            kind = BattleActionRelationKind.DefenseResponse;
+            return true;
+        }
+        if (cardType == CardType.Dodge)
+        {
+            kind = BattleActionRelationKind.EvadeResponse;
+            return true;
+        }
+        return false;
+    }
+
+    private string GetEnemyActionType(
+        CharacterData enemy,
+        int enemySlotIndex
+    )
+    {
+        if (runtimeState == null || runtimeState.intentQueue == null)
+        {
+            return string.Empty;
+        }
+
+        for (int index = 0; index < runtimeState.intentQueue.Count; index++)
+        {
+            BattleEnemyIntent intent = runtimeState.intentQueue[index];
+            if (intent != null &&
+                object.ReferenceEquals(intent.enemy, enemy) &&
+                MathfMaxOne(intent.enemySlotIndex) == enemySlotIndex &&
+                intent.enemyCardState != null &&
+                intent.enemyCardState.cardData != null)
+            {
+                return intent.enemyCardState.cardData.cardType;
+            }
+        }
+        return string.Empty;
     }
 
     private void AddRelation(

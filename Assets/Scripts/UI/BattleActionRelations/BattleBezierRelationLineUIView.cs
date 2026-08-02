@@ -41,10 +41,19 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
     private Color lastColor;
     private bool lastDashed;
     private bool lastHighlighted;
+    private float lastRangeStart;
+    private float lastRangeEnd = 1f;
+    private Vector2 lastSourceStart;
+    private Vector2 lastSourceControl;
+    private Vector2 lastSourceEnd;
+    private bool lastActivationRaycastSafe = true;
     private float lastStep;
     private float totalLength;
+    private bool isDestroying;
 
     public int SegmentPoolCount => segmentPool.Count;
+    internal int UnderlaySegmentPoolCount => underlaySegmentPool.Count;
+    internal bool HasUnderlayArrow => underlayArrow != null;
     public int ActiveSegmentCount => activeSegmentCount;
     public Vector2 StartPoint => lastStart;
     public Vector2 ControlPoint => lastControl;
@@ -57,6 +66,38 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
     public Color LastColor => lastColor;
     public float TotalLength => totalLength;
     public float SegmentStep => lastStep;
+    public float RangeStart => lastRangeStart;
+    public float RangeEnd => lastRangeEnd;
+    public Vector2 SourceCurveStart => lastSourceStart;
+    public Vector2 SourceCurveControlPoint => lastSourceControl;
+    public Vector2 SourceCurveEnd => lastSourceEnd;
+    public bool LastActivationRaycastSafe => lastActivationRaycastSafe;
+    public bool CanvasGroupIgnoresRaycasts => canvasGroup != null &&
+        !canvasGroup.interactable && !canvasGroup.blocksRaycasts;
+    public bool ArrowImagesIgnoreRaycasts =>
+        (arrowImage == null || !arrowImage.raycastTarget) &&
+        (underlayArrow == null || !underlayArrow.raycastTarget);
+    public bool UnderlayImagesIgnoreRaycasts
+    {
+        get
+        {
+            if (underlayArrow != null && underlayArrow.raycastTarget)
+            {
+                return false;
+            }
+            for (int index = 0;
+                 index < underlaySegmentPool.Count;
+                 index++)
+            {
+                if (underlaySegmentPool[index] != null &&
+                    underlaySegmentPool[index].raycastTarget)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
     public bool IsVisible => canvasGroup != null
         ? canvasGroup.alpha > 0f
         : gameObject.activeSelf;
@@ -69,14 +110,23 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
     {
         get
         {
-            if ((arrowImage != null && arrowImage.raycastTarget) ||
+            if ((segmentTemplate != null && segmentTemplate.raycastTarget) ||
+                (arrowImage != null && arrowImage.raycastTarget) ||
                 (underlayArrow != null && underlayArrow.raycastTarget))
             {
                 return false;
             }
             for (int index = 0; index < segmentPool.Count; index++)
             {
-                if (segmentPool[index].raycastTarget ||
+                if (segmentPool[index] != null &&
+                    segmentPool[index].raycastTarget)
+                {
+                    return false;
+                }
+            }
+            for (int index = 0; index < underlaySegmentPool.Count; index++)
+            {
+                if (underlaySegmentPool[index] != null &&
                     underlaySegmentPool[index].raycastTarget)
                 {
                     return false;
@@ -88,8 +138,29 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
 
     private void Awake()
     {
+        isDestroying = false;
         EnsureInitialized();
         SetVisible(false);
+    }
+
+    private void OnEnable()
+    {
+        isDestroying = false;
+        EnsureInitialized();
+    }
+
+    private void OnDisable()
+    {
+        Clear();
+    }
+
+    private void OnDestroy()
+    {
+        isDestroying = true;
+        Clear();
+        segmentPool.Clear();
+        underlaySegmentPool.Clear();
+        underlayArrow = null;
     }
 
     public void Render(
@@ -101,6 +172,33 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
         bool highlighted
     )
     {
+        RenderRange(
+            start,
+            control,
+            end,
+            0f,
+            1f,
+            color,
+            dashed,
+            highlighted
+        );
+    }
+
+    public void RenderRange(
+        Vector2 sourceStart,
+        Vector2 sourceControl,
+        Vector2 sourceEnd,
+        float rangeStart,
+        float rangeEnd,
+        Color color,
+        bool dashed,
+        bool highlighted
+    )
+    {
+        if (isDestroying)
+        {
+            return;
+        }
         EnsureInitialized();
         if (segmentTemplate == null || arrowImage == null)
         {
@@ -108,12 +206,34 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
             return;
         }
 
+        rangeStart = Mathf.Clamp01(rangeStart);
+        rangeEnd = Mathf.Clamp01(rangeEnd);
+        Vector2 start;
+        Vector2 control;
+        Vector2 end;
+        ResolveQuadraticSubcurve(
+            sourceStart,
+            sourceControl,
+            sourceEnd,
+            rangeStart,
+            rangeEnd,
+            out start,
+            out control,
+            out end
+        );
+
         lastStart = start;
         lastControl = control;
         lastEnd = end;
+        lastSourceStart = sourceStart;
+        lastSourceControl = sourceControl;
+        lastSourceEnd = sourceEnd;
+        lastRangeStart = rangeStart;
+        lastRangeEnd = rangeEnd;
         lastColor = color;
         lastDashed = dashed;
         lastHighlighted = highlighted;
+        lastActivationRaycastSafe = true;
 
         BuildArcLengthTable(start, control, end);
         float segmentLength = Mathf.Max(1f, segmentSize.x);
@@ -184,6 +304,7 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
 
     public void Clear()
     {
+        PruneDestroyedImageReferences();
         activeSegmentCount = 0;
         HideUnusedSegments(0);
         if (arrowImage != null)
@@ -210,6 +331,7 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
     public Vector2 GetSegmentPosition(int index)
     {
         return index >= 0 && index < activeSegmentCount
+            && index < segmentPool.Count && segmentPool[index] != null
             ? segmentPool[index].rectTransform.anchoredPosition
             : Vector2.zero;
     }
@@ -269,6 +391,53 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
         useUnderlay = testUseUnderlay;
     }
 
+    internal void SetRenderedRaycastTargetsForTesting(bool enabled)
+    {
+        if (arrowImage != null)
+        {
+            arrowImage.raycastTarget = enabled;
+        }
+        if (underlayArrow != null)
+        {
+            underlayArrow.raycastTarget = enabled;
+        }
+        for (int index = 0; index < segmentPool.Count; index++)
+        {
+            if (segmentPool[index] != null)
+            {
+                segmentPool[index].raycastTarget = enabled;
+            }
+        }
+        for (int index = 0; index < underlaySegmentPool.Count; index++)
+        {
+            if (underlaySegmentPool[index] != null)
+            {
+                underlaySegmentPool[index].raycastTarget = enabled;
+            }
+        }
+    }
+
+    public void ApplyVisualSettings(
+        Vector2 resolvedSegmentSize,
+        Vector2 resolvedArrowSize,
+        float resolvedDashedGap,
+        float resolvedSolidOverlap,
+        float resolvedUnderlayScale,
+        float arrowScale
+    )
+    {
+        if (isDestroying)
+        {
+            return;
+        }
+        EnsureInitialized();
+        segmentSize = resolvedSegmentSize;
+        arrowSize = resolvedArrowSize * Mathf.Max(0f, arrowScale);
+        dashedGap = Mathf.Max(0f, resolvedDashedGap);
+        solidOverlap = Mathf.Max(0f, resolvedSolidOverlap);
+        underlayScale = Mathf.Max(1f, resolvedUnderlayScale);
+    }
+
     public static Vector2 EvaluateQuadraticBezier(
         Vector2 start,
         Vector2 control,
@@ -280,6 +449,85 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
         return oneMinusT * oneMinusT * start +
             2f * oneMinusT * t * control +
             t * t * end;
+    }
+
+    public static Vector2 EvaluateQuadraticTangent(
+        Vector2 start,
+        Vector2 control,
+        Vector2 end,
+        float t
+    )
+    {
+        return 2f * ((1f - t) * (control - start) +
+            t * (end - control));
+    }
+
+    public static void ResolveCenteredGapParameters(
+        Vector2 start,
+        Vector2 control,
+        Vector2 end,
+        float gap,
+        out float leftT,
+        out float rightT
+    )
+    {
+        float targetGap = Mathf.Max(0f, gap);
+        float low = 0f;
+        float high = 0.5f;
+        for (int index = 0; index < 24; index++)
+        {
+            float halfSpan = (low + high) * 0.5f;
+            float testLeft = 0.5f - halfSpan;
+            float testRight = 0.5f + halfSpan;
+            float actualGap = Vector2.Distance(
+                EvaluateQuadraticBezier(start, control, end, testLeft),
+                EvaluateQuadraticBezier(start, control, end, testRight)
+            );
+            if (actualGap < targetGap)
+            {
+                low = halfSpan;
+            }
+            else
+            {
+                high = halfSpan;
+            }
+        }
+        float resolvedHalfSpan = (low + high) * 0.5f;
+        leftT = 0.5f - resolvedHalfSpan;
+        rightT = 0.5f + resolvedHalfSpan;
+    }
+
+    public static void ResolveQuadraticSubcurve(
+        Vector2 sourceStart,
+        Vector2 sourceControl,
+        Vector2 sourceEnd,
+        float rangeStart,
+        float rangeEnd,
+        out Vector2 start,
+        out Vector2 control,
+        out Vector2 end
+    )
+    {
+        start = EvaluateQuadraticBezier(
+            sourceStart,
+            sourceControl,
+            sourceEnd,
+            rangeStart
+        );
+        end = EvaluateQuadraticBezier(
+            sourceStart,
+            sourceControl,
+            sourceEnd,
+            rangeEnd
+        );
+        Vector2 startTangent = EvaluateQuadraticTangent(
+            sourceStart,
+            sourceControl,
+            sourceEnd,
+            rangeStart
+        );
+        control = start +
+            startTangent * ((rangeEnd - rangeStart) * 0.5f);
     }
 
     public static Vector2 ResolveControlPoint(
@@ -307,9 +555,18 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
 
     private void EnsureInitialized()
     {
+        if (isDestroying)
+        {
+            return;
+        }
+        PruneDestroyedImageReferences();
         if (canvasGroup == null)
         {
             canvasGroup = GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+            {
+                canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            }
         }
         if (canvasGroup != null)
         {
@@ -327,8 +584,31 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
             arrowImage.rectTransform.pivot = new Vector2(1f, 0.5f);
             arrowImage.gameObject.SetActive(false);
         }
+        EnsurePoolRaycastSafety();
         EnsureSampleArrays();
         EnsureUnderlayArrow();
+    }
+
+    private void EnsurePoolRaycastSafety()
+    {
+        for (int index = 0; index < segmentPool.Count; index++)
+        {
+            if (segmentPool[index] != null)
+            {
+                segmentPool[index].raycastTarget = false;
+            }
+        }
+        for (int index = 0; index < underlaySegmentPool.Count; index++)
+        {
+            if (underlaySegmentPool[index] != null)
+            {
+                underlaySegmentPool[index].raycastTarget = false;
+            }
+        }
+        if (underlayArrow != null)
+        {
+            underlayArrow.raycastTarget = false;
+        }
     }
 
     private void EnsureSampleArrays()
@@ -343,7 +623,7 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
 
     private void EnsureUnderlayArrow()
     {
-        if (underlayArrow != null || arrowImage == null)
+        if (isDestroying || underlayArrow != null || arrowImage == null)
         {
             return;
         }
@@ -387,7 +667,12 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
 
     private void EnsureSegmentCapacity(int required)
     {
-        while (segmentPool.Count < required)
+        if (isDestroying || segmentTemplate == null)
+        {
+            return;
+        }
+        PruneDestroyedImageReferences();
+        while (underlaySegmentPool.Count < required)
         {
             Image underlay = Instantiate(segmentTemplate, transform);
             underlay.name = "UnderlaySegment_" + underlaySegmentPool.Count;
@@ -395,7 +680,9 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
             underlay.gameObject.SetActive(false);
             underlay.transform.SetAsFirstSibling();
             underlaySegmentPool.Add(underlay);
-
+        }
+        while (segmentPool.Count < required)
+        {
             Image segment = Instantiate(segmentTemplate, transform);
             segment.name = "Segment_" + segmentPool.Count;
             segment.raycastTarget = false;
@@ -406,10 +693,26 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
 
     private void HideUnusedSegments(int usedCount)
     {
+        PruneDestroyedImageReferences();
         for (int index = usedCount; index < segmentPool.Count; index++)
         {
-            segmentPool[index].gameObject.SetActive(false);
-            underlaySegmentPool[index].gameObject.SetActive(false);
+            Image segment = segmentPool[index];
+            if (segment != null)
+            {
+                segment.raycastTarget = false;
+                segment.gameObject.SetActive(false);
+            }
+        }
+        for (int index = usedCount;
+             index < underlaySegmentPool.Count;
+             index++)
+        {
+            Image underlay = underlaySegmentPool[index];
+            if (underlay != null)
+            {
+                underlay.raycastTarget = false;
+                underlay.gameObject.SetActive(false);
+            }
         }
     }
 
@@ -422,20 +725,26 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
         bool visible
     )
     {
-        image.gameObject.SetActive(visible);
+        if (image == null)
+        {
+            return;
+        }
+        image.raycastTarget = false;
+        image.gameObject.SetActive(false);
         if (!visible)
         {
             return;
         }
         image.sprite = lineSegmentSprite;
         image.color = color;
-        image.raycastTarget = false;
         RectTransform rect = image.rectTransform;
         rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(0.5f, 0.5f);
         rect.anchoredPosition = position;
         rect.sizeDelta = size;
         rect.localRotation = Quaternion.Euler(0f, 0f, GetAngle(tangent));
+        lastActivationRaycastSafe &= !image.raycastTarget;
+        image.gameObject.SetActive(true);
     }
 
     private void ConfigureArrow(
@@ -451,20 +760,22 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
         {
             return;
         }
-        image.gameObject.SetActive(visible);
+        image.raycastTarget = false;
+        image.gameObject.SetActive(false);
         if (!visible)
         {
             return;
         }
         image.sprite = arrowSprite;
         image.color = color;
-        image.raycastTarget = false;
         RectTransform rect = image.rectTransform;
         rect.anchorMin = rect.anchorMax = new Vector2(0.5f, 0.5f);
         rect.pivot = new Vector2(1f, 0.5f);
         rect.anchoredPosition = tip;
         rect.sizeDelta = size;
         rect.localRotation = Quaternion.Euler(0f, 0f, GetAngle(tangent));
+        lastActivationRaycastSafe &= !image.raycastTarget;
+        image.gameObject.SetActive(true);
     }
 
     private void GetPointAndTangentAtDistance(
@@ -511,5 +822,25 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
         return tangent.sqrMagnitude > 0.0001f
             ? Mathf.Atan2(tangent.y, tangent.x) * Mathf.Rad2Deg
             : 0f;
+    }
+
+    private void PruneDestroyedImageReferences()
+    {
+        for (int index = segmentPool.Count - 1; index >= 0; index--)
+        {
+            if (segmentPool[index] == null)
+            {
+                segmentPool.RemoveAt(index);
+            }
+        }
+        for (int index = underlaySegmentPool.Count - 1;
+             index >= 0;
+             index--)
+        {
+            if (underlaySegmentPool[index] == null)
+            {
+                underlaySegmentPool.RemoveAt(index);
+            }
+        }
     }
 }

@@ -2,9 +2,16 @@ using System;
 
 public enum BattleActionRelationKind
 {
-    EnemyUnilateralAttack,
-    PlayerUnilateralAttack,
-    Clash
+    EnemyUnilateralTarget,
+    PlayerUnilateralTarget,
+    AttackClash,
+    DefenseResponse,
+    EvadeResponse,
+
+    // 保留旧名称，避免历史测试和序列化外代码在本轮被迫同步重命名。
+    EnemyUnilateralAttack = EnemyUnilateralTarget,
+    PlayerUnilateralAttack = PlayerUnilateralTarget,
+    Clash = AttackClash
 }
 
 public enum BattleActionRelationSide
@@ -22,6 +29,13 @@ public sealed class BattleActionRelationDescriptor
     public string PlayerSlotID { get; }
     public string EnemySlotID { get; }
     public BattleActionRelationSide SourceSide { get; }
+    public string PlayerActionType { get; }
+    public string EnemyActionType { get; }
+    public bool IsMutual { get; }
+    public bool UsesMutualSolidVisual => IsMutual &&
+        (Kind == BattleActionRelationKind.AttackClash ||
+         Kind == BattleActionRelationKind.DefenseResponse ||
+         Kind == BattleActionRelationKind.EvadeResponse);
     public bool IsCurrentFinalEffective { get; }
     public int SourceOrder { get; }
     public int TargetOrder { get; }
@@ -36,7 +50,10 @@ public sealed class BattleActionRelationDescriptor
         string enemySlotID,
         BattleActionRelationSide sourceSide,
         int sourceOrder,
-        int targetOrder
+        int targetOrder,
+        string playerActionType = null,
+        string enemyActionType = null,
+        bool isMutual = false
     )
     {
         RelationID = relationID ?? string.Empty;
@@ -46,6 +63,9 @@ public sealed class BattleActionRelationDescriptor
         PlayerSlotID = playerSlotID;
         EnemySlotID = enemySlotID;
         SourceSide = sourceSide;
+        PlayerActionType = playerActionType ?? string.Empty;
+        EnemyActionType = enemyActionType ?? string.Empty;
+        IsMutual = isMutual;
         SourceOrder = sourceOrder;
         TargetOrder = targetOrder;
         IsCurrentFinalEffective = true;

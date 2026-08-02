@@ -4,12 +4,43 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
 {
     [SerializeField] private BattleBezierRelationLineUIView primaryCurve;
     [SerializeField] private BattleBezierRelationLineUIView secondaryCurve;
+    [SerializeField] private CanvasGroup canvasGroup;
 
     public string RelationID { get; private set; }
     public BattleActionRelationKind Kind { get; private set; }
     public bool IsHighlighted { get; private set; }
     public BattleBezierRelationLineUIView PrimaryCurve => primaryCurve;
     public BattleBezierRelationLineUIView SecondaryCurve => secondaryCurve;
+    public bool CanvasGroupIgnoresRaycasts => canvasGroup != null &&
+        !canvasGroup.interactable && !canvasGroup.blocksRaycasts;
+    private bool isDestroying;
+
+    private void Awake()
+    {
+        isDestroying = false;
+        EnsureRaycastSafety();
+    }
+
+    private void OnEnable()
+    {
+        isDestroying = false;
+        EnsureRaycastSafety();
+    }
+
+    private void OnDestroy()
+    {
+        isDestroying = true;
+        RelationID = string.Empty;
+        IsHighlighted = false;
+        if (primaryCurve != null)
+        {
+            primaryCurve.Clear();
+        }
+        if (secondaryCurve != null)
+        {
+            secondaryCurve.Clear();
+        }
+    }
 
     public void ShowUnilateral(
         BattleActionRelationDescriptor descriptor,
@@ -24,6 +55,7 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
         float laneSpacing
     )
     {
+        EnsureRaycastSafety();
         if (descriptor == null || primaryCurve == null)
         {
             ClearView();
@@ -62,7 +94,7 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
         Color playerColor,
         Color enemyColor,
         bool highlighted,
-        float clashCurveHeight,
+        float baseCurveHeight,
         float distanceCurveFactor,
         float minCurveHeight,
         float maxCurveHeight,
@@ -70,6 +102,7 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
         float clashArrowGap
     )
     {
+        EnsureRaycastSafety();
         if (descriptor == null || primaryCurve == null ||
             secondaryCurve == null)
         {
@@ -81,53 +114,43 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
         Kind = descriptor.Kind;
         IsHighlighted = highlighted;
 
-        float height = Mathf.Clamp(
-            clashCurveHeight +
-                Mathf.Abs(enemyStart.x - playerStart.x) *
-                    distanceCurveFactor +
-                descriptor.LaneIndex * laneSpacing,
-            minCurveHeight,
-            maxCurveHeight + descriptor.LaneIndex * laneSpacing
-        );
-        Vector2 center = new Vector2(
-            (playerStart.x + enemyStart.x) * 0.5f,
-            Mathf.Max(playerStart.y, enemyStart.y) + height
-        );
-        Vector2 direction = enemyStart - playerStart;
-        if (direction.sqrMagnitude <= 0.0001f)
-        {
-            direction = Vector2.right;
-        }
-        direction.Normalize();
-
-        float halfGap = Mathf.Max(0f, clashArrowGap) * 0.5f;
-        Vector2 playerTip = center - direction * halfGap;
-        Vector2 enemyTip = center + direction * halfGap;
-        Vector2 playerControl = Vector2.Lerp(
+        Vector2 sharedControl =
+            BattleBezierRelationLineUIView.ResolveControlPoint(
+                playerStart,
+                enemyStart,
+                baseCurveHeight,
+                distanceCurveFactor,
+                minCurveHeight,
+                maxCurveHeight,
+                descriptor.LaneIndex * laneSpacing
+            );
+        float playerRangeEnd;
+        float enemyRangeEnd;
+        BattleBezierRelationLineUIView.ResolveCenteredGapParameters(
             playerStart,
-            playerTip,
-            0.55f
-        );
-        playerControl.y = playerTip.y;
-        Vector2 enemyControl = Vector2.Lerp(
+            sharedControl,
             enemyStart,
-            enemyTip,
-            0.55f
+            clashArrowGap,
+            out playerRangeEnd,
+            out enemyRangeEnd
         );
-        enemyControl.y = enemyTip.y;
 
-        primaryCurve.Render(
+        primaryCurve.RenderRange(
             playerStart,
-            playerControl,
-            playerTip,
+            sharedControl,
+            enemyStart,
+            0f,
+            playerRangeEnd,
             playerColor,
             false,
             highlighted
         );
-        secondaryCurve.Render(
+        secondaryCurve.RenderRange(
+            playerStart,
+            sharedControl,
             enemyStart,
-            enemyControl,
-            enemyTip,
+            1f,
+            enemyRangeEnd,
             enemyColor,
             false,
             highlighted
@@ -135,13 +158,73 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
         gameObject.SetActive(true);
     }
 
+    public void ApplyVisualSettings(
+        Vector2 segmentSize,
+        Vector2 arrowSize,
+        float dashedGap,
+        float solidOverlap,
+        float underlayScale,
+        float arrowScale
+    )
+    {
+        EnsureRaycastSafety();
+        primaryCurve?.ApplyVisualSettings(
+            segmentSize,
+            arrowSize,
+            dashedGap,
+            solidOverlap,
+            underlayScale,
+            arrowScale
+        );
+        secondaryCurve?.ApplyVisualSettings(
+            segmentSize,
+            arrowSize,
+            dashedGap,
+            solidOverlap,
+            underlayScale,
+            arrowScale
+        );
+    }
+
+    public void PrepareForReuse()
+    {
+        EnsureRaycastSafety();
+    }
+
+    private void EnsureRaycastSafety()
+    {
+        if (isDestroying)
+        {
+            return;
+        }
+        if (canvasGroup == null)
+        {
+            canvasGroup = GetComponent<CanvasGroup>();
+            if (canvasGroup == null)
+            {
+                canvasGroup = gameObject.AddComponent<CanvasGroup>();
+            }
+        }
+        canvasGroup.interactable = false;
+        canvasGroup.blocksRaycasts = false;
+    }
+
     public void ClearView()
     {
         RelationID = string.Empty;
         IsHighlighted = false;
-        primaryCurve?.Clear();
-        secondaryCurve?.Clear();
-        gameObject.SetActive(false);
+        if (primaryCurve != null)
+        {
+            primaryCurve.Clear();
+        }
+        if (secondaryCurve != null)
+        {
+            secondaryCurve.Clear();
+        }
+        if (!isDestroying && gameObject.activeSelf)
+        {
+            gameObject.SetActive(false);
+        }
     }
 
     public bool ValidateConfiguration()
@@ -178,5 +261,6 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
     {
         primaryCurve = primary;
         secondaryCurve = secondary;
+        EnsureRaycastSafety();
     }
 }
