@@ -6,6 +6,15 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
 {
     private const int FixedUnitCountPerCamp = 2;
 
+    private sealed class WorldVisualReferences
+    {
+        public SpriteRenderer renderer;
+        public Transform headAnchor;
+        public Transform footAnchor;
+        public Transform centerAnchor;
+        public Transform targetAnchor;
+    }
+
     [Header("世界角色Prefab")]
     [SerializeField] private GameObject allyWorldPrefab;
     [SerializeField] private GameObject enemyWorldPrefab;
@@ -343,27 +352,15 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
         out string errorMessage
     )
     {
-        errorMessage = string.Empty;
-        if (prefab.GetComponentInChildren<SpriteRenderer>(true) == null)
+        WorldVisualReferences references;
+        if (!TryResolveWorldVisualReferences(
+                prefab,
+                "世界Prefab",
+                out references,
+                out errorMessage))
         {
-            errorMessage = label + "世界Prefab缺少SpriteRenderer";
+            errorMessage = label + "：" + errorMessage;
             return false;
-        }
-
-        string[] anchorNames =
-        {
-            "HeadUIAnchor",
-            "FootUIAnchor",
-            "CenterAnchor",
-            "TargetAnchor"
-        };
-        for (int index = 0; index < anchorNames.Length; index++)
-        {
-            if (FindNamedTransform(prefab, anchorNames[index]) == null)
-            {
-                errorMessage = label + "世界Prefab缺少" + anchorNames[index];
-                return false;
-            }
         }
 
         Vector3 scale = prefab.transform.localScale;
@@ -432,22 +429,19 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
         worldRoot.name = worldName;
         generatedWorldObjects.Add(worldRoot);
 
-        SpriteRenderer renderer =
-            worldRoot.GetComponentInChildren<SpriteRenderer>(true);
-        Transform headAnchor = FindNamedTransform(worldRoot, "HeadUIAnchor");
-        Transform footAnchor = FindNamedTransform(worldRoot, "FootUIAnchor");
-        Transform centerAnchor = FindNamedTransform(worldRoot, "CenterAnchor");
-        Transform targetAnchor = FindNamedTransform(worldRoot, "TargetAnchor");
-        if (renderer == null || headAnchor == null || footAnchor == null ||
-            centerAnchor == null || targetAnchor == null)
+        WorldVisualReferences worldVisual;
+        if (!TryResolveWorldVisualReferences(
+                worldRoot,
+                "世界实例",
+                out worldVisual,
+                out errorMessage))
         {
-            errorMessage = worldName + "实例缺少世界表现组件或锚点";
             return false;
         }
-        if (camp == BattleUnitCamp.Enemy)
-        {
-            renderer.flipX = true;
-        }
+
+        // Prefab中的Sprite是当前默认外观。这里不写sprite、不改Scale，
+        // 只对敌方应用阵营朝向，因此同阵营两名单位可以安全共用模板。
+        ApplyCampVisualSettings(worldVisual.renderer, camp);
 
         GameObject statusRoot = Instantiate(
             statusPrefab,
@@ -471,9 +465,9 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
         follower.Bind(
             worldCamera,
             statusCanvas,
-            headAnchor,
-            footAnchor,
-            centerAnchor
+            worldVisual.headAnchor,
+            worldVisual.footAnchor,
+            worldVisual.centerAnchor
         );
 
         List<BattleActionSlotUIView> slots =
@@ -523,11 +517,11 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
             runtimeUnit,
             camp,
             worldRoot,
-            renderer,
-            headAnchor,
-            footAnchor,
-            centerAnchor,
-            targetAnchor,
+            worldVisual.renderer,
+            worldVisual.headAnchor,
+            worldVisual.footAnchor,
+            worldVisual.centerAnchor,
+            worldVisual.targetAnchor,
             statusRoot,
             statusView,
             follower,
@@ -537,25 +531,92 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
         return true;
     }
 
-    private static Transform FindNamedTransform(
+    private static bool TryResolveWorldVisualReferences(
         GameObject root,
-        string targetName
+        string objectKind,
+        out WorldVisualReferences references,
+        out string errorMessage
     )
     {
+        references = new WorldVisualReferences();
+        errorMessage = string.Empty;
         if (root == null)
         {
-            return null;
+            errorMessage = objectKind + "为空。";
+            return false;
         }
 
+        // 仅在初始化和预检时遍历一次，并包含Inactive子节点。
         Transform[] transforms = root.GetComponentsInChildren<Transform>(true);
         for (int index = 0; index < transforms.Length; index++)
         {
-            if (transforms[index].name == targetName)
+            Transform current = transforms[index];
+            if (references.renderer == null)
             {
-                return transforms[index];
+                references.renderer = current.GetComponent<SpriteRenderer>();
+            }
+
+            if (current.name == "HeadUIAnchor")
+            {
+                references.headAnchor = current;
+            }
+            else if (current.name == "FootUIAnchor")
+            {
+                references.footAnchor = current;
+            }
+            else if (current.name == "CenterAnchor")
+            {
+                references.centerAnchor = current;
+            }
+            else if (current.name == "TargetAnchor")
+            {
+                references.targetAnchor = current;
             }
         }
-        return null;
+
+        string displayName = root.name;
+        if (references.renderer == null)
+        {
+            errorMessage = objectKind + "“" + displayName +
+                "”及其子节点中均未找到 SpriteRenderer。";
+            return false;
+        }
+        if (references.headAnchor == null)
+        {
+            errorMessage = objectKind + "“" + displayName +
+                "”缺少 HeadUIAnchor。";
+            return false;
+        }
+        if (references.footAnchor == null)
+        {
+            errorMessage = objectKind + "“" + displayName +
+                "”缺少 FootUIAnchor。";
+            return false;
+        }
+        if (references.centerAnchor == null)
+        {
+            errorMessage = objectKind + "“" + displayName +
+                "”缺少 CenterAnchor。";
+            return false;
+        }
+        if (references.targetAnchor == null)
+        {
+            errorMessage = objectKind + "“" + displayName +
+                "”缺少 TargetAnchor。";
+            return false;
+        }
+        return true;
+    }
+
+    private static void ApplyCampVisualSettings(
+        SpriteRenderer renderer,
+        BattleUnitCamp camp
+    )
+    {
+        if (renderer != null && camp == BattleUnitCamp.Enemy)
+        {
+            renderer.flipX = true;
+        }
     }
 
     private static bool HasRuntimeActionSlot(
