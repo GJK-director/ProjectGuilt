@@ -10291,3 +10291,177 @@ B HP：0 / 30
 - 战斗奖励流程。
 - 战斗重开流程。
 - BattlePhase enum 重构。
+
+## 八十九、二级信息面板第一版已接入
+
+### 一、统一面板宿主
+
+新增：
+
+```text
+BattleSecondaryInfoPanelHost
+BattleSecondaryInfoContent
+BattleSecondaryInfoHoverRequest
+```
+
+当前规则：
+
+- 一个根 Canvas 只按需创建一个二级信息面板宿主。
+- 卡牌关键词和人物状态图标复用同一个面板。
+- 触发源只通过 `BattleSecondaryInfoPanelHost.HandlePointer(...)` 进入宿主。
+- 没有给关键词和状态分别创建两套 Show / Hide 接口。
+- 面板使用 `Time.unscaledTime` 处理延时，不受战斗暂停或时间缩放影响。
+- 当前悬停约 0.45 秒后显示。
+- 面板会根据指针位置显示，并限制在 Canvas 可视范围内。
+
+### 二、关闭与面板移入规则
+
+当前规则：
+
+- 离开状态图标或关键词后进入短暂关闭等待。
+- 在等待时间内移入详细信息面板，面板继续保持。
+- 离开触发源且没有进入面板时，面板自动关闭。
+- 从详细信息面板移出后，面板自动关闭。
+- 卡牌或状态图标被禁用、清空、销毁时，会清理对应悬停请求。
+
+### 三、卡牌关键词接入
+
+`BattleCardUIPreviewData` 现在会携带：
+
+```text
+CardKeywordData[] keywords
+```
+
+`BattleCardUIView` 当前支持：
+
+- 将卡面描述里匹配到的关键词转换为 TMP Link。
+- 关键词显示为金色下划线。
+- 只在光标实际位于关键词文字上时启动延时面板。
+- 同一段描述中的重复关键词共用同一条说明。
+- 离开关键词文字时关闭对应请求，不影响原有卡牌悬浮动画和点击选择。
+
+### 四、人物状态图标接入
+
+`BattleBuffGroupUIView` 当前会从 `BuffDefinitions.json` 读取状态说明，并给可见状态槽位绑定：
+
+- 状态显示名。
+- 状态详细说明。
+- 当前总层数。
+- 持续时间或永久状态。
+
+`BattleBuffIconUIView` 当前支持延时悬停请求。
+
+溢出槽位 `...+N` 仍保留原有点击逻辑，不作为单个状态详情触发源。
+
+### 五、BattleScene 示例
+
+卡牌示例：
+
+```text
+atk_bullet_001 / 基础射击
+关键词：子弹
+```
+
+人物状态示例：
+
+```text
+ally_001 / 人物A
+原有状态：Bullet x6，永久
+新增状态：Strength x1，持续3回合
+```
+
+BattleScene 的正常手牌列表本来就包含 `atk_bullet_001`，人物A也会通过正式角色定义入口应用初始状态，因此没有修改战斗场景 YAML 或战斗结算代码。
+
+### 六、验证记录
+
+- CardsTest.json、CharacterDefinitions.json、BuffDefinitions.json 均通过 JSON 解析检查。
+- 使用 Unity 当前生成的完整 Assembly-CSharp 编译响应文件验证，C# 编译通过且无警告。
+- 已确认 BattleScene 卡面描述与 Buff 图标子节点均开启 UI Raycast。
+- 当前项目正由交互式 Unity 编辑器占用，因此没有强制关闭用户编辑器执行批处理场景启动。
+- 最终面板位置、字体观感和悬停手感仍需在已打开的 BattleScene 中进行一次人工 Play Mode 确认。
+
+## 九十、二级信息面板分辨率与最前层优化完成
+
+### 一、独立最前层 Canvas
+
+二级信息面板宿主不再作为来源 Canvas 的普通子节点。
+
+当前会按需创建独立根 Canvas：
+
+```text
+RenderMode：ScreenSpaceOverlay
+CanvasScaler：ScaleWithScreenSize
+ReferenceResolution：1920 x 1080
+MatchWidthOrHeight：0.5
+Sorting Layer：运行时可用的最高层
+Sorting Order：32767
+```
+
+当前还会在 `LateUpdate` 中保持：
+
+- `ScreenSpaceOverlay`。
+- 最高 Sorting Layer。
+- Sorting Order 32767。
+- 场景根对象中的最后兄弟顺序。
+
+因此面板不再受 BattleScene 中其他普通 Canvas、世界跟随 UI、卡牌或关系线图层遮挡。
+
+独立 Canvas 自带 `GraphicRaycaster`，详细信息面板仍然可以接收指针进入和离开事件。
+
+### 二、动态分辨率适配
+
+面板当前会根据以下数据重新计算布局：
+
+- `Screen.width`。
+- `Screen.height`。
+- `Screen.safeArea`。
+- Overlay Canvas 的实际 RectTransform 尺寸。
+- Overlay CanvasScaler 的当前 `scaleFactor`。
+
+当前响应式规则：
+
+- 常规面板宽度根据安全区域宽度动态计算。
+- 常规宽度限制在 300 到 440 参考单位之间。
+- 窄屏时允许继续收缩，最低目标为 180 参考单位。
+- 低分辨率时最多提供 2 倍字体、边距和面板尺寸补偿。
+- 高分辨率继续由 CanvasScaler 等比例放大。
+- 标题、正文、页脚、内边距和段落间距同步调整。
+- TMP 正文继续自动换行。
+
+### 三、安全区域与边缘翻转
+
+面板定位现在使用 `Screen.safeArea` 转换后的本地安全区域。
+
+当前选位规则：
+
+- 默认显示在光标右下方。
+- 右侧空间不足时自动翻到左侧。
+- 下方空间不足时自动翻到上方。
+- 最终位置会再次约束在安全区域内。
+- 分辨率、窗口尺寸或安全区域在面板显示期间变化时，会自动重排并重新定位。
+
+### 四、接口与业务保持不变
+
+宿主对业务 View 仍然只暴露：
+
+```csharp
+BattleSecondaryInfoPanelHost.HandlePointer(...)
+```
+
+没有修改：
+
+- 卡牌关键词数据格式。
+- Buff 定义数据格式。
+- 卡牌关键词触发 View。
+- Buff 图标触发 View。
+- 悬停延时与关闭语义。
+- 战斗结算逻辑。
+- BattleScene YAML。
+
+### 五、验证记录
+
+- 最终源码使用 Unity 当前生成的完整 Assembly-CSharp 响应文件编译通过，无 C# 警告或错误。
+- 本轮过程中交互式 Unity 已完成资源刷新与程序集重载；最后的源码状态另由完整响应文件复验。
+- Unity Editor.log 未发现二级面板、Canvas、Layout、空引用或 MissingReference 相关错误。
+- 静态响应式计算已覆盖 640x480、800x600、1280x720、1920x1080、2560x1080、720x1280、3840x2160。
+- `git diff --check` 通过。
