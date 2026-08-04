@@ -11,6 +11,8 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
     public bool IsHighlighted { get; private set; }
     public BattleBezierRelationLineUIView PrimaryCurve => primaryCurve;
     public BattleBezierRelationLineUIView SecondaryCurve => secondaryCurve;
+    public int SiblingIndex => transform.GetSiblingIndex();
+    public float UnilateralArrowEndpointOffset { get; private set; }
     public bool CanvasGroupIgnoresRaycasts => canvasGroup != null &&
         !canvasGroup.interactable && !canvasGroup.blocksRaycasts;
     private bool isDestroying;
@@ -52,7 +54,8 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
         float distanceCurveFactor,
         float minCurveHeight,
         float maxCurveHeight,
-        float laneSpacing
+        float laneSpacing,
+        float arrowEndpointOffset = 0f
     )
     {
         EnsureRaycastSafety();
@@ -75,10 +78,17 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
                 maxCurveHeight,
                 descriptor.LaneIndex * laneSpacing
             );
+        // 共享端点只做视觉避让，关系描述中的正式槽位ID保持不变。
+        Vector2 visualEnd = ResolveVisualArrowEndpoint(
+            control,
+            end,
+            arrowEndpointOffset
+        );
+        UnilateralArrowEndpointOffset = arrowEndpointOffset;
         primaryCurve.Render(
             start,
             control,
-            end,
+            visualEnd,
             color,
             true,
             highlighted
@@ -113,6 +123,7 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
         RelationID = descriptor.RelationID;
         Kind = descriptor.Kind;
         IsHighlighted = highlighted;
+        UnilateralArrowEndpointOffset = 0f;
 
         Vector2 sharedControl =
             BattleBezierRelationLineUIView.ResolveControlPoint(
@@ -213,6 +224,7 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
     {
         RelationID = string.Empty;
         IsHighlighted = false;
+        UnilateralArrowEndpointOffset = 0f;
         if (primaryCurve != null)
         {
             primaryCurve.Clear();
@@ -262,5 +274,26 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
         primaryCurve = primary;
         secondaryCurve = secondary;
         EnsureRaycastSafety();
+    }
+
+    private static Vector2 ResolveVisualArrowEndpoint(
+        Vector2 control,
+        Vector2 end,
+        float offset
+    )
+    {
+        if (Mathf.Abs(offset) <= 0.001f)
+        {
+            return end;
+        }
+
+        Vector2 tangent = end - control;
+        if (tangent.sqrMagnitude <= 0.0001f)
+        {
+            return end;
+        }
+
+        Vector2 normal = new Vector2(-tangent.y, tangent.x).normalized;
+        return end + normal * offset;
     }
 }

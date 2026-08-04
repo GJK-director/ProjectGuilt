@@ -1575,7 +1575,13 @@ public static class BattleActionRelationInteractionMode75Tests
         "普通敌方虚线几何回归不变",
         "双方互动继续复用普通共享曲线",
         "Clash Arrow Gap只影响中间间距",
-        "Highlight不改变曲线高度"
+        "Highlight不改变曲线高度",
+        "Tab显示两名友方指向不同敌人的全部箭头",
+        "两名友方共享敌方终点时两支箭头均可见",
+        "两名敌人共享友方终点时两支箭头均可见",
+        "混合关系数量与全部箭头视觉状态正确",
+        "Tab Hover Selected反复切换后箭头稳定",
+        "对象池复用后关系View顺序与箭头稳定"
     };
 
     private sealed class Fixture
@@ -1584,9 +1590,12 @@ public static class BattleActionRelationInteractionMode75Tests
         public CharacterData allyA;
         public CharacterData allyB;
         public CharacterData enemy;
+        public CharacterData enemy2;
         public BattleActionSlot sourceSlot;
         public BattleEnemyIntent intent;
+        public BattleEnemyIntent intent2;
         public BattleCardState attack;
+        public BattleCardState allyBAttack;
         public BattleCardState defense;
         public BattleCardState dodge;
     }
@@ -1616,6 +1625,13 @@ public static class BattleActionRelationInteractionMode75Tests
         public BattleBezierRelationLineUIView preview;
     }
 
+    private sealed class RelationVisualSnapshot
+    {
+        public Vector2 arrowTip;
+        public int siblingIndex;
+        public string parentName;
+    }
+
     public static bool Run()
     {
         bool[] results = new bool[Names.Length];
@@ -1623,6 +1639,7 @@ public static class BattleActionRelationInteractionMode75Tests
         RunAssignments(results);
         RunRelations(results);
         RunSelectionAndPriority(results);
+        RunRevealAllArrowStability(results);
 
         bool allPassed = true;
         for (int index = 0; index < results.Length; index++)
@@ -1633,7 +1650,7 @@ public static class BattleActionRelationInteractionMode75Tests
             );
             allPassed &= results[index];
         }
-        Debug.Log("模式75 90项聚合结果：" + allPassed);
+        Debug.Log("模式75 " + Names.Length + "项聚合结果：" + allPassed);
         return allPassed;
     }
 
@@ -2187,6 +2204,167 @@ public static class BattleActionRelationInteractionMode75Tests
         DestroyDisplay(display);
     }
 
+    private static void RunRevealAllArrowStability(bool[] r)
+    {
+        Fixture distinct = CreateMultiRelationFixture();
+        bool distinctAssigned = AssignPlayerAttack(
+            distinct,
+            distinct.allyA,
+            distinct.attack,
+            distinct.enemy
+        ) && AssignPlayerAttack(
+            distinct,
+            distinct.allyB,
+            distinct.allyBAttack,
+            distinct.enemy2
+        );
+        Display distinctDisplay = CreateDisplay(distinct);
+        distinctDisplay.controller.SetRevealAllHeld(true);
+        BattleActionRelationUIView distinctA = FindVisibleRelationByID(
+            distinctDisplay.controller,
+            "AllyA:1->Enemy:1"
+        );
+        BattleActionRelationUIView distinctB = FindVisibleRelationByID(
+            distinctDisplay.controller,
+            "AllyB:1->Enemy2:1"
+        );
+        r[90] = distinctAssigned && distinctA != null && distinctB != null &&
+            HasVisiblePrimaryArrow(distinctA) &&
+            HasVisiblePrimaryArrow(distinctB) &&
+            distinctDisplay.controller.CachedRelations.Count == 4 &&
+            HasUniqueIDs(distinctDisplay.controller.CachedRelations) &&
+            distinctDisplay.controller.VisibleRelationCount ==
+                distinctDisplay.controller.CachedRelations.Count;
+        DestroyDisplay(distinctDisplay);
+
+        Fixture sharedPlayerTarget = CreateMultiRelationFixture();
+        bool sharedPlayerAssigned = AssignPlayerAttack(
+            sharedPlayerTarget,
+            sharedPlayerTarget.allyA,
+            sharedPlayerTarget.attack,
+            sharedPlayerTarget.enemy
+        ) && AssignPlayerAttack(
+            sharedPlayerTarget,
+            sharedPlayerTarget.allyB,
+            sharedPlayerTarget.allyBAttack,
+            sharedPlayerTarget.enemy
+        );
+        Display sharedPlayerDisplay = CreateDisplay(sharedPlayerTarget);
+        sharedPlayerDisplay.controller.SetRevealAllHeld(true);
+        BattleActionRelationUIView sharedPlayerA = FindVisibleRelationByID(
+            sharedPlayerDisplay.controller,
+            "AllyA:1->Enemy:1"
+        );
+        BattleActionRelationUIView sharedPlayerB = FindVisibleRelationByID(
+            sharedPlayerDisplay.controller,
+            "AllyB:1->Enemy:1"
+        );
+        r[91] = sharedPlayerAssigned &&
+            sharedPlayerDisplay.controller.CachedRelations.Count == 4 &&
+            HasUniqueIDs(sharedPlayerDisplay.controller.CachedRelations) &&
+            HaveSeparatedVisibleArrows(sharedPlayerA, sharedPlayerB);
+        DestroyDisplay(sharedPlayerDisplay);
+
+        Fixture sharedEnemyTarget = CreateMultiRelationFixture();
+        SetIntentTarget(
+            sharedEnemyTarget.intent,
+            sharedEnemyTarget.allyA,
+            1
+        );
+        SetIntentTarget(
+            sharedEnemyTarget.intent2,
+            sharedEnemyTarget.allyA,
+            1
+        );
+        Display sharedEnemyDisplay = CreateDisplay(sharedEnemyTarget);
+        sharedEnemyDisplay.controller.SetRevealAllHeld(true);
+        BattleActionRelationUIView sharedEnemyA = FindVisibleRelationByID(
+            sharedEnemyDisplay.controller,
+            "Enemy:1->AllyA:1"
+        );
+        BattleActionRelationUIView sharedEnemyB = FindVisibleRelationByID(
+            sharedEnemyDisplay.controller,
+            "Enemy2:1->AllyA:1"
+        );
+        r[92] = sharedEnemyDisplay.controller.CachedRelations.Count == 2 &&
+            HasUniqueIDs(sharedEnemyDisplay.controller.CachedRelations) &&
+            HaveSeparatedVisibleArrows(sharedEnemyA, sharedEnemyB);
+        DestroyDisplay(sharedEnemyDisplay);
+
+        Fixture mixed = CreateMultiRelationFixture();
+        SetIntentTarget(mixed.intent, mixed.allyA, 1);
+        BattleActionAssignmentResult mixedResponseResult;
+        bool mixedResponseAssigned =
+            BattleActionSlotManager.TryAssignToEnemyIntent(
+                mixed.runtime,
+                mixed.allyA,
+                1,
+                mixed.attack,
+                mixed.intent,
+                out mixedResponseResult
+            );
+        bool mixedUnilateralAssigned = AssignPlayerAttack(
+            mixed,
+            mixed.allyB,
+            mixed.allyBAttack,
+            mixed.enemy2
+        );
+        Display mixedDisplay = CreateDisplay(mixed);
+        mixedDisplay.controller.SetRevealAllHeld(true);
+        r[93] = mixedResponseAssigned && mixedUnilateralAssigned &&
+            mixedDisplay.controller.CachedRelations.Count == 3 &&
+            mixedDisplay.controller.VisibleRelationCount == 3 &&
+            AllVisibleCurvesHaveArrows(mixedDisplay.controller);
+        DestroyDisplay(mixedDisplay);
+
+        Fixture repeated = CreateMultiRelationFixture();
+        AssignPlayerAttack(
+            repeated,
+            repeated.allyA,
+            repeated.attack,
+            repeated.enemy
+        );
+        AssignPlayerAttack(
+            repeated,
+            repeated.allyB,
+            repeated.allyBAttack,
+            repeated.enemy
+        );
+        Display repeatedDisplay = CreateDisplay(repeated);
+        repeatedDisplay.controller.SetRevealAllHeld(true);
+        Dictionary<string, RelationVisualSnapshot> repeatedExpected =
+            CaptureVisibleRelationVisuals(repeatedDisplay.controller);
+        bool repeatedStable = repeatedExpected.Count ==
+            repeatedDisplay.controller.CachedRelations.Count;
+        for (int cycle = 0; cycle < 3; cycle++)
+        {
+            repeatedDisplay.controller.SetRevealAllHeld(false);
+            repeatedDisplay.controller.SetHoveredSlot("AllyA:1");
+            repeatedDisplay.controller.ClearHoveredSlot("AllyA:1");
+            repeatedDisplay.controller.SetSelectedSlot("AllyB:1");
+            repeatedDisplay.controller.ClearSelectedSlot();
+            repeatedDisplay.controller.SetRevealAllHeld(true);
+            repeatedStable &= VisibleVisualsMatch(
+                repeatedDisplay.controller,
+                repeatedExpected
+            );
+        }
+        r[94] = repeatedStable;
+
+        repeatedDisplay.controller.SetHoveredSlot("AllyA:1");
+        repeatedDisplay.controller.ClearHoveredSlot("AllyA:1");
+        repeatedDisplay.controller.SetRevealAllHeld(false);
+        repeatedDisplay.controller.SetSelectedSlot("AllyB:1");
+        repeatedDisplay.controller.ClearSelectedSlot();
+        repeatedDisplay.controller.RefreshRelations();
+        repeatedDisplay.controller.SetRevealAllHeld(true);
+        r[95] = VisibleVisualsMatch(
+            repeatedDisplay.controller,
+            repeatedExpected
+        );
+        DestroyDisplay(repeatedDisplay);
+    }
+
     private static AssignmentProbe ProbePendingTarget(
         Fixture fixture,
         BattleCardState card
@@ -2420,6 +2598,22 @@ public static class BattleActionRelationInteractionMode75Tests
         return false;
     }
 
+    private static BattleActionRelationUIView FindVisibleRelationByID(
+        BattleActionRelationLineController controller,
+        string relationID
+    )
+    {
+        for (int index = 0; index < controller.VisibleRelationCount; index++)
+        {
+            BattleActionRelationUIView view = controller.GetVisibleView(index);
+            if (view != null && view.RelationID == relationID)
+            {
+                return view;
+            }
+        }
+        return null;
+    }
+
     private static void LogSelectedRelationDiagnostic(
         BattleActionRelationLineController controller,
         string selectedSlotID
@@ -2471,6 +2665,148 @@ public static class BattleActionRelationInteractionMode75Tests
         string selected = controller.SelectedSlotID;
         controller.EndCardTargetingPreview();
         return controller.SelectedSlotID == selected;
+    }
+
+    private static bool AssignPlayerAttack(
+        Fixture fixture,
+        CharacterData owner,
+        BattleCardState card,
+        CharacterData targetEnemy
+    )
+    {
+        BattleActionAssignmentResult result;
+        return BattleActionSlotManager.TryAssignToEnemy(
+            fixture.runtime,
+            owner,
+            1,
+            card,
+            targetEnemy,
+            1,
+            out result
+        ) && result != null && result.isSuccess;
+    }
+
+    private static void SetIntentTarget(
+        BattleEnemyIntent intent,
+        CharacterData target,
+        int slotIndex
+    )
+    {
+        intent.originalTargetCharacter = target;
+        intent.originalTargetSlotIndex = slotIndex;
+        intent.ResetResponseState();
+    }
+
+    private static bool HasVisiblePrimaryArrow(
+        BattleActionRelationUIView view
+    )
+    {
+        return view != null &&
+            IsCurveArrowReady(view.PrimaryCurve);
+    }
+
+    private static bool HaveSeparatedVisibleArrows(
+        BattleActionRelationUIView left,
+        BattleActionRelationUIView right
+    )
+    {
+        return HasVisiblePrimaryArrow(left) &&
+            HasVisiblePrimaryArrow(right) &&
+            Mathf.Abs(left.UnilateralArrowEndpointOffset) > 0.001f &&
+            Mathf.Abs(right.UnilateralArrowEndpointOffset) > 0.001f &&
+            Vector2.Distance(
+                left.PrimaryCurve.ArrowTip,
+                right.PrimaryCurve.ArrowTip
+            ) > 0.01f;
+    }
+
+    private static bool AllVisibleCurvesHaveArrows(
+        BattleActionRelationLineController controller
+    )
+    {
+        for (int index = 0; index < controller.VisibleRelationCount; index++)
+        {
+            BattleActionRelationUIView view = controller.GetVisibleView(index);
+            if (view == null || !IsCurveArrowReady(view.PrimaryCurve))
+            {
+                return false;
+            }
+            if (view.SecondaryCurve != null &&
+                view.SecondaryCurve.IsVisible &&
+                !IsCurveArrowReady(view.SecondaryCurve))
+            {
+                return false;
+            }
+        }
+        return controller.VisibleRelationCount > 0;
+    }
+
+    private static bool IsCurveArrowReady(
+        BattleBezierRelationLineUIView curve
+    )
+    {
+        return curve != null && curve.IsVisible &&
+            curve.ArrowActiveSelf && curve.ArrowAlpha > 0f &&
+            curve.ArrowRenderedSize.x > 0f &&
+            curve.ArrowRenderedSize.y > 0f &&
+            curve.HasDeterministicVisualLayerOrder;
+    }
+
+    private static Dictionary<string, RelationVisualSnapshot>
+        CaptureVisibleRelationVisuals(
+            BattleActionRelationLineController controller
+        )
+    {
+        Dictionary<string, RelationVisualSnapshot> snapshots =
+            new Dictionary<string, RelationVisualSnapshot>(
+                StringComparer.Ordinal
+            );
+        for (int index = 0; index < controller.VisibleRelationCount; index++)
+        {
+            BattleActionRelationUIView view = controller.GetVisibleView(index);
+            if (view == null || view.PrimaryCurve == null)
+            {
+                continue;
+            }
+            snapshots[view.RelationID] = new RelationVisualSnapshot
+            {
+                arrowTip = view.PrimaryCurve.ArrowTip,
+                siblingIndex = view.SiblingIndex,
+                parentName = view.transform.parent != null
+                    ? view.transform.parent.name
+                    : string.Empty
+            };
+        }
+        return snapshots;
+    }
+
+    private static bool VisibleVisualsMatch(
+        BattleActionRelationLineController controller,
+        Dictionary<string, RelationVisualSnapshot> expected
+    )
+    {
+        if (expected == null ||
+            controller.VisibleRelationCount != expected.Count ||
+            !AllVisibleCurvesHaveArrows(controller))
+        {
+            return false;
+        }
+
+        for (int index = 0; index < controller.VisibleRelationCount; index++)
+        {
+            BattleActionRelationUIView view = controller.GetVisibleView(index);
+            RelationVisualSnapshot snapshot;
+            if (view == null || view.PrimaryCurve == null ||
+                !expected.TryGetValue(view.RelationID, out snapshot) ||
+                !Approximately(view.PrimaryCurve.ArrowTip, snapshot.arrowTip) ||
+                view.SiblingIndex != snapshot.siblingIndex ||
+                view.transform.parent == null ||
+                view.transform.parent.name != snapshot.parentName)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static Fixture CreateFixture()
@@ -2528,6 +2864,81 @@ public static class BattleActionRelationInteractionMode75Tests
         fixture.runtime.SetActionSlots(slots);
         fixture.runtime.SetIntentQueue(
             new List<BattleEnemyIntent> { fixture.intent }
+        );
+        fixture.runtime.SetPhase("Prepare");
+        return fixture;
+    }
+
+    private static Fixture CreateMultiRelationFixture()
+    {
+        Fixture fixture = new Fixture();
+        fixture.allyA = new CharacterData("mode75_multi_A", 30, 10, 10);
+        fixture.allyB = new CharacterData("mode75_multi_B", 30, 8, 8);
+        fixture.enemy = new CharacterData("mode75_multi_Enemy1", 50, 5, 5);
+        fixture.enemy2 = new CharacterData("mode75_multi_Enemy2", 50, 4, 4);
+        fixture.attack = BattleCardManager.CreateBattleCard(
+            fixture.allyA,
+            CreateCard("mode75_multi_attack_a", CardType.Attack),
+            "mode75_multi_attack_a_instance"
+        );
+        fixture.allyBAttack = BattleCardManager.CreateBattleCard(
+            fixture.allyB,
+            CreateCard("mode75_multi_attack_b", CardType.Attack),
+            "mode75_multi_attack_b_instance"
+        );
+        BattleCardState enemyAttack = BattleCardManager.CreateBattleCard(
+            fixture.enemy,
+            CreateCard("mode75_multi_enemy_attack_1", CardType.Attack),
+            "mode75_multi_enemy_attack_1_instance"
+        );
+        BattleCardState enemy2Attack = BattleCardManager.CreateBattleCard(
+            fixture.enemy2,
+            CreateCard("mode75_multi_enemy_attack_2", CardType.Attack),
+            "mode75_multi_enemy_attack_2_instance"
+        );
+        List<BattleActionSlot> slots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                fixture.allyA,
+                fixture.allyB,
+                2
+            );
+        fixture.sourceSlot = BattleActionSlotManager.GetSlot(
+            slots,
+            fixture.allyA,
+            1
+        );
+        fixture.intent = new BattleEnemyIntent(
+            "mode75_multi_intent_1",
+            fixture.enemy,
+            enemyAttack,
+            fixture.allyA,
+            2,
+            1,
+            1
+        );
+        fixture.intent2 = new BattleEnemyIntent(
+            "mode75_multi_intent_2",
+            fixture.enemy2,
+            enemy2Attack,
+            fixture.allyB,
+            2,
+            2,
+            1
+        );
+        fixture.runtime = new BattleRuntimeState();
+        fixture.runtime.SetCharacters(
+            fixture.allyA,
+            fixture.allyB,
+            fixture.enemy,
+            fixture.enemy2
+        );
+        fixture.runtime.SetActionSlots(slots);
+        fixture.runtime.SetIntentQueue(
+            new List<BattleEnemyIntent>
+            {
+                fixture.intent,
+                fixture.intent2
+            }
         );
         fixture.runtime.SetPhase("Prepare");
         return fixture;
@@ -2656,6 +3067,23 @@ public static class BattleActionRelationInteractionMode75Tests
         RegisterSlot(display, fixture.allyB, 1, false, new Vector2(220f, -100f));
         RegisterSlot(display, fixture.enemy, 0, true, new Vector2(-80f, 140f));
         RegisterSlot(display, fixture.enemy, 1, true, new Vector2(120f, 140f));
+        if (fixture.enemy2 != null)
+        {
+            RegisterSlot(
+                display,
+                fixture.enemy2,
+                0,
+                true,
+                new Vector2(260f, 140f)
+            );
+            RegisterSlot(
+                display,
+                fixture.enemy2,
+                1,
+                true,
+                new Vector2(400f, 140f)
+            );
+        }
     }
 
     private static void RegisterSlot(

@@ -28,6 +28,9 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     [SerializeField] private float minCurveHeight = 100f;
     [SerializeField] private float maxCurveHeight = 320f;
     [SerializeField] private float laneSpacing = 28f;
+    [SerializeField, Min(0f)]
+    [Tooltip("多条单向关系共享同一箭头终点时，沿曲线末端法线分开的间距。")]
+    private float sharedArrowEndpointSpacing = 18f;
 
     [Header("线条尺寸")]
     [SerializeField] private Vector2 segmentSize = new Vector2(12f, 4f);
@@ -59,6 +62,10 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         new List<BattleActionRelationUIView>();
     private readonly List<BattleActionRelationDescriptor> cachedRelations =
         new List<BattleActionRelationDescriptor>();
+    private readonly Dictionary<string, int> visibleTargetCounts =
+        new Dictionary<string, int>();
+    private readonly Dictionary<string, int> visibleTargetOrdinals =
+        new Dictionary<string, int>();
     private BattleRuntimeState runtimeState;
     private BattleActionRelationQueryService queryService;
     private string hoveredSlotID;
@@ -592,6 +599,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             return;
         }
 
+        CountVisibleUnilateralTargets();
         for (int index = 0; index < cachedRelations.Count; index++)
         {
             BattleActionRelationDescriptor relation = cachedRelations[index];
@@ -608,13 +616,18 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             {
                 continue;
             }
-            ShowRelation(relation, highlighted);
+            ShowRelation(
+                relation,
+                highlighted,
+                GetStableArrowEndpointOffset(relation)
+            );
         }
     }
 
     private void ShowRelation(
         BattleActionRelationDescriptor relation,
-        bool highlighted
+        bool highlighted,
+        float arrowEndpointOffset
     )
     {
         Vector2 source;
@@ -679,7 +692,8 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
                 distanceCurveFactor,
                 minCurveHeight,
                 maxCurveHeight,
-                laneSpacing
+                laneSpacing,
+                arrowEndpointOffset
             );
         }
         activeViews.Add(view);
@@ -710,6 +724,8 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         }
         view.gameObject.SetActive(false);
         view.transform.SetParent(root, false);
+        // 对象池中的旧 sibling 位置不可复用；当前稳定查询顺序决定本次绘制顺序。
+        view.transform.SetAsLastSibling();
         RectTransform rect = view.transform as RectTransform;
         if (rect != null)
         {
@@ -722,6 +738,68 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         }
         view.PrepareForReuse();
         return view;
+    }
+
+    private void CountVisibleUnilateralTargets()
+    {
+        visibleTargetCounts.Clear();
+        visibleTargetOrdinals.Clear();
+        for (int index = 0; index < cachedRelations.Count; index++)
+        {
+            BattleActionRelationDescriptor relation = cachedRelations[index];
+            if (relation.UsesMutualSolidVisual ||
+                !ShouldDisplayRelation(relation))
+            {
+                continue;
+            }
+
+            int count;
+            visibleTargetCounts.TryGetValue(relation.TargetSlotID, out count);
+            visibleTargetCounts[relation.TargetSlotID] = count + 1;
+        }
+    }
+
+    private float GetStableArrowEndpointOffset(
+        BattleActionRelationDescriptor relation
+    )
+    {
+        if (relation == null || relation.UsesMutualSolidVisual ||
+            sharedArrowEndpointSpacing <= 0f)
+        {
+            return 0f;
+        }
+
+        int count;
+        if (!visibleTargetCounts.TryGetValue(relation.TargetSlotID, out count) ||
+            count <= 1)
+        {
+            return 0f;
+        }
+
+        int ordinal;
+        visibleTargetOrdinals.TryGetValue(
+            relation.TargetSlotID,
+            out ordinal
+        );
+        visibleTargetOrdinals[relation.TargetSlotID] = ordinal + 1;
+        return (ordinal - (count - 1) * 0.5f) *
+            sharedArrowEndpointSpacing;
+    }
+
+    private bool ShouldDisplayRelation(
+        BattleActionRelationDescriptor relation
+    )
+    {
+        if (relation == null)
+        {
+            return false;
+        }
+
+        bool hovered = !string.IsNullOrEmpty(hoveredSlotID) &&
+            relation.InvolvesSlot(hoveredSlotID);
+        bool selected = !string.IsNullOrEmpty(selectedSlotID) &&
+            relation.InvolvesSlot(selectedSlotID);
+        return revealAllHeld || hovered || selected;
     }
 
     private void RecycleActiveViews()

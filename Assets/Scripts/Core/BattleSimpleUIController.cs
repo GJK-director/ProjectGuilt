@@ -24,10 +24,6 @@ public class BattleSimpleUIController : MonoBehaviour
     [SerializeField] private TMP_Text logText;
     [SerializeField] private BattleCardUIView testCardView;
     [SerializeField] private BattleCardHandUIView testCardHandView;
-    [SerializeField] private BattleCharacterStatusUIView ally01StatusView;
-    [SerializeField] private BattleCharacterStatusUIView ally02StatusView;
-    [SerializeField] private BattleCharacterStatusUIView enemy01StatusView;
-    [SerializeField] private BattleCharacterStatusUIView enemy02StatusView;
     [SerializeField] private BattleRoundUIView roundView;
     [SerializeField] private BattleGuiltUIView guiltView;
     [SerializeField]
@@ -65,6 +61,14 @@ public class BattleSimpleUIController : MonoBehaviour
     private CharacterData ally02;
     private CharacterData enemy01;
     private CharacterData enemy02;
+
+    // 四个状态View只能由Spawner生成的Handle提供，不再接受场景静态引用。
+    private BattleCharacterStatusUIView ally01StatusView;
+    private BattleCharacterStatusUIView ally02StatusView;
+    private BattleCharacterStatusUIView enemy01StatusView;
+    private BattleCharacterStatusUIView enemy02StatusView;
+    private bool runtimeUnitViewsReady;
+    private bool warnedRuntimeUnitViewsUnavailable;
 
     private BattleCardState allyAAttackCardState;
     private BattleCardState allyABulletAttackCardState;
@@ -127,8 +131,10 @@ public class BattleSimpleUIController : MonoBehaviour
     void Start()
     {
         InitializeTestBattleData();
-        SpawnRuntimeUnitViewsOnce();
-        BindCharacterStatusSlotInteractions();
+        if (SpawnRuntimeUnitViewsOnce())
+        {
+            BindCharacterStatusSlotInteractions();
+        }
         BindCardHandInteractions();
         BindButtonEvents();
         RefreshView();
@@ -149,7 +155,13 @@ public class BattleSimpleUIController : MonoBehaviour
         }
 
         cardInteractionCoordinator?.ClearAllSelections();
+        if (unitViewSpawner != null)
+        {
+            unitViewSpawner.GeneratedViewsCleared -=
+                OnRuntimeUnitViewsCleared;
+        }
         unitViewSpawner?.ClearGeneratedViews();
+        ClearRuntimeStatusViewReferences();
         actionRelationLineController?.ClearAll();
         UnbindButtonEvents();
     }
@@ -344,17 +356,34 @@ public class BattleSimpleUIController : MonoBehaviour
         return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
     }
 
-    void SpawnRuntimeUnitViewsOnce()
+    bool SpawnRuntimeUnitViewsOnce()
     {
-        if (unitViewSpawner == null || runtimeState == null)
+        ClearRuntimeStatusViewReferences();
+
+        if (unitViewSpawner == null)
         {
-            return;
+            lastLog = "运行时角色表现初始化失败：未绑定BattleUnitViewSpawner";
+            Debug.LogError(lastLog, this);
+            return false;
         }
+
+        if (runtimeState == null)
+        {
+            lastLog = "运行时角色表现初始化失败：BattleRuntimeState为空";
+            Debug.LogError(lastLog, this);
+            return false;
+        }
+
+        unitViewSpawner.GeneratedViewsCleared -=
+            OnRuntimeUnitViewsCleared;
+        unitViewSpawner.GeneratedViewsCleared +=
+            OnRuntimeUnitViewsCleared;
 
         if (!unitViewSpawner.Spawn(runtimeState))
         {
             lastLog = "运行时角色表现生成失败，请检查Spawner配置";
-            return;
+            Debug.LogError(lastLog, this);
+            return false;
         }
 
         // 动态生成成功后，现有控制器继续复用原StatusView交互和刷新流程。
@@ -367,18 +396,47 @@ public class BattleSimpleUIController : MonoBehaviour
         BattleUnitViewHandle enemy02Handle =
             unitViewSpawner.GetHandle(enemy02);
 
-        ally01StatusView = ally01Handle != null
-            ? ally01Handle.StatusView
-            : ally01StatusView;
-        ally02StatusView = ally02Handle != null
-            ? ally02Handle.StatusView
-            : ally02StatusView;
-        enemy01StatusView = enemy01Handle != null
-            ? enemy01Handle.StatusView
-            : enemy01StatusView;
-        enemy02StatusView = enemy02Handle != null
-            ? enemy02Handle.StatusView
-            : enemy02StatusView;
+        if (!HasValidStatusView(ally01Handle) ||
+            !HasValidStatusView(ally02Handle) ||
+            !HasValidStatusView(enemy01Handle) ||
+            !HasValidStatusView(enemy02Handle))
+        {
+            lastLog = "运行时角色表现初始化失败：四个动态Handle或StatusView不完整";
+            Debug.LogError(lastLog, this);
+            unitViewSpawner.ClearGeneratedViews();
+            return false;
+        }
+
+        ally01StatusView = ally01Handle.StatusView;
+        ally02StatusView = ally02Handle.StatusView;
+        enemy01StatusView = enemy01Handle.StatusView;
+        enemy02StatusView = enemy02Handle.StatusView;
+        runtimeUnitViewsReady = true;
+        warnedRuntimeUnitViewsUnavailable = false;
+        return true;
+    }
+
+    private static bool HasValidStatusView(BattleUnitViewHandle handle)
+    {
+        return handle != null && handle.StatusView != null;
+    }
+
+    private void OnRuntimeUnitViewsCleared()
+    {
+        // Spawner可能先于Controller销毁，立即清掉所有动态对象引用。
+        cardInteractionCoordinator?.ClearAllSelections();
+        actionRelationLineController?.ClearSelectedSlot();
+        ClearRuntimeStatusViewReferences();
+    }
+
+    private void ClearRuntimeStatusViewReferences()
+    {
+        ally01StatusView = null;
+        ally02StatusView = null;
+        enemy01StatusView = null;
+        enemy02StatusView = null;
+        runtimeUnitViewsReady = false;
+        warnedRuntimeUnitViewsUnavailable = false;
     }
 
     List<BattleEnemyIntent> CreateFixedEnemyIntentQueue(List<BattleActionSlot> actionSlots)
@@ -1460,30 +1518,21 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void RefreshCharacterStatusViews()
     {
-        if (unitViewSpawner != null && unitViewSpawner.IsSpawned)
+        if (runtimeUnitViewsReady &&
+            unitViewSpawner != null &&
+            unitViewSpawner.IsSpawned)
         {
             unitViewSpawner.RefreshGeneratedViews();
             return;
         }
 
-        if (ally01StatusView != null)
+        if (!warnedRuntimeUnitViewsUnavailable)
         {
-            ally01StatusView.SetCharacter(ally01);
-        }
-
-        if (ally02StatusView != null)
-        {
-            ally02StatusView.SetCharacter(ally02);
-        }
-
-        if (enemy01StatusView != null)
-        {
-            enemy01StatusView.SetCharacter(enemy01);
-        }
-
-        if (enemy02StatusView != null)
-        {
-            enemy02StatusView.SetCharacter(enemy02);
+            warnedRuntimeUnitViewsUnavailable = true;
+            Debug.LogWarning(
+                "动态角色状态UI尚未就绪，本次刷新已安全跳过。",
+                this
+            );
         }
     }
 
@@ -1860,10 +1909,6 @@ public class BattleSimpleUIController : MonoBehaviour
         }
 
         actionRelationLineController.BindRuntimeState(runtimeState);
-        RegisterStatusViewRelationSlots(ally01StatusView);
-        RegisterStatusViewRelationSlots(ally02StatusView);
-        RegisterStatusViewRelationSlots(enemy01StatusView);
-        RegisterStatusViewRelationSlots(enemy02StatusView);
         actionRelationLineController.RefreshRelations();
         if (cardInteractionCoordinator != null &&
             cardInteractionCoordinator.SelectedActionSlotView != null)
@@ -1873,23 +1918,6 @@ public class BattleSimpleUIController : MonoBehaviour
             );
         }
         RefreshCardTargetingPreview();
-    }
-
-    private void RegisterStatusViewRelationSlots(
-        BattleCharacterStatusUIView statusView
-    )
-    {
-        if (statusView == null || actionRelationLineController == null)
-        {
-            return;
-        }
-
-        actionRelationLineController.RegisterSlotView(
-            statusView.GetSlotView(0)
-        );
-        actionRelationLineController.RegisterSlotView(
-            statusView.GetSlotView(1)
-        );
     }
 
     private void OnSelfActionTargetClicked(

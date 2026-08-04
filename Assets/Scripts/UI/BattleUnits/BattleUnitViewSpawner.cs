@@ -40,19 +40,12 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
     [SerializeField]
     private BattleActionRelationLineController relationLineController;
 
-    [Header("旧静态对象兼容")]
-    [SerializeField] private bool disableLegacyStaticObjectsOnSpawn;
-    [SerializeField] private GameObject[] legacyStaticWorldObjects;
-    [SerializeField] private GameObject[] legacyStaticStatusUIObjects;
-
     private readonly List<BattleUnitViewHandle> generatedHandles =
         new List<BattleUnitViewHandle>();
     private readonly List<GameObject> generatedWorldObjects =
         new List<GameObject>();
     private readonly List<GameObject> generatedStatusUIObjects =
         new List<GameObject>();
-    private readonly Dictionary<GameObject, bool> legacyOriginalActiveStates =
-        new Dictionary<GameObject, bool>();
     private bool isSpawned;
     private bool isClearing;
 
@@ -60,6 +53,7 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
     public IReadOnlyList<BattleUnitViewHandle> GeneratedHandles =>
         generatedHandles;
     public event Action SpawnCompleted;
+    public event Action GeneratedViewsCleared;
 
     public bool Spawn(BattleRuntimeState runtimeState)
     {
@@ -133,7 +127,6 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
         }
 
         isSpawned = true;
-        CaptureAndDisableLegacyStaticObjects();
         relationLineController.RefreshRelations();
         SpawnCompleted?.Invoke();
         return true;
@@ -176,6 +169,10 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
             return;
         }
 
+        bool hadGeneratedViews = isSpawned ||
+            generatedHandles.Count > 0 ||
+            generatedWorldObjects.Count > 0 ||
+            generatedStatusUIObjects.Count > 0;
         isClearing = true;
         for (int index = 0; index < generatedHandles.Count; index++)
         {
@@ -219,8 +216,11 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
         generatedStatusUIObjects.Clear();
         generatedWorldObjects.Clear();
         isSpawned = false;
-        RestoreLegacyStaticObjects();
         isClearing = false;
+        if (hadGeneratedViews)
+        {
+            GeneratedViewsCleared?.Invoke();
+        }
     }
 
     private void OnDestroy()
@@ -640,52 +640,6 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
             }
         }
         return false;
-    }
-
-    private void CaptureAndDisableLegacyStaticObjects()
-    {
-        if (!disableLegacyStaticObjectsOnSpawn)
-        {
-            return;
-        }
-        legacyOriginalActiveStates.Clear();
-        CaptureAndSetObjectsInactive(legacyStaticWorldObjects);
-        CaptureAndSetObjectsInactive(legacyStaticStatusUIObjects);
-    }
-
-    private void CaptureAndSetObjectsInactive(GameObject[] objects)
-    {
-        if (objects == null)
-        {
-            return;
-        }
-        for (int index = 0; index < objects.Length; index++)
-        {
-            if (objects[index] != null)
-            {
-                if (!legacyOriginalActiveStates.ContainsKey(objects[index]))
-                {
-                    legacyOriginalActiveStates.Add(
-                        objects[index],
-                        objects[index].activeSelf
-                    );
-                }
-                objects[index].SetActive(false);
-            }
-        }
-    }
-
-    private void RestoreLegacyStaticObjects()
-    {
-        foreach (KeyValuePair<GameObject, bool> pair in
-            legacyOriginalActiveStates)
-        {
-            if (pair.Key != null)
-            {
-                pair.Key.SetActive(pair.Value);
-            }
-        }
-        legacyOriginalActiveStates.Clear();
     }
 
     private static void DestroyGeneratedObjects(List<GameObject> objects)

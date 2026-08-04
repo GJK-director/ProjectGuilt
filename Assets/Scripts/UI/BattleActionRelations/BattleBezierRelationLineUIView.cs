@@ -103,6 +103,54 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
         : gameObject.activeSelf;
     public bool IsUnderlayVisible => useUnderlay && underlayArrow != null &&
         underlayArrow.gameObject.activeSelf;
+    public bool ArrowActiveSelf => arrowImage != null &&
+        arrowImage.gameObject.activeSelf;
+    public float ArrowAlpha => arrowImage != null ? arrowImage.color.a : 0f;
+    public Vector2 ArrowRenderedSize => arrowImage != null
+        ? arrowImage.rectTransform.sizeDelta
+        : Vector2.zero;
+    public int ArrowSiblingIndex => arrowImage != null
+        ? arrowImage.transform.GetSiblingIndex()
+        : -1;
+    public bool HasDeterministicVisualLayerOrder
+    {
+        get
+        {
+            if (arrowImage == null)
+            {
+                return false;
+            }
+
+            int mainArrowIndex = arrowImage.transform.GetSiblingIndex();
+            int lowestMainIndex = mainArrowIndex;
+            for (int index = 0; index < segmentPool.Count; index++)
+            {
+                if (segmentPool[index] == null)
+                {
+                    continue;
+                }
+                int segmentIndex =
+                    segmentPool[index].transform.GetSiblingIndex();
+                lowestMainIndex = Mathf.Min(lowestMainIndex, segmentIndex);
+                if (segmentIndex >= mainArrowIndex)
+                {
+                    return false;
+                }
+            }
+
+            for (int index = 0; index < underlaySegmentPool.Count; index++)
+            {
+                if (underlaySegmentPool[index] != null &&
+                    underlaySegmentPool[index].transform.GetSiblingIndex() >=
+                    lowestMainIndex)
+                {
+                    return false;
+                }
+            }
+            return underlayArrow == null ||
+                underlayArrow.transform.GetSiblingIndex() < lowestMainIndex;
+        }
+    }
     public Vector2 MainSegmentSize => segmentSize *
         (lastHighlighted ? highlightScale : 1f);
     public Vector2 UnderlaySegmentSize => MainSegmentSize * underlayScale;
@@ -249,6 +297,7 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
             : Mathf.FloorToInt(usableLength / lastStep) + 1;
 
         EnsureSegmentCapacity(requiredSegments);
+        ApplyVisualSiblingOrder();
         HideUnusedSegments(requiredSegments);
 
         float alpha = highlighted ? highlightAlpha : normalAlpha;
@@ -688,6 +737,36 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
             segment.raycastTarget = false;
             segment.gameObject.SetActive(false);
             segmentPool.Add(segment);
+        }
+    }
+
+    private void ApplyVisualSiblingOrder()
+    {
+        // 每次扩容后重新固定层级，避免新线段追加到主箭头之上。
+        int siblingIndex = 0;
+        for (int index = 0; index < underlaySegmentPool.Count; index++)
+        {
+            if (underlaySegmentPool[index] != null)
+            {
+                underlaySegmentPool[index].transform.SetSiblingIndex(
+                    siblingIndex++
+                );
+            }
+        }
+        if (underlayArrow != null)
+        {
+            underlayArrow.transform.SetSiblingIndex(siblingIndex++);
+        }
+        for (int index = 0; index < segmentPool.Count; index++)
+        {
+            if (segmentPool[index] != null)
+            {
+                segmentPool[index].transform.SetSiblingIndex(siblingIndex++);
+            }
+        }
+        if (arrowImage != null)
+        {
+            arrowImage.transform.SetAsLastSibling();
         }
     }
 
