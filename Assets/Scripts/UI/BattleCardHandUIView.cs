@@ -142,5 +142,7 @@ public class BattleCardHandUIView : MonoBehaviour
         }
 
         spawnedCardViews.Clear();
+        lastDisplayedOwner = null;
+        hasDisplayedAnyHand = false;
     }
 }

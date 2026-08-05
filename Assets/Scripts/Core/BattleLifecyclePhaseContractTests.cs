@@ -344,9 +344,11 @@ public static class BattleLifecyclePhaseContractTests
     {
         BattleRuntimeState victory = CreateBattleEndRuntime(false);
         BattleRuntimeState defeat = CreateBattleEndRuntime(true);
-        return victory.EvaluateBattleEnd() == BattleResult.Victory &&
+        return new BattleLifecycleController(victory).EvaluateBattleEnd() ==
+                BattleResult.Victory &&
             victory.LifecyclePhase == BattleLifecyclePhase.BattleEnded &&
-            defeat.EvaluateBattleEnd() == BattleResult.Defeat &&
+            new BattleLifecycleController(defeat).EvaluateBattleEnd() ==
+                BattleResult.Defeat &&
             defeat.LifecyclePhase == BattleLifecyclePhase.BattleEnded;
     }
 

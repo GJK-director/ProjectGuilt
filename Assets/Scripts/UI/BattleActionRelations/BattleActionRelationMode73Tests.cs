@@ -1533,8 +1533,8 @@ public static class BattleActionRelationInteractionMode75Tests
         "Self目标不依赖SelfActionDropZone",
         "点击当前selectedSlot可以确认Self目标",
         "取消目标选择不会清除selectedSlot",
-        "安排成功后selectedSlot仍保留",
-        "非攻击卡安排后槽位视觉更新",
+        "安排成功后清除selectedSlot且正式关系保留",
+        "非攻击卡安排后槽位选中高亮清除",
         "非攻击卡安排后卡牌状态更新",
         "Self防御不生成关系Descriptor",
         "Self闪避不生成关系Descriptor",
@@ -2393,10 +2393,9 @@ public static class BattleActionRelationInteractionMode75Tests
         r[27] = defenseSelf.result != null &&
             defenseSelf.result.placementType == BattleActionPlacementType.Self;
         r[28] = pendingAttack.selectionRetained;
-        r[29] = defenseSelf.selectionRetained &&
-            dodgeEnemy.selectionRetained;
-        r[30] = defenseSelf.slotVisualRetained &&
-            dodgeSelf.slotVisualRetained;
+        r[29] = VerifySuccessfulAssignmentCompletionContract();
+        r[30] = !defenseSelf.slotVisualRetained &&
+            !dodgeSelf.slotVisualRetained;
         r[31] = defenseSelf.slot.cardState != null &&
             dodgeEnemy.slot.cardState != null;
     }
@@ -3409,6 +3408,10 @@ public static class BattleActionRelationInteractionMode75Tests
                 source
             );
         probe.success = outcome != null && outcome.isSuccess;
+        if (probe.success)
+        {
+            coordinator.ClearAllSelections();
+        }
         probe.result = outcome != null ? outcome.assignmentResult : null;
         probe.slot = fixture.sourceSlot;
         probe.selectionRetained =
@@ -3447,9 +3450,14 @@ public static class BattleActionRelationInteractionMode75Tests
             fixture.runtime,
             target
         );
+        bool succeeded = outcome != null && outcome.isSuccess;
+        if (succeeded)
+        {
+            coordinator.ClearAllSelections();
+        }
         AssignmentProbe probe = new AssignmentProbe
         {
-            success = outcome != null && outcome.isSuccess,
+            success = succeeded,
             result = outcome != null ? outcome.assignmentResult : null,
             slot = fixture.sourceSlot,
             selectionRetained = object.ReferenceEquals(
@@ -3462,6 +3470,111 @@ public static class BattleActionRelationInteractionMode75Tests
         UnityEngine.Object.DestroyImmediate(source.gameObject);
         UnityEngine.Object.DestroyImmediate(target.gameObject);
         return probe;
+    }
+
+    private static bool VerifySuccessfulAssignmentCompletionContract()
+    {
+        Fixture fixture = CreateFixture();
+        Display display = CreateDisplay(fixture);
+        BattleCardSelectionController selection =
+            new BattleCardSelectionController();
+        BattleCardInteractionCoordinator coordinator =
+            new BattleCardInteractionCoordinator(selection);
+        BattleActionSlotUIView source = CreateSlotView(
+            "Mode75SuccessfulAssignmentSource",
+            fixture.allyA,
+            0,
+            false,
+            null
+        );
+        BattleActionSlotUIView target = CreateSlotView(
+            "Mode75SuccessfulAssignmentTarget",
+            fixture.enemy,
+            1,
+            true,
+            null
+        );
+        BattleCardUIView cardView = CreateCardView(
+            "Mode75SuccessfulAssignmentCard",
+            fixture.allyA,
+            fixture.enemy,
+            fixture.defense,
+            selection
+        );
+        Action<BattleActionSlotUIView> selectionHandler = selectedSlot =>
+        {
+            if (selectedSlot == null)
+            {
+                display.controller.ClearSelectedSlot();
+            }
+            else
+            {
+                display.controller.SetSelectedSlot(selectedSlot);
+            }
+        };
+        coordinator.SourceSlotSelectionChanged += selectionHandler;
+
+        bool sourceSelected = coordinator.SelectSourceSlot(source);
+        bool cardSelected = selection.SelectCard(cardView);
+        bool previewStarted = display.controller.BeginCardTargetingPreview(
+            "AllyA:1"
+        );
+        BattleCardInteractionOutcome outcome = coordinator.ClickEnemySlot(
+            fixture.runtime,
+            target
+        );
+        bool assignmentSucceeded = outcome != null &&
+            outcome.isSuccess &&
+            outcome.assignmentResult != null &&
+            outcome.assignmentResult.isSuccess;
+
+        // 对齐正式成功收尾：仅清理临时交互状态，不触碰已写入的安排数据。
+        if (assignmentSucceeded)
+        {
+            coordinator.ClearAllSelections();
+            display.controller.EndCardTargetingPreview();
+            display.controller.ClearSelectedSlot();
+            display.controller.RefreshRelations();
+        }
+
+        BattleActionRelationDescriptor formalRelation = FindKind(
+            display.controller.CachedRelations,
+            BattleActionRelationKind.PlayerUnilateralTarget
+        );
+        bool formalSlotRetained = fixture.sourceSlot != null &&
+            object.ReferenceEquals(
+                fixture.sourceSlot.cardState,
+                fixture.defense
+            ) &&
+            fixture.sourceSlot.placementType ==
+                BattleActionPlacementType.SpecificEnemy &&
+            fixture.sourceSlot.requestedTargetSlotIndex == 2;
+        display.controller.SetRevealAllHeld(true);
+        bool formalRelationVisible = formalRelation != null &&
+            IsRelationVisible(
+                display.controller,
+                formalRelation.RelationID
+            );
+        display.controller.SetRevealAllHeld(false);
+
+        bool passed = sourceSelected && cardSelected && previewStarted &&
+            assignmentSucceeded &&
+            coordinator.SelectedActionSlotView == null &&
+            coordinator.SelectedCharacter == null &&
+            !selection.HasSelection &&
+            string.IsNullOrEmpty(display.controller.SelectedSlotID) &&
+            !display.controller.PreviewActive &&
+            formalRelation != null &&
+            formalSlotRetained &&
+            formalRelationVisible &&
+            !source.IsSelected;
+
+        coordinator.SourceSlotSelectionChanged -= selectionHandler;
+        UnityEngine.Object.DestroyImmediate(cardView.gameObject);
+        UnityEngine.Object.DestroyImmediate(source.gameObject);
+        UnityEngine.Object.DestroyImmediate(target.gameObject);
+        DestroyDisplay(display);
+        return passed;
     }
 
     private static IReadOnlyList<BattleActionRelationDescriptor>

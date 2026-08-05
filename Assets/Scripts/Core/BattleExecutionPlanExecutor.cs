@@ -15,11 +15,47 @@ public static class BattleExecutionPlanExecutor
 
     public static void ExecuteExecutionPlan(BattleExecutionPlan plan, BattleRuntimeState runtimeState)
     {
-        ExecuteExecutionPlanInternal(plan, runtimeState);
+        if (runtimeState == null)
+        {
+            ExecuteExecutionPlanInternal(plan, null);
+            return;
+        }
+
+        if (!object.ReferenceEquals(runtimeState.currentExecutionPlan, plan))
+        {
+            Debug.LogWarning("执行计划失败：传入计划不是RuntimeState当前计划");
+            return;
+        }
+
+        string failureMessage;
+        if (!new BattleLifecycleController(runtimeState)
+                .TryExecuteCurrentPlan(out failureMessage))
+        {
+            Debug.LogWarning(failureMessage);
+        }
     }
 
-    static void ExecuteExecutionPlanInternal(BattleExecutionPlan plan, BattleRuntimeState runtimeState)
+    internal static void ExecuteCurrentPlanFromLifecycle(
+        BattleLifecycleController lifecycleController
+    )
     {
+        BattleRuntimeState runtimeState = lifecycleController != null
+            ? lifecycleController.RuntimeState
+            : null;
+        BattleExecutionPlan plan = runtimeState != null
+            ? runtimeState.currentExecutionPlan
+            : null;
+        ExecuteExecutionPlanInternal(plan, lifecycleController);
+    }
+
+    static void ExecuteExecutionPlanInternal(
+        BattleExecutionPlan plan,
+        BattleLifecycleController lifecycleController
+    )
+    {
+        BattleRuntimeState runtimeState = lifecycleController != null
+            ? lifecycleController.RuntimeState
+            : null;
         Debug.Log("===== BattleExecutionPlan 正式执行开始 =====");
         Debug.Log("提示：RespondedEnemyIntent / UnrespondedEnemyIntent / FreeAction 已交给 BattleResolver 正式入口处理");
 
@@ -111,7 +147,7 @@ public static class BattleExecutionPlanExecutor
 
             if (runtimeState != null)
             {
-                runtimeState.EvaluateBattleEnd();
+                lifecycleController.EvaluateBattleEnd();
 
                 if (runtimeState.IsBattleEnded)
                 {

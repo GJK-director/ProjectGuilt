@@ -73,6 +73,7 @@ public class BattleSimpleUIController : MonoBehaviour
     [SerializeField] private Button qiehuanButton;
 
     private BattleRuntimeState runtimeState;
+    private BattleLifecycleController lifecycleController;
 
     private CharacterData ally01;
     private CharacterData ally02;
@@ -112,12 +113,13 @@ public class BattleSimpleUIController : MonoBehaviour
     private const string ActionModePassiveGuard = "PassiveGuard";
 
     private CharacterData selectedActor;
-    private int selectedSlotIndex = 1;
+    private int selectedSlotIndex;
     private BattleCardState selectedCardState;
     private string selectedActionMode;
     private bool showingSinCards = false;
 
     private bool isRunningCompleteTurnCycle;
+    private bool terminalInteractionStateCleared;
     private readonly BattleCardSelectionController cardSelectionController =
         new BattleCardSelectionController();
     private BattleCardInteractionCoordinator cardInteractionCoordinator;
@@ -146,6 +148,17 @@ public class BattleSimpleUIController : MonoBehaviour
     public CharacterData Ally02 => ally02;
     public CharacterData Enemy01 => enemy01;
     public CharacterData Enemy02 => enemy02;
+    internal bool HasPlanningSlotSelection =>
+        cardInteractionCoordinator != null &&
+        cardInteractionCoordinator.SelectedActionSlotView != null;
+    internal CharacterData PlanningHandOwner =>
+        testCardHandView != null
+            ? testCardHandView.LastDisplayedOwner
+            : null;
+    internal int VisiblePlanningCardCount =>
+        testCardHandView != null
+            ? testCardHandView.SpawnedCardViews.Count
+            : 0;
 
     void Awake()
     {
@@ -321,6 +334,8 @@ public class BattleSimpleUIController : MonoBehaviour
         BindCharacterStatusSlotInteractions();
         BindCardHandInteractions();
         BindButtonEvents();
+        // 初始化与每场战斗首次进入Prepare都不默认选择角色或展示手牌。
+        ClearPlanningSelectionAndHideCards();
         return true;
     }
 
@@ -729,6 +744,8 @@ public class BattleSimpleUIController : MonoBehaviour
     )
     {
         runtimeState = initializedRuntimeState;
+        lifecycleController = new BattleLifecycleController(runtimeState);
+        terminalInteractionStateCleared = false;
         ally01 = runtimeState.allyA;
         ally02 = runtimeState.allyB;
         enemy01 = runtimeState.enemy;
@@ -753,6 +770,8 @@ public class BattleSimpleUIController : MonoBehaviour
     private void ClearRuntimeAndLegacyReferences()
     {
         runtimeState = null;
+        lifecycleController = null;
+        terminalInteractionStateCleared = false;
         ally01 = null;
         ally02 = null;
         enemy01 = null;
@@ -789,15 +808,13 @@ public class BattleSimpleUIController : MonoBehaviour
         CreateTestBattleCards(cards);
 
         runtimeState = new BattleRuntimeState();
+        lifecycleController = new BattleLifecycleController(runtimeState);
         runtimeState.SetCharacters(ally01, ally02, enemy01, enemy02);
         List<BattleActionSlot> initialActionSlots = BattleActionSlotManager.CreatePartyActionSlots(ally01, ally02, 2);
         runtimeState.SetActionSlots(initialActionSlots);
         runtimeState.SetIntentQueue(CreateFixedEnemyIntentQueue(initialActionSlots));
-        string transitionFailure;
-        if (!runtimeState.TryTransitionTo(
-                BattleLifecyclePhase.Prepare,
-                out transitionFailure
-            ))
+        string transitionFailure = "生命周期控制器为空";
+        if (!lifecycleController.TryInitializeToPrepare(out transitionFailure))
         {
             lastLog = transitionFailure;
             Debug.LogError(lastLog);
@@ -1348,6 +1365,17 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void ToggleCardGroup()
     {
+        if (!CanEditActionSlots() ||
+            cardInteractionCoordinator == null ||
+            cardInteractionCoordinator.SelectedActionSlotView == null)
+        {
+            lastLog = runtimeState != null && runtimeState.IsBattleEnded
+                ? "战斗已经结束，不能切换卡牌组"
+                : "请先选择一个可用的我方行动槽位";
+            RefreshView();
+            return;
+        }
+
         showingSinCards = cardInteractionCoordinator.ToggleCardMode(
             showingSinCards
         );
@@ -1467,6 +1495,15 @@ public class BattleSimpleUIController : MonoBehaviour
 
     void TrySelectActor(CharacterData actor, string actorLabel)
     {
+        if (!CanEditActionSlots())
+        {
+            lastLog = runtimeState != null && runtimeState.IsBattleEnded
+                ? "战斗已经结束，不能选择行动角色"
+                : "当前不能选择行动角色";
+            RefreshView();
+            return;
+        }
+
         if (actor == null)
         {
             ClearSelectedActionState();
@@ -1491,6 +1528,12 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void OnClickSelectSlot1()
     {
+        if (!CanEditActionSlots())
+        {
+            lastLog = "当前不能选择行动槽位";
+            RefreshView();
+            return;
+        }
         selectedSlotIndex = 1;
         lastLog = "Selected slot: 1";
         RefreshView();
@@ -1498,6 +1541,12 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void OnClickSelectSlot2()
     {
+        if (!CanEditActionSlots())
+        {
+            lastLog = "当前不能选择行动槽位";
+            RefreshView();
+            return;
+        }
         selectedSlotIndex = 2;
         lastLog = "Selected slot: 2";
         RefreshView();
@@ -1530,6 +1579,13 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void SelectCardForCurrentActor(BattleCardState allyACardState, BattleCardState allyBCardState, string cardLabel)
     {
+        if (!CanEditActionSlots())
+        {
+            lastLog = "当前不能选择卡牌";
+            RefreshView();
+            return;
+        }
+
         if (selectedActor == null)
         {
             lastLog = "Please select actor first";
@@ -1552,6 +1608,12 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void OnClickSelectFreeAttackMode()
     {
+        if (!CanEditActionSlots())
+        {
+            lastLog = "当前不能选择行动用途";
+            RefreshView();
+            return;
+        }
         selectedActionMode = ActionModeFreeAttack;
         lastLog = "Selected mode: FreeAttack";
         RefreshView();
@@ -1559,6 +1621,12 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void OnClickSelectRespondIntent1Mode()
     {
+        if (!CanEditActionSlots())
+        {
+            lastLog = "当前不能选择行动用途";
+            RefreshView();
+            return;
+        }
         selectedActionMode = ActionModeRespondIntent1;
         lastLog = "Selected mode: RespondIntent1";
         RefreshView();
@@ -1566,6 +1634,12 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void OnClickSelectPassiveGuardMode()
     {
+        if (!CanEditActionSlots())
+        {
+            lastLog = "当前不能选择行动用途";
+            RefreshView();
+            return;
+        }
         selectedActionMode = ActionModePassiveGuard;
         lastLog = "Selected mode: PassiveGuard";
         RefreshView();
@@ -1713,6 +1787,10 @@ public class BattleSimpleUIController : MonoBehaviour
             ? GetSelectedActorLabel() + " slot " + selectedSlotIndex + " assigned FreeAction: " + selectedCardState.GetCardName()
             : "Assign failed: " + assignResult.failureMessage;
 
+        if (result)
+        {
+            ClearPlanningSelectionAndHideCards();
+        }
         RefreshView();
     }
 
@@ -1801,6 +1879,10 @@ public class BattleSimpleUIController : MonoBehaviour
             ? GetSelectedActorLabel() + " slot " + selectedSlotIndex + " assigned PassiveGuard: " + selectedCardState.GetCardName()
             : "Assign failed: " + assignResult.failureMessage;
 
+        if (result)
+        {
+            ClearPlanningSelectionAndHideCards();
+        }
         RefreshView();
     }
 
@@ -1850,6 +1932,10 @@ public class BattleSimpleUIController : MonoBehaviour
             ? GetSelectedActorLabel() + " slot " + selectedSlotIndex + " assigned RespondIntent1: " + selectedCardState.GetCardName()
             : "Assign failed: " + assignResult.failureMessage;
 
+        if (result)
+        {
+            ClearPlanningSelectionAndHideCards();
+        }
         RefreshView();
     }
 
@@ -1863,22 +1949,51 @@ public class BattleSimpleUIController : MonoBehaviour
     void ClearSelectedActionState()
     {
         selectedActor = null;
-        selectedSlotIndex = 1;
+        selectedSlotIndex = 0;
         selectedCardState = null;
         selectedActionMode = null;
     }
 
     private void ClearAllUISelectionState()
     {
-        cardInteractionCoordinator.ClearAllSelections();
+        ClearPlanningSelectionAndHideCards();
+    }
+
+    // 规划交互的统一清理入口：不触碰正式槽位安排和正式关系数据。
+    internal void ClearPlanningSelectionAndHideCards()
+    {
+        cardInteractionCoordinator?.ClearAllSelections();
         ClearSelectedActionState();
+        testCardHandView?.ClearCards();
+        testCardView?.SetEmpty();
         actionRelationLineController?.EndCardTargetingPreview();
+        actionRelationLineController?.ClearSelectedSlot();
         actionRelationLineController?.SetCardTargetingDiagnosticState(
             false,
             string.Empty,
             string.Empty,
             false
         );
+    }
+
+    private void SynchronizeInteractionStateWithLifecycle()
+    {
+        bool battleEnded = runtimeState != null &&
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.BattleEnded;
+        if (!battleEnded)
+        {
+            terminalInteractionStateCleared = false;
+            return;
+        }
+
+        if (terminalInteractionStateCleared)
+        {
+            return;
+        }
+
+        // 只在首次观察到终局阶段时清理一次临时交互状态。
+        ClearPlanningSelectionAndHideCards();
+        terminalInteractionStateCleared = true;
     }
 
     private void RefreshBattleStartButtonState()
@@ -1910,11 +2025,7 @@ public class BattleSimpleUIController : MonoBehaviour
         }
 
         isRunningCompleteTurnCycle = true;
-        EndCardTargetingSession(
-            cardSelectionController,
-            actionRelationLineController
-        );
-        cardInteractionCoordinator.PrepareForBattleStart();
+        ClearPlanningSelectionAndHideCards();
         actionRelationLineController?.ClearAll();
         RefreshBattleStartButtonState();
 
@@ -1965,28 +2076,21 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        EndCardTargetingSession(
-            cardSelectionController,
-            actionRelationLineController
-        );
-
-        BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
-            runtimeState.actionSlots,
-            runtimeState.intentQueue
-        );
-
-        runtimeState.SetExecutionPlan(executionPlan);
-        string transitionFailure;
-        if (!runtimeState.TryTransitionTo(
-                BattleLifecyclePhase.PlanReady,
+        BattleExecutionPlan executionPlan;
+        string transitionFailure = "生命周期控制器为空";
+        if (lifecycleController == null ||
+            !lifecycleController.TryCreateExecutionPlan(
+                true,
+                out executionPlan,
                 out transitionFailure
             ))
         {
-            runtimeState.ClearExecutionPlan();
             lastLog = transitionFailure;
             RefreshView();
             return;
         }
+
+        ClearPlanningSelectionAndHideCards();
 
         BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
 
@@ -2026,43 +2130,25 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        string transitionFailure;
-        if (!runtimeState.TryTransitionTo(
-                BattleLifecyclePhase.Executing,
-                out transitionFailure
-            ))
+        ClearPlanningSelectionAndHideCards();
+
+        string transitionFailure = "生命周期控制器为空";
+        if (lifecycleController == null ||
+            !lifecycleController.TryExecuteCurrentPlan(out transitionFailure))
         {
             lastLog = transitionFailure;
             RefreshView();
             return;
         }
 
-        BattleExecutionPlanExecutor.ExecuteExecutionPlan(runtimeState.currentExecutionPlan, runtimeState);
-
-        if (!runtimeState.IsBattleEnded)
-        {
-            if (IsCurrentPlanCompleted())
-            {
-                if (!runtimeState.TryTransitionTo(
-                        BattleLifecyclePhase.TurnResolved,
-                        out transitionFailure
-                    ))
-                {
-                    lastLog = transitionFailure;
-                    RefreshView();
-                    return;
-                }
-                lastLog = "执行计划已执行，plan.isCompleted = " + runtimeState.currentExecutionPlan.isCompleted;
-            }
-            else
-            {
-                lastLog = "ExecutionPlan仍有未完成项，不能进入Completed";
-            }
-        }
-
         if (runtimeState.IsBattleEnded)
         {
             lastLog = "战斗结束：" + runtimeState.battleResult;
+        }
+        else
+        {
+            lastLog = "执行计划已执行，plan.isCompleted = " +
+                runtimeState.currentExecutionPlan.isCompleted;
         }
 
         RefreshView();
@@ -2091,8 +2177,15 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        runtimeState.EndCurrentTurnAndClearRuntimeObjects();
-        ClearSelectedActionState();
+        string failureMessage = "生命周期控制器为空";
+        if (lifecycleController == null ||
+            !lifecycleController.TryEndCurrentTurn(out failureMessage))
+        {
+            lastLog = failureMessage;
+            RefreshView();
+            return;
+        }
+        ClearPlanningSelectionAndHideCards();
         lastLog = "当前回合已结束，临时对象已清理";
         RefreshView();
     }
@@ -2120,28 +2213,24 @@ public class BattleSimpleUIController : MonoBehaviour
 
         List<BattleActionSlot> newActionSlots = BattleActionSlotManager.CreateLivingPartyActionSlots(ally01, ally02, 2);
 
-        if (newActionSlots == null || newActionSlots.Count == 0)
+        List<BattleEnemyIntent> newIntentQueue = newActionSlots != null &&
+            newActionSlots.Count > 0
+            ? CreateFixedEnemyIntentQueue(newActionSlots)
+            : new List<BattleEnemyIntent>();
+        string failureMessage = "生命周期控制器为空";
+        if (lifecycleController != null &&
+            lifecycleController.TryPrepareNextTurn(
+                newActionSlots,
+                newIntentQueue,
+                out failureMessage
+            ))
         {
-            runtimeState.EvaluateBattleEnd();
-            lastLog = runtimeState.IsBattleEnded
-                ? "战斗已经结束，无法继续操作"
-                : "没有存活角色行动槽位，不能准备下一回合";
-            RefreshView();
-            return;
-        }
-
-        List<BattleEnemyIntent> newIntentQueue = CreateFixedEnemyIntentQueue(newActionSlots);
-
-        runtimeState.PrepareNextTurnWithRuntimeObjects(newActionSlots, newIntentQueue);
-
-        if (runtimeState.LifecyclePhase == BattleLifecyclePhase.Prepare)
-        {
-            ClearSelectedActionState();
+            ClearPlanningSelectionAndHideCards();
             lastLog = "下一回合已准备，阶段：Prepare";
         }
         else
         {
-            lastLog = "准备下一回合失败";
+            lastLog = failureMessage;
         }
 
         RefreshView();
@@ -2149,6 +2238,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void RefreshView()
     {
+        SynchronizeInteractionStateWithLifecycle();
         BattleStateViewData viewData = BattleStateViewData.FromRuntimeState(runtimeState);
 
         SetText(
@@ -2420,11 +2510,78 @@ public class BattleSimpleUIController : MonoBehaviour
         }
     }
 
+    internal bool TrySelectActionSlotForPlanning(
+        BattleActionSlotUIView slotView
+    )
+    {
+        if (!IsValidPlanningSlotView(slotView) ||
+            cardInteractionCoordinator == null ||
+            !cardInteractionCoordinator.SelectSourceSlot(slotView))
+        {
+            return false;
+        }
+
+        RefreshTestCardView();
+        RefreshTestCardHandView();
+        RefreshCardTargetingPreview();
+        return true;
+    }
+
+    private bool IsValidPlanningSlotView(BattleActionSlotUIView slotView)
+    {
+        if (!CanEditActionSlots() ||
+            slotView == null ||
+            slotView.IsEnemySlot ||
+            slotView.BoundCharacter == null ||
+            slotView.BoundCharacter.IsDead() ||
+            runtimeState.allyUnits == null ||
+            runtimeState.actionSlots == null ||
+            !ContainsCharacterReference(
+                runtimeState.allyUnits,
+                slotView.BoundCharacter
+            ))
+        {
+            return false;
+        }
+
+        for (int index = 0;
+            index < runtimeState.actionSlots.Count;
+            index++)
+        {
+            BattleActionSlot slot = runtimeState.actionSlots[index];
+            if (slot != null &&
+                object.ReferenceEquals(
+                    slot.owner,
+                    slotView.BoundCharacter
+                ) &&
+                slot.slotIndex == slotView.FormalSlotIndex)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsCharacterReference(
+        List<CharacterData> characters,
+        CharacterData target
+    )
+    {
+        for (int index = 0; index < characters.Count; index++)
+        {
+            if (object.ReferenceEquals(characters[index], target))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private void OnAllyActionSlotClicked(BattleActionSlotUIView clickedSlotView)
     {
-        if (clickedSlotView == null ||
-            clickedSlotView.IsEnemySlot ||
-            clickedSlotView.BoundCharacter == null)
+        if (!IsValidPlanningSlotView(clickedSlotView))
         {
             return;
         }
@@ -2457,18 +2614,12 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        if (cardInteractionCoordinator.SelectSourceSlot(clickedSlotView))
-        {
-            RefreshTestCardHandView();
-            RefreshCardTargetingPreview();
-        }
+        TrySelectActionSlotForPlanning(clickedSlotView);
     }
 
     private void OnAllyActionSlotRightClicked(BattleActionSlotUIView clickedSlotView)
     {
-        if (clickedSlotView == null ||
-            clickedSlotView.IsEnemySlot ||
-            clickedSlotView.BoundCharacter == null)
+        if (!IsValidPlanningSlotView(clickedSlotView))
         {
             return;
         }
@@ -2494,6 +2645,7 @@ public class BattleSimpleUIController : MonoBehaviour
                 cardSelectionController,
                 actionRelationLineController
             );
+            cardInteractionCoordinator.SelectSourceSlot(clickedSlotView);
         }
         RefreshView();
     }
@@ -2502,6 +2654,11 @@ public class BattleSimpleUIController : MonoBehaviour
         BattleActionSlotUIView targetSlotView
     )
     {
+        if (!CanEditActionSlots())
+        {
+            return;
+        }
+
         BattleCardInteractionOutcome outcome =
             cardInteractionCoordinator.ClickEnemySlot(
                 runtimeState,
@@ -2530,6 +2687,11 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void OnCardSelectionChanged(BattleCardUIView selectedCardView)
     {
+        if (!CanEditActionSlots())
+        {
+            actionRelationLineController?.EndCardTargetingPreview();
+            return;
+        }
         RefreshCardTargetingPreview();
     }
 
@@ -2539,6 +2701,12 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         if (actionRelationLineController == null)
         {
+            return;
+        }
+
+        if (!CanEditActionSlots())
+        {
+            actionRelationLineController.ClearSelectedSlot();
             return;
         }
 
@@ -2666,11 +2834,8 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void CompleteSuccessfulCardAssignment()
     {
-        // 卡牌已进入行动槽，本次目标选择会话结束；来源槽位选择继续保留。
-        EndCardTargetingSession(
-            cardSelectionController,
-            actionRelationLineController
-        );
+        // 正式安排已写入Runtime；本次规划会话完整结束，正式关系数据继续保留。
+        ClearPlanningSelectionAndHideCards();
     }
 
     internal static void EndCardTargetingSession(
@@ -2705,6 +2870,11 @@ public class BattleSimpleUIController : MonoBehaviour
         BattleSelfActionDropZone targetView
     )
     {
+        if (!CanEditActionSlots())
+        {
+            return;
+        }
+
         BattleCardInteractionOutcome outcome =
             cardInteractionCoordinator.ClickSelfTarget(
                 runtimeState,
@@ -2738,16 +2908,23 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        if (allyABulletAttackCardState == null)
+        CharacterData handOwner = cardInteractionCoordinator != null
+            ? cardInteractionCoordinator.SelectedCharacter
+            : null;
+        BattleCardState previewCard = FindCardStateByID(
+            handOwner,
+            "atk_bullet_001"
+        );
+        if (handOwner == null || previewCard == null)
         {
             testCardView.SetEmpty();
             return;
         }
 
         BattleCardUIPreviewData previewData = BattleCardUIPreviewBuilder.Build(
-            ally01,
+            handOwner,
             enemy01,
-            allyABulletAttackCardState
+            previewCard
         );
 
         testCardView.SetCard(previewData);
@@ -2761,12 +2938,22 @@ public class BattleSimpleUIController : MonoBehaviour
         }
 
         CharacterData selectedCharacter =
-            cardInteractionCoordinator.SelectedCharacter;
-        CharacterData handOwner = selectedCharacter != null
-            ? selectedCharacter
-            : ally01;
+            cardInteractionCoordinator != null
+                ? cardInteractionCoordinator.SelectedCharacter
+                : null;
+        BattleActionSlotUIView selectedSlotView =
+            cardInteractionCoordinator != null
+                ? cardInteractionCoordinator.SelectedActionSlotView
+                : null;
 
-        if (handOwner == null || handOwner.battleCards == null)
+        if (selectedCharacter == null ||
+            selectedSlotView == null ||
+            !IsValidPlanningSlotView(selectedSlotView) ||
+            !object.ReferenceEquals(
+                selectedSlotView.BoundCharacter,
+                selectedCharacter
+            ) ||
+            selectedCharacter.battleCards == null)
         {
             testCardHandView.ClearCards();
             return;
@@ -2776,10 +2963,13 @@ public class BattleSimpleUIController : MonoBehaviour
             ? sinTestHandCardIDs
             : normalTestHandCardIDs;
 
-        List<BattleCardState> cards = FindTestHandCardsByID(handOwner, targetCardIDs);
+        List<BattleCardState> cards = FindTestHandCardsByID(
+            selectedCharacter,
+            targetCardIDs
+        );
 
         testCardHandView.SetCards(
-            handOwner,
+            selectedCharacter,
             enemy01,
             cards
         );
@@ -2991,7 +3181,9 @@ public class BattleSimpleUIController : MonoBehaviour
             ? GetSelectedActorLabel()
             : "NoActor";
 
-        string slotText = "Slot" + selectedSlotIndex;
+        string slotText = selectedSlotIndex > 0
+            ? "Slot" + selectedSlotIndex
+            : "NoSlot";
         string cardText = GetSelectedCardText();
         string modeText = GetSelectedActionModeText();
 
@@ -3337,37 +3529,31 @@ public static class BattleAutomaticTurnCycle
             return result;
         }
 
-        BattleExecutionPlan executionPlan =
-            BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
-                runtimeState.actionSlots,
-                runtimeState.intentQueue
-            );
-
-        runtimeState.SetExecutionPlan(executionPlan);
-        result.executedPlan = executionPlan;
-
-        if (executionPlan == null ||
-            executionPlan.executionItems == null ||
-            executionPlan.executionItems.Count == 0)
-        {
-            Debug.LogWarning("完整回合启动失败：ExecutionPlan为空，已安全返回Prepare");
-            runtimeState.ClearExecutionPlan();
-            result.message = "执行计划为空，本回合未执行";
-            return result;
-        }
-
-        string transitionFailure;
-        if (!runtimeState.TryTransitionTo(
-                BattleLifecyclePhase.Executing,
-                out transitionFailure
+        BattleLifecycleController lifecycleController =
+            new BattleLifecycleController(runtimeState);
+        BattleExecutionPlan executionPlan;
+        string failureMessage;
+        if (!lifecycleController.TryCreateExecutionPlan(
+                false,
+                out executionPlan,
+                out failureMessage
             ))
         {
-            runtimeState.ClearExecutionPlan();
-            result.message = transitionFailure;
+            Debug.LogWarning("完整回合启动失败：ExecutionPlan为空，已安全返回Prepare");
+            result.message = failureMessage;
             return result;
         }
+
+        result.executedPlan = executionPlan;
         BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
-        BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan, runtimeState);
+        if (!lifecycleController.TryExecuteCurrentPlan(out failureMessage))
+        {
+            result.executionPlanCompleted = executionPlan.isCompleted;
+            result.battleEnded = runtimeState.IsBattleEnded;
+            result.message = failureMessage;
+            result.endingTurn = runtimeState.currentTurn;
+            return result;
+        }
 
         result.executionPlanCompleted = executionPlan.isCompleted;
         result.battleEnded = runtimeState.IsBattleEnded;
@@ -3388,20 +3574,9 @@ public static class BattleAutomaticTurnCycle
             return result;
         }
 
-        if (!runtimeState.TryTransitionTo(
-                BattleLifecyclePhase.TurnResolved,
-                out transitionFailure
-            ))
+        if (!lifecycleController.TryEndCurrentTurn(out failureMessage))
         {
-            result.message = transitionFailure;
-            result.endingTurn = runtimeState.currentTurn;
-            return result;
-        }
-        runtimeState.EndCurrentTurnAndClearRuntimeObjects();
-
-        if (runtimeState.LifecyclePhase != BattleLifecyclePhase.TurnEnded)
-        {
-            result.message = "结束当前回合失败，未准备下一回合";
+            result.message = failureMessage;
             result.endingTurn = runtimeState.currentTurn;
             return result;
         }
@@ -3415,7 +3590,7 @@ public static class BattleAutomaticTurnCycle
 
         if (newActionSlots == null || newActionSlots.Count == 0)
         {
-            runtimeState.EvaluateBattleEnd();
+            lifecycleController.EvaluateBattleEnd();
             result.battleEnded = runtimeState.IsBattleEnded;
             result.isSuccess = result.battleEnded;
             result.message = result.battleEnded
@@ -3435,7 +3610,17 @@ public static class BattleAutomaticTurnCycle
             newActionSlots
         );
 
-        runtimeState.PrepareNextTurnWithRuntimeObjects(newActionSlots, newIntentQueue);
+        if (!lifecycleController.TryPrepareNextTurn(
+                newActionSlots,
+                newIntentQueue,
+                out failureMessage
+            ))
+        {
+            result.message = failureMessage;
+            result.battleEnded = runtimeState.IsBattleEnded;
+            result.endingTurn = runtimeState.currentTurn;
+            return result;
+        }
 
         result.advancedToNextTurn =
             runtimeState.currentTurn == result.startingTurn + 1 &&

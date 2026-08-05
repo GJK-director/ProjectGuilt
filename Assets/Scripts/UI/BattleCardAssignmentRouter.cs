@@ -37,6 +37,11 @@ public static class BattleCardAssignmentRouter
         out BattleActionAssignmentResult result
     )
     {
+        if (!ValidatePlanningRuntime(runtimeState, out result))
+        {
+            return false;
+        }
+
         if (!ValidateSelectedCard(
                 selectedOwner,
                 selectedFormalSlotIndex,
@@ -80,6 +85,11 @@ public static class BattleCardAssignmentRouter
         out BattleActionAssignmentResult result
     )
     {
+        if (!ValidatePlanningRuntime(runtimeState, out result))
+        {
+            return false;
+        }
+
         if (!ValidateSelectedCard(
                 selectedOwner,
                 selectedFormalSlotIndex,
@@ -115,6 +125,11 @@ public static class BattleCardAssignmentRouter
         out BattleActionAssignmentResult result
     )
     {
+        if (!ValidatePlanningRuntime(runtimeState, out result))
+        {
+            return false;
+        }
+
         if (owner == null || formalSlotIndex <= 0)
         {
             result = CreateFailure(
@@ -197,6 +212,43 @@ public static class BattleCardAssignmentRouter
             result = CreateFailure(
                 "卡牌安排失败：卡牌不属于当前选中角色",
                 CardEligibilityFailureReason.InvalidActor
+            );
+            return false;
+        }
+
+        result = null;
+        return true;
+    }
+
+    private static bool ValidatePlanningRuntime(
+        BattleRuntimeState runtimeState,
+        out BattleActionAssignmentResult result
+    )
+    {
+        if (runtimeState == null)
+        {
+            result = CreateFailure(
+                "卡牌安排失败：BattleRuntimeState为空",
+                CardEligibilityFailureReason.InvalidSlot
+            );
+            return false;
+        }
+
+        if (runtimeState.LifecyclePhase == BattleLifecyclePhase.BattleEnded)
+        {
+            result = CreateFailure(
+                "卡牌安排失败：战斗已经结束",
+                CardEligibilityFailureReason.UnsupportedCondition
+            );
+            return false;
+        }
+
+        if (runtimeState.LifecyclePhase != BattleLifecyclePhase.Prepare ||
+            runtimeState.currentExecutionPlan != null)
+        {
+            result = CreateFailure(
+                "卡牌安排失败：当前不在可编辑的Prepare阶段",
+                CardEligibilityFailureReason.UnsupportedCondition
             );
             return false;
         }
