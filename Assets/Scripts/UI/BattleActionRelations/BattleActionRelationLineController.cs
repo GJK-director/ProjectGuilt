@@ -2010,7 +2010,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     {
         return runtimeState != null &&
             !runtimeState.IsBattleEnded &&
-            runtimeState.currentPhase == "Prepare" &&
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.Prepare &&
             runtimeState.currentExecutionPlan == null;
     }
 

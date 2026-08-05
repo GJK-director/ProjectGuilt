@@ -99,7 +99,7 @@ public sealed class BattleActionRelationQueryService
     {
         return runtimeState != null &&
             !runtimeState.IsBattleEnded &&
-            runtimeState.currentPhase == "Prepare" &&
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.Prepare &&
             runtimeState.currentExecutionPlan == null;
     }
 

@@ -387,7 +387,8 @@ public class BattleSimpleUIController : MonoBehaviour
             return false;
         }
 
-        if (initializedRuntimeState.currentPhase != "Prepare")
+        if (initializedRuntimeState.LifecyclePhase !=
+            BattleLifecyclePhase.Prepare)
         {
             errorMessage =
                 "BattleScene初始化失败：初始阶段必须为Prepare，当前为" +
@@ -792,7 +793,16 @@ public class BattleSimpleUIController : MonoBehaviour
         List<BattleActionSlot> initialActionSlots = BattleActionSlotManager.CreatePartyActionSlots(ally01, ally02, 2);
         runtimeState.SetActionSlots(initialActionSlots);
         runtimeState.SetIntentQueue(CreateFixedEnemyIntentQueue(initialActionSlots));
-        runtimeState.SetPhase("Prepare");
+        string transitionFailure;
+        if (!runtimeState.TryTransitionTo(
+                BattleLifecyclePhase.Prepare,
+                out transitionFailure
+            ))
+        {
+            lastLog = transitionFailure;
+            Debug.LogError(lastLog);
+            return false;
+        }
 
         lastLog = "初始化完成：已进入 Prepare 阶段";
         return true;
@@ -1966,7 +1976,17 @@ public class BattleSimpleUIController : MonoBehaviour
         );
 
         runtimeState.SetExecutionPlan(executionPlan);
-        runtimeState.SetPhase("PlanReady");
+        string transitionFailure;
+        if (!runtimeState.TryTransitionTo(
+                BattleLifecyclePhase.PlanReady,
+                out transitionFailure
+            ))
+        {
+            runtimeState.ClearExecutionPlan();
+            lastLog = transitionFailure;
+            RefreshView();
+            return;
+        }
 
         BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
 
@@ -2006,13 +2026,32 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        string transitionFailure;
+        if (!runtimeState.TryTransitionTo(
+                BattleLifecyclePhase.Executing,
+                out transitionFailure
+            ))
+        {
+            lastLog = transitionFailure;
+            RefreshView();
+            return;
+        }
+
         BattleExecutionPlanExecutor.ExecuteExecutionPlan(runtimeState.currentExecutionPlan, runtimeState);
 
         if (!runtimeState.IsBattleEnded)
         {
             if (IsCurrentPlanCompleted())
             {
-                runtimeState.SetPhase("Completed");
+                if (!runtimeState.TryTransitionTo(
+                        BattleLifecyclePhase.TurnResolved,
+                        out transitionFailure
+                    ))
+                {
+                    lastLog = transitionFailure;
+                    RefreshView();
+                    return;
+                }
                 lastLog = "执行计划已执行，plan.isCompleted = " + runtimeState.currentExecutionPlan.isCompleted;
             }
             else
@@ -2095,7 +2134,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
         runtimeState.PrepareNextTurnWithRuntimeObjects(newActionSlots, newIntentQueue);
 
-        if (IsPhase("Prepare"))
+        if (runtimeState.LifecyclePhase == BattleLifecyclePhase.Prepare)
         {
             ClearSelectedActionState();
             lastLog = "下一回合已准备，阶段：Prepare";
@@ -2838,11 +2877,6 @@ public class BattleSimpleUIController : MonoBehaviour
         return false;
     }
 
-    private bool IsPhase(string phaseName)
-    {
-        return runtimeState != null && runtimeState.currentPhase == phaseName;
-    }
-
     private bool HasCurrentPlan()
     {
         return runtimeState != null && runtimeState.currentExecutionPlan != null;
@@ -2855,31 +2889,38 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private bool CanEditActionSlots()
     {
-        return runtimeState != null && !runtimeState.IsBattleEnded && IsPhase("Prepare") && !HasCurrentPlan();
+        return runtimeState != null && !runtimeState.IsBattleEnded &&
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.Prepare &&
+            !HasCurrentPlan();
     }
 
     private bool CanCreatePlan()
     {
-        return runtimeState != null && !runtimeState.IsBattleEnded && IsPhase("Prepare") && !HasCurrentPlan();
+        return runtimeState != null && !runtimeState.IsBattleEnded &&
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.Prepare &&
+            !HasCurrentPlan();
     }
 
     private bool CanExecutePlan()
     {
-        return runtimeState != null && !runtimeState.IsBattleEnded && HasCurrentPlan() && !runtimeState.currentExecutionPlan.isCompleted;
+        return runtimeState != null && !runtimeState.IsBattleEnded &&
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.PlanReady &&
+            HasCurrentPlan() && !runtimeState.currentExecutionPlan.isCompleted;
     }
 
     private bool CanEndTurn()
     {
         return runtimeState != null &&
             !runtimeState.IsBattleEnded &&
-            IsPhase("Completed") &&
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.TurnResolved &&
             HasCurrentPlan() &&
             IsCurrentPlanCompleted();
     }
 
     private bool CanPrepareNextTurn()
     {
-        return runtimeState != null && !runtimeState.IsBattleEnded && IsPhase("TurnEnded");
+        return runtimeState != null && !runtimeState.IsBattleEnded &&
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.TurnEnded;
     }
 
     bool HasRuntimeState()
@@ -3250,7 +3291,7 @@ public static class BattleAutomaticTurnCycle
     {
         return runtimeState != null &&
             !runtimeState.IsBattleEnded &&
-            runtimeState.currentPhase == "Prepare" &&
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.Prepare &&
             runtimeState.currentExecutionPlan == null;
     }
 
@@ -3311,12 +3352,20 @@ public static class BattleAutomaticTurnCycle
         {
             Debug.LogWarning("完整回合启动失败：ExecutionPlan为空，已安全返回Prepare");
             runtimeState.ClearExecutionPlan();
-            runtimeState.SetPhase("Prepare");
             result.message = "执行计划为空，本回合未执行";
             return result;
         }
 
-        runtimeState.SetPhase("BattleStart");
+        string transitionFailure;
+        if (!runtimeState.TryTransitionTo(
+                BattleLifecyclePhase.Executing,
+                out transitionFailure
+            ))
+        {
+            runtimeState.ClearExecutionPlan();
+            result.message = transitionFailure;
+            return result;
+        }
         BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
         BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan, runtimeState);
 
@@ -3339,10 +3388,18 @@ public static class BattleAutomaticTurnCycle
             return result;
         }
 
-        runtimeState.SetPhase("Completed");
+        if (!runtimeState.TryTransitionTo(
+                BattleLifecyclePhase.TurnResolved,
+                out transitionFailure
+            ))
+        {
+            result.message = transitionFailure;
+            result.endingTurn = runtimeState.currentTurn;
+            return result;
+        }
         runtimeState.EndCurrentTurnAndClearRuntimeObjects();
 
-        if (runtimeState.currentPhase != "TurnEnded")
+        if (runtimeState.LifecyclePhase != BattleLifecyclePhase.TurnEnded)
         {
             result.message = "结束当前回合失败，未准备下一回合";
             result.endingTurn = runtimeState.currentTurn;
@@ -3382,7 +3439,7 @@ public static class BattleAutomaticTurnCycle
 
         result.advancedToNextTurn =
             runtimeState.currentTurn == result.startingTurn + 1 &&
-            runtimeState.currentPhase == "Prepare" &&
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.Prepare &&
             runtimeState.currentExecutionPlan == null;
         result.isSuccess = result.advancedToNextTurn;
         result.battleEnded = runtimeState.IsBattleEnded;

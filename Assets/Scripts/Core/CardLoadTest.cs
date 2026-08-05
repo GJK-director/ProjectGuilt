@@ -59,7 +59,8 @@ public enum BattleTestMode
     BattlePermanentBulletBuffBasic = 72,
     BattleActionRelationLineBasic = 73,
     BattleCharacterStatusWorldFollowBasic = 74,
-    BattleActionRelationInteractionFix = 75
+    BattleActionRelationInteractionFix = 75,
+    BattleLifecyclePhaseContractBasic = 76
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -359,6 +360,12 @@ public class CardLoadTest : MonoBehaviour
             return;
         }
 
+        if (testMode == BattleTestMode.BattleLifecyclePhaseContractBasic)
+        {
+            BattleLifecyclePhaseContractTests.Run();
+            return;
+        }
+
         if (testMode == BattleTestMode.BattleResolverResolveRespondedDefenseFullBlockBasic)
         {
             RunBattleResolverResolveRespondedDefenseFullBlockBasicTestSequence();
@@ -642,7 +649,7 @@ public class CardLoadTest : MonoBehaviour
         );
 
         runtimeState.SetExecutionPlan(executionPlan);
-        runtimeState.SetPhase("PlanReady");
+        SetTestLifecyclePhase(runtimeState, BattleLifecyclePhase.PlanReady);
         runtimeState.PrintRuntimeState();
 
         Debug.Log("预期 battleUnits 数量为 3：" + (runtimeState.battleUnits.Count == 3));
@@ -681,11 +688,12 @@ public class CardLoadTest : MonoBehaviour
         );
 
         runtimeState.SetExecutionPlan(executionPlan);
-        runtimeState.SetPhase("PlanReady");
+        SetTestLifecyclePhase(runtimeState, BattleLifecyclePhase.PlanReady);
 
         Debug.Log("===== 清理前 BattleRuntimeState =====");
         runtimeState.PrintRuntimeState();
 
+        BattleLifecyclePhase phaseBeforeClear = runtimeState.LifecyclePhase;
         runtimeState.ClearCurrentTurnRuntimeObjects();
 
         Debug.Log("===== 清理后 BattleRuntimeState =====");
@@ -699,7 +707,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期清理后 intentQueue 数量为 0：" + (runtimeState.intentQueue.Count == 0));
         Debug.Log("预期清理后 currentExecutionPlan 为空：" + (runtimeState.currentExecutionPlan == null));
         Debug.Log("预期清理后 currentTurn 仍为 1：" + (runtimeState.currentTurn == 1));
-        Debug.Log("预期清理后 currentPhase 为 TurnCleared：" + (runtimeState.currentPhase == "TurnCleared"));
+        Debug.Log("预期清理运行时对象不改变生命周期阶段：" + (runtimeState.LifecyclePhase == phaseBeforeClear));
         Debug.Log("本测试只验证 RuntimeState 清理，不执行 plan，不调用 Resolver，不扣血，不处理 Buff / CD / UseCount / guiltGain，不推进下一回合");
     }
 
@@ -732,7 +740,7 @@ public class CardLoadTest : MonoBehaviour
         );
 
         runtimeState.SetExecutionPlan(executionPlan);
-        runtimeState.SetPhase("Completed");
+        SetTestLifecyclePhase(runtimeState, BattleLifecyclePhase.TurnResolved);
 
         Debug.Log("===== 结束回合前 BattleRuntimeState =====");
         runtimeState.PrintRuntimeState();
@@ -783,7 +791,7 @@ public class CardLoadTest : MonoBehaviour
         );
 
         runtimeState.SetExecutionPlan(oldExecutionPlan);
-        runtimeState.SetPhase("TurnEnded");
+        SetTestLifecyclePhase(runtimeState, BattleLifecyclePhase.TurnEnded);
 
         Debug.Log("===== 准备下一回合前 BattleRuntimeState =====");
         runtimeState.PrintRuntimeState();
@@ -830,7 +838,7 @@ public class CardLoadTest : MonoBehaviour
 
         runtimeState.SetActionSlots(actionSlots);
         runtimeState.SetIntentQueue(intentQueue);
-        runtimeState.SetPhase("Prepare");
+        SetTestLifecyclePhase(runtimeState, BattleLifecyclePhase.Prepare);
 
         runtimeState.PrintRuntimeState();
         BattleEnemyIntentManager.PrintIntentQueue(intentQueue);
@@ -884,7 +892,7 @@ public class CardLoadTest : MonoBehaviour
 
         runtimeState.SetActionSlots(actionSlots);
         runtimeState.SetIntentQueue(intentQueue);
-        runtimeState.SetPhase("Prepare");
+        SetTestLifecyclePhase(runtimeState, BattleLifecyclePhase.Prepare);
 
         BattleStateViewData viewData = BattleStateViewData.FromRuntimeState(runtimeState);
         viewData.PrintViewData();
@@ -923,7 +931,7 @@ public class CardLoadTest : MonoBehaviour
 
         runtimeState.SetActionSlots(actionSlots);
         runtimeState.SetIntentQueue(intentQueue);
-        runtimeState.SetPhase("Prepare");
+        SetTestLifecyclePhase(runtimeState, BattleLifecyclePhase.Prepare);
 
         BattleStateViewData viewData = BattleStateViewData.FromRuntimeState(runtimeState);
         viewData.PrintViewData();
@@ -977,7 +985,7 @@ public class CardLoadTest : MonoBehaviour
 
         runtimeState.SetActionSlots(actionSlots);
         runtimeState.SetIntentQueue(intentQueue);
-        runtimeState.SetPhase("Prepare");
+        SetTestLifecyclePhase(runtimeState, BattleLifecyclePhase.Prepare);
 
         BattleStateViewData viewData = BattleStateViewData.FromRuntimeState(runtimeState);
         viewData.PrintViewData();
@@ -1040,7 +1048,7 @@ public class CardLoadTest : MonoBehaviour
         );
 
         runtimeState.SetActionSlots(actionSlots);
-        runtimeState.SetPhase("Prepare");
+        SetTestLifecyclePhase(runtimeState, BattleLifecyclePhase.Prepare);
 
         BattleStateViewData viewData = BattleStateViewData.FromRuntimeState(runtimeState);
         viewData.PrintViewData();
@@ -10739,7 +10747,10 @@ public class CardLoadTest : MonoBehaviour
         context.runtimeState.SetIntentQueue(
             new List<BattleEnemyIntent>()
         );
-        context.runtimeState.SetPhase("Prepare");
+        SetTestLifecyclePhase(
+            context.runtimeState,
+            BattleLifecyclePhase.Prepare
+        );
 
         BattleCardState firstCard =
             CreateFixedAttackCardForCharacter(
@@ -11097,7 +11108,10 @@ public class CardLoadTest : MonoBehaviour
                 assignContext.runtimeState.intentQueue
             );
         assignContext.runtimeState.SetExecutionPlan(executionPlan);
-        assignContext.runtimeState.SetPhase("PlanReady");
+        SetTestLifecyclePhase(
+            assignContext.runtimeState,
+            BattleLifecyclePhase.Executing
+        );
         BattleExecutionPlanExecutor.ExecuteExecutionPlan(
             executionPlan,
             assignContext.runtimeState
@@ -11674,7 +11688,10 @@ public class CardLoadTest : MonoBehaviour
         context.runtimeState.SetIntentQueue(
             new List<BattleEnemyIntent>()
         );
-        context.runtimeState.SetPhase("Prepare");
+        SetTestLifecyclePhase(
+            context.runtimeState,
+            BattleLifecyclePhase.Prepare
+        );
 
         BattleCardSelectionController selectionController =
             new BattleCardSelectionController();
@@ -12033,7 +12050,10 @@ public class CardLoadTest : MonoBehaviour
             );
         context.runtimeState.SetActionSlots(slots);
         context.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
-        context.runtimeState.SetPhase("Prepare");
+        SetTestLifecyclePhase(
+            context.runtimeState,
+            BattleLifecyclePhase.Prepare
+        );
 
         BattleCardState normalCard = CreateFixedAttackCardForCharacter(
             context.allyA,
@@ -12824,7 +12844,10 @@ public class CardLoadTest : MonoBehaviour
             return;
         }
 
-        context.runtimeState.SetPhase("Completed");
+        SetTestLifecyclePhase(
+            context.runtimeState,
+            BattleLifecyclePhase.TurnResolved
+        );
         context.runtimeState.EndCurrentTurnAndClearRuntimeObjects();
 
         List<BattleActionSlot> nextSlots =
@@ -13314,6 +13337,7 @@ public class CardLoadTest : MonoBehaviour
             5,
             1
         );
+        SetTestLifecyclePhase(context.runtimeState, BattleLifecyclePhase.Executing);
         context.runtimeState.EvaluateBattleEnd();
         int turnBefore = context.runtimeState.currentTurn;
         BattleAutomaticTurnCycleResult result = RunAutomaticTurnCycle(context);
@@ -13690,7 +13714,10 @@ public class CardLoadTest : MonoBehaviour
             context.enemyAttackCardState.currentUseCount == enemyUseCountBefore;
 
         context.runtimeState.ClearExecutionPlan();
-        context.runtimeState.SetPhase("Completed");
+        SetTestLifecyclePhase(
+            context.runtimeState,
+            BattleLifecyclePhase.TurnResolved
+        );
         BattleAutomaticTurnCycleResult wrongPhaseResult =
             RunAutomaticTurnCycle(context);
 
@@ -13770,7 +13797,10 @@ public class CardLoadTest : MonoBehaviour
                 actionSlots
             )
         );
-        context.runtimeState.SetPhase("Prepare");
+        SetTestLifecyclePhase(
+            context.runtimeState,
+            BattleLifecyclePhase.Prepare
+        );
 
         return context;
     }
@@ -15777,6 +15807,7 @@ public class CardLoadTest : MonoBehaviour
         );
         battleEndedContext.runtimeState.SetActionSlots(new List<BattleActionSlot> { battleEndedSlot });
         battleEndedContext.enemy.currentHP = 0;
+        SetTestLifecyclePhase(battleEndedContext.runtimeState, BattleLifecyclePhase.Executing);
         battleEndedContext.runtimeState.EvaluateBattleEnd();
         int battleEndedCooldown = battleEndedSlot.cardState.currentCooldown;
         battleEndedContext.runtimeState.EvaluateBattleEnd();
@@ -15964,7 +15995,10 @@ public class CardLoadTest : MonoBehaviour
         completedPlan.isCompleted = true;
         context.runtimeState.SetActionSlots(actionSlots);
         context.runtimeState.SetExecutionPlan(completedPlan);
-        context.runtimeState.SetPhase("Completed");
+        SetTestLifecyclePhase(
+            context.runtimeState,
+            BattleLifecyclePhase.TurnResolved
+        );
     }
 
     BattleActionSlot CreateMode58ResponseSlot(
@@ -20633,7 +20667,10 @@ public class CardLoadTest : MonoBehaviour
             )
             : new List<BattleEnemyIntent>();
 
-        context.runtimeState.SetPhase("TurnEnded");
+        SetTestLifecyclePhase(
+            context.runtimeState,
+            BattleLifecyclePhase.TurnEnded
+        );
         context.runtimeState.PrepareNextTurnWithRuntimeObjects(mixedSlots, intentQueue);
 
         Debug.Log("RuntimeState只保留A槽位：" + (context.runtimeState.actionSlots.Count == 2 && AreAllSlotsOwnedBy(context.runtimeState.actionSlots, context.allyA)));
@@ -20649,6 +20686,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("===== 模式46 子测试J：全部玩家死亡不能准备下一回合 =====");
 
         BattleEndedTestContext context = CreateBattleEndedTestContext("single_death_j", 0, 0, 50, 20, 3, 8);
+        SetTestLifecyclePhase(context.runtimeState, BattleLifecyclePhase.Executing);
         context.runtimeState.EvaluateBattleEnd();
 
         List<BattleActionSlot> livingSlots = BattleActionSlotManager.CreateLivingPartyActionSlots(context.allyA, context.allyB, 2);
@@ -20724,7 +20762,10 @@ public class CardLoadTest : MonoBehaviour
             )
             : new List<BattleEnemyIntent>();
 
-        startContext.runtimeState.SetPhase("TurnEnded");
+        SetTestLifecyclePhase(
+            startContext.runtimeState,
+            BattleLifecyclePhase.TurnEnded
+        );
         startContext.runtimeState.PrepareNextTurnWithRuntimeObjects(livingSlots, intentQueue);
 
         bool deadBPendingNotApplied =
@@ -20758,7 +20799,10 @@ public class CardLoadTest : MonoBehaviour
         BattleExecutionPlan completedPlan = new BattleExecutionPlan();
         completedPlan.isCompleted = true;
         endContext.runtimeState.SetExecutionPlan(completedPlan);
-        endContext.runtimeState.SetPhase("Completed");
+        SetTestLifecyclePhase(
+            endContext.runtimeState,
+            BattleLifecyclePhase.TurnResolved
+        );
         endContext.runtimeState.EndCurrentTurnAndClearRuntimeObjects();
 
         int aEndDurationAfter = GetBuffDuration(endContext.allyA, "SingleDeathKAliveAEnd");
@@ -20960,6 +21004,7 @@ public class CardLoadTest : MonoBehaviour
         context.allyB.currentHP = 0;
         context.enemy.currentHP = 0;
 
+        SetTestLifecyclePhase(context.runtimeState, BattleLifecyclePhase.Executing);
         context.runtimeState.EvaluateBattleEnd();
 
         Debug.Log("phase是否符合预期：" + (context.runtimeState.currentPhase == "BattleEnded"));
@@ -21001,6 +21046,7 @@ public class CardLoadTest : MonoBehaviour
         List<BattleEnemyIntent> originalIntents = BattleEnemyIntentManager.CreateIntentQueue(originalIntent);
         context.runtimeState.SetActionSlots(originalSlots);
         context.runtimeState.SetIntentQueue(originalIntents);
+        SetTestLifecyclePhase(context.runtimeState, BattleLifecyclePhase.Executing);
         context.runtimeState.EvaluateBattleEnd();
 
         int slotCountBefore = context.runtimeState.actionSlots.Count;
@@ -21329,15 +21375,29 @@ public class CardLoadTest : MonoBehaviour
 
         context.runtimeState = new BattleRuntimeState();
         context.runtimeState.SetCharacters(context.allyA, context.allyB, context.enemy);
-        context.runtimeState.SetPhase("Prepare");
+        SetTestLifecyclePhase(
+            context.runtimeState,
+            BattleLifecyclePhase.Prepare
+        );
 
         return context;
+    }
+
+    bool SetTestLifecyclePhase(
+        BattleRuntimeState runtimeState,
+        BattleLifecyclePhase targetPhase
+    )
+    {
+        return BattleLifecyclePhaseContractTests.TryReachPhaseForTest(
+            runtimeState,
+            targetPhase
+        );
     }
 
     void ExecutePlanWithRuntimeStateAndCompleteTurn(BattleRuntimeState runtimeState, BattleExecutionPlan executionPlan)
     {
         runtimeState.SetExecutionPlan(executionPlan);
-        runtimeState.SetPhase("BattleStart");
+        SetTestLifecyclePhase(runtimeState, BattleLifecyclePhase.Executing);
         BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
         BattleExecutionPlanExecutor.ExecuteExecutionPlan(executionPlan, runtimeState);
 
@@ -21345,7 +21405,10 @@ public class CardLoadTest : MonoBehaviour
             runtimeState.currentExecutionPlan != null &&
             runtimeState.currentExecutionPlan.isCompleted)
         {
-            runtimeState.SetPhase("Completed");
+            SetTestLifecyclePhase(
+                runtimeState,
+                BattleLifecyclePhase.TurnResolved
+            );
         }
     }
 

@@ -1203,7 +1203,7 @@ public static class BattleActionSlotManager
             return false;
         }
 
-        if (runtimeState.currentPhase != "Prepare")
+        if (runtimeState.LifecyclePhase != BattleLifecyclePhase.Prepare)
         {
             result = CreateAssignmentFailure(
                 "准备阶段安排失败：当前阶段不是Prepare",

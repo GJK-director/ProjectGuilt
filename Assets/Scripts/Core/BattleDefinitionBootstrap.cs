@@ -201,7 +201,14 @@ public static class BattleDefinitionBootstrap
 
         runtimeState.SetIntentQueue(intentResult.intentQueue);
         runtimeState.ClearExecutionPlan();
-        runtimeState.SetPhase("Prepare");
+        string transitionFailure;
+        if (!runtimeState.TryTransitionTo(
+                BattleLifecyclePhase.Prepare,
+                out transitionFailure
+            ))
+        {
+            return BattleDefinitionBootstrapResult.Failure(transitionFailure);
+        }
 
         return BattleDefinitionBootstrapResult.Success(
             runtimeState,

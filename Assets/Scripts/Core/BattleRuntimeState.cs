@@ -41,14 +41,24 @@ public class BattleRuntimeState
     // currentGuilt = 当前战斗中玩家队伍共享的公共负罪感。
     public int currentGuilt;
 
-    // currentPhase = 当前阶段文本，第一版先用字符串，不急着做 enum。
-    public string currentPhase;
+    private BattleLifecyclePhase lifecyclePhase;
+
+    public BattleLifecyclePhase LifecyclePhase
+    {
+        get { return lifecyclePhase; }
+    }
+
+    // 旧UI和测试暂时继续读取该文本；内部权威状态只使用LifecyclePhase。
+    public string currentPhase
+    {
+        get { return GetCompatiblePhaseText(lifecyclePhase); }
+    }
 
     public BattleResult battleResult;
 
     public bool IsBattleEnded
     {
-        get { return currentPhase == "BattleEnded"; }
+        get { return lifecyclePhase == BattleLifecyclePhase.BattleEnded; }
     }
 
     public BattleRuntimeState()
@@ -61,7 +71,7 @@ public class BattleRuntimeState
         currentExecutionPlan = null;
         currentTurn = 1;
         currentGuilt = 0;
-        currentPhase = "Init";
+        lifecyclePhase = BattleLifecyclePhase.Init;
         battleResult = BattleResult.None;
     }
 
@@ -187,7 +197,6 @@ public class BattleRuntimeState
         ClearActionSlots();
         ClearIntentQueue();
         ClearExecutionPlan();
-        SetPhase("TurnCleared");
     }
 
     // EndCurrentTurnAndClearRuntimeObjects = 结束当前回合并清理运行时临时对象
@@ -206,11 +215,23 @@ public class BattleRuntimeState
             return;
         }
 
+        string failureMessage;
+        if (!TryTransitionTo(
+                BattleLifecyclePhase.TurnEnding,
+                out failureMessage
+            ))
+        {
+            return;
+        }
+
         // 连续闪避必须先正式结算，再进入现有 TurnEnd CD Tick，保持与本回合失败卡一致。
         BattleContinuousDodgeManager.FinalizeActiveDodges(this, "TurnEnd");
         BattleTurnProcessor.EndTurn(GetLivingTurnParticipants());
         ClearCurrentTurnRuntimeObjects();
-        SetPhase("TurnEnded");
+        if (!TryTransitionTo(BattleLifecyclePhase.TurnEnded, out failureMessage))
+        {
+            Debug.LogError(failureMessage);
+        }
     }
 
     // PrepareNextTurnWithRuntimeObjects = 准备下一回合运行时对象
@@ -248,12 +269,24 @@ public class BattleRuntimeState
             return;
         }
 
+        string failureMessage;
+        if (!TryTransitionTo(
+                BattleLifecyclePhase.PreparingNextTurn,
+                out failureMessage
+            ))
+        {
+            return;
+        }
+
         AdvanceTurn();
         BattleTurnProcessor.StartTurn(GetLivingTurnParticipants());
         SetActionSlots(filteredActionSlots);
         SetIntentQueue(newIntentQueue);
         ClearExecutionPlan();
-        SetPhase("Prepare");
+        if (!TryTransitionTo(BattleLifecyclePhase.Prepare, out failureMessage))
+        {
+            Debug.LogError(failureMessage);
+        }
     }
 
     List<BattleActionSlot> FilterLivingActionSlotsForNextTurn(List<BattleActionSlot> slots)
@@ -356,10 +389,33 @@ public class BattleRuntimeState
         participants.Add(character);
     }
 
-    // SetPhase = 设置当前阶段文本。
-    public void SetPhase(string phase)
+    public bool TryTransitionTo(
+        BattleLifecyclePhase nextPhase,
+        out string failureMessage
+    )
     {
-        currentPhase = string.IsNullOrEmpty(phase) ? "Unknown" : phase;
+        BattleLifecyclePhase previousPhase = lifecyclePhase;
+        if (previousPhase == nextPhase)
+        {
+            failureMessage =
+                "非法生命周期转换：" + previousPhase + " -> " + nextPhase +
+                "；不能重复进入相同阶段。";
+            Debug.LogWarning(failureMessage);
+            return false;
+        }
+
+        if (!IsLegalTransition(previousPhase, nextPhase))
+        {
+            failureMessage =
+                "非法生命周期转换：" + previousPhase + " -> " + nextPhase;
+            Debug.LogWarning(failureMessage);
+            return false;
+        }
+
+        lifecyclePhase = nextPhase;
+        failureMessage = string.Empty;
+        Debug.Log("生命周期转换：" + previousPhase + " -> " + nextPhase);
+        return true;
     }
 
     // AdvanceTurn = 当前回合数递增。
@@ -397,10 +453,71 @@ public class BattleRuntimeState
 
     void SetBattleEnded(BattleResult result)
     {
+        if (IsBattleEnded)
+        {
+            return;
+        }
+
         battleResult = result;
         BattleContinuousDodgeManager.FinalizeActiveDodges(this, "BattleEnded");
-        SetPhase("BattleEnded");
+        string failureMessage;
+        if (!TryTransitionTo(BattleLifecyclePhase.BattleEnded, out failureMessage))
+        {
+            Debug.LogError(failureMessage);
+            return;
+        }
         Debug.Log("检测到战斗结束：" + battleResult);
+    }
+
+    static bool IsLegalTransition(
+        BattleLifecyclePhase current,
+        BattleLifecyclePhase next
+    )
+    {
+        if (next == BattleLifecyclePhase.BattleEnded)
+        {
+            return current == BattleLifecyclePhase.Executing ||
+                current == BattleLifecyclePhase.TurnResolved ||
+                current == BattleLifecyclePhase.TurnEnding ||
+                current == BattleLifecyclePhase.TurnEnded ||
+                current == BattleLifecyclePhase.PreparingNextTurn;
+        }
+
+        switch (current)
+        {
+            case BattleLifecyclePhase.Init:
+                return next == BattleLifecyclePhase.Prepare;
+            case BattleLifecyclePhase.Prepare:
+                return next == BattleLifecyclePhase.PlanReady ||
+                    next == BattleLifecyclePhase.Executing;
+            case BattleLifecyclePhase.PlanReady:
+                return next == BattleLifecyclePhase.Executing;
+            case BattleLifecyclePhase.Executing:
+                return next == BattleLifecyclePhase.TurnResolved;
+            case BattleLifecyclePhase.TurnResolved:
+                return next == BattleLifecyclePhase.TurnEnding;
+            case BattleLifecyclePhase.TurnEnding:
+                return next == BattleLifecyclePhase.TurnEnded;
+            case BattleLifecyclePhase.TurnEnded:
+                return next == BattleLifecyclePhase.PreparingNextTurn;
+            case BattleLifecyclePhase.PreparingNextTurn:
+                return next == BattleLifecyclePhase.Prepare;
+            default:
+                return false;
+        }
+    }
+
+    static string GetCompatiblePhaseText(BattleLifecyclePhase phase)
+    {
+        switch (phase)
+        {
+            case BattleLifecyclePhase.Executing:
+                return "BattleStart";
+            case BattleLifecyclePhase.TurnResolved:
+                return "Completed";
+            default:
+                return phase.ToString();
+        }
     }
 
     // PrintRuntimeState = 打印当前运行时状态，只读不改状态。

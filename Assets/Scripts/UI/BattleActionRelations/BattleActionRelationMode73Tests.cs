@@ -1073,11 +1073,17 @@ public static class BattleActionRelationMode73Tests
             display.previewCurve.StartPoint
         );
 
-        fixture.runtime.SetPhase("Executing");
+        TransitionRuntimeForTest(
+            fixture.runtime,
+            BattleLifecyclePhase.Executing
+        );
         display.controller.RefreshRelations();
         r[72] = display.controller.VisibleRelationCount == 0 &&
             !display.controller.PreviewActive;
-        fixture.runtime.SetPhase("Prepare");
+        TransitionRuntimeForTest(
+            fixture.runtime,
+            BattleLifecyclePhase.Prepare
+        );
         display.controller.RefreshRelations();
         display.controller.SetRevealAllHeld(true);
         r[73] = display.controller.VisibleRelationCount ==
@@ -1140,8 +1146,19 @@ public static class BattleActionRelationMode73Tests
         {
             f.intent1
         });
-        f.runtime.SetPhase("Prepare");
+        TransitionRuntimeForTest(f.runtime, BattleLifecyclePhase.Prepare);
         return f;
+    }
+
+    private static bool TransitionRuntimeForTest(
+        BattleRuntimeState runtimeState,
+        BattleLifecyclePhase targetPhase
+    )
+    {
+        return BattleLifecyclePhaseContractTests.TryReachPhaseForTest(
+            runtimeState,
+            targetPhase
+        );
     }
 
     private static CardTestData CreateCardData(string id, string type)
@@ -2617,7 +2634,10 @@ public static class BattleActionRelationInteractionMode75Tests
             hoverView.RelationID.Contains("Enemy:1");
         display.controller.ClearHoveredSlot("Enemy:1");
         r[74] = FindHighlighted(display.controller) != null;
-        fixture.runtime.SetPhase("PlanReady");
+        TransitionRuntimeForTest(
+            fixture.runtime,
+            BattleLifecyclePhase.PlanReady
+        );
         display.controller.RefreshRelations();
         r[75] = string.IsNullOrEmpty(display.controller.SelectedSlotID);
 
@@ -2629,7 +2649,10 @@ public static class BattleActionRelationInteractionMode75Tests
         r[77] = display.controller.IsShuttingDown &&
             string.IsNullOrEmpty(display.controller.SelectedSlotID);
 
-        fixture.runtime.SetPhase("Prepare");
+        TransitionRuntimeForTest(
+            fixture.runtime,
+            BattleLifecyclePhase.Prepare
+        );
         display.root.SetActive(true);
         display.controller.BindRuntimeState(fixture.runtime);
         RegisterSlots(display, fixture);
@@ -4383,7 +4406,10 @@ public static class BattleActionRelationInteractionMode75Tests
         fixture.runtime.SetIntentQueue(
             new List<BattleEnemyIntent> { fixture.intent }
         );
-        fixture.runtime.SetPhase("Prepare");
+        TransitionRuntimeForTest(
+            fixture.runtime,
+            BattleLifecyclePhase.Prepare
+        );
         return fixture;
     }
 
@@ -4468,7 +4494,10 @@ public static class BattleActionRelationInteractionMode75Tests
                 fixture.intent2
             }
         );
-        fixture.runtime.SetPhase("Prepare");
+        TransitionRuntimeForTest(
+            fixture.runtime,
+            BattleLifecyclePhase.Prepare
+        );
         return fixture;
     }
 
@@ -4515,6 +4544,17 @@ public static class BattleActionRelationInteractionMode75Tests
             selection
         );
         return view;
+    }
+
+    private static bool TransitionRuntimeForTest(
+        BattleRuntimeState runtimeState,
+        BattleLifecyclePhase targetPhase
+    )
+    {
+        return BattleLifecyclePhaseContractTests.TryReachPhaseForTest(
+            runtimeState,
+            targetPhase
+        );
     }
 
     private static BattleActionSlotUIView CreateSlotView(
