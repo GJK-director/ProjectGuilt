@@ -59,6 +59,11 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
     public int SegmentPoolCount => segmentPool.Count;
     public int MainSegmentPoolCount => segmentPool.Count;
     public int UnderlaySegmentPoolCount => underlaySegmentPool.Count;
+    public int HierarchyMainSegmentCount => CountHierarchySegments(false, false);
+    public int HierarchyUnderlaySegmentCount => CountHierarchySegments(true, false);
+    public int UnregisteredMainSegmentCount => CountHierarchySegments(false, true);
+    public int UnregisteredUnderlaySegmentCount =>
+        CountHierarchySegments(true, true);
     internal bool HasUnderlayArrow => underlayArrow != null;
     public int ActiveSegmentCount => activeSegmentCount;
     public int ActiveMainSegmentCount => CountActiveSegments(segmentPool);
@@ -483,6 +488,42 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
             : null;
         arrowSprite = testArrow != null ? testArrow.sprite : null;
         EnsureInitialized();
+    }
+
+    internal void CollectUnregisteredSegmentImages(List<Image> output)
+    {
+        if (output == null)
+        {
+            return;
+        }
+
+        Image[] hierarchyImages = GetComponentsInChildren<Image>(true);
+        for (int index = 0; index < hierarchyImages.Length; index++)
+        {
+            Image image = hierarchyImages[index];
+            if (image == null || !IsRuntimeSegmentName(image.gameObject.name))
+            {
+                continue;
+            }
+
+            bool underlay = IsUnderlaySegmentName(image.gameObject.name);
+            if (!(underlay
+                    ? underlaySegmentPool.Contains(image)
+                    : segmentPool.Contains(image)))
+            {
+                output.Add(image);
+            }
+        }
+    }
+
+    internal bool IsRegisteredMainSegment(Image image)
+    {
+        return image != null && segmentPool.Contains(image);
+    }
+
+    internal bool IsRegisteredUnderlaySegment(Image image)
+    {
+        return image != null && underlaySegmentPool.Contains(image);
     }
 
     internal void ConfigureGeometryForTesting(
@@ -1007,5 +1048,43 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
                 underlaySegmentPool.RemoveAt(index);
             }
         }
+    }
+
+    private int CountHierarchySegments(bool underlay, bool unregisteredOnly)
+    {
+        int count = 0;
+        Image[] hierarchyImages = GetComponentsInChildren<Image>(true);
+        for (int index = 0; index < hierarchyImages.Length; index++)
+        {
+            Image image = hierarchyImages[index];
+            if (image == null ||
+                IsUnderlaySegmentName(image.gameObject.name) != underlay ||
+                !IsRuntimeSegmentName(image.gameObject.name))
+            {
+                continue;
+            }
+
+            bool registered = underlay
+                ? underlaySegmentPool.Contains(image)
+                : segmentPool.Contains(image);
+            if (!unregisteredOnly || !registered)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static bool IsRuntimeSegmentName(string objectName)
+    {
+        return !string.IsNullOrEmpty(objectName) &&
+            (objectName.StartsWith("Segment_") ||
+             objectName.StartsWith("UnderlaySegment_"));
+    }
+
+    private static bool IsUnderlaySegmentName(string objectName)
+    {
+        return !string.IsNullOrEmpty(objectName) &&
+            objectName.StartsWith("UnderlaySegment_");
     }
 }

@@ -654,7 +654,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 181188a2a2e742d7913064bfd2cc6771, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleSceneBootstrap
-  encounterID: encounter_test_001
+  encounterID: encounter_invalid_test
   battleUIController: {fileID: 107164112}
   useDebugTestInitialization: 0
 --- !u!4 &283409991
@@ -971,7 +971,7 @@ MonoBehaviour:
   highlightRoot: {fileID: 68671829}
   previewRoot: {fileID: 21910952}
   relationViewTemplate: {fileID: 779121894}
-  previewCurve: {fileID: 2036406693}
+  previewCurve: {fileID: 741657499}
   relationLayerCanvasGroup: {fileID: 0}
   targetCanvas: {fileID: 1488813075}
   uiCamera: {fileID: 1152837976}

@@ -81,6 +81,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     private bool previewActive;
     private Vector2 previewPointerScreenPosition;
     private bool isShuttingDown;
+    private bool configurationValid;
     private bool diagnosticHasCardSelection;
     private string diagnosticSelectedCardID;
     private string diagnosticSelectedActionSlotID;
@@ -99,6 +100,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     internal CanvasGroup RelationLayerCanvasGroup =>
         relationLayerCanvasGroup;
     internal bool IsShuttingDown => isShuttingDown;
+    internal bool ConfigurationValid => configurationValid;
 
     private void Awake()
     {
@@ -110,8 +112,15 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         if (relationViewTemplate != null)
         {
             relationViewTemplate.gameObject.SetActive(false);
-            relationViewTemplate.PrepareForReuse();
         }
+        configurationValid = !HasAnySerializedConfiguration() ||
+            ValidateRuntimeConfiguration(true, false);
+        if (!configurationValid)
+        {
+            previewCurve?.Clear();
+            return;
+        }
+        relationViewTemplate?.PrepareForReuse();
         EnsureRelationLayerRaycastSafety();
         ApplyPreviewVisualSettings();
         previewCurve?.Clear();
@@ -120,6 +129,10 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     private void OnEnable()
     {
         isShuttingDown = false;
+        if (!configurationValid && HasAnySerializedConfiguration())
+        {
+            return;
+        }
         EnsureRelationLayerRaycastSafety();
         ApplyPreviewVisualSettings();
     }
@@ -135,19 +148,19 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             return;
         }
 
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        // F8先记录异常现场，不能先让Tab刷新回收或重新分配View。
+        if (IsRelationDiagnosticsInputPressed(Keyboard.current))
+        {
+            LogCurrentRelationDiagnostics();
+        }
+#endif
+
         bool tabHeld = IsRevealAllInputHeld(Keyboard.current);
         if (tabHeld != revealAllHeld)
         {
             SetRevealAllHeld(tabHeld);
         }
-
-#if UNITY_EDITOR || DEVELOPMENT_BUILD
-        // 仅在按住 Tab 时响应一次 F8，避免开发诊断在 Update 中持续刷日志。
-        if (revealAllHeld && IsRelationDiagnosticsInputPressed(Keyboard.current))
-        {
-            LogCurrentRelationDiagnostics();
-        }
-#endif
 
         if (previewActive)
         {
@@ -658,6 +671,14 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
                 .Append(curve.MainSegmentPoolCount)
                 .Append(" UnderlaySegmentPoolCount=")
                 .Append(curve.UnderlaySegmentPoolCount)
+                .Append(" HierarchyMainSegmentCount=")
+                .Append(curve.HierarchyMainSegmentCount)
+                .Append(" HierarchyUnderlaySegmentCount=")
+                .Append(curve.HierarchyUnderlaySegmentCount)
+                .Append(" UnregisteredMainSegmentCount=")
+                .Append(curve.UnregisteredMainSegmentCount)
+                .Append(" UnregisteredUnderlaySegmentCount=")
+                .Append(curve.UnregisteredUnderlaySegmentCount)
                 .Append(" ArrowInstanceID=").Append(curve.ArrowInstanceID)
                 .Append(" ArrowActiveSelf=").Append(curve.ArrowActiveSelf)
                 .Append(" ArrowAlpha=").Append(curve.ArrowAlpha)
@@ -698,6 +719,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             hierarchyCurves,
             hierarchyViews
         );
+        AppendUnregisteredSegmentDiagnostics(builder, hierarchyCurves);
     }
 
     private static void AppendLayerCountMismatchDiagnostics(
@@ -801,6 +823,14 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             .Append(previewCurve.MainSegmentPoolCount)
             .Append(" UnderlaySegmentPoolCount=")
             .Append(previewCurve.UnderlaySegmentPoolCount)
+            .Append(" HierarchyMainSegmentCount=")
+            .Append(previewCurve.HierarchyMainSegmentCount)
+            .Append(" HierarchyUnderlaySegmentCount=")
+            .Append(previewCurve.HierarchyUnderlaySegmentCount)
+            .Append(" UnregisteredMainSegmentCount=")
+            .Append(previewCurve.UnregisteredMainSegmentCount)
+            .Append(" UnregisteredUnderlaySegmentCount=")
+            .Append(previewCurve.UnregisteredUnderlaySegmentCount)
             .Append(" ArrowInstanceID=").Append(previewCurve.ArrowInstanceID)
             .Append(" ArrowActiveSelf=").Append(previewCurve.ArrowActiveSelf)
             .Append(" ArrowAlpha=").Append(previewCurve.ArrowAlpha)
@@ -919,6 +949,53 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         }
     }
 
+    private void AppendUnregisteredSegmentDiagnostics(
+        StringBuilder builder,
+        BattleBezierRelationLineUIView[] curves
+    )
+    {
+        builder.AppendLine("[Curve层级中存在未登记Segment]");
+        int visibleUnregisteredCount = 0;
+        List<Image> unregisteredImages = new List<Image>();
+        for (int curveIndex = 0; curveIndex < curves.Length; curveIndex++)
+        {
+            BattleBezierRelationLineUIView curve = curves[curveIndex];
+            if (curve == null)
+            {
+                continue;
+            }
+
+            unregisteredImages.Clear();
+            curve.CollectUnregisteredSegmentImages(unregisteredImages);
+            for (int imageIndex = 0;
+                 imageIndex < unregisteredImages.Count;
+                 imageIndex++)
+            {
+                Image image = unregisteredImages[imageIndex];
+                if (image == null || !image.gameObject.activeSelf)
+                {
+                    continue;
+                }
+
+                visibleUnregisteredCount++;
+                builder.Append("[").Append(visibleUnregisteredCount - 1)
+                    .Append("] CurveInstanceID=")
+                    .Append(curve.GetInstanceID())
+                    .Append(" ImageInstanceID=").Append(image.GetInstanceID())
+                    .Append(" Path=").Append(GetTransformPath(image.transform))
+                    .Append(" Name=").Append(image.gameObject.name)
+                    .Append(" activeSelf=").Append(image.gameObject.activeSelf)
+                    .Append(" InMainPool=")
+                    .Append(curve.IsRegisteredMainSegment(image))
+                    .Append(" InUnderlayPool=")
+                    .Append(curve.IsRegisteredUnderlaySegment(image))
+                    .AppendLine();
+            }
+        }
+        builder.Append("ActiveUnregisteredSegment数量=")
+            .Append(visibleUnregisteredCount).AppendLine();
+    }
+
     public bool BeginCardTargetingPreview(string sourceSlotID)
     {
         if (isShuttingDown || !IsPlanningState() || previewCurve == null ||
@@ -1035,6 +1112,14 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     [ContextMenu("验证行动关系线配置")]
     public void ValidateConfiguration()
     {
+        configurationValid = ValidateRuntimeConfiguration(true, true);
+    }
+
+    private bool ValidateRuntimeConfiguration(
+        bool logMessages,
+        bool logSummary
+    )
+    {
         bool valid = true;
         valid &= ValidateReference(lineLayer, "Line Layer");
         valid &= ValidateReference(normalDashedRoot, "NormalDashedRoot");
@@ -1049,6 +1134,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         else
         {
             valid &= relationViewTemplate.ValidateConfiguration();
+            valid &= relationViewTemplate.ValidateCurveOwnership(logMessages);
         }
         if (previewCurve == null)
         {
@@ -1058,6 +1144,59 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         else
         {
             valid &= previewCurve.ValidateConfiguration("PreviewCurve");
+        }
+        if (relationViewTemplate != null && previewCurve != null)
+        {
+            bool sharesTemplateCurve = object.ReferenceEquals(
+                    previewCurve,
+                    relationViewTemplate.PrimaryCurve
+                ) || object.ReferenceEquals(
+                    previewCurve,
+                    relationViewTemplate.SecondaryCurve
+                );
+            if (sharesTemplateCurve)
+            {
+                if (logMessages)
+                {
+                    Debug.LogError(
+                        "PreviewCurve不能与RelationViewTemplate共享Curve实例。",
+                        this
+                    );
+                }
+                valid = false;
+            }
+            if (!IsUnderRoot(previewCurve.transform, previewRoot))
+            {
+                if (logMessages)
+                {
+                    Debug.LogError(
+                        "PreviewCurve必须位于PreviewRoot层级下。",
+                        this
+                    );
+                }
+                valid = false;
+            }
+            if (IsUnderRoot(
+                    relationViewTemplate.PrimaryCurve != null
+                        ? relationViewTemplate.PrimaryCurve.transform
+                        : null,
+                    previewRoot
+                ) || IsUnderRoot(
+                    relationViewTemplate.SecondaryCurve != null
+                        ? relationViewTemplate.SecondaryCurve.transform
+                        : null,
+                    previewRoot
+                ))
+            {
+                if (logMessages)
+                {
+                    Debug.LogError(
+                        "RelationViewTemplate的Curve不能位于PreviewRoot层级下。",
+                        this
+                    );
+                }
+                valid = false;
+            }
         }
         if (targetCanvas == null && GetComponentInParent<Canvas>() == null)
         {
@@ -1117,9 +1256,13 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
                 valid = false;
             }
         }
-        Debug.Log(valid
-            ? "行动关系线配置验证通过。"
-            : "行动关系线配置不完整，请按以上日志检查。", this);
+        if (logSummary)
+        {
+            Debug.Log(valid
+                ? "行动关系线配置验证通过。"
+                : "行动关系线配置不完整，请按以上日志检查。", this);
+        }
+        return valid;
     }
 
     public static bool TryConvertRectAnchorToLayerLocal(
@@ -1178,8 +1321,13 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         if (relationViewTemplate != null)
         {
             relationViewTemplate.gameObject.SetActive(false);
-            relationViewTemplate.PrepareForReuse();
         }
+        configurationValid = ValidateRuntimeConfiguration(false, false);
+        if (!configurationValid)
+        {
+            return;
+        }
+        relationViewTemplate?.PrepareForReuse();
         EnsureRelationLayerRaycastSafety();
         ApplyPreviewVisualSettings();
     }
@@ -1314,7 +1462,8 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
 
     private BattleActionRelationUIView GetPooledView(RectTransform root)
     {
-        if (isShuttingDown || relationViewTemplate == null || root == null)
+        if (isShuttingDown || !configurationValid ||
+            relationViewTemplate == null || root == null)
         {
             return null;
         }
@@ -1367,7 +1516,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         BattleActionRelationUIView view
     )
     {
-        if (view == null || !view.EnsureOwnedCurveReferences())
+        if (view == null || !view.ValidateCurveOwnership(true))
         {
             return false;
         }
@@ -1672,6 +1821,14 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             .Append(curve.MainSegmentPoolCount)
             .Append(" UnderlaySegmentPoolCount=")
             .Append(curve.UnderlaySegmentPoolCount)
+            .Append(" HierarchyMainSegmentCount=")
+            .Append(curve.HierarchyMainSegmentCount)
+            .Append(" HierarchyUnderlaySegmentCount=")
+            .Append(curve.HierarchyUnderlaySegmentCount)
+            .Append(" UnregisteredMainSegmentCount=")
+            .Append(curve.UnregisteredMainSegmentCount)
+            .Append(" UnregisteredUnderlaySegmentCount=")
+            .Append(curve.UnregisteredUnderlaySegmentCount)
             .Append(" ArrowActiveSelf=").Append(curve.ArrowActiveSelf)
             .Append(" ArrowAlpha=").Append(curve.ArrowAlpha)
             .Append(" HasVisibleMainArrow=")
@@ -1933,6 +2090,14 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             underlayScale,
             previewArrowScale
         );
+    }
+
+    private bool HasAnySerializedConfiguration()
+    {
+        return lineLayer != null || normalDashedRoot != null ||
+            normalClashRoot != null || highlightRoot != null ||
+            previewRoot != null || relationViewTemplate != null ||
+            previewCurve != null || targetCanvas != null;
     }
 
     private bool ValidateReference(Object value, string label)

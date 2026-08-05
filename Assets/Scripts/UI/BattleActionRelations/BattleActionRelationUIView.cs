@@ -213,18 +213,7 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
 
     internal bool EnsureOwnedCurveReferences()
     {
-        // Unity场景模板可能把序列化字段保留为外部对象引用。
-        // 新View只在入池时修复一次，之后复用自身Curve，不在刷新时重复实例化。
-        primaryCurve = ResolveOwnedCurve(
-            primaryCurve,
-            "PrimaryCurve",
-            secondaryCurve
-        );
-        secondaryCurve = ResolveOwnedCurve(
-            secondaryCurve,
-            "SecondaryCurve",
-            primaryCurve
-        );
+        // 模板必须在序列化层级中持有自己的Curve；禁止克隆活动中的外部Preview视觉。
         return ValidateCurveOwnership(true);
     }
 
@@ -402,46 +391,6 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
         primaryCurve = primary;
         secondaryCurve = secondary;
         EnsureRaycastSafety();
-    }
-
-    private BattleBezierRelationLineUIView ResolveOwnedCurve(
-        BattleBezierRelationLineUIView current,
-        string expectedName,
-        BattleBezierRelationLineUIView excluded
-    )
-    {
-        if (OwnsCurve(current) && current != excluded)
-        {
-            return current;
-        }
-
-        string sourceName = current != null
-            ? current.gameObject.name
-            : expectedName;
-        BattleBezierRelationLineUIView[] descendants =
-            GetComponentsInChildren<BattleBezierRelationLineUIView>(true);
-        for (int index = 0; index < descendants.Length; index++)
-        {
-            BattleBezierRelationLineUIView candidate = descendants[index];
-            if (candidate != null && candidate != excluded &&
-                candidate.gameObject.name == sourceName)
-            {
-                return candidate;
-            }
-        }
-
-        if (current == null)
-        {
-            return null;
-        }
-
-        // 外部Curve只作为模板来源；克隆后由当前View独占和销毁。
-        BattleBezierRelationLineUIView clone = Instantiate(
-            current,
-            transform
-        );
-        clone.name = sourceName;
-        return clone;
     }
 
     private bool OwnsCurve(BattleBezierRelationLineUIView curve)

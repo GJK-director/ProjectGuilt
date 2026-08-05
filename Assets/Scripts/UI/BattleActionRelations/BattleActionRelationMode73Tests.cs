@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -1582,10 +1583,10 @@ public static class BattleActionRelationInteractionMode75Tests
         "混合关系数量与全部箭头视觉状态正确",
         "Tab Hover Selected反复切换后箭头稳定",
         "对象池复用后关系View顺序与箭头稳定",
-        "外部共享PrimaryCurve模板克隆后改为View独占",
-        "两条拼点同时显示时Curve与Arrow全部唯一",
-        "第二条拼点渲染不会改写第一条Curve状态",
-        "对象池回收复用后Curve与Arrow仍然独立"
+        "外部共享Curve模板被拒绝且不创建池View",
+        "Preview与模板隔离且首个池View无未登记Segment",
+        "首次Clash只显示两条独立半实线",
+        "F8诊断不改变现场且对象池复用仍独立"
     };
 
     private sealed class Fixture
@@ -2993,6 +2994,7 @@ public static class BattleActionRelationInteractionMode75Tests
         r[firstResultIndex + 1] = false;
         r[firstResultIndex + 2] = false;
         r[firstResultIndex + 3] = false;
+        Display invalidDisplay = null;
         Display display = null;
         try
         {
@@ -3021,76 +3023,91 @@ public static class BattleActionRelationInteractionMode75Tests
                 return;
             }
 
-            display = CreateDisplay(fixture, true);
+            invalidDisplay = CreateDisplay(fixture, true);
+            bool externalTemplateRejected =
+                invalidDisplay.relationTemplate != null &&
+                invalidDisplay.externalPrimaryCurve != null &&
+                !invalidDisplay.relationTemplate.OwnsPrimaryCurve &&
+                !invalidDisplay.controller.ConfigurationValid &&
+                invalidDisplay.controller.RelationViewPoolCount == 0 &&
+                invalidDisplay.controller.VisibleRelationCount == 0;
+            r[96] = externalTemplateRejected;
+            DestroyDisplay(invalidDisplay);
+            invalidDisplay = null;
+
+            display = CreateDisplay(fixture);
+            bool isolatedConfiguration =
+                display.controller.ConfigurationValid &&
+                display.relationTemplate.OwnsPrimaryCurve &&
+                display.relationTemplate.OwnsSecondaryCurve &&
+                display.preview != display.relationTemplate.PrimaryCurve &&
+                display.preview != display.relationTemplate.SecondaryCurve;
+
+            // 先经正式Preview入口生成运行时Segment，再首次创建对象池View。
+            bool previewBegan = display.controller.BeginCardTargetingPreview(
+                "AllyA:1"
+            );
+            display.controller.UpdateCardTargetingPointer(
+                new Vector2(420f, 280f)
+            );
+            bool previewHasRuntimeSegments = previewBegan &&
+                display.controller.PreviewActive &&
+                display.preview.ActiveSegmentCount > 0;
             RevealAllAndForceLayout(display);
             List<BattleActionRelationUIView> clashViews =
                 GetVisibleClashViews(display.controller);
-            bool externalTemplateReproduced =
-                display.relationTemplate != null &&
-                display.externalPrimaryCurve != null &&
-                !display.relationTemplate.OwnsPrimaryCurve;
-            bool allViewsOwnCurves = true;
+            bool allViewsOwnCurvesWithoutUnregisteredSegments = true;
             for (int index = 0; index < clashViews.Count; index++)
             {
                 BattleActionRelationUIView view = clashViews[index];
-                allViewsOwnCurves &= view != null &&
+                allViewsOwnCurvesWithoutUnregisteredSegments &= view != null &&
                     view.OwnsPrimaryCurve && view.OwnsSecondaryCurve &&
-                    view.PrimaryCurve != display.externalPrimaryCurve;
+                    view.PrimaryCurve.UnregisteredMainSegmentCount == 0 &&
+                    view.PrimaryCurve.UnregisteredUnderlaySegmentCount == 0 &&
+                    view.SecondaryCurve.UnregisteredMainSegmentCount == 0 &&
+                    view.SecondaryCurve.UnregisteredUnderlaySegmentCount == 0;
             }
-            r[96] = externalTemplateReproduced &&
-                clashViews.Count == 2 && allViewsOwnCurves;
+            r[97] = isolatedConfiguration && previewHasRuntimeSegments &&
+                clashViews.Count == 2 &&
+                allViewsOwnCurvesWithoutUnregisteredSegments;
 
-            r[97] = r[96] &&
+            display.controller.EndCardTargetingPreview();
+            bool onlyIndependentHalfSolidCurves = clashViews.Count == 2 &&
                 AllVisibleViewsAreIndependent(display.controller) &&
                 AreClashCurveResourcesUnique(clashViews);
-
-            bool secondRenderDidNotRewriteFirst = false;
-            if (clashViews.Count == 2)
+            for (int index = 0; index < clashViews.Count; index++)
             {
-                BattleActionRelationUIView first = clashViews[0];
-                BattleActionRelationUIView second = clashViews[1];
-                int firstCurveID = first.PrimaryCurve.GetInstanceID();
-                int firstSegments = first.PrimaryCurve.ActiveSegmentCount;
-                Vector2 firstTip = first.PrimaryCurve.ArrowTip;
-                float firstRangeStart = first.PrimaryCurve.RangeStart;
-                float firstRangeEnd = first.PrimaryCurve.RangeEnd;
-                BattleActionRelationDescriptor secondDescriptor =
-                    FindRelationByID(
-                        display.controller.CachedRelations,
-                        second.RelationID
-                    );
-                bool secondShown = second.ShowClash(
-                    secondDescriptor,
-                    new Vector2(-140f, -80f),
-                    new Vector2(240f, 160f),
-                    Color.cyan,
-                    Color.red,
-                    false,
-                    90f,
-                    0.12f,
-                    60f,
-                    180f,
-                    16f,
-                    10f
-                );
-                secondRenderDidNotRewriteFirst = secondShown &&
-                    first.PrimaryCurve.GetInstanceID() == firstCurveID &&
-                    first.PrimaryCurve.ActiveSegmentCount == firstSegments &&
-                    Approximately(first.PrimaryCurve.ArrowTip, firstTip) &&
-                    Mathf.Abs(first.PrimaryCurve.RangeStart -
-                        firstRangeStart) < 0.001f &&
-                    Mathf.Abs(first.PrimaryCurve.RangeEnd -
-                        firstRangeEnd) < 0.001f &&
-                    first.PrimaryCurve.ArrowActiveSelf;
+                BattleActionRelationUIView view = clashViews[index];
+                onlyIndependentHalfSolidCurves &=
+                    IsHalfSolidClashCurve(view.PrimaryCurve) &&
+                    IsHalfSolidClashCurve(view.SecondaryCurve);
             }
-            r[98] = secondRenderDidNotRewriteFirst;
+            r[98] = onlyIndependentHalfSolidCurves;
 
+            int visibleBeforeDiagnostic = display.controller.VisibleRelationCount;
+            int poolBeforeDiagnostic = display.controller.RelationViewPoolCount;
+            bool revealBeforeDiagnostic = display.controller.RevealAllHeld;
+            string hoveredBeforeDiagnostic = display.controller.HoveredSlotID;
+            string selectedBeforeDiagnostic = display.controller.SelectedSlotID;
+            string relationIDsBeforeDiagnostic =
+                GetVisibleRelationIDSnapshot(display.controller);
+            display.controller.LogCurrentRelationDiagnostics();
+            bool diagnosticDidNotMutate =
+                display.controller.VisibleRelationCount ==
+                    visibleBeforeDiagnostic &&
+                display.controller.RelationViewPoolCount ==
+                    poolBeforeDiagnostic &&
+                display.controller.RevealAllHeld == revealBeforeDiagnostic &&
+                display.controller.HoveredSlotID == hoveredBeforeDiagnostic &&
+                display.controller.SelectedSlotID == selectedBeforeDiagnostic &&
+                GetVisibleRelationIDSnapshot(display.controller) ==
+                    relationIDsBeforeDiagnostic;
             display.controller.SetRevealAllHeld(false);
             Canvas.ForceUpdateCanvases();
             display.controller.SetRevealAllHeld(true);
             Canvas.ForceUpdateCanvases();
             clashViews = GetVisibleClashViews(display.controller);
-            r[99] = clashViews.Count == 2 &&
+            r[99] = diagnosticDidNotMutate && clashViews.Count == 2 &&
                 AllVisibleViewsAreIndependent(display.controller) &&
                 AreClashCurveResourcesUnique(clashViews);
         }
@@ -3102,8 +3119,33 @@ public static class BattleActionRelationInteractionMode75Tests
         }
         finally
         {
+            DestroyDisplay(invalidDisplay);
             DestroyDisplay(display);
         }
+    }
+
+    private static bool IsHalfSolidClashCurve(
+        BattleBezierRelationLineUIView curve
+    )
+    {
+        return curve != null && curve.CurrentLineStyle == "Solid" &&
+            curve.ActiveSegmentCount > 0 && curve.ArrowActiveSelf &&
+            Mathf.Abs(curve.RangeEnd - curve.RangeStart) < 0.75f;
+    }
+
+    private static string GetVisibleRelationIDSnapshot(
+        BattleActionRelationLineController controller
+    )
+    {
+        StringBuilder builder = new StringBuilder();
+        for (int index = 0; index < controller.VisibleRelationCount; index++)
+        {
+            BattleActionRelationUIView view = controller.GetVisibleView(index);
+            builder.Append(index).Append(':')
+                .Append(view != null ? view.RelationID : "null")
+                .Append('|');
+        }
+        return builder.ToString();
     }
 
     private static bool TryValidateCurveOwnershipFixture(
