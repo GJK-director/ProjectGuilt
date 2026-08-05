@@ -19,6 +19,9 @@ internal sealed class BattleBuffDisplayEntry
     public string displayName;
     public int totalStack;
     public Sprite iconSprite;
+    public string description;
+    public int duration;
+    public string expireRule;
 }
 
 public class BattleBuffGroupUIView : MonoBehaviour
@@ -120,7 +123,13 @@ public class BattleBuffGroupUIView : MonoBehaviour
             BattleBuffIconUIView slot = slotPool[index];
             BattleBuffDisplayEntry entry = entries[index];
             slot.SetOverflowClickHandler(null);
-            slot.SetBuff(entry.iconSprite, entry.totalStack);
+            slot.SetBuff(
+                entry.iconSprite,
+                entry.totalStack,
+                0,
+                BuildSecondaryInfoContent(entry),
+                "battle-buff-" + entry.buffID
+            );
         }
 
         if (hasOverflow &&
@@ -542,6 +551,11 @@ public class BattleBuffGroupUIView : MonoBehaviour
 
             BattleBuffIconBinding binding =
                 FindBinding(buff.buffID);
+            BuffDefinitionData definition;
+            BuffDefinitionLoader.TryGetDefinition(
+                buff.buffID,
+                out definition
+            );
             entry = new BattleBuffDisplayEntry
             {
                 buffID = buff.buffID,
@@ -555,13 +569,54 @@ public class BattleBuffGroupUIView : MonoBehaviour
                     binding != null &&
                     binding.iconSprite != null
                         ? binding.iconSprite
-                        : defaultBuffIcon
+                        : defaultBuffIcon,
+                description =
+                    definition != null
+                        ? definition.description
+                        : string.Empty,
+                duration = buff.duration,
+                expireRule = buff.expireRule
             };
             entryByID.Add(entry.buffID, entry);
             entries.Add(entry);
         }
 
         return entries;
+    }
+
+    private BattleSecondaryInfoContent BuildSecondaryInfoContent(
+        BattleBuffDisplayEntry entry
+    )
+    {
+        if (entry == null)
+        {
+            return null;
+        }
+
+        string title = !string.IsNullOrEmpty(entry.displayName)
+            ? entry.displayName
+            : entry.buffID;
+        string body = !string.IsNullOrEmpty(entry.description)
+            ? entry.description
+            : "该状态暂时没有补充说明。";
+        string durationText =
+            entry.duration < 0 ||
+            string.Equals(
+                entry.expireRule,
+                BuffExpireRule.Permanent,
+                StringComparison.Ordinal
+            )
+                ? "永久"
+                : entry.duration + " 回合";
+        string footer =
+            "当前层数：" + entry.totalStack +
+            "\n持续时间：" + durationText;
+
+        return new BattleSecondaryInfoContent(
+            title,
+            body,
+            footer
+        );
     }
 
     private BattleBuffIconBinding FindBinding(string buffID)

@@ -4,7 +4,10 @@ using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-public class BattleBuffIconUIView : MonoBehaviour, IPointerClickHandler
+public class BattleBuffIconUIView : MonoBehaviour,
+    IPointerClickHandler,
+    IPointerEnterHandler,
+    IPointerExitHandler
 {
     [SerializeField] private Image iconImage;
     [SerializeField] private TMP_Text stackText;
@@ -14,6 +17,9 @@ public class BattleBuffIconUIView : MonoBehaviour, IPointerClickHandler
     private int overflowHiddenCount;
     private Action<int> overflowClickHandler;
     private bool hasExplicitVisualState;
+    private BattleSecondaryInfoContent secondaryInfoContent;
+    private string secondaryInfoKey;
+    private bool secondaryInfoHoverActive;
 
     public bool IsOverflow => isOverflow;
     public int OverflowHiddenCount => overflowHiddenCount;
@@ -28,7 +34,13 @@ public class BattleBuffIconUIView : MonoBehaviour, IPointerClickHandler
         }
     }
 
-    public void SetBuff(Sprite iconSprite, int stack, int endTurnDelta = 0)
+    public void SetBuff(
+        Sprite iconSprite,
+        int stack,
+        int endTurnDelta = 0,
+        BattleSecondaryInfoContent infoContent = null,
+        string infoKey = null
+    )
     {
         hasExplicitVisualState = true;
 
@@ -40,6 +52,14 @@ public class BattleBuffIconUIView : MonoBehaviour, IPointerClickHandler
 
         isOverflow = false;
         overflowHiddenCount = 0;
+        if (secondaryInfoHoverActive &&
+            secondaryInfoKey != infoKey)
+        {
+            ClearSecondaryInfoHover();
+        }
+
+        secondaryInfoContent = infoContent;
+        secondaryInfoKey = infoKey ?? string.Empty;
         gameObject.SetActive(true);
 
         if (iconImage != null)
@@ -69,6 +89,9 @@ public class BattleBuffIconUIView : MonoBehaviour, IPointerClickHandler
     )
     {
         hasExplicitVisualState = true;
+        ClearSecondaryInfoHover();
+        secondaryInfoContent = null;
+        secondaryInfoKey = string.Empty;
 
         if (hiddenCount <= 0)
         {
@@ -129,9 +152,39 @@ public class BattleBuffIconUIView : MonoBehaviour, IPointerClickHandler
         overflowClickHandler?.Invoke(overflowHiddenCount);
     }
 
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        if (eventData == null ||
+            isOverflow ||
+            secondaryInfoContent == null ||
+            !secondaryInfoContent.IsValid)
+        {
+            return;
+        }
+
+        secondaryInfoHoverActive = true;
+        BattleSecondaryInfoPanelHost.HandlePointer(
+            new BattleSecondaryInfoHoverRequest(
+                gameObject,
+                secondaryInfoKey,
+                secondaryInfoContent,
+                eventData.position,
+                true
+            )
+        );
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        ClearSecondaryInfoHover();
+    }
+
     public void SetEmpty()
     {
         hasExplicitVisualState = true;
+        ClearSecondaryInfoHover();
+        secondaryInfoContent = null;
+        secondaryInfoKey = string.Empty;
         isOverflow = false;
         overflowHiddenCount = 0;
 
@@ -154,5 +207,29 @@ public class BattleBuffIconUIView : MonoBehaviour, IPointerClickHandler
         }
 
         gameObject.SetActive(false);
+    }
+
+    void ClearSecondaryInfoHover()
+    {
+        if (!secondaryInfoHoverActive)
+        {
+            return;
+        }
+
+        BattleSecondaryInfoPanelHost.HandlePointer(
+            new BattleSecondaryInfoHoverRequest(
+                gameObject,
+                secondaryInfoKey,
+                null,
+                Vector2.zero,
+                false
+            )
+        );
+        secondaryInfoHoverActive = false;
+    }
+
+    void OnDisable()
+    {
+        ClearSecondaryInfoHover();
     }
 }

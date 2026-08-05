@@ -10,4 +10,5 @@ public class BattleCardUIPreviewData
     public string cooldownText;
     public bool isUsable;
     public string unavailableReason;
+    public CardKeywordData[] keywords;
 }

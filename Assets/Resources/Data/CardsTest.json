@@ -102,7 +102,13 @@
     "cardID": "atk_bullet_001",
     "cardName": "基础射击",
     "description": "消耗1枚子弹，根据当前子弹数量提高点数。",
-    "keywords": [],
+    "keywords": [
+      {
+        "keywordID": "Bullet",
+        "displayName": "子弹",
+        "tooltipText": "子弹是一种常驻战斗资源。基础射击成功使用后会消耗1枚，并根据使用前的子弹数量提高点数。"
+      }
+    ],
     "rarity": "White",
     "cardType": "Attack",
     "isClashable": true,

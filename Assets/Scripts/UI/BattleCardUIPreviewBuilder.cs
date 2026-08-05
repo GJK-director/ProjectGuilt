@@ -26,6 +26,7 @@ public static class BattleCardUIPreviewBuilder
             data.cooldownText = "—";
             data.isUsable = false;
             data.unavailableReason = "卡牌状态为空";
+            data.keywords = null;
             return data;
         }
 
@@ -49,6 +50,7 @@ public static class BattleCardUIPreviewBuilder
             data.cooldownText = "—";
             data.isUsable = false;
             data.unavailableReason = "卡牌数据为空";
+            data.keywords = null;
             return data;
         }
 
@@ -70,6 +72,7 @@ public static class BattleCardUIPreviewBuilder
         data.isUsable = eligibility != null && eligibility.isEligible;
         data.unavailableReason = eligibility != null ? eligibility.failureMessage : "卡牌可用性检查失败";
         data.descriptionText = cardData.description ?? "";
+        data.keywords = cardData.keywords;
 
         return data;
     }

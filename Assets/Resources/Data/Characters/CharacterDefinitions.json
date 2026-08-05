@@ -20,6 +20,11 @@
         "buffID": "Bullet",
         "stack": 6,
         "duration": -1
+      },
+      {
+        "buffID": "Strength",
+        "stack": 1,
+        "duration": 3
       }
     ],
     "prefabKey": "ally_a_test_prefab",

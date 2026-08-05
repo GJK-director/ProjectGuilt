@@ -9,7 +9,7 @@
     "defaultCheckTiming": "TurnEnd",
     "defaultExpireRule": "DurationDown",
     "consumeRule": "None",
-    "description": "Attack point +1 per stack"
+    "description": "每层使攻击卡点数 +1。"
   },
   {
     "buffID": "Weakness",
@@ -81,7 +81,7 @@
     "defaultCheckTiming": "None",
     "defaultExpireRule": "Permanent",
     "consumeRule": "None",
-    "description": "Permanent resource or counter"
+    "description": "子弹是一种常驻战斗资源；卡牌可以按规则检查、加成或消耗其层数。"
   },
   {
     "buffID": "GuardUp",
