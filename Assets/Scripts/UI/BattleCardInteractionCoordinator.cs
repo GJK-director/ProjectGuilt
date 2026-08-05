@@ -26,6 +26,29 @@ public sealed class BattleCardInteractionCoordinator
     public CharacterData SelectedCharacter => selectedCharacter;
     public BattleActionSlotUIView SelectedActionSlotView =>
         selectedActionSlotView;
+    public BattleCardUIView SelectedCardView =>
+        cardSelectionController != null
+            ? cardSelectionController.SelectedCardView
+            : null;
+    public bool IsCardTargetingActive
+    {
+        get
+        {
+            BattleCardUIView selectedCardView = SelectedCardView;
+            return selectedActionSlotView != null &&
+                selectedCharacter != null &&
+                selectedCardView != null &&
+                selectedCardView.BoundCardState != null &&
+                object.ReferenceEquals(
+                    selectedActionSlotView.BoundCharacter,
+                    selectedCharacter
+                ) &&
+                object.ReferenceEquals(
+                    selectedCardView.BoundOwner,
+                    selectedCharacter
+                );
+        }
+    }
     public int SelectedFormalSlotIndex =>
         selectedActionSlotView != null &&
         !selectedActionSlotView.IsEnemySlot &&

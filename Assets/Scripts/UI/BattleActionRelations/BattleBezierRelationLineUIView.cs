@@ -50,11 +50,35 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
     private float lastStep;
     private float totalLength;
     private bool isDestroying;
+    private bool hasRendered;
+    private bool hasPreviousRender;
+    private bool previousDashed;
+    private float previousRangeStart;
+    private float previousRangeEnd = 1f;
 
     public int SegmentPoolCount => segmentPool.Count;
-    internal int UnderlaySegmentPoolCount => underlaySegmentPool.Count;
+    public int MainSegmentPoolCount => segmentPool.Count;
+    public int UnderlaySegmentPoolCount => underlaySegmentPool.Count;
     internal bool HasUnderlayArrow => underlayArrow != null;
     public int ActiveSegmentCount => activeSegmentCount;
+    public int ActiveMainSegmentCount => CountActiveSegments(segmentPool);
+    public int ActiveUnderlaySegmentCount =>
+        CountActiveSegments(underlaySegmentPool);
+    public bool HasVisibleMainArrow => arrowImage != null &&
+        arrowImage.gameObject.activeSelf && arrowImage.color.a > 0f;
+    public bool HasVisibleUnderlayArrow => underlayArrow != null &&
+        underlayArrow.gameObject.activeSelf && underlayArrow.color.a > 0f;
+    public string CurrentLineStyle => hasRendered
+        ? GetLineStyleName(lastDashed)
+        : "None";
+    public string PreviousLineStyle => hasPreviousRender
+        ? GetLineStyleName(previousDashed)
+        : "None";
+    public Vector2 CurrentRange => new Vector2(lastRangeStart, lastRangeEnd);
+    public Vector2 PreviousRange => new Vector2(
+        previousRangeStart,
+        previousRangeEnd
+    );
     public Vector2 StartPoint => lastStart;
     public Vector2 ControlPoint => lastControl;
     public Vector2 ArrowTip => lastEnd;
@@ -112,6 +136,18 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
     public int ArrowSiblingIndex => arrowImage != null
         ? arrowImage.transform.GetSiblingIndex()
         : -1;
+    public int ArrowInstanceID => arrowImage != null
+        ? arrowImage.GetInstanceID()
+        : 0;
+    public int SegmentTemplateInstanceID => segmentTemplate != null
+        ? segmentTemplate.GetInstanceID()
+        : 0;
+    public int UnderlayArrowInstanceID => underlayArrow != null
+        ? underlayArrow.GetInstanceID()
+        : 0;
+    public int CanvasGroupInstanceID => canvasGroup != null
+        ? canvasGroup.GetInstanceID()
+        : 0;
     public bool HasDeterministicVisualLayerOrder
     {
         get
@@ -270,6 +306,14 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
             out end
         );
 
+        if (hasRendered)
+        {
+            previousDashed = lastDashed;
+            previousRangeStart = lastRangeStart;
+            previousRangeEnd = lastRangeEnd;
+            hasPreviousRender = true;
+        }
+
         lastStart = start;
         lastControl = control;
         lastEnd = end;
@@ -281,6 +325,7 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
         lastColor = color;
         lastDashed = dashed;
         lastHighlighted = highlighted;
+        hasRendered = true;
         lastActivationRaycastSafe = true;
 
         BuildArcLengthTable(start, control, end);
@@ -298,7 +343,10 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
 
         EnsureSegmentCapacity(requiredSegments);
         ApplyVisualSiblingOrder();
-        HideUnusedSegments(requiredSegments);
+        // 每次渲染先关闭两个池的完整可见集合，再只激活本次需要的N项。
+        // 这样完整虚线切换为半段实线时，池尾和旧Underlay都不会残留。
+        DisableUnusedSegments(segmentPool, 0);
+        DisableUnusedSegments(underlaySegmentPool, 0);
 
         float alpha = highlighted ? highlightAlpha : normalAlpha;
         Color mainColor = color;
@@ -348,6 +396,8 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
             mainColor,
             true
         );
+        DisableUnusedSegments(segmentPool, requiredSegments);
+        DisableUnusedSegments(underlaySegmentPool, requiredSegments);
         SetVisible(true);
     }
 
@@ -383,6 +433,14 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
             && index < segmentPool.Count && segmentPool[index] != null
             ? segmentPool[index].rectTransform.anchoredPosition
             : Vector2.zero;
+    }
+
+    public int GetActiveSegmentInstanceID(int index)
+    {
+        return index >= 0 && index < activeSegmentCount &&
+            index < segmentPool.Count && segmentPool[index] != null
+            ? segmentPool[index].GetInstanceID()
+            : 0;
     }
 
     public bool ValidateConfiguration(string label)
@@ -773,26 +831,54 @@ public sealed class BattleBezierRelationLineUIView : MonoBehaviour
     private void HideUnusedSegments(int usedCount)
     {
         PruneDestroyedImageReferences();
-        for (int index = usedCount; index < segmentPool.Count; index++)
+        DisableUnusedSegments(segmentPool, usedCount);
+        DisableUnusedSegments(underlaySegmentPool, usedCount);
+    }
+
+    private static void DisableUnusedSegments(
+        List<Image> pool,
+        int usedCount
+    )
+    {
+        if (pool == null)
         {
-            Image segment = segmentPool[index];
-            if (segment != null)
+            return;
+        }
+
+        int firstUnusedIndex = Mathf.Clamp(usedCount, 0, pool.Count);
+        for (int index = firstUnusedIndex; index < pool.Count; index++)
+        {
+            Image image = pool[index];
+            if (image == null)
             {
-                segment.raycastTarget = false;
-                segment.gameObject.SetActive(false);
+                continue;
+            }
+            image.raycastTarget = false;
+            image.gameObject.SetActive(false);
+        }
+    }
+
+    private static int CountActiveSegments(List<Image> pool)
+    {
+        if (pool == null)
+        {
+            return 0;
+        }
+
+        int count = 0;
+        for (int index = 0; index < pool.Count; index++)
+        {
+            if (pool[index] != null && pool[index].gameObject.activeSelf)
+            {
+                count++;
             }
         }
-        for (int index = usedCount;
-             index < underlaySegmentPool.Count;
-             index++)
-        {
-            Image underlay = underlaySegmentPool[index];
-            if (underlay != null)
-            {
-                underlay.raycastTarget = false;
-                underlay.gameObject.SetActive(false);
-            }
-        }
+        return count;
+    }
+
+    private static string GetLineStyleName(bool dashed)
+    {
+        return dashed ? "Dashed" : "Solid";
     }
 
     private void ConfigureSegment(

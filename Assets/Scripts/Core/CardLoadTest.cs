@@ -5486,8 +5486,197 @@ public class CardLoadTest : MonoBehaviour
         RunBattleDefinitionDataMissingCardFailSubTest();
         RunBattleDefinitionDataMissingBuffFailSubTest();
         RunBattleDefinitionDataMissingCrossReferenceFailSubTest();
+        RunBattleSceneInitializationRuntimeContractSubTest();
+        RunBattleSceneInitializationLegacyCardsSubTest();
+        RunBattleSceneInitializationDuplicateGuardSubTest();
+        RunBattleSceneBootstrapFailureAndDebugDefaultSubTest();
 
         Debug.Log("===== BattleDefinitionDataBootstrapBasic 聚合测试结束 =====");
+    }
+
+    void RunBattleSceneInitializationRuntimeContractSubTest()
+    {
+        BattleDefinitionBootstrapResult result =
+            BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        string errorMessage = string.Empty;
+        bool valid =
+            result != null &&
+            result.isSuccess &&
+            BattleSimpleUIController.ValidateRuntimeStateForInitialization(
+                result.runtimeState,
+                out errorMessage
+            );
+
+        Debug.Log(
+            "模式56 T 正式Runtime满足Controller严格初始化契约：" + valid +
+            (valid ? "" : " / " + errorMessage)
+        );
+    }
+
+    void RunBattleSceneInitializationLegacyCardsSubTest()
+    {
+        BattleDefinitionBootstrapResult result =
+            BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        BattleSimpleUIController.LegacyCardReferenceSet references = null;
+        string errorMessage = string.Empty;
+        bool resolved =
+            result != null &&
+            result.isSuccess &&
+            BattleSimpleUIController.TryResolveLegacyCardReferences(
+                result.runtimeState,
+                out references,
+                out errorMessage
+            );
+
+        bool formalReferences = resolved &&
+            HasExactCardReference(result.runtimeState.allyA, references.allyAAttack) &&
+            HasExactCardReference(result.runtimeState.allyA, references.allyABulletAttack) &&
+            HasExactCardReference(result.runtimeState.allyA, references.allyADefense) &&
+            HasExactCardReference(result.runtimeState.allyA, references.allyADodge) &&
+            HasExactCardReference(result.runtimeState.allyA, references.allyAAbility) &&
+            HasExactCardReference(result.runtimeState.allyA, references.allyASinAttack) &&
+            HasExactCardReference(result.runtimeState.allyB, references.allyBAttack) &&
+            HasExactCardReference(result.runtimeState.allyB, references.allyBDefense) &&
+            HasExactCardReference(result.runtimeState.allyB, references.allyBDodge) &&
+            HasExactCardReference(result.runtimeState.allyB, references.allyBAbility) &&
+            HasExactCardReference(result.runtimeState.allyB, references.allyBSinAttack) &&
+            HasExactCardReference(result.runtimeState.enemy, references.enemyAttack) &&
+            HasExactCardReference(result.runtimeState.enemy2, references.enemy02Attack) &&
+            !object.ReferenceEquals(
+                references.enemyAttack,
+                references.enemy02Attack
+            ) &&
+            !HasDebugCardInstanceID(references);
+
+        Debug.Log(
+            "模式56 U 兼容卡牌全部来自正式battleCards且敌人实例独立：" +
+            formalReferences +
+            (resolved ? "" : " / " + errorMessage)
+        );
+    }
+
+    void RunBattleSceneInitializationDuplicateGuardSubTest()
+    {
+        BattleDefinitionBootstrapResult result =
+            BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
+        GameObject controllerObject =
+            new GameObject("Mode56DuplicateInitializationController");
+        controllerObject.SetActive(false);
+        BattleSimpleUIController controller =
+            controllerObject.AddComponent<BattleSimpleUIController>();
+
+        System.Reflection.BindingFlags flags =
+            System.Reflection.BindingFlags.Instance |
+            System.Reflection.BindingFlags.NonPublic;
+        System.Reflection.FieldInfo initializedField =
+            typeof(BattleSimpleUIController).GetField("isInitialized", flags);
+        System.Reflection.FieldInfo runtimeField =
+            typeof(BattleSimpleUIController).GetField("runtimeState", flags);
+        BattleRuntimeState existingRuntime = new BattleRuntimeState();
+
+        initializedField?.SetValue(controller, true);
+        runtimeField?.SetValue(controller, existingRuntime);
+        bool accepted = controller.InitializeFromRuntimeState(
+            result != null ? result.runtimeState : null
+        );
+        bool duplicateRejected =
+            initializedField != null &&
+            runtimeField != null &&
+            !accepted &&
+            object.ReferenceEquals(controller.RuntimeState, existingRuntime);
+
+        Debug.Log(
+            "模式56 V Controller重复Initialize被拒绝且不覆盖现有Runtime：" +
+            duplicateRejected
+        );
+        Destroy(controllerObject);
+    }
+
+    void RunBattleSceneBootstrapFailureAndDebugDefaultSubTest()
+    {
+        BattleDefinitionBootstrapResult invalidResult =
+            BattleDefinitionBootstrap.CreateRuntimeState(
+                "missing_encounter_for_mode56"
+            );
+        GameObject bootstrapObject =
+            new GameObject("Mode56BattleSceneBootstrapDefaults");
+        bootstrapObject.SetActive(false);
+        BattleSceneBootstrap bootstrap =
+            bootstrapObject.AddComponent<BattleSceneBootstrap>();
+
+        bool safeFailureAndDefault =
+            invalidResult != null &&
+            !invalidResult.isSuccess &&
+            invalidResult.runtimeState == null &&
+            !bootstrap.UseDebugTestInitialization &&
+            bootstrap.ActiveBootstrapResult == null &&
+            !bootstrap.HasStartedInitialization;
+
+        Debug.Log(
+            "模式56 W 无效encounter安全失败且Debug开关默认关闭：" +
+            safeFailureAndDefault
+        );
+        Destroy(bootstrapObject);
+    }
+
+    bool HasExactCardReference(
+        CharacterData owner,
+        BattleCardState expectedCardState
+    )
+    {
+        if (owner == null ||
+            owner.battleCards == null ||
+            expectedCardState == null ||
+            !object.ReferenceEquals(expectedCardState.owner, owner))
+        {
+            return false;
+        }
+
+        for (int index = 0; index < owner.battleCards.Count; index++)
+        {
+            if (object.ReferenceEquals(
+                    owner.battleCards[index],
+                    expectedCardState))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    bool HasDebugCardInstanceID(
+        BattleSimpleUIController.LegacyCardReferenceSet references
+    )
+    {
+        BattleCardState[] cards =
+        {
+            references.allyAAttack,
+            references.allyABulletAttack,
+            references.allyADefense,
+            references.allyADodge,
+            references.allyAAbility,
+            references.allyASinAttack,
+            references.allyBAttack,
+            references.allyBDefense,
+            references.allyBDodge,
+            references.allyBAbility,
+            references.allyBSinAttack,
+            references.enemyAttack,
+            references.enemy02Attack
+        };
+
+        for (int index = 0; index < cards.Length; index++)
+        {
+            if (cards[index] != null &&
+                !string.IsNullOrEmpty(cards[index].instanceID) &&
+                cards[index].instanceID.StartsWith("ui_"))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     void RunBattlePreparedActionAssignmentModelBasicTestSequence()

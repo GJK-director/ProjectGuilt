@@ -9,6 +9,23 @@ public class BattleSimpleUIController : MonoBehaviour
 {
     internal const string ClashSinTestCardID = "sin_attack_test_001";
 
+    internal sealed class LegacyCardReferenceSet
+    {
+        public BattleCardState allyAAttack;
+        public BattleCardState allyABulletAttack;
+        public BattleCardState allyADefense;
+        public BattleCardState allyADodge;
+        public BattleCardState allyAAbility;
+        public BattleCardState allyASinAttack;
+        public BattleCardState allyBAttack;
+        public BattleCardState allyBDefense;
+        public BattleCardState allyBDodge;
+        public BattleCardState allyBAbility;
+        public BattleCardState allyBSinAttack;
+        public BattleCardState enemyAttack;
+        public BattleCardState enemy02Attack;
+    }
+
     [SerializeField] private TMP_Text topInfoText;
     [SerializeField] private TMP_Text enemyStateText;
     [SerializeField] private TMP_Text allyAStateText;
@@ -69,6 +86,9 @@ public class BattleSimpleUIController : MonoBehaviour
     private BattleCharacterStatusUIView enemy02StatusView;
     private bool runtimeUnitViewsReady;
     private bool warnedRuntimeUnitViewsUnavailable;
+    private bool isInitialized;
+    private bool isInitializing;
+    private bool buttonEventsBound;
 
     private BattleCardState allyAAttackCardState;
     private BattleCardState allyABulletAttackCardState;
@@ -118,6 +138,15 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private string lastLog = "等待初始化";
 
+    public bool IsInitialized => isInitialized;
+    public bool IsInitializing => isInitializing;
+    public bool ButtonEventsBound => buttonEventsBound;
+    public BattleRuntimeState RuntimeState => runtimeState;
+    public CharacterData Ally01 => ally01;
+    public CharacterData Ally02 => ally02;
+    public CharacterData Enemy01 => enemy01;
+    public CharacterData Enemy02 => enemy02;
+
     void Awake()
     {
         cardInteractionCoordinator =
@@ -126,18 +155,6 @@ public class BattleSimpleUIController : MonoBehaviour
             OnSourceSlotSelectionChanged;
         cardSelectionController.SelectionChanged +=
             OnCardSelectionChanged;
-    }
-
-    void Start()
-    {
-        InitializeTestBattleData();
-        if (SpawnRuntimeUnitViewsOnce())
-        {
-            BindCharacterStatusSlotInteractions();
-        }
-        BindCardHandInteractions();
-        BindButtonEvents();
-        RefreshView();
     }
 
     void OnDestroy()
@@ -166,7 +183,596 @@ public class BattleSimpleUIController : MonoBehaviour
         UnbindButtonEvents();
     }
 
-    void InitializeTestBattleData()
+    // 正式战斗只消费Definition已经创建完成的RuntimeState，不在Controller内补造数据。
+    public bool InitializeFromRuntimeState(
+        BattleRuntimeState initializedRuntimeState
+    )
+    {
+        if (!TryBeginInitialization("正式RuntimeState"))
+        {
+            return false;
+        }
+
+        try
+        {
+            string errorMessage;
+            LegacyCardReferenceSet cardReferences;
+
+            if (!ValidateRuntimeStateForInitialization(
+                    initializedRuntimeState,
+                    out errorMessage) ||
+                !TryResolveLegacyCardReferences(
+                    initializedRuntimeState,
+                    out cardReferences,
+                    out errorMessage))
+            {
+                ShowInitializationFailure(errorMessage);
+                return false;
+            }
+
+            BindRuntimeReferences(initializedRuntimeState, cardReferences);
+
+            if (!CompletePresentationInitialization())
+            {
+                ShowInitializationFailure(lastLog);
+                return false;
+            }
+
+            lastLog = "正式战斗初始化完成：已进入 Prepare 阶段";
+            RefreshView();
+            isInitialized = true;
+            return true;
+        }
+        finally
+        {
+            isInitializing = false;
+        }
+    }
+
+    public bool InitializeDebugTestBattle()
+    {
+        if (!TryBeginInitialization("Debug测试战斗"))
+        {
+            return false;
+        }
+
+        Debug.LogWarning(
+            "BattleScene正在使用Debug测试初始化，未使用正式Encounter Definition。",
+            this
+        );
+
+        try
+        {
+            if (!InitializeTestBattleData())
+            {
+                ShowInitializationFailure(lastLog);
+                return false;
+            }
+
+            if (!CompletePresentationInitialization())
+            {
+                ShowInitializationFailure(lastLog);
+                return false;
+            }
+
+            RefreshView();
+            isInitialized = true;
+            return true;
+        }
+        finally
+        {
+            isInitializing = false;
+        }
+    }
+
+    public void ShowInitializationFailure(string message)
+    {
+        lastLog = string.IsNullOrEmpty(message)
+            ? "BattleScene初始化失败：未知错误"
+            : message;
+        Debug.LogError(lastLog, this);
+
+        cardInteractionCoordinator?.ClearAllSelections();
+        ClearSelectedActionState();
+        testCardHandView?.SetSelectionController(null);
+        UnbindButtonEvents();
+
+        if (unitViewSpawner != null)
+        {
+            unitViewSpawner.ClearGeneratedViews();
+        }
+
+        ClearRuntimeStatusViewReferences();
+        actionRelationLineController?.ClearAll();
+        ClearRuntimeAndLegacyReferences();
+        isInitialized = false;
+        RefreshView();
+    }
+
+    private bool TryBeginInitialization(string initializationName)
+    {
+        if (isInitialized || isInitializing)
+        {
+            Debug.LogWarning(
+                "BattleSimpleUIController拒绝重复初始化：" +
+                initializationName,
+                this
+            );
+            return false;
+        }
+
+        isInitializing = true;
+        return true;
+    }
+
+    private bool CompletePresentationInitialization()
+    {
+        if (!SpawnRuntimeUnitViewsOnce() ||
+            unitViewSpawner == null ||
+            !unitViewSpawner.IsSpawned)
+        {
+            lastLog = "BattleScene初始化失败：运行时角色表现生成未完成";
+            unitViewSpawner?.ClearGeneratedViews();
+            ClearRuntimeStatusViewReferences();
+            actionRelationLineController?.ClearAll();
+            return false;
+        }
+
+        BindCharacterStatusSlotInteractions();
+        BindCardHandInteractions();
+        BindButtonEvents();
+        return true;
+    }
+
+    internal static bool ValidateRuntimeStateForInitialization(
+        BattleRuntimeState initializedRuntimeState,
+        out string errorMessage
+    )
+    {
+        errorMessage = string.Empty;
+
+        if (initializedRuntimeState == null)
+        {
+            errorMessage = "BattleScene初始化失败：BattleRuntimeState为空";
+            return false;
+        }
+
+        CharacterData allyA = initializedRuntimeState.allyA;
+        CharacterData allyB = initializedRuntimeState.allyB;
+        CharacterData enemy = initializedRuntimeState.enemy;
+        CharacterData enemy2 = initializedRuntimeState.enemy2;
+
+        if (allyA == null || allyB == null || enemy == null || enemy2 == null)
+        {
+            errorMessage = "BattleScene初始化失败：固定2+2角色引用不完整";
+            return false;
+        }
+
+        if (!HasExactUnitReferences(
+                initializedRuntimeState.allyUnits,
+                allyA,
+                allyB))
+        {
+            errorMessage = "BattleScene初始化失败：allyUnits必须恰好包含allyA和allyB";
+            return false;
+        }
+
+        if (!HasExactUnitReferences(
+                initializedRuntimeState.enemyUnits,
+                enemy,
+                enemy2))
+        {
+            errorMessage = "BattleScene初始化失败：enemyUnits必须恰好包含enemy和enemy2";
+            return false;
+        }
+
+        CharacterData[] units = { allyA, allyB, enemy, enemy2 };
+        if (!HasFourDistinctBattleUnits(
+                initializedRuntimeState.battleUnits,
+                units,
+                out errorMessage) ||
+            !HasUniqueRuntimeUnitIDs(units, out errorMessage) ||
+            !HasValidInitialActionSlots(
+                initializedRuntimeState.actionSlots,
+                allyA,
+                allyB,
+                out errorMessage))
+        {
+            return false;
+        }
+
+        if (initializedRuntimeState.intentQueue == null)
+        {
+            errorMessage = "BattleScene初始化失败：intentQueue为空";
+            return false;
+        }
+
+        if (initializedRuntimeState.currentPhase != "Prepare")
+        {
+            errorMessage =
+                "BattleScene初始化失败：初始阶段必须为Prepare，当前为" +
+                initializedRuntimeState.currentPhase;
+            return false;
+        }
+
+        for (int unitIndex = 0; unitIndex < units.Length; unitIndex++)
+        {
+            CharacterData unit = units[unitIndex];
+            if (unit.battleCards == null)
+            {
+                errorMessage =
+                    "BattleScene初始化失败：" + unit.runtimeUnitID +
+                    " 的battleCards为空";
+                return false;
+            }
+
+            for (int cardIndex = 0;
+                cardIndex < unit.battleCards.Count;
+                cardIndex++)
+            {
+                BattleCardState cardState = unit.battleCards[cardIndex];
+                if (cardState == null ||
+                    cardState.cardData == null ||
+                    !object.ReferenceEquals(cardState.owner, unit))
+                {
+                    errorMessage =
+                        "BattleScene初始化失败：" + unit.runtimeUnitID +
+                        " 的卡牌owner或CardData无效，索引=" + cardIndex;
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    internal static bool TryResolveLegacyCardReferences(
+        BattleRuntimeState initializedRuntimeState,
+        out LegacyCardReferenceSet references,
+        out string errorMessage
+    )
+    {
+        references = new LegacyCardReferenceSet();
+        errorMessage = string.Empty;
+
+        if (initializedRuntimeState == null)
+        {
+            errorMessage = "BattleScene兼容卡牌绑定失败：RuntimeState为空";
+            return false;
+        }
+
+        CharacterData allyA = initializedRuntimeState.allyA;
+        CharacterData allyB = initializedRuntimeState.allyB;
+        CharacterData enemy = initializedRuntimeState.enemy;
+        CharacterData enemy2 = initializedRuntimeState.enemy2;
+
+        if (!TryRequireCard(allyA, "atk_001", out references.allyAAttack, out errorMessage) ||
+            !TryRequireCard(allyA, "def_001", out references.allyADefense, out errorMessage) ||
+            !TryRequireCard(allyA, "dodge_001", out references.allyADodge, out errorMessage) ||
+            !TryRequireCard(allyA, "sin_ability_001", out references.allyAAbility, out errorMessage) ||
+            !TryRequireCard(allyA, ClashSinTestCardID, out references.allyASinAttack, out errorMessage) ||
+            !TryRequireCard(allyB, "atk_001", out references.allyBAttack, out errorMessage) ||
+            !TryRequireCard(allyB, "def_001", out references.allyBDefense, out errorMessage) ||
+            !TryRequireCard(allyB, "dodge_001", out references.allyBDodge, out errorMessage) ||
+            !TryRequireCard(allyB, "sin_ability_001", out references.allyBAbility, out errorMessage) ||
+            !TryRequireCard(allyB, ClashSinTestCardID, out references.allyBSinAttack, out errorMessage))
+        {
+            return false;
+        }
+
+        // 单卡预览是兼容调试入口，正式卡组没有基础射击时保持空白。
+        references.allyABulletAttack = FindOwnedCardByID(
+            allyA,
+            "atk_bullet_001"
+        );
+        references.enemyAttack = FindIntentCardForEnemy(
+            initializedRuntimeState.intentQueue,
+            enemy
+        ) ?? FindOwnedCardByID(enemy, "enemy_atk_001");
+        references.enemy02Attack = FindIntentCardForEnemy(
+            initializedRuntimeState.intentQueue,
+            enemy2
+        ) ?? FindOwnedCardByID(enemy2, "enemy_atk_001");
+
+        if (!ValidateEnemyCardReference(
+                enemy,
+                references.enemyAttack,
+                out errorMessage) ||
+            !ValidateEnemyCardReference(
+                enemy2,
+                references.enemy02Attack,
+                out errorMessage))
+        {
+            return false;
+        }
+
+        if (object.ReferenceEquals(
+                references.enemyAttack,
+                references.enemy02Attack))
+        {
+            errorMessage = "BattleScene兼容卡牌绑定失败：两名敌人共享同一BattleCardState";
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool HasExactUnitReferences(
+        List<CharacterData> units,
+        CharacterData first,
+        CharacterData second
+    )
+    {
+        return units != null &&
+            units.Count == 2 &&
+            object.ReferenceEquals(units[0], first) &&
+            object.ReferenceEquals(units[1], second);
+    }
+
+    private static bool HasFourDistinctBattleUnits(
+        List<CharacterData> battleUnits,
+        CharacterData[] expectedUnits,
+        out string errorMessage
+    )
+    {
+        errorMessage = string.Empty;
+        if (battleUnits == null || battleUnits.Count != 4)
+        {
+            errorMessage = "BattleScene初始化失败：battleUnits必须恰好为4个";
+            return false;
+        }
+
+        for (int index = 0; index < expectedUnits.Length; index++)
+        {
+            if (!object.ReferenceEquals(battleUnits[index], expectedUnits[index]))
+            {
+                errorMessage = "BattleScene初始化失败：battleUnits顺序或引用不匹配";
+                return false;
+            }
+
+            for (int otherIndex = index + 1;
+                otherIndex < expectedUnits.Length;
+                otherIndex++)
+            {
+                if (object.ReferenceEquals(
+                        expectedUnits[index],
+                        expectedUnits[otherIndex]))
+                {
+                    errorMessage = "BattleScene初始化失败：battleUnits存在重复角色引用";
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HasUniqueRuntimeUnitIDs(
+        CharacterData[] units,
+        out string errorMessage
+    )
+    {
+        errorMessage = string.Empty;
+        HashSet<string> ids = new HashSet<string>();
+        for (int index = 0; index < units.Length; index++)
+        {
+            string runtimeUnitID = units[index].runtimeUnitID;
+            if (string.IsNullOrEmpty(runtimeUnitID) || !ids.Add(runtimeUnitID))
+            {
+                errorMessage =
+                    "BattleScene初始化失败：runtimeUnitID为空或重复：" +
+                    runtimeUnitID;
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HasValidInitialActionSlots(
+        List<BattleActionSlot> actionSlots,
+        CharacterData allyA,
+        CharacterData allyB,
+        out string errorMessage
+    )
+    {
+        errorMessage = string.Empty;
+        if (actionSlots == null || actionSlots.Count != 4)
+        {
+            errorMessage = "BattleScene初始化失败：初始友方行动槽必须恰好为4个";
+            return false;
+        }
+
+        bool allyA1 = false;
+        bool allyA2 = false;
+        bool allyB1 = false;
+        bool allyB2 = false;
+
+        for (int index = 0; index < actionSlots.Count; index++)
+        {
+            BattleActionSlot slot = actionSlots[index];
+            if (slot == null || !slot.IsEmpty() || slot.actor != null)
+            {
+                errorMessage = "BattleScene初始化失败：初始行动槽为空引用或已经被安排";
+                return false;
+            }
+
+            if (object.ReferenceEquals(slot.owner, allyA))
+            {
+                if (slot.slotIndex == 1 && !allyA1) allyA1 = true;
+                else if (slot.slotIndex == 2 && !allyA2) allyA2 = true;
+                else
+                {
+                    errorMessage = "BattleScene初始化失败：allyA行动槽编号重复或非法";
+                    return false;
+                }
+            }
+            else if (object.ReferenceEquals(slot.owner, allyB))
+            {
+                if (slot.slotIndex == 1 && !allyB1) allyB1 = true;
+                else if (slot.slotIndex == 2 && !allyB2) allyB2 = true;
+                else
+                {
+                    errorMessage = "BattleScene初始化失败：allyB行动槽编号重复或非法";
+                    return false;
+                }
+            }
+            else
+            {
+                errorMessage = "BattleScene初始化失败：初始行动槽包含非友方owner";
+                return false;
+            }
+        }
+
+        return allyA1 && allyA2 && allyB1 && allyB2;
+    }
+
+    private static bool TryRequireCard(
+        CharacterData owner,
+        string cardID,
+        out BattleCardState cardState,
+        out string errorMessage
+    )
+    {
+        cardState = FindOwnedCardByID(owner, cardID);
+        if (cardState != null)
+        {
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        string ownerID = owner != null
+            ? owner.runtimeUnitID
+            : "<null>";
+        errorMessage =
+            "BattleScene兼容卡牌绑定失败：角色 " + ownerID +
+            " 缺少 " + cardID;
+        return false;
+    }
+
+    private static BattleCardState FindOwnedCardByID(
+        CharacterData owner,
+        string cardID
+    )
+    {
+        if (owner == null || owner.battleCards == null)
+        {
+            return null;
+        }
+
+        for (int index = 0; index < owner.battleCards.Count; index++)
+        {
+            BattleCardState cardState = owner.battleCards[index];
+            if (cardState != null &&
+                object.ReferenceEquals(cardState.owner, owner) &&
+                cardState.cardData != null &&
+                cardState.cardData.cardID == cardID)
+            {
+                return cardState;
+            }
+        }
+
+        return null;
+    }
+
+    private static BattleCardState FindIntentCardForEnemy(
+        List<BattleEnemyIntent> intentQueue,
+        CharacterData enemy
+    )
+    {
+        if (intentQueue == null || enemy == null)
+        {
+            return null;
+        }
+
+        for (int index = 0; index < intentQueue.Count; index++)
+        {
+            BattleEnemyIntent intent = intentQueue[index];
+            if (intent != null &&
+                object.ReferenceEquals(intent.enemy, enemy) &&
+                intent.enemyCardState != null &&
+                object.ReferenceEquals(intent.enemyCardState.owner, enemy))
+            {
+                return intent.enemyCardState;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool ValidateEnemyCardReference(
+        CharacterData enemy,
+        BattleCardState cardState,
+        out string errorMessage
+    )
+    {
+        if (enemy != null &&
+            cardState != null &&
+            cardState.cardData != null &&
+            object.ReferenceEquals(cardState.owner, enemy))
+        {
+            errorMessage = string.Empty;
+            return true;
+        }
+
+        errorMessage =
+            "BattleScene兼容卡牌绑定失败：敌人 " +
+            (enemy != null ? enemy.runtimeUnitID : "<null>") +
+            " 缺少可用的enemy_atk_001正式实例";
+        return false;
+    }
+
+    private void BindRuntimeReferences(
+        BattleRuntimeState initializedRuntimeState,
+        LegacyCardReferenceSet references
+    )
+    {
+        runtimeState = initializedRuntimeState;
+        ally01 = runtimeState.allyA;
+        ally02 = runtimeState.allyB;
+        enemy01 = runtimeState.enemy;
+        enemy02 = runtimeState.enemy2;
+
+        allyAAttackCardState = references.allyAAttack;
+        allyABulletAttackCardState = references.allyABulletAttack;
+        allyADefenseCardState = references.allyADefense;
+        allyADodgeCardState = references.allyADodge;
+        allyAAbilityCardState = references.allyAAbility;
+        allyASinAttackCardState = references.allyASinAttack;
+        allyAClashSinCardState = references.allyASinAttack;
+        allyBAttackCardState = references.allyBAttack;
+        allyBDefenseCardState = references.allyBDefense;
+        allyBDodgeCardState = references.allyBDodge;
+        allyBAbilityCardState = references.allyBAbility;
+        allyBClashSinCardState = references.allyBSinAttack;
+        enemyAttackCardState = references.enemyAttack;
+        enemy02AttackCardState = references.enemy02Attack;
+    }
+
+    private void ClearRuntimeAndLegacyReferences()
+    {
+        runtimeState = null;
+        ally01 = null;
+        ally02 = null;
+        enemy01 = null;
+        enemy02 = null;
+        allyAAttackCardState = null;
+        allyABulletAttackCardState = null;
+        allyADefenseCardState = null;
+        allyADodgeCardState = null;
+        allyAAbilityCardState = null;
+        allyAClashSinCardState = null;
+        allyASinAttackCardState = null;
+        allyBAttackCardState = null;
+        allyBDefenseCardState = null;
+        allyBDodgeCardState = null;
+        allyBAbilityCardState = null;
+        allyBClashSinCardState = null;
+        enemyAttackCardState = null;
+        enemy02AttackCardState = null;
+    }
+
+    bool InitializeTestBattleData()
     {
         CreateTestCharacters();
         ApplyAlly01InitialBuffsFromDefinition();
@@ -176,7 +782,7 @@ public class BattleSimpleUIController : MonoBehaviour
         {
             lastLog = "初始化失败：没有读取到卡牌数据";
             Debug.LogWarning(lastLog);
-            return;
+            return false;
         }
 
         CreateTestBattleCards(cards);
@@ -189,6 +795,7 @@ public class BattleSimpleUIController : MonoBehaviour
         runtimeState.SetPhase("Prepare");
 
         lastLog = "初始化完成：已进入 Prepare 阶段";
+        return true;
     }
 
     void CreateTestCharacters()
@@ -441,6 +1048,8 @@ public class BattleSimpleUIController : MonoBehaviour
 
     List<BattleEnemyIntent> CreateFixedEnemyIntentQueue(List<BattleActionSlot> actionSlots)
     {
+        // 正式初始化迁移第一轮：初始RuntimeState已由Definition创建；
+        // 自动完整回合与后续回合意图仍暂用固定兼容逻辑，下一轮再迁移。
         return BattleAutomaticTurnCycle.CreateFixedEnemyIntentQueue(
             enemy01,
             enemyAttackCardState,
@@ -469,6 +1078,11 @@ public class BattleSimpleUIController : MonoBehaviour
 
     void BindButtonEvents()
     {
+        if (buttonEventsBound)
+        {
+            return;
+        }
+
         if (assignA1FreeAttackButton != null)
         {
             assignA1FreeAttackButton.onClick.AddListener(OnClickAssignA1FreeAttack);
@@ -588,10 +1202,17 @@ public class BattleSimpleUIController : MonoBehaviour
         {
             qiehuanButton.onClick.AddListener(ToggleCardGroup);
         }
+
+        buttonEventsBound = true;
     }
 
     void UnbindButtonEvents()
     {
+        if (!buttonEventsBound)
+        {
+            return;
+        }
+
         if (assignA1FreeAttackButton != null)
         {
             assignA1FreeAttackButton.onClick.RemoveListener(OnClickAssignA1FreeAttack);
@@ -711,6 +1332,8 @@ public class BattleSimpleUIController : MonoBehaviour
         {
             qiehuanButton.onClick.RemoveListener(ToggleCardGroup);
         }
+
+        buttonEventsBound = false;
     }
 
     private void ToggleCardGroup()
@@ -1222,7 +1845,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void OnClickClearSelection()
     {
-        ClearSelectedActionState();
+        ClearAllUISelectionState();
         lastLog = "Selection cleared";
         RefreshView();
     }
@@ -1239,6 +1862,13 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         cardInteractionCoordinator.ClearAllSelections();
         ClearSelectedActionState();
+        actionRelationLineController?.EndCardTargetingPreview();
+        actionRelationLineController?.SetCardTargetingDiagnosticState(
+            false,
+            string.Empty,
+            string.Empty,
+            false
+        );
     }
 
     private void RefreshBattleStartButtonState()
@@ -1270,6 +1900,10 @@ public class BattleSimpleUIController : MonoBehaviour
         }
 
         isRunningCompleteTurnCycle = true;
+        EndCardTargetingSession(
+            cardSelectionController,
+            actionRelationLineController
+        );
         cardInteractionCoordinator.PrepareForBattleStart();
         actionRelationLineController?.ClearAll();
         RefreshBattleStartButtonState();
@@ -1320,6 +1954,11 @@ public class BattleSimpleUIController : MonoBehaviour
             RefreshView();
             return;
         }
+
+        EndCardTargetingSession(
+            cardSelectionController,
+            actionRelationLineController
+        );
 
         BattleExecutionPlan executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
             runtimeState.actionSlots,
@@ -1769,6 +2408,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
             if (outcome.isSuccess)
             {
+                CompleteSuccessfulCardAssignment();
                 RefreshView();
             }
             else
@@ -1809,6 +2449,13 @@ public class BattleSimpleUIController : MonoBehaviour
                 : "取消行动安排失败";
 
         // 取消安排只改变槽位内容，保留当前一级槽位选择。
+        if (cancelled)
+        {
+            EndCardTargetingSession(
+                cardSelectionController,
+                actionRelationLineController
+            );
+        }
         RefreshView();
     }
 
@@ -1838,6 +2485,7 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        CompleteSuccessfulCardAssignment();
         RefreshView();
     }
 
@@ -1888,17 +2536,111 @@ public class BattleSimpleUIController : MonoBehaviour
             cardInteractionCoordinator != null
                 ? cardInteractionCoordinator.SelectedActionSlotView
                 : null;
-        if (!cardSelectionController.HasSelection ||
-            sourceSlot == null ||
-            !CanEditActionSlots())
+        BattleCardUIView selectedCardView =
+            cardInteractionCoordinator != null
+                ? cardInteractionCoordinator.SelectedCardView
+                : null;
+        string sourceSlotID = sourceSlot != null
+            ? actionRelationLineController.GetSlotID(sourceSlot)
+            : string.Empty;
+        bool targetingActive = IsValidCardTargetingSession(
+            sourceSlot,
+            selectedCardView
+        );
+
+        actionRelationLineController.SetCardTargetingDiagnosticState(
+            cardSelectionController.HasSelection,
+            selectedCardView != null &&
+                selectedCardView.BoundCardState != null &&
+                selectedCardView.BoundCardState.cardData != null
+                    ? selectedCardView.BoundCardState.cardData.cardID
+                    : string.Empty,
+            sourceSlotID,
+            targetingActive
+        );
+
+        if (!targetingActive)
         {
             actionRelationLineController.EndCardTargetingPreview();
             return;
         }
 
-        string sourceSlotID =
-            actionRelationLineController.GetSlotID(sourceSlot);
         actionRelationLineController.BeginCardTargetingPreview(sourceSlotID);
+    }
+
+    private bool IsValidCardTargetingSession(
+        BattleActionSlotUIView sourceSlot,
+        BattleCardUIView selectedCardView
+    )
+    {
+        if (!CanEditActionSlots() ||
+            cardInteractionCoordinator == null ||
+            !cardInteractionCoordinator.IsCardTargetingActive ||
+            sourceSlot == null ||
+            sourceSlot.IsEnemySlot ||
+            sourceSlot.BoundCharacter == null ||
+            sourceSlot.BoundCharacter.IsDead() ||
+            selectedCardView == null ||
+            selectedCardView.BoundCardState == null ||
+            !object.ReferenceEquals(
+                selectedCardView.BoundOwner,
+                sourceSlot.BoundCharacter) ||
+            !ShouldDisplayCardInHand(
+                runtimeState,
+                selectedCardView.BoundCardState))
+        {
+            return false;
+        }
+
+        BattleActionSlot runtimeSlot = BattleActionSlotManager.GetSlot(
+            runtimeState.actionSlots,
+            sourceSlot.BoundCharacter,
+            sourceSlot.FormalSlotIndex
+        );
+        return runtimeSlot != null &&
+            ContainsExactCardReference(
+                sourceSlot.BoundCharacter,
+                selectedCardView.BoundCardState
+            );
+    }
+
+    private static bool ContainsExactCardReference(
+        CharacterData owner,
+        BattleCardState cardState
+    )
+    {
+        if (owner == null || owner.battleCards == null || cardState == null)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < owner.battleCards.Count; index++)
+        {
+            if (object.ReferenceEquals(owner.battleCards[index], cardState))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private void CompleteSuccessfulCardAssignment()
+    {
+        // 卡牌已进入行动槽，本次目标选择会话结束；来源槽位选择继续保留。
+        EndCardTargetingSession(
+            cardSelectionController,
+            actionRelationLineController
+        );
+    }
+
+    internal static void EndCardTargetingSession(
+        BattleCardSelectionController selectionController,
+        BattleActionRelationLineController relationLineController
+    )
+    {
+        selectionController?.ClearSelection();
+        relationLineController?.EndCardTargetingPreview();
     }
 
     private void RefreshActionRelations()
@@ -1946,6 +2688,7 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        CompleteSuccessfulCardAssignment();
         RefreshView();
     }
 

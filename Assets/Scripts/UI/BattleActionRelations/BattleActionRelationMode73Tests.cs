@@ -1581,7 +1581,11 @@ public static class BattleActionRelationInteractionMode75Tests
         "两名敌人共享友方终点时两支箭头均可见",
         "混合关系数量与全部箭头视觉状态正确",
         "Tab Hover Selected反复切换后箭头稳定",
-        "对象池复用后关系View顺序与箭头稳定"
+        "对象池复用后关系View顺序与箭头稳定",
+        "外部共享PrimaryCurve模板克隆后改为View独占",
+        "两条拼点同时显示时Curve与Arrow全部唯一",
+        "第二条拼点渲染不会改写第一条Curve状态",
+        "对象池回收复用后Curve与Arrow仍然独立"
     };
 
     private sealed class Fixture
@@ -1595,7 +1599,9 @@ public static class BattleActionRelationInteractionMode75Tests
         public BattleEnemyIntent intent;
         public BattleEnemyIntent intent2;
         public BattleCardState attack;
+        public BattleCardState attack2;
         public BattleCardState allyBAttack;
+        public BattleCardState allyBAttack2;
         public BattleCardState defense;
         public BattleCardState dodge;
     }
@@ -1623,6 +1629,8 @@ public static class BattleActionRelationInteractionMode75Tests
         public RectTransform previewRoot;
         public BattleActionRelationLineController controller;
         public BattleBezierRelationLineUIView preview;
+        public BattleActionRelationUIView relationTemplate;
+        public BattleBezierRelationLineUIView externalPrimaryCurve;
     }
 
     private sealed class RelationVisualSnapshot
@@ -1640,6 +1648,9 @@ public static class BattleActionRelationInteractionMode75Tests
         RunRelations(results);
         RunSelectionAndPriority(results);
         RunRevealAllArrowStability(results);
+        RunCurveOwnershipRegressionTests(results);
+        bool previewLifecyclePassed = RunPreviewLifecycleRegressionTests();
+        bool curveTransitionPassed = RunCurveTransitionRegressionTests();
 
         bool allPassed = true;
         for (int index = 0; index < results.Length; index++)
@@ -1650,8 +1661,509 @@ public static class BattleActionRelationInteractionMode75Tests
             );
             allPassed &= results[index];
         }
+        allPassed &= previewLifecyclePassed;
+        allPassed &= curveTransitionPassed;
         Debug.Log("模式75 " + Names.Length + "项聚合结果：" + allPassed);
         return allPassed;
+    }
+
+    private static bool RunCurveTransitionRegressionTests()
+    {
+        bool unilateralToClashPassed = false;
+        bool rangeShrinkPassed = false;
+        bool dashedToSolidPassed = false;
+        bool formalOrderPassed = false;
+        bool repeatedTransitionPassed = false;
+        Display display = null;
+        BattleActionRelationUIView view = null;
+        BattleBezierRelationLineUIView rangeCurve = null;
+        BattleBezierRelationLineUIView styleCurve = null;
+
+        try
+        {
+            display = CreateDisplay(CreateFixture());
+            view = CreateRelationView(display.root.transform, display.sprite);
+            rangeCurve = CreateCurve(
+                "Mode75RangeShrinkCurve",
+                display.root.transform,
+                display.sprite
+            );
+            styleCurve = CreateCurve(
+                "Mode75StyleSwitchCurve",
+                display.root.transform,
+                display.sprite
+            );
+
+            Vector2 start = new Vector2(-220f, -80f);
+            Vector2 control = new Vector2(0f, 170f);
+            Vector2 end = new Vector2(220f, 100f);
+            BattleActionRelationDescriptor unilateral =
+                new BattleActionRelationDescriptor(
+                    "Mode75TransitionUnilateral",
+                    BattleActionRelationKind.PlayerUnilateralTarget,
+                    "AllyA:1",
+                    "Enemy:1",
+                    "AllyA:1",
+                    "Enemy:1",
+                    BattleActionRelationSide.Player,
+                    1,
+                    1,
+                    CardType.Attack,
+                    CardType.Attack,
+                    false
+                );
+            BattleActionRelationDescriptor clash =
+                new BattleActionRelationDescriptor(
+                    "Mode75TransitionClash",
+                    BattleActionRelationKind.AttackClash,
+                    "AllyA:1",
+                    "Enemy:1",
+                    "AllyA:1",
+                    "Enemy:1",
+                    BattleActionRelationSide.Player,
+                    1,
+                    1,
+                    CardType.Attack,
+                    CardType.Attack,
+                    true
+                );
+
+            bool unilateralShown = view.ShowUnilateral(
+                unilateral,
+                start,
+                end,
+                Color.cyan,
+                false,
+                130f,
+                0.12f,
+                100f,
+                320f,
+                28f
+            );
+            int fullMainCount = view.PrimaryCurve.ActiveMainSegmentCount;
+            int fullUnderlayCount =
+                view.PrimaryCurve.ActiveUnderlaySegmentCount;
+            bool clashShown = view.ShowClash(
+                clash,
+                start,
+                end,
+                Color.cyan,
+                Color.red,
+                false,
+                130f,
+                0.12f,
+                100f,
+                320f,
+                28f,
+                10f
+            );
+            unilateralToClashPassed = unilateralShown && clashShown &&
+                fullMainCount > 0 && fullUnderlayCount == fullMainCount &&
+                IsCurvePoolSynchronized(view.PrimaryCurve) &&
+                IsCurvePoolSynchronized(view.SecondaryCurve) &&
+                view.PrimaryCurve.CurrentLineStyle == "Solid" &&
+                view.PrimaryCurve.PreviousLineStyle == "Dashed" &&
+                view.PrimaryCurve.RangeEnd < 1f &&
+                view.SecondaryCurve.RangeStart > 0f &&
+                view.PrimaryCurve.HasVisibleMainArrow &&
+                view.SecondaryCurve.HasVisibleMainArrow;
+
+            rangeCurve.RenderRange(
+                start,
+                control,
+                end,
+                0f,
+                1f,
+                Color.cyan,
+                true,
+                false
+            );
+            int fullRangeCount = rangeCurve.ActiveSegmentCount;
+            int fullRangePoolCount = rangeCurve.MainSegmentPoolCount;
+            rangeCurve.RenderRange(
+                start,
+                control,
+                end,
+                0f,
+                0.5f,
+                Color.cyan,
+                true,
+                false
+            );
+            rangeShrinkPassed = fullRangeCount > 0 &&
+                rangeCurve.ActiveSegmentCount < fullRangeCount &&
+                rangeCurve.MainSegmentPoolCount == fullRangePoolCount &&
+                IsCurvePoolSynchronized(rangeCurve) &&
+                rangeCurve.CurrentRange == new Vector2(0f, 0.5f) &&
+                rangeCurve.PreviousRange == new Vector2(0f, 1f);
+
+            styleCurve.Render(
+                start,
+                control,
+                end,
+                Color.cyan,
+                true,
+                false
+            );
+            int dashedPoolCount = styleCurve.MainSegmentPoolCount;
+            styleCurve.Render(
+                start,
+                control,
+                end,
+                Color.cyan,
+                false,
+                false
+            );
+            dashedToSolidPassed =
+                styleCurve.PreviousLineStyle == "Dashed" &&
+                styleCurve.CurrentLineStyle == "Solid" &&
+                styleCurve.MainSegmentPoolCount >= dashedPoolCount &&
+                IsCurvePoolSynchronized(styleCurve);
+
+            view.ClearView();
+            bool startedWithoutVisuals =
+                view.PrimaryCurve.ActiveMainSegmentCount == 0 &&
+                view.PrimaryCurve.ActiveUnderlaySegmentCount == 0 &&
+                view.SecondaryCurve.ActiveMainSegmentCount == 0 &&
+                view.SecondaryCurve.ActiveUnderlaySegmentCount == 0;
+            bool formalUnilateralShown = view.ShowUnilateral(
+                unilateral,
+                start,
+                end,
+                Color.cyan,
+                false,
+                130f,
+                0.12f,
+                100f,
+                320f,
+                28f
+            );
+            bool formalClashShown = view.ShowClash(
+                clash,
+                start,
+                end,
+                Color.cyan,
+                Color.red,
+                false,
+                130f,
+                0.12f,
+                100f,
+                320f,
+                28f,
+                10f
+            );
+            formalOrderPassed = startedWithoutVisuals &&
+                formalUnilateralShown && formalClashShown &&
+                view.Kind == BattleActionRelationKind.AttackClash &&
+                view.RelationID == clash.RelationID &&
+                IsCurvePoolSynchronized(view.PrimaryCurve) &&
+                IsCurvePoolSynchronized(view.SecondaryCurve) &&
+                view.PrimaryCurve.CurrentLineStyle == "Solid" &&
+                view.SecondaryCurve.CurrentLineStyle == "Solid";
+
+            int primaryPoolBeforeRepeat =
+                view.PrimaryCurve.MainSegmentPoolCount;
+            int primaryUnderlayPoolBeforeRepeat =
+                view.PrimaryCurve.UnderlaySegmentPoolCount;
+            int secondaryPoolBeforeRepeat =
+                view.SecondaryCurve.MainSegmentPoolCount;
+            int secondaryUnderlayPoolBeforeRepeat =
+                view.SecondaryCurve.UnderlaySegmentPoolCount;
+            view.ClearView();
+            bool repeatedUnilateralShown = view.ShowUnilateral(
+                unilateral,
+                start,
+                end,
+                Color.cyan,
+                false,
+                130f,
+                0.12f,
+                100f,
+                320f,
+                28f
+            );
+            bool repeatedClashShown = view.ShowClash(
+                clash,
+                start,
+                end,
+                Color.cyan,
+                Color.red,
+                false,
+                130f,
+                0.12f,
+                100f,
+                320f,
+                28f,
+                10f
+            );
+            repeatedTransitionPassed = repeatedUnilateralShown &&
+                repeatedClashShown &&
+                view.PrimaryCurve.MainSegmentPoolCount ==
+                    primaryPoolBeforeRepeat &&
+                view.PrimaryCurve.UnderlaySegmentPoolCount ==
+                    primaryUnderlayPoolBeforeRepeat &&
+                view.SecondaryCurve.MainSegmentPoolCount ==
+                    secondaryPoolBeforeRepeat &&
+                view.SecondaryCurve.UnderlaySegmentPoolCount ==
+                    secondaryUnderlayPoolBeforeRepeat &&
+                IsCurvePoolSynchronized(view.PrimaryCurve) &&
+                IsCurvePoolSynchronized(view.SecondaryCurve) &&
+                view.PrimaryCurve.HasVisibleMainArrow &&
+                view.SecondaryCurve.HasVisibleMainArrow;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError("模式75 Curve转换回归异常：" + exception);
+        }
+        finally
+        {
+            DestroyDisplay(display);
+        }
+
+        Debug.Log(
+            "模式75 Curve转换A 同一View单向转Clash：" +
+            unilateralToClashPassed
+        );
+        Debug.Log(
+            "模式75 Curve转换B 完整Range缩短后池尾关闭：" +
+            rangeShrinkPassed
+        );
+        Debug.Log(
+            "模式75 Curve转换C 虚线转实线无旧样式残留：" +
+            dashedToSolidPassed
+        );
+        Debug.Log(
+            "模式75 Curve转换D 无关系到单向再到Clash：" +
+            formalOrderPassed
+        );
+        Debug.Log(
+            "模式75 Curve转换E 反复转换池容量稳定：" +
+            repeatedTransitionPassed
+        );
+        return unilateralToClashPassed && rangeShrinkPassed &&
+            dashedToSolidPassed && formalOrderPassed &&
+            repeatedTransitionPassed;
+    }
+
+    private static bool IsCurvePoolSynchronized(
+        BattleBezierRelationLineUIView curve
+    )
+    {
+        return curve != null && curve.ActiveSegmentCount >= 0 &&
+            curve.ActiveMainSegmentCount == curve.ActiveSegmentCount &&
+            curve.ActiveUnderlaySegmentCount == curve.ActiveSegmentCount &&
+            curve.ActiveMainSegmentCount <= curve.MainSegmentPoolCount &&
+            curve.ActiveUnderlaySegmentCount <=
+                curve.UnderlaySegmentPoolCount;
+    }
+
+    private static bool RunPreviewLifecycleRegressionTests()
+    {
+        const string successName = "成功安排后Preview关闭且后续Hover不重开";
+        const string clashName = "正式拼点不与Preview虚线重叠";
+        const string cancelName = "取消安排后Preview保持关闭且重新选卡才开启";
+        const string sourceName = "保留来源槽位但无卡牌时Targeting关闭";
+        const string formalName = "关闭Preview不影响正式关系与Tab显示";
+        bool successPassed = false;
+        bool clashPassed = false;
+        bool cancelPassed = false;
+        bool sourcePassed = false;
+        bool formalPassed = false;
+        Display display = null;
+        BattleActionSlotUIView sourceView = null;
+        BattleActionSlotUIView targetView = null;
+        BattleActionSlotUIView otherTargetView = null;
+        BattleCardUIView cardView = null;
+
+        try
+        {
+            Fixture fixture = CreateFixture();
+            display = CreateDisplay(fixture);
+            BattleCardSelectionController selection =
+                new BattleCardSelectionController();
+            BattleCardInteractionCoordinator coordinator =
+                new BattleCardInteractionCoordinator(selection);
+            sourceView = CreateSlotView(
+                "Mode75PreviewLifecycleSource",
+                fixture.allyA,
+                0,
+                false,
+                null
+            );
+            targetView = CreateSlotView(
+                "Mode75PreviewLifecycleIntentTarget",
+                fixture.enemy,
+                0,
+                true,
+                null
+            );
+            targetView.SetBoundEnemyIntent(fixture.intent);
+            otherTargetView = CreateSlotView(
+                "Mode75PreviewLifecycleOtherTarget",
+                fixture.enemy,
+                1,
+                true,
+                null
+            );
+            cardView = CreateCardView(
+                "Mode75PreviewLifecycleCard",
+                fixture.allyA,
+                fixture.enemy,
+                fixture.attack,
+                selection
+            );
+
+            bool sourceSelected = coordinator.SelectSourceSlot(sourceView);
+            bool cardSelected = selection.SelectCard(cardView);
+            display.controller.SetSelectedSlot(sourceView);
+            bool previewStarted = coordinator.IsCardTargetingActive &&
+                display.controller.BeginCardTargetingPreview("AllyA:1");
+            display.controller.SetHoveredSlot("Enemy:1");
+            display.controller.UpdateCardTargetingPointer(
+                new Vector2(300f, 180f)
+            );
+            bool previewWasVisible = previewStarted &&
+                display.controller.PreviewActive &&
+                display.preview.ArrowActiveSelf;
+
+            BattleCardInteractionOutcome outcome =
+                coordinator.ClickEnemySlot(fixture.runtime, targetView);
+            BattleSimpleUIController.EndCardTargetingSession(
+                selection,
+                display.controller
+            );
+            display.controller.RefreshRelations();
+            display.controller.SetSelectedSlot(sourceView);
+            BattleActionRelationDescriptor clash = FindKind(
+                display.controller.CachedRelations,
+                BattleActionRelationKind.AttackClash
+            );
+            BattleActionRelationUIView clashView = clash != null
+                ? FindVisibleRelationByID(
+                    display.controller,
+                    clash.RelationID
+                )
+                : null;
+
+            display.controller.SetHoveredSlot("Enemy:2");
+            successPassed = sourceSelected && cardSelected &&
+                previewWasVisible && outcome != null && outcome.isSuccess &&
+                !selection.HasSelection &&
+                !coordinator.IsCardTargetingActive &&
+                !display.controller.PreviewActive &&
+                !display.preview.ArrowActiveSelf;
+            clashPassed = clash != null && clashView != null &&
+                HasVisiblePrimaryArrow(clashView) &&
+                clashView.SecondaryCurve != null &&
+                clashView.SecondaryCurve.ArrowActiveSelf &&
+                !display.controller.PreviewActive &&
+                !display.preview.ArrowActiveSelf;
+
+            BattleActionAssignmentResult cancelResult;
+            bool cancelled = BattleCardAssignmentRouter.TryCancelSelectedSlot(
+                fixture.runtime,
+                fixture.allyA,
+                1,
+                out cancelResult
+            );
+            BattleSimpleUIController.EndCardTargetingSession(
+                selection,
+                display.controller
+            );
+            display.controller.RefreshRelations();
+            display.controller.SetHoveredSlot("Enemy:1");
+            bool stayedClosedAfterCancel =
+                !display.controller.PreviewActive &&
+                !display.preview.ArrowActiveSelf;
+            bool sourceRetained = object.ReferenceEquals(
+                coordinator.SelectedActionSlotView,
+                sourceView
+            );
+            bool noCardIsNotTargeting = sourceRetained &&
+                !selection.HasSelection &&
+                !coordinator.IsCardTargetingActive;
+            bool cardReturnedToHand = BattleSimpleUIController
+                .ShouldDisplayCardInHand(fixture.runtime, fixture.attack);
+            bool reselected = selection.SelectCard(cardView);
+            bool restartedOnlyAfterReselect = reselected &&
+                coordinator.IsCardTargetingActive &&
+                display.controller.BeginCardTargetingPreview("AllyA:1");
+            cancelPassed = cancelled && cardReturnedToHand &&
+                stayedClosedAfterCancel &&
+                restartedOnlyAfterReselect;
+            sourcePassed = noCardIsNotTargeting;
+
+            BattleSimpleUIController.EndCardTargetingSession(
+                selection,
+                display.controller
+            );
+            bool selectedAgain = selection.SelectCard(cardView);
+            BattleCardInteractionOutcome unilateralOutcome =
+                coordinator.ClickEnemySlot(
+                    fixture.runtime,
+                    otherTargetView
+                );
+            BattleSimpleUIController.EndCardTargetingSession(
+                selection,
+                display.controller
+            );
+            display.controller.RefreshRelations();
+            int formalRelationCount =
+                display.controller.CachedRelations.Count;
+            bool hasEnemyRelation = FindKind(
+                display.controller.CachedRelations,
+                BattleActionRelationKind.EnemyUnilateralTarget
+            ) != null;
+            bool hasPlayerRelation = FindKind(
+                display.controller.CachedRelations,
+                BattleActionRelationKind.PlayerUnilateralTarget
+            ) != null;
+            display.controller.SetRevealAllHeld(true);
+            bool tabShowsAll = display.controller.VisibleRelationCount ==
+                formalRelationCount;
+            display.controller.SetRevealAllHeld(false);
+            display.controller.SetSelectedSlot(sourceView);
+            display.controller.SetHoveredSlot("Enemy:2");
+            formalPassed = selectedAgain &&
+                unilateralOutcome != null && unilateralOutcome.isSuccess &&
+                formalRelationCount == 2 &&
+                hasEnemyRelation && hasPlayerRelation && tabShowsAll &&
+                display.controller.CachedRelations.Count ==
+                    formalRelationCount &&
+                !display.controller.PreviewActive;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError("模式75 Preview生命周期回归异常：" + exception);
+        }
+        finally
+        {
+            if (cardView != null)
+            {
+                UnityEngine.Object.DestroyImmediate(cardView.gameObject);
+            }
+            if (sourceView != null)
+            {
+                UnityEngine.Object.DestroyImmediate(sourceView.gameObject);
+            }
+            if (targetView != null)
+            {
+                UnityEngine.Object.DestroyImmediate(targetView.gameObject);
+            }
+            if (otherTargetView != null)
+            {
+                UnityEngine.Object.DestroyImmediate(otherTargetView.gameObject);
+            }
+            DestroyDisplay(display);
+        }
+
+        Debug.Log("模式75 Preview回归1 " + successName + "：" + successPassed);
+        Debug.Log("模式75 Preview回归2 " + clashName + "：" + clashPassed);
+        Debug.Log("模式75 Preview回归3 " + cancelName + "：" + cancelPassed);
+        Debug.Log("模式75 Preview回归4 " + sourceName + "：" + sourcePassed);
+        Debug.Log("模式75 Preview回归5 " + formalName + "：" + formalPassed);
+        return successPassed && clashPassed && cancelPassed &&
+            sourcePassed && formalPassed;
     }
 
     private static void RunDestroySafety(bool[] r)
@@ -2207,19 +2719,20 @@ public static class BattleActionRelationInteractionMode75Tests
     private static void RunRevealAllArrowStability(bool[] r)
     {
         Fixture distinct = CreateMultiRelationFixture();
-        bool distinctAssigned = AssignPlayerAttack(
+        bool distinctAAssigned = AssignPlayerAttack(
             distinct,
             distinct.allyA,
             distinct.attack,
             distinct.enemy
-        ) && AssignPlayerAttack(
+        );
+        bool distinctBAssigned = AssignPlayerAttack(
             distinct,
             distinct.allyB,
             distinct.allyBAttack,
             distinct.enemy2
         );
         Display distinctDisplay = CreateDisplay(distinct);
-        distinctDisplay.controller.SetRevealAllHeld(true);
+        RevealAllAndForceLayout(distinctDisplay);
         BattleActionRelationUIView distinctA = FindVisibleRelationByID(
             distinctDisplay.controller,
             "AllyA:1->Enemy:1"
@@ -2228,29 +2741,41 @@ public static class BattleActionRelationInteractionMode75Tests
             distinctDisplay.controller,
             "AllyB:1->Enemy2:1"
         );
-        r[90] = distinctAssigned && distinctA != null && distinctB != null &&
+        r[90] = distinctAAssigned && distinctBAssigned &&
+            distinctA != null && distinctB != null &&
             HasVisiblePrimaryArrow(distinctA) &&
             HasVisiblePrimaryArrow(distinctB) &&
             distinctDisplay.controller.CachedRelations.Count == 4 &&
             HasUniqueIDs(distinctDisplay.controller.CachedRelations) &&
             distinctDisplay.controller.VisibleRelationCount ==
-                distinctDisplay.controller.CachedRelations.Count;
+                distinctDisplay.controller.CachedRelations.Count &&
+            AllVisibleViewsAreIndependent(distinctDisplay.controller);
+        if (!r[90])
+        {
+            LogRevealAllDiagnostic(
+                "测试91 distinctAAssigned=" + distinctAAssigned +
+                "，distinctBAssigned=" + distinctBAssigned,
+                distinctDisplay,
+                4
+            );
+        }
         DestroyDisplay(distinctDisplay);
 
         Fixture sharedPlayerTarget = CreateMultiRelationFixture();
-        bool sharedPlayerAssigned = AssignPlayerAttack(
+        bool sharedPlayerAAssigned = AssignPlayerAttack(
             sharedPlayerTarget,
             sharedPlayerTarget.allyA,
             sharedPlayerTarget.attack,
             sharedPlayerTarget.enemy
-        ) && AssignPlayerAttack(
+        );
+        bool sharedPlayerBAssigned = AssignPlayerAttack(
             sharedPlayerTarget,
             sharedPlayerTarget.allyB,
             sharedPlayerTarget.allyBAttack,
             sharedPlayerTarget.enemy
         );
         Display sharedPlayerDisplay = CreateDisplay(sharedPlayerTarget);
-        sharedPlayerDisplay.controller.SetRevealAllHeld(true);
+        RevealAllAndForceLayout(sharedPlayerDisplay);
         BattleActionRelationUIView sharedPlayerA = FindVisibleRelationByID(
             sharedPlayerDisplay.controller,
             "AllyA:1->Enemy:1"
@@ -2259,10 +2784,20 @@ public static class BattleActionRelationInteractionMode75Tests
             sharedPlayerDisplay.controller,
             "AllyB:1->Enemy:1"
         );
-        r[91] = sharedPlayerAssigned &&
+        r[91] = sharedPlayerAAssigned && sharedPlayerBAssigned &&
             sharedPlayerDisplay.controller.CachedRelations.Count == 4 &&
             HasUniqueIDs(sharedPlayerDisplay.controller.CachedRelations) &&
-            HaveSeparatedVisibleArrows(sharedPlayerA, sharedPlayerB);
+            HaveSeparatedVisibleArrows(sharedPlayerA, sharedPlayerB) &&
+            AllVisibleViewsAreIndependent(sharedPlayerDisplay.controller);
+        if (!r[91])
+        {
+            LogRevealAllDiagnostic(
+                "测试92 assignedA=" + sharedPlayerAAssigned +
+                "，assignedB=" + sharedPlayerBAssigned,
+                sharedPlayerDisplay,
+                4
+            );
+        }
         DestroyDisplay(sharedPlayerDisplay);
 
         Fixture sharedEnemyTarget = CreateMultiRelationFixture();
@@ -2277,7 +2812,7 @@ public static class BattleActionRelationInteractionMode75Tests
             1
         );
         Display sharedEnemyDisplay = CreateDisplay(sharedEnemyTarget);
-        sharedEnemyDisplay.controller.SetRevealAllHeld(true);
+        RevealAllAndForceLayout(sharedEnemyDisplay);
         BattleActionRelationUIView sharedEnemyA = FindVisibleRelationByID(
             sharedEnemyDisplay.controller,
             "Enemy:1->AllyA:1"
@@ -2288,7 +2823,16 @@ public static class BattleActionRelationInteractionMode75Tests
         );
         r[92] = sharedEnemyDisplay.controller.CachedRelations.Count == 2 &&
             HasUniqueIDs(sharedEnemyDisplay.controller.CachedRelations) &&
-            HaveSeparatedVisibleArrows(sharedEnemyA, sharedEnemyB);
+            HaveSeparatedVisibleArrows(sharedEnemyA, sharedEnemyB) &&
+            AllVisibleViewsAreIndependent(sharedEnemyDisplay.controller);
+        if (!r[92])
+        {
+            LogRevealAllDiagnostic(
+                "测试93 两个敌人共享AllyA:1",
+                sharedEnemyDisplay,
+                2
+            );
+        }
         DestroyDisplay(sharedEnemyDisplay);
 
         Fixture mixed = CreateMultiRelationFixture();
@@ -2310,11 +2854,22 @@ public static class BattleActionRelationInteractionMode75Tests
             mixed.enemy2
         );
         Display mixedDisplay = CreateDisplay(mixed);
-        mixedDisplay.controller.SetRevealAllHeld(true);
+        RevealAllAndForceLayout(mixedDisplay);
         r[93] = mixedResponseAssigned && mixedUnilateralAssigned &&
             mixedDisplay.controller.CachedRelations.Count == 3 &&
             mixedDisplay.controller.VisibleRelationCount == 3 &&
-            AllVisibleCurvesHaveArrows(mixedDisplay.controller);
+            AllVisibleCurvesHaveArrows(mixedDisplay.controller) &&
+            AllVisibleViewsAreIndependent(mixedDisplay.controller) &&
+            ValidateClashCurveIndependence(mixedDisplay);
+        if (!r[93])
+        {
+            LogRevealAllDiagnostic(
+                "测试94 responseAssigned=" + mixedResponseAssigned +
+                "，unilateralAssigned=" + mixedUnilateralAssigned,
+                mixedDisplay,
+                3
+            );
+        }
         DestroyDisplay(mixedDisplay);
 
         Fixture repeated = CreateMultiRelationFixture();
@@ -2331,7 +2886,7 @@ public static class BattleActionRelationInteractionMode75Tests
             repeated.enemy
         );
         Display repeatedDisplay = CreateDisplay(repeated);
-        repeatedDisplay.controller.SetRevealAllHeld(true);
+        RevealAllAndForceLayout(repeatedDisplay);
         Dictionary<string, RelationVisualSnapshot> repeatedExpected =
             CaptureVisibleRelationVisuals(repeatedDisplay.controller);
         bool repeatedStable = repeatedExpected.Count ==
@@ -2339,30 +2894,404 @@ public static class BattleActionRelationInteractionMode75Tests
         for (int cycle = 0; cycle < 3; cycle++)
         {
             repeatedDisplay.controller.SetRevealAllHeld(false);
+            Canvas.ForceUpdateCanvases();
+            repeatedStable &= repeatedDisplay.controller.VisibleRelationCount == 0;
             repeatedDisplay.controller.SetHoveredSlot("AllyA:1");
-            repeatedDisplay.controller.ClearHoveredSlot("AllyA:1");
+            Canvas.ForceUpdateCanvases();
+            repeatedStable &= VisibleRelationIDsMatchSlots(
+                repeatedDisplay.controller,
+                "AllyA:1",
+                null
+            );
             repeatedDisplay.controller.SetSelectedSlot("AllyB:1");
-            repeatedDisplay.controller.ClearSelectedSlot();
+            Canvas.ForceUpdateCanvases();
+            repeatedStable &= VisibleRelationIDsMatchSlots(
+                repeatedDisplay.controller,
+                "AllyA:1",
+                "AllyB:1"
+            );
+            repeatedDisplay.controller.ClearHoveredSlot("AllyA:1");
+            Canvas.ForceUpdateCanvases();
+            repeatedStable &= VisibleRelationIDsMatchSlots(
+                repeatedDisplay.controller,
+                "AllyB:1",
+                null
+            );
             repeatedDisplay.controller.SetRevealAllHeld(true);
+            Canvas.ForceUpdateCanvases();
+            repeatedStable &= VisibleRelationIDsMatchAll(
+                repeatedDisplay.controller
+            );
+            repeatedDisplay.controller.ClearSelectedSlot();
+            Canvas.ForceUpdateCanvases();
             repeatedStable &= VisibleVisualsMatch(
                 repeatedDisplay.controller,
                 repeatedExpected
             );
         }
         r[94] = repeatedStable;
+        if (!r[94])
+        {
+            LogRevealAllDiagnostic(
+                "测试95 Tab/Hover/Selected切换后视觉集合不稳定",
+                repeatedDisplay,
+                repeatedExpected.Count
+            );
+        }
 
-        repeatedDisplay.controller.SetHoveredSlot("AllyA:1");
-        repeatedDisplay.controller.ClearHoveredSlot("AllyA:1");
         repeatedDisplay.controller.SetRevealAllHeld(false);
-        repeatedDisplay.controller.SetSelectedSlot("AllyB:1");
         repeatedDisplay.controller.ClearSelectedSlot();
-        repeatedDisplay.controller.RefreshRelations();
-        repeatedDisplay.controller.SetRevealAllHeld(true);
-        r[95] = VisibleVisualsMatch(
-            repeatedDisplay.controller,
-            repeatedExpected
-        );
+        bool cancelledInitial = CancelAllPlayerAssignments(repeated);
+        bool sceneAReady = SetupRelationSceneA(repeated);
+        RevealAllAndForceLayout(repeatedDisplay);
+        Dictionary<string, RelationVisualSnapshot> sceneAExpected =
+            CaptureVisibleRelationVisuals(repeatedDisplay.controller);
+        bool sceneAValid = cancelledInitial && sceneAReady &&
+            ValidateSceneA(repeatedDisplay.controller);
+
+        bool sceneBCancelled = CancelAllPlayerAssignments(repeated);
+        bool sceneBReady = SetupRelationSceneB(repeated);
+        RevealAllAndForceLayout(repeatedDisplay);
+        bool sceneBValid = sceneBCancelled && sceneBReady &&
+            ValidateSceneB(repeatedDisplay.controller);
+
+        bool sceneCCancelled = CancelAllPlayerAssignments(repeated);
+        bool sceneCReady = SetupRelationSceneC(repeated);
+        RevealAllAndForceLayout(repeatedDisplay);
+        bool sceneCValid = sceneCCancelled && sceneCReady &&
+            ValidateSceneC(repeatedDisplay.controller);
+
+        bool sceneAReturnCancelled = CancelAllPlayerAssignments(repeated);
+        bool sceneAReturnReady = SetupRelationSceneA(repeated);
+        RevealAllAndForceLayout(repeatedDisplay);
+        bool sceneAReturnStable = sceneAReturnCancelled &&
+            sceneAReturnReady && ValidateSceneA(repeatedDisplay.controller) &&
+            VisibleVisualsMatch(
+                repeatedDisplay.controller,
+                sceneAExpected
+            );
+        r[95] = sceneAValid && sceneBValid && sceneCValid &&
+            sceneAReturnStable;
+        if (!r[95])
+        {
+            LogRevealAllDiagnostic(
+                "测试96 sceneA=" + sceneAValid +
+                "，sceneB=" + sceneBValid +
+                "，sceneC=" + sceneCValid +
+                "，sceneAReturn=" + sceneAReturnStable,
+                repeatedDisplay,
+                5
+            );
+        }
         DestroyDisplay(repeatedDisplay);
+    }
+
+    private static void RunCurveOwnershipRegressionTests(bool[] r)
+    {
+        const int firstResultIndex = 96;
+        r[firstResultIndex] = false;
+        r[firstResultIndex + 1] = false;
+        r[firstResultIndex + 2] = false;
+        r[firstResultIndex + 3] = false;
+        Display display = null;
+        try
+        {
+            // Curve所有权回归需要两名独立敌人与两个独立Intent，不能使用单Intent基础夹具。
+            Fixture fixture = CreateMultiRelationFixture();
+            string fixtureFailureReason;
+            if (!TryValidateCurveOwnershipFixture(
+                    fixture,
+                    out fixtureFailureReason
+                ))
+            {
+                Debug.LogError(
+                    "模式75 Curve所有权测试夹具初始化失败：" +
+                    fixtureFailureReason
+                );
+                return;
+            }
+
+            bool setupPassed = SetupTwoClashRelations(fixture);
+            if (!setupPassed)
+            {
+                Debug.LogError(
+                    "模式75 Curve所有权测试初始化失败：" +
+                    "两条独立拼点关系未能通过正式Manager完成安排。"
+                );
+                return;
+            }
+
+            display = CreateDisplay(fixture, true);
+            RevealAllAndForceLayout(display);
+            List<BattleActionRelationUIView> clashViews =
+                GetVisibleClashViews(display.controller);
+            bool externalTemplateReproduced =
+                display.relationTemplate != null &&
+                display.externalPrimaryCurve != null &&
+                !display.relationTemplate.OwnsPrimaryCurve;
+            bool allViewsOwnCurves = true;
+            for (int index = 0; index < clashViews.Count; index++)
+            {
+                BattleActionRelationUIView view = clashViews[index];
+                allViewsOwnCurves &= view != null &&
+                    view.OwnsPrimaryCurve && view.OwnsSecondaryCurve &&
+                    view.PrimaryCurve != display.externalPrimaryCurve;
+            }
+            r[96] = externalTemplateReproduced &&
+                clashViews.Count == 2 && allViewsOwnCurves;
+
+            r[97] = r[96] &&
+                AllVisibleViewsAreIndependent(display.controller) &&
+                AreClashCurveResourcesUnique(clashViews);
+
+            bool secondRenderDidNotRewriteFirst = false;
+            if (clashViews.Count == 2)
+            {
+                BattleActionRelationUIView first = clashViews[0];
+                BattleActionRelationUIView second = clashViews[1];
+                int firstCurveID = first.PrimaryCurve.GetInstanceID();
+                int firstSegments = first.PrimaryCurve.ActiveSegmentCount;
+                Vector2 firstTip = first.PrimaryCurve.ArrowTip;
+                float firstRangeStart = first.PrimaryCurve.RangeStart;
+                float firstRangeEnd = first.PrimaryCurve.RangeEnd;
+                BattleActionRelationDescriptor secondDescriptor =
+                    FindRelationByID(
+                        display.controller.CachedRelations,
+                        second.RelationID
+                    );
+                bool secondShown = second.ShowClash(
+                    secondDescriptor,
+                    new Vector2(-140f, -80f),
+                    new Vector2(240f, 160f),
+                    Color.cyan,
+                    Color.red,
+                    false,
+                    90f,
+                    0.12f,
+                    60f,
+                    180f,
+                    16f,
+                    10f
+                );
+                secondRenderDidNotRewriteFirst = secondShown &&
+                    first.PrimaryCurve.GetInstanceID() == firstCurveID &&
+                    first.PrimaryCurve.ActiveSegmentCount == firstSegments &&
+                    Approximately(first.PrimaryCurve.ArrowTip, firstTip) &&
+                    Mathf.Abs(first.PrimaryCurve.RangeStart -
+                        firstRangeStart) < 0.001f &&
+                    Mathf.Abs(first.PrimaryCurve.RangeEnd -
+                        firstRangeEnd) < 0.001f &&
+                    first.PrimaryCurve.ArrowActiveSelf;
+            }
+            r[98] = secondRenderDidNotRewriteFirst;
+
+            display.controller.SetRevealAllHeld(false);
+            Canvas.ForceUpdateCanvases();
+            display.controller.SetRevealAllHeld(true);
+            Canvas.ForceUpdateCanvases();
+            clashViews = GetVisibleClashViews(display.controller);
+            r[99] = clashViews.Count == 2 &&
+                AllVisibleViewsAreIndependent(display.controller) &&
+                AreClashCurveResourcesUnique(clashViews);
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError(
+                "模式75 Curve所有权测试初始化或执行失败：" + exception
+            );
+        }
+        finally
+        {
+            DestroyDisplay(display);
+        }
+    }
+
+    private static bool TryValidateCurveOwnershipFixture(
+        Fixture fixture,
+        out string failureReason
+    )
+    {
+        failureReason = string.Empty;
+        if (fixture == null)
+        {
+            failureReason = "fixture为null。";
+            return false;
+        }
+        if (fixture.runtime == null)
+        {
+            failureReason = "runtime为null。";
+            return false;
+        }
+        if (fixture.allyA == null || fixture.allyB == null)
+        {
+            failureReason = "allyA或allyB为null。";
+            return false;
+        }
+        if (fixture.enemy == null)
+        {
+            failureReason = "enemy1为null。";
+            return false;
+        }
+        if (fixture.enemy2 == null)
+        {
+            failureReason = "enemy2为null。";
+            return false;
+        }
+        if (object.ReferenceEquals(fixture.enemy, fixture.enemy2))
+        {
+            failureReason = "enemy1与enemy2引用相同。";
+            return false;
+        }
+        if (fixture.intent == null)
+        {
+            failureReason = "enemyIntent1为null。";
+            return false;
+        }
+        if (fixture.intent2 == null)
+        {
+            failureReason = "enemyIntent2为null。";
+            return false;
+        }
+        if (object.ReferenceEquals(fixture.intent, fixture.intent2))
+        {
+            failureReason = "enemyIntent1与enemyIntent2引用相同。";
+            return false;
+        }
+        if (!object.ReferenceEquals(fixture.intent.enemy, fixture.enemy) ||
+            !object.ReferenceEquals(fixture.intent2.enemy, fixture.enemy2))
+        {
+            failureReason = "Intent与所属敌人引用不匹配。";
+            return false;
+        }
+        if (fixture.intent.enemyCardState == null ||
+            fixture.intent2.enemyCardState == null)
+        {
+            failureReason = "Intent缺少敌人卡牌状态。";
+            return false;
+        }
+        if (fixture.intent.enemySlotIndex <= 0 ||
+            fixture.intent2.enemySlotIndex <= 0)
+        {
+            failureReason = "Intent的enemySlotIndex不合法。";
+            return false;
+        }
+        if (fixture.attack == null || fixture.attack2 == null)
+        {
+            failureReason = "AllyA两张独立攻击卡未完整创建。";
+            return false;
+        }
+        if (fixture.runtime.intentQueue == null ||
+            !fixture.runtime.intentQueue.Contains(fixture.intent) ||
+            !fixture.runtime.intentQueue.Contains(fixture.intent2))
+        {
+            failureReason = "RuntimeState未登记两个独立Intent。";
+            return false;
+        }
+        return true;
+    }
+
+    private static bool SetupTwoClashRelations(Fixture fixture)
+    {
+        SetIntentTarget(fixture.intent, fixture.allyA, 1);
+        SetIntentTarget(fixture.intent2, fixture.allyA, 2);
+        bool targetsInitialized =
+            object.ReferenceEquals(
+                fixture.intent.actualTargetCharacter,
+                fixture.allyA
+            ) && fixture.intent.actualTargetSlotIndex == 1 &&
+            object.ReferenceEquals(
+                fixture.intent2.actualTargetCharacter,
+                fixture.allyA
+            ) && fixture.intent2.actualTargetSlotIndex == 2;
+        BattleActionAssignmentResult firstResult;
+        BattleActionAssignmentResult secondResult;
+        bool firstAssigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+                fixture.runtime,
+                fixture.allyA,
+                1,
+                fixture.attack,
+                fixture.intent,
+                out firstResult
+            );
+        bool secondAssigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+                fixture.runtime,
+                fixture.allyA,
+                2,
+                fixture.attack2,
+                fixture.intent2,
+                out secondResult
+            );
+        return targetsInitialized && firstAssigned && secondAssigned &&
+            firstResult != null && firstResult.isSuccess &&
+            secondResult != null && secondResult.isSuccess &&
+            fixture.intent.isResponded && fixture.intent2.isResponded &&
+            object.ReferenceEquals(
+                fixture.intent.actualTargetCharacter,
+                fixture.allyA
+            ) && fixture.intent.actualTargetSlotIndex == 1 &&
+            object.ReferenceEquals(
+                fixture.intent2.actualTargetCharacter,
+                fixture.allyA
+            ) && fixture.intent2.actualTargetSlotIndex == 2;
+    }
+
+    private static List<BattleActionRelationUIView> GetVisibleClashViews(
+        BattleActionRelationLineController controller
+    )
+    {
+        List<BattleActionRelationUIView> views =
+            new List<BattleActionRelationUIView>();
+        for (int index = 0; index < controller.VisibleRelationCount; index++)
+        {
+            BattleActionRelationUIView view = controller.GetVisibleView(index);
+            if (view != null &&
+                (view.Kind == BattleActionRelationKind.AttackClash ||
+                 view.Kind == BattleActionRelationKind.DefenseResponse ||
+                 view.Kind == BattleActionRelationKind.EvadeResponse))
+            {
+                views.Add(view);
+            }
+        }
+        return views;
+    }
+
+    private static bool AreClashCurveResourcesUnique(
+        List<BattleActionRelationUIView> views
+    )
+    {
+        HashSet<int> curveIDs = new HashSet<int>();
+        HashSet<int> arrowIDs = new HashSet<int>();
+        for (int index = 0; index < views.Count; index++)
+        {
+            BattleActionRelationUIView view = views[index];
+            if (view == null || !view.ValidateCurveOwnership(false) ||
+                !curveIDs.Add(view.PrimaryCurve.GetInstanceID()) ||
+                !curveIDs.Add(view.SecondaryCurve.GetInstanceID()) ||
+                !arrowIDs.Add(view.PrimaryCurve.ArrowInstanceID) ||
+                !arrowIDs.Add(view.SecondaryCurve.ArrowInstanceID) ||
+                view.PrimaryCurve.ActiveSegmentCount <= 0 ||
+                view.SecondaryCurve.ActiveSegmentCount <= 0)
+            {
+                return false;
+            }
+        }
+        return views.Count > 0;
+    }
+
+    private static BattleActionRelationDescriptor FindRelationByID(
+        IReadOnlyList<BattleActionRelationDescriptor> relations,
+        string relationID
+    )
+    {
+        for (int index = 0; index < relations.Count; index++)
+        {
+            if (relations[index] != null &&
+                relations[index].RelationID == relationID)
+            {
+                return relations[index];
+            }
+        }
+        return null;
     }
 
     private static AssignmentProbe ProbePendingTarget(
@@ -2614,6 +3543,22 @@ public static class BattleActionRelationInteractionMode75Tests
         return null;
     }
 
+    private static BattleActionRelationUIView FindVisibleRelationByKind(
+        BattleActionRelationLineController controller,
+        BattleActionRelationKind kind
+    )
+    {
+        for (int index = 0; index < controller.VisibleRelationCount; index++)
+        {
+            BattleActionRelationUIView view = controller.GetVisibleView(index);
+            if (view != null && view.Kind == kind)
+            {
+                return view;
+            }
+        }
+        return null;
+    }
+
     private static void LogSelectedRelationDiagnostic(
         BattleActionRelationLineController controller,
         string selectedSlotID
@@ -2667,23 +3612,390 @@ public static class BattleActionRelationInteractionMode75Tests
         return controller.SelectedSlotID == selected;
     }
 
+    private static void RevealAllAndForceLayout(Display display)
+    {
+        display.controller.RefreshRelations();
+        display.controller.SetRevealAllHeld(true);
+        Canvas.ForceUpdateCanvases();
+    }
+
+    private static void LogRevealAllDiagnostic(
+        string label,
+        Display display,
+        int expectedRelationCount
+    )
+    {
+        BattleActionRelationLineController controller = display.controller;
+        HashSet<int> viewIDs = new HashSet<int>();
+        HashSet<int> primaryCurveIDs = new HashSet<int>();
+        HashSet<int> arrowIDs = new HashSet<int>();
+        Debug.Log(
+            "[模式75多关系诊断] " + label +
+            "，ExpectedDescriptors=" + expectedRelationCount +
+            "，ActualDescriptors=" + controller.CachedRelations.Count +
+            "，ExpectedViews=" + expectedRelationCount +
+            "，ActualViews=" + controller.VisibleRelationCount
+        );
+
+        for (int index = 0; index < controller.CachedRelations.Count; index++)
+        {
+            BattleActionRelationDescriptor relation =
+                controller.CachedRelations[index];
+            Debug.Log(
+                "[模式75 Descriptor] Index=" + index +
+                "，RelationID=" + relation.RelationID +
+                "，SourceSlotID=" + relation.SourceSlotID +
+                "，TargetSlotID=" + relation.TargetSlotID +
+                "，Kind=" + relation.Kind +
+                "，SourceSide=" + relation.SourceSide +
+                "，LaneIndex=" + relation.LaneIndex
+            );
+        }
+
+        for (int index = 0; index < controller.VisibleRelationCount; index++)
+        {
+            BattleActionRelationUIView view = controller.GetVisibleView(index);
+            if (view == null)
+            {
+                Debug.Log("[模式75 View] Index=" + index + "，View=null");
+                continue;
+            }
+
+            viewIDs.Add(view.GetInstanceID());
+            if (view.PrimaryCurve != null)
+            {
+                primaryCurveIDs.Add(view.PrimaryCurve.GetInstanceID());
+                arrowIDs.Add(view.PrimaryCurve.ArrowInstanceID);
+            }
+            if (view.SecondaryCurve != null &&
+                view.SecondaryCurve.IsVisible)
+            {
+                arrowIDs.Add(view.SecondaryCurve.ArrowInstanceID);
+            }
+
+            Debug.Log(
+                "[模式75 View] Index=" + index +
+                "，RelationID=" + view.RelationID +
+                "，ViewInstanceID=" + view.GetInstanceID() +
+                "，Root=" +
+                (view.transform.parent != null
+                    ? view.transform.parent.name
+                    : "null") +
+                "，SiblingIndex=" + view.SiblingIndex +
+                "，EndpointOffset=" +
+                view.UnilateralArrowEndpointOffset
+            );
+            LogCurveDiagnostic("Primary", view.PrimaryCurve);
+            LogCurveDiagnostic("Secondary", view.SecondaryCurve);
+        }
+
+        Debug.Log(
+            "[模式75多关系诊断] DistinctViewIDs=" + viewIDs.Count +
+            "，DistinctPrimaryCurveIDs=" + primaryCurveIDs.Count +
+            "，DistinctArrowIDs=" + arrowIDs.Count
+        );
+    }
+
+    private static void LogCurveDiagnostic(
+        string label,
+        BattleBezierRelationLineUIView curve
+    )
+    {
+        if (curve == null)
+        {
+            Debug.Log("[模式75 Curve] " + label + "=null");
+            return;
+        }
+
+        Debug.Log(
+            "[模式75 Curve] " + label +
+            "，CurveInstanceID=" + curve.GetInstanceID() +
+            "，ArrowInstanceID=" + curve.ArrowInstanceID +
+            "，SegmentTemplateInstanceID=" +
+            curve.SegmentTemplateInstanceID +
+            "，UnderlayArrowInstanceID=" +
+            curve.UnderlayArrowInstanceID +
+            "，CanvasGroupInstanceID=" + curve.CanvasGroupInstanceID +
+            "，ArrowActive=" + curve.ArrowActiveSelf +
+            "，ArrowAlpha=" + curve.ArrowAlpha +
+            "，ArrowSize=" + curve.ArrowRenderedSize +
+            "，ActiveSegmentCount=" + curve.ActiveSegmentCount +
+            "，FirstSegmentInstanceID=" +
+            curve.GetActiveSegmentInstanceID(0) +
+            "，ArrowTip=" + curve.ArrowTip +
+            "，ArrowSiblingIndex=" + curve.ArrowSiblingIndex +
+            "，LayerOrderValid=" +
+            curve.HasDeterministicVisualLayerOrder
+        );
+    }
+
     private static bool AssignPlayerAttack(
         Fixture fixture,
         CharacterData owner,
         BattleCardState card,
-        CharacterData targetEnemy
+        CharacterData targetEnemy,
+        int ownerSlotIndex = 1,
+        int targetEnemySlotIndex = 1
     )
     {
         BattleActionAssignmentResult result;
         return BattleActionSlotManager.TryAssignToEnemy(
             fixture.runtime,
             owner,
-            1,
+            ownerSlotIndex,
             card,
             targetEnemy,
-            1,
+            targetEnemySlotIndex,
             out result
         ) && result != null && result.isSuccess;
+    }
+
+    private static bool CancelAllPlayerAssignments(Fixture fixture)
+    {
+        bool allCancelled = true;
+        CharacterData[] allies = { fixture.allyA, fixture.allyB };
+        for (int allyIndex = 0; allyIndex < allies.Length; allyIndex++)
+        {
+            for (int slotIndex = 1; slotIndex <= 2; slotIndex++)
+            {
+                BattleActionAssignmentResult result;
+                allCancelled &= BattleActionSlotManager.TryCancelAssignment(
+                    fixture.runtime,
+                    allies[allyIndex],
+                    slotIndex,
+                    out result
+                );
+            }
+        }
+        fixture.intent.ResetResponseState();
+        fixture.intent2.ResetResponseState();
+        return allCancelled;
+    }
+
+    private static bool SetupRelationSceneA(Fixture fixture)
+    {
+        SetIntentTarget(fixture.intent, fixture.allyA, 1);
+        SetIntentTarget(fixture.intent2, fixture.allyB, 2);
+        BattleActionAssignmentResult responseResult;
+        bool responseAssigned =
+            BattleActionSlotManager.TryAssignToEnemyIntent(
+                fixture.runtime,
+                fixture.allyA,
+                1,
+                fixture.attack,
+                fixture.intent,
+                out responseResult
+            );
+        return responseAssigned &&
+            AssignPlayerAttack(
+                fixture,
+                fixture.allyA,
+                fixture.attack2,
+                fixture.enemy2,
+                2,
+                1
+            ) && AssignPlayerAttack(
+                fixture,
+                fixture.allyB,
+                fixture.allyBAttack,
+                fixture.enemy2,
+                1,
+                2
+            ) && AssignPlayerAttack(
+                fixture,
+                fixture.allyB,
+                fixture.allyBAttack2,
+                fixture.enemy2,
+                2,
+                2
+            );
+    }
+
+    private static bool SetupRelationSceneB(Fixture fixture)
+    {
+        SetIntentTarget(fixture.intent, fixture.allyA, 2);
+        SetIntentTarget(fixture.intent2, fixture.allyB, 2);
+        return AssignPlayerAttack(
+            fixture,
+            fixture.allyB,
+            fixture.allyBAttack,
+            fixture.enemy2,
+            1,
+            2
+        ) && AssignPlayerAttack(
+            fixture,
+            fixture.allyB,
+            fixture.allyBAttack2,
+            fixture.enemy2,
+            2,
+            2
+        );
+    }
+
+    private static bool SetupRelationSceneC(Fixture fixture)
+    {
+        SetIntentTarget(fixture.intent, fixture.allyA, 2);
+        SetIntentTarget(fixture.intent2, fixture.allyB, 2);
+        return AssignPlayerAttack(
+            fixture,
+            fixture.allyA,
+            fixture.attack,
+            fixture.enemy2,
+            1,
+            2
+        ) && AssignPlayerAttack(
+            fixture,
+            fixture.allyA,
+            fixture.attack2,
+            fixture.enemy2,
+            2,
+            2
+        ) && AssignPlayerAttack(
+            fixture,
+            fixture.allyB,
+            fixture.allyBAttack,
+            fixture.enemy2,
+            1,
+            2
+        ) && AssignPlayerAttack(
+            fixture,
+            fixture.allyB,
+            fixture.allyBAttack2,
+            fixture.enemy2,
+            2,
+            2
+        );
+    }
+
+    private static bool ValidateSceneA(
+        BattleActionRelationLineController controller
+    )
+    {
+        BattleActionRelationUIView clash = FindVisibleRelationByKind(
+            controller,
+            BattleActionRelationKind.AttackClash
+        );
+        return controller.CachedRelations.Count == 5 &&
+            controller.VisibleRelationCount == 5 &&
+            CountRelationsByKind(
+                controller.CachedRelations,
+                BattleActionRelationKind.AttackClash
+            ) == 1 &&
+            CountRelationsByKind(
+                controller.CachedRelations,
+                BattleActionRelationKind.PlayerUnilateralTarget
+            ) == 3 &&
+            clash != null && IsCurveArrowReady(clash.PrimaryCurve) &&
+            IsCurveArrowReady(clash.SecondaryCurve) &&
+            AllVisibleCurvesHaveArrows(controller) &&
+            AllVisibleViewsAreIndependent(controller);
+    }
+
+    private static bool ValidateSceneB(
+        BattleActionRelationLineController controller
+    )
+    {
+        BattleActionRelationUIView first = FindVisibleRelationByID(
+            controller,
+            "AllyB:1->Enemy2:2"
+        );
+        BattleActionRelationUIView second = FindVisibleRelationByID(
+            controller,
+            "AllyB:2->Enemy2:2"
+        );
+        return controller.CachedRelations.Count == 4 &&
+            controller.VisibleRelationCount == 4 &&
+            CountRelationsByKind(
+                controller.CachedRelations,
+                BattleActionRelationKind.PlayerUnilateralTarget
+            ) == 2 &&
+            HaveSeparatedVisibleArrows(first, second) &&
+            AllVisibleViewsAreIndependent(controller);
+    }
+
+    private static bool ValidateSceneC(
+        BattleActionRelationLineController controller
+    )
+    {
+        return controller.CachedRelations.Count == 6 &&
+            controller.VisibleRelationCount == 6 &&
+            CountRelationsByKind(
+                controller.CachedRelations,
+                BattleActionRelationKind.PlayerUnilateralTarget
+            ) == 4 &&
+            HaveDistinctPlayerArrowTips(
+                controller,
+                "Enemy2:2",
+                4
+            ) && AllVisibleCurvesHaveArrows(controller) &&
+            AllVisibleViewsAreIndependent(controller);
+    }
+
+    private static int CountRelationsByKind(
+        IReadOnlyList<BattleActionRelationDescriptor> relations,
+        BattleActionRelationKind kind
+    )
+    {
+        int count = 0;
+        for (int index = 0; index < relations.Count; index++)
+        {
+            if (relations[index].Kind == kind)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private static bool HaveDistinctPlayerArrowTips(
+        BattleActionRelationLineController controller,
+        string targetSlotID,
+        int expectedCount
+    )
+    {
+        List<BattleActionRelationUIView> views =
+            new List<BattleActionRelationUIView>();
+        for (int index = 0; index < controller.CachedRelations.Count; index++)
+        {
+            BattleActionRelationDescriptor relation =
+                controller.CachedRelations[index];
+            if (relation.Kind !=
+                    BattleActionRelationKind.PlayerUnilateralTarget ||
+                relation.TargetSlotID != targetSlotID)
+            {
+                continue;
+            }
+            BattleActionRelationUIView view = FindVisibleRelationByID(
+                controller,
+                relation.RelationID
+            );
+            if (!HasVisiblePrimaryArrow(view))
+            {
+                return false;
+            }
+            views.Add(view);
+        }
+
+        if (views.Count != expectedCount)
+        {
+            return false;
+        }
+        for (int left = 0; left < views.Count; left++)
+        {
+            for (int right = left + 1; right < views.Count; right++)
+            {
+                if (views[left].PrimaryCurve.ArrowInstanceID ==
+                        views[right].PrimaryCurve.ArrowInstanceID ||
+                    Approximately(
+                        views[left].PrimaryCurve.ArrowTip,
+                        views[right].PrimaryCurve.ArrowTip
+                    ))
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
     private static void SetIntentTarget(
@@ -2741,6 +4053,95 @@ public static class BattleActionRelationInteractionMode75Tests
         return controller.VisibleRelationCount > 0;
     }
 
+    private static bool AllVisibleViewsAreIndependent(
+        BattleActionRelationLineController controller
+    )
+    {
+        HashSet<int> viewIDs = new HashSet<int>();
+        HashSet<int> curveIDs = new HashSet<int>();
+        HashSet<int> arrowIDs = new HashSet<int>();
+        for (int index = 0; index < controller.VisibleRelationCount; index++)
+        {
+            BattleActionRelationUIView view = controller.GetVisibleView(index);
+            if (view == null || !viewIDs.Add(view.GetInstanceID()) ||
+                view.PrimaryCurve == null ||
+                !curveIDs.Add(view.PrimaryCurve.GetInstanceID()) ||
+                view.PrimaryCurve.ArrowInstanceID == 0 ||
+                !arrowIDs.Add(view.PrimaryCurve.ArrowInstanceID))
+            {
+                return false;
+            }
+
+            if (view.SecondaryCurve != null &&
+                view.SecondaryCurve.IsVisible &&
+                (!curveIDs.Add(view.SecondaryCurve.GetInstanceID()) ||
+                 view.SecondaryCurve.ArrowInstanceID == 0 ||
+                 !arrowIDs.Add(view.SecondaryCurve.ArrowInstanceID) ||
+                 view.PrimaryCurve.SegmentTemplateInstanceID ==
+                    view.SecondaryCurve.SegmentTemplateInstanceID ||
+                 view.PrimaryCurve.CanvasGroupInstanceID ==
+                    view.SecondaryCurve.CanvasGroupInstanceID ||
+                 view.PrimaryCurve.UnderlayArrowInstanceID ==
+                    view.SecondaryCurve.UnderlayArrowInstanceID ||
+                 view.PrimaryCurve.GetActiveSegmentInstanceID(0) ==
+                    view.SecondaryCurve.GetActiveSegmentInstanceID(0)))
+            {
+                return false;
+            }
+        }
+        return viewIDs.Count == controller.VisibleRelationCount;
+    }
+
+    private static bool ValidateClashCurveIndependence(Display display)
+    {
+        BattleActionRelationUIView clashView = FindVisibleRelationByKind(
+            display.controller,
+            BattleActionRelationKind.AttackClash
+        );
+        if (clashView == null || clashView.PrimaryCurve == null ||
+            clashView.SecondaryCurve == null ||
+            !IsCurveArrowReady(clashView.PrimaryCurve) ||
+            !IsCurveArrowReady(clashView.SecondaryCurve))
+        {
+            return false;
+        }
+
+        int primarySegments = clashView.PrimaryCurve.ActiveSegmentCount;
+        Vector2 primaryTip = clashView.PrimaryCurve.ArrowTip;
+        float primaryAlpha = clashView.PrimaryCurve.ArrowAlpha;
+        clashView.SecondaryCurve.Clear();
+        bool primarySurvivedSecondaryClear =
+            clashView.PrimaryCurve.ArrowActiveSelf &&
+            clashView.PrimaryCurve.ActiveSegmentCount == primarySegments &&
+            Approximately(clashView.PrimaryCurve.ArrowTip, primaryTip) &&
+            Mathf.Abs(clashView.PrimaryCurve.ArrowAlpha - primaryAlpha) <
+                0.001f;
+
+        RevealAllAndForceLayout(display);
+        clashView = FindVisibleRelationByKind(
+            display.controller,
+            BattleActionRelationKind.AttackClash
+        );
+        if (clashView == null || clashView.PrimaryCurve == null ||
+            clashView.SecondaryCurve == null)
+        {
+            return false;
+        }
+        int secondarySegments = clashView.SecondaryCurve.ActiveSegmentCount;
+        Vector2 secondaryTip = clashView.SecondaryCurve.ArrowTip;
+        float secondaryAlpha = clashView.SecondaryCurve.ArrowAlpha;
+        clashView.PrimaryCurve.Clear();
+        bool secondarySurvivedPrimaryClear =
+            clashView.SecondaryCurve.ArrowActiveSelf &&
+            clashView.SecondaryCurve.ActiveSegmentCount == secondarySegments &&
+            Approximately(clashView.SecondaryCurve.ArrowTip, secondaryTip) &&
+            Mathf.Abs(clashView.SecondaryCurve.ArrowAlpha - secondaryAlpha) <
+                0.001f;
+        RevealAllAndForceLayout(display);
+        return primarySurvivedSecondaryClear &&
+            secondarySurvivedPrimaryClear;
+    }
+
     private static bool IsCurveArrowReady(
         BattleBezierRelationLineUIView curve
     )
@@ -2780,6 +4181,59 @@ public static class BattleActionRelationInteractionMode75Tests
         return snapshots;
     }
 
+    private static bool VisibleRelationIDsMatchAll(
+        BattleActionRelationLineController controller
+    )
+    {
+        HashSet<string> expected = new HashSet<string>(StringComparer.Ordinal);
+        for (int index = 0; index < controller.CachedRelations.Count; index++)
+        {
+            expected.Add(controller.CachedRelations[index].RelationID);
+        }
+        return VisibleRelationIDsMatch(controller, expected);
+    }
+
+    private static bool VisibleRelationIDsMatchSlots(
+        BattleActionRelationLineController controller,
+        string firstSlotID,
+        string secondSlotID
+    )
+    {
+        HashSet<string> expected = new HashSet<string>(StringComparer.Ordinal);
+        for (int index = 0; index < controller.CachedRelations.Count; index++)
+        {
+            BattleActionRelationDescriptor relation =
+                controller.CachedRelations[index];
+            if (relation.InvolvesSlot(firstSlotID) ||
+                (!string.IsNullOrEmpty(secondSlotID) &&
+                 relation.InvolvesSlot(secondSlotID)))
+            {
+                expected.Add(relation.RelationID);
+            }
+        }
+        return VisibleRelationIDsMatch(controller, expected);
+    }
+
+    private static bool VisibleRelationIDsMatch(
+        BattleActionRelationLineController controller,
+        HashSet<string> expected
+    )
+    {
+        if (controller.VisibleRelationCount != expected.Count)
+        {
+            return false;
+        }
+        for (int index = 0; index < controller.VisibleRelationCount; index++)
+        {
+            BattleActionRelationUIView view = controller.GetVisibleView(index);
+            if (view == null || !expected.Contains(view.RelationID))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private static bool VisibleVisualsMatch(
         BattleActionRelationLineController controller,
         Dictionary<string, RelationVisualSnapshot> expected
@@ -2792,6 +4246,8 @@ public static class BattleActionRelationInteractionMode75Tests
             return false;
         }
 
+        Dictionary<string, RelationVisualSnapshot> actual =
+            CaptureVisibleRelationVisuals(controller);
         for (int index = 0; index < controller.VisibleRelationCount; index++)
         {
             BattleActionRelationUIView view = controller.GetVisibleView(index);
@@ -2799,11 +4255,31 @@ public static class BattleActionRelationInteractionMode75Tests
             if (view == null || view.PrimaryCurve == null ||
                 !expected.TryGetValue(view.RelationID, out snapshot) ||
                 !Approximately(view.PrimaryCurve.ArrowTip, snapshot.arrowTip) ||
-                view.SiblingIndex != snapshot.siblingIndex ||
                 view.transform.parent == null ||
                 view.transform.parent.name != snapshot.parentName)
             {
                 return false;
+            }
+        }
+
+        foreach (KeyValuePair<string, RelationVisualSnapshot> left in expected)
+        {
+            foreach (KeyValuePair<string, RelationVisualSnapshot> right in expected)
+            {
+                if (string.CompareOrdinal(left.Key, right.Key) >= 0 ||
+                    left.Value.parentName != right.Value.parentName)
+                {
+                    continue;
+                }
+                RelationVisualSnapshot actualLeft;
+                RelationVisualSnapshot actualRight;
+                if (!actual.TryGetValue(left.Key, out actualLeft) ||
+                    !actual.TryGetValue(right.Key, out actualRight) ||
+                    Math.Sign(left.Value.siblingIndex - right.Value.siblingIndex) !=
+                    Math.Sign(actualLeft.siblingIndex - actualRight.siblingIndex))
+                {
+                    return false;
+                }
             }
         }
         return true;
@@ -2881,10 +4357,20 @@ public static class BattleActionRelationInteractionMode75Tests
             CreateCard("mode75_multi_attack_a", CardType.Attack),
             "mode75_multi_attack_a_instance"
         );
+        fixture.attack2 = BattleCardManager.CreateBattleCard(
+            fixture.allyA,
+            CreateCard("mode75_multi_attack_a_2", CardType.Attack),
+            "mode75_multi_attack_a_2_instance"
+        );
         fixture.allyBAttack = BattleCardManager.CreateBattleCard(
             fixture.allyB,
             CreateCard("mode75_multi_attack_b", CardType.Attack),
             "mode75_multi_attack_b_instance"
+        );
+        fixture.allyBAttack2 = BattleCardManager.CreateBattleCard(
+            fixture.allyB,
+            CreateCard("mode75_multi_attack_b_2", CardType.Attack),
+            "mode75_multi_attack_b_2_instance"
         );
         BattleCardState enemyAttack = BattleCardManager.CreateBattleCard(
             fixture.enemy,
@@ -3011,6 +4497,14 @@ public static class BattleActionRelationInteractionMode75Tests
 
     private static Display CreateDisplay(Fixture fixture)
     {
+        return CreateDisplay(fixture, false);
+    }
+
+    private static Display CreateDisplay(
+        Fixture fixture,
+        bool useExternalPrimaryTemplate
+    )
+    {
         Display display = new Display();
         display.root = new GameObject(
             "Mode75Display",
@@ -3030,10 +4524,14 @@ public static class BattleActionRelationInteractionMode75Tests
         display.clashRoot = CreateRect("Clash", display.lineLayer);
         display.highlightRoot = CreateRect("Highlight", display.lineLayer);
         display.previewRoot = CreateRect("Preview", display.lineLayer);
-        BattleActionRelationUIView template = CreateRelationView(
-            display.lineLayer,
-            display.sprite
-        );
+        BattleActionRelationUIView template = useExternalPrimaryTemplate
+            ? CreateRelationViewWithExternalPrimary(
+                display.lineLayer,
+                display.sprite,
+                out display.externalPrimaryCurve
+            )
+            : CreateRelationView(display.lineLayer, display.sprite);
+        display.relationTemplate = template;
         template.gameObject.SetActive(false);
         display.preview = CreateCurve(
             "PreviewCurve",
@@ -3057,6 +4555,33 @@ public static class BattleActionRelationInteractionMode75Tests
         RegisterSlots(display, fixture);
         display.controller.RefreshRelations();
         return display;
+    }
+
+    private static BattleActionRelationUIView
+        CreateRelationViewWithExternalPrimary(
+            Transform parent,
+            Sprite sprite,
+            out BattleBezierRelationLineUIView externalPrimary
+        )
+    {
+        externalPrimary = CreateCurve(
+            "PrimaryCurve",
+            parent,
+            sprite
+        );
+        GameObject value = new GameObject(
+            "Mode75ExternalPrimaryRelationView",
+            typeof(RectTransform),
+            typeof(BattleActionRelationUIView)
+        );
+        value.transform.SetParent(parent, false);
+        BattleActionRelationUIView view =
+            value.GetComponent<BattleActionRelationUIView>();
+        view.ConfigureForTesting(
+            externalPrimary,
+            CreateCurve("SecondaryCurve", value.transform, sprite)
+        );
+        return view;
     }
 
     private static void RegisterSlots(Display display, Fixture fixture)

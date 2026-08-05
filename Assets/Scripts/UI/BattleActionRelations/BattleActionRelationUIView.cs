@@ -11,6 +11,8 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
     public bool IsHighlighted { get; private set; }
     public BattleBezierRelationLineUIView PrimaryCurve => primaryCurve;
     public BattleBezierRelationLineUIView SecondaryCurve => secondaryCurve;
+    public bool OwnsPrimaryCurve => OwnsCurve(primaryCurve);
+    public bool OwnsSecondaryCurve => OwnsCurve(secondaryCurve);
     public int SiblingIndex => transform.GetSiblingIndex();
     public float UnilateralArrowEndpointOffset { get; private set; }
     public bool CanvasGroupIgnoresRaycasts => canvasGroup != null &&
@@ -34,17 +36,17 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
         isDestroying = true;
         RelationID = string.Empty;
         IsHighlighted = false;
-        if (primaryCurve != null)
+        if (OwnsPrimaryCurve)
         {
             primaryCurve.Clear();
         }
-        if (secondaryCurve != null)
+        if (OwnsSecondaryCurve)
         {
             secondaryCurve.Clear();
         }
     }
 
-    public void ShowUnilateral(
+    public bool ShowUnilateral(
         BattleActionRelationDescriptor descriptor,
         Vector2 start,
         Vector2 end,
@@ -62,9 +64,12 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
         if (descriptor == null || primaryCurve == null)
         {
             ClearView();
-            return;
+            return false;
         }
 
+        ClearCurvesWhenDisplayTypeChanges(descriptor.Kind);
+        // 对象池模板为 inactive；必须先激活完成 OnEnable 初始化，再绘制箭头。
+        gameObject.SetActive(true);
         RelationID = descriptor.RelationID;
         Kind = descriptor.Kind;
         IsHighlighted = highlighted;
@@ -94,10 +99,10 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
             highlighted
         );
         secondaryCurve?.Clear();
-        gameObject.SetActive(true);
+        return primaryCurve.IsVisible && primaryCurve.ArrowActiveSelf;
     }
 
-    public void ShowClash(
+    public bool ShowClash(
         BattleActionRelationDescriptor descriptor,
         Vector2 playerStart,
         Vector2 enemyStart,
@@ -117,9 +122,12 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
             secondaryCurve == null)
         {
             ClearView();
-            return;
+            return false;
         }
 
+        ClearCurvesWhenDisplayTypeChanges(descriptor.Kind);
+        // 同一 RelationView 的两条半曲线都在激活后绘制，避免 OnEnable 清掉箭头。
+        gameObject.SetActive(true);
         RelationID = descriptor.RelationID;
         Kind = descriptor.Kind;
         IsHighlighted = highlighted;
@@ -166,7 +174,8 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
             false,
             highlighted
         );
-        gameObject.SetActive(true);
+        return primaryCurve.IsVisible && primaryCurve.ArrowActiveSelf &&
+            secondaryCurve.IsVisible && secondaryCurve.ArrowActiveSelf;
     }
 
     public void ApplyVisualSettings(
@@ -200,6 +209,111 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
     public void PrepareForReuse()
     {
         EnsureRaycastSafety();
+    }
+
+    internal bool EnsureOwnedCurveReferences()
+    {
+        // Unity场景模板可能把序列化字段保留为外部对象引用。
+        // 新View只在入池时修复一次，之后复用自身Curve，不在刷新时重复实例化。
+        primaryCurve = ResolveOwnedCurve(
+            primaryCurve,
+            "PrimaryCurve",
+            secondaryCurve
+        );
+        secondaryCurve = ResolveOwnedCurve(
+            secondaryCurve,
+            "SecondaryCurve",
+            primaryCurve
+        );
+        return ValidateCurveOwnership(true);
+    }
+
+    internal bool ValidateCurveOwnership(bool logError)
+    {
+        bool valid = OwnsPrimaryCurve && OwnsSecondaryCurve &&
+            primaryCurve != secondaryCurve;
+        if (valid)
+        {
+            valid = primaryCurve.ArrowInstanceID != 0 &&
+                secondaryCurve.ArrowInstanceID != 0 &&
+                primaryCurve.ArrowInstanceID !=
+                    secondaryCurve.ArrowInstanceID &&
+                primaryCurve.SegmentTemplateInstanceID != 0 &&
+                secondaryCurve.SegmentTemplateInstanceID != 0 &&
+                primaryCurve.SegmentTemplateInstanceID !=
+                    secondaryCurve.SegmentTemplateInstanceID &&
+                primaryCurve.CanvasGroupInstanceID != 0 &&
+                secondaryCurve.CanvasGroupInstanceID != 0 &&
+                primaryCurve.CanvasGroupInstanceID !=
+                    secondaryCurve.CanvasGroupInstanceID;
+        }
+
+        if (!valid && logError)
+        {
+            Debug.LogError(
+                "RelationView Curve所有权无效：View=" + GetInstanceID() +
+                "，PrimaryCurve=" + GetCurveInstanceID(primaryCurve) +
+                "，PrimaryArrow=" + GetArrowInstanceID(primaryCurve) +
+                "，SecondaryCurve=" + GetCurveInstanceID(secondaryCurve) +
+                "，SecondaryArrow=" + GetArrowInstanceID(secondaryCurve) +
+                "，OwnsPrimary=" + OwnsPrimaryCurve +
+                "，OwnsSecondary=" + OwnsSecondaryCurve,
+                this
+            );
+        }
+        return valid;
+    }
+
+    internal bool SharesVisualInstancesWith(
+        BattleActionRelationUIView other
+    )
+    {
+        if (other == null)
+        {
+            return false;
+        }
+
+        BattleBezierRelationLineUIView[] ownCurves =
+            { primaryCurve, secondaryCurve };
+        BattleBezierRelationLineUIView[] otherCurves =
+            { other.primaryCurve, other.secondaryCurve };
+        for (int ownIndex = 0; ownIndex < ownCurves.Length; ownIndex++)
+        {
+            BattleBezierRelationLineUIView own = ownCurves[ownIndex];
+            if (own == null)
+            {
+                continue;
+            }
+            for (int otherIndex = 0;
+                 otherIndex < otherCurves.Length;
+                 otherIndex++)
+            {
+                BattleBezierRelationLineUIView candidate =
+                    otherCurves[otherIndex];
+                if (candidate != null &&
+                    (own == candidate ||
+                     SharesNonZeroInstance(
+                         own.ArrowInstanceID,
+                         candidate.ArrowInstanceID
+                     ) ||
+                     SharesNonZeroInstance(
+                         own.SegmentTemplateInstanceID,
+                         candidate.SegmentTemplateInstanceID
+                     ) ||
+                     SharesNonZeroInstance(
+                         own.UnderlayArrowInstanceID,
+                         candidate.UnderlayArrowInstanceID
+                     ) ||
+                     SharesNonZeroInstance(
+                         own.CanvasGroupInstanceID,
+                         candidate.CanvasGroupInstanceID
+                     )))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     private void EnsureRaycastSafety()
@@ -239,6 +353,20 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
         }
     }
 
+    private void ClearCurvesWhenDisplayTypeChanges(
+        BattleActionRelationKind nextKind
+    )
+    {
+        if (string.IsNullOrEmpty(RelationID) || Kind == nextKind)
+        {
+            return;
+        }
+
+        // 同一活动View从单向虚线切到双方实线时，先清空旧类型视觉。
+        primaryCurve?.Clear();
+        secondaryCurve?.Clear();
+    }
+
     public bool ValidateConfiguration()
     {
         bool valid = true;
@@ -274,6 +402,70 @@ public sealed class BattleActionRelationUIView : MonoBehaviour
         primaryCurve = primary;
         secondaryCurve = secondary;
         EnsureRaycastSafety();
+    }
+
+    private BattleBezierRelationLineUIView ResolveOwnedCurve(
+        BattleBezierRelationLineUIView current,
+        string expectedName,
+        BattleBezierRelationLineUIView excluded
+    )
+    {
+        if (OwnsCurve(current) && current != excluded)
+        {
+            return current;
+        }
+
+        string sourceName = current != null
+            ? current.gameObject.name
+            : expectedName;
+        BattleBezierRelationLineUIView[] descendants =
+            GetComponentsInChildren<BattleBezierRelationLineUIView>(true);
+        for (int index = 0; index < descendants.Length; index++)
+        {
+            BattleBezierRelationLineUIView candidate = descendants[index];
+            if (candidate != null && candidate != excluded &&
+                candidate.gameObject.name == sourceName)
+            {
+                return candidate;
+            }
+        }
+
+        if (current == null)
+        {
+            return null;
+        }
+
+        // 外部Curve只作为模板来源；克隆后由当前View独占和销毁。
+        BattleBezierRelationLineUIView clone = Instantiate(
+            current,
+            transform
+        );
+        clone.name = sourceName;
+        return clone;
+    }
+
+    private bool OwnsCurve(BattleBezierRelationLineUIView curve)
+    {
+        return curve != null && curve.transform.IsChildOf(transform);
+    }
+
+    private static bool SharesNonZeroInstance(int left, int right)
+    {
+        return left != 0 && left == right;
+    }
+
+    private static int GetCurveInstanceID(
+        BattleBezierRelationLineUIView curve
+    )
+    {
+        return curve != null ? curve.GetInstanceID() : 0;
+    }
+
+    private static int GetArrowInstanceID(
+        BattleBezierRelationLineUIView curve
+    )
+    {
+        return curve != null ? curve.ArrowInstanceID : 0;
     }
 
     private static Vector2 ResolveVisualArrowEndpoint(

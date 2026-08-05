@@ -1,6 +1,8 @@
 using System.Collections.Generic;
+using System.Text;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.UI;
 
 public sealed class BattleActionRelationLineController : MonoBehaviour
 {
@@ -66,21 +68,31 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         new Dictionary<string, int>();
     private readonly Dictionary<string, int> visibleTargetOrdinals =
         new Dictionary<string, int>();
+    private readonly Dictionary<string, float> endpointOffsetByRelationID =
+        new Dictionary<string, float>();
+    private readonly HashSet<int> usedViewInstanceIDs = new HashSet<int>();
     private BattleRuntimeState runtimeState;
     private BattleActionRelationQueryService queryService;
     private string hoveredSlotID;
     private string selectedSlotID;
     private string previewSourceSlotID;
+    private string previewTargetSlotID;
     private bool revealAllHeld;
     private bool previewActive;
     private Vector2 previewPointerScreenPosition;
     private bool isShuttingDown;
+    private bool diagnosticHasCardSelection;
+    private string diagnosticSelectedCardID;
+    private string diagnosticSelectedActionSlotID;
+    private bool diagnosticIsCardTargetingActive;
 
     public int VisibleRelationCount => activeViews.Count;
     public string HoveredSlotID => hoveredSlotID;
     public string SelectedSlotID => selectedSlotID;
     public bool RevealAllHeld => revealAllHeld;
     public bool PreviewActive => previewActive;
+    public string PreviewSourceSlotID => previewSourceSlotID;
+    public string PreviewTargetSlotID => previewTargetSlotID;
     public int RelationViewPoolCount => relationViewPool.Count;
     public IReadOnlyList<BattleActionRelationDescriptor> CachedRelations =>
         cachedRelations;
@@ -128,6 +140,14 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         {
             SetRevealAllHeld(tabHeld);
         }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        // 仅在按住 Tab 时响应一次 F8，避免开发诊断在 Update 中持续刷日志。
+        if (revealAllHeld && IsRelationDiagnosticsInputPressed(Keyboard.current))
+        {
+            LogCurrentRelationDiagnostics();
+        }
+#endif
 
         if (previewActive)
         {
@@ -283,6 +303,9 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             return;
         }
         hoveredSlotID = slotID ?? string.Empty;
+        previewTargetSlotID = previewActive
+            ? hoveredSlotID
+            : string.Empty;
         RefreshVisibleRelations();
     }
 
@@ -294,6 +317,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             return;
         }
         hoveredSlotID = string.Empty;
+        previewTargetSlotID = string.Empty;
         RefreshVisibleRelations();
     }
 
@@ -332,6 +356,569 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         RefreshVisibleRelations();
     }
 
+    [ContextMenu("输出当前真实关系线诊断")]
+    public void LogCurrentRelationDiagnostics()
+    {
+        StringBuilder builder = new StringBuilder(16384);
+        Dictionary<string, int> expectedViewCounts =
+            new Dictionary<string, int>();
+        Dictionary<string, int> activeViewCounts =
+            new Dictionary<string, int>();
+        Dictionary<int, string> viewOwners =
+            new Dictionary<int, string>();
+        Dictionary<int, string> curveOwners =
+            new Dictionary<int, string>();
+        Dictionary<int, string> arrowOwners =
+            new Dictionary<int, string>();
+        List<string> conflicts = new List<string>();
+        int expectedVisibleCount = 0;
+
+        builder.AppendLine("[关系线真实场景诊断]");
+        builder.Append("Controller=").Append(name)
+            .Append(" InstanceID=").Append(GetInstanceID())
+            .Append(" Planning=").Append(IsPlanningState())
+            .Append(" RevealAllHeld=").Append(revealAllHeld)
+            .Append(" HoveredSlotID=").Append(hoveredSlotID)
+            .Append(" SelectedSlotID=").Append(selectedSlotID)
+            .AppendLine();
+        builder.Append("PreviewActive=").Append(previewActive)
+            .Append(" PreviewSourceSlotID=").Append(previewSourceSlotID)
+            .Append(" PreviewTargetSlotID=").Append(previewTargetSlotID)
+            .Append(" HasCardSelection=").Append(diagnosticHasCardSelection)
+            .Append(" SelectedCardID=").Append(diagnosticSelectedCardID)
+            .Append(" SelectedActionSlotID=")
+            .Append(diagnosticSelectedActionSlotID)
+            .Append(" IsCardTargetingActive=")
+            .Append(diagnosticIsCardTargetingActive)
+            .AppendLine();
+        builder.Append("cachedRelations数量=")
+            .Append(cachedRelations.Count)
+            .AppendLine();
+
+        for (int index = 0; index < cachedRelations.Count; index++)
+        {
+            BattleActionRelationDescriptor relation = cachedRelations[index];
+            if (relation == null)
+            {
+                builder.Append("[Descriptor ").Append(index)
+                    .AppendLine("] null");
+                continue;
+            }
+
+            bool shouldDisplay = ShouldDisplayRelation(relation);
+            builder.Append("[Descriptor ").Append(index).Append("] ")
+                .Append("RelationID=").Append(relation.RelationID)
+                .Append(" RelationKind=").Append(relation.Kind)
+                .Append(" SourceSlotID=").Append(relation.SourceSlotID)
+                .Append(" TargetSlotID=").Append(relation.TargetSlotID)
+                .Append(" SourceSide=").Append(relation.SourceSide)
+                .Append(" ShouldDisplay=").Append(shouldDisplay)
+                .AppendLine();
+
+            if (!shouldDisplay)
+            {
+                continue;
+            }
+
+            expectedVisibleCount++;
+            IncrementRelationCount(expectedViewCounts, relation.RelationID);
+        }
+
+        builder.Append("应显示关系数量=").Append(expectedVisibleCount)
+            .AppendLine();
+        builder.Append("activeViews数量=").Append(activeViews.Count)
+            .AppendLine();
+
+        for (int index = 0; index < activeViews.Count; index++)
+        {
+            BattleActionRelationUIView view = activeViews[index];
+            if (view == null)
+            {
+                builder.Append("[ActiveView ").Append(index)
+                    .AppendLine("] null");
+                conflicts.Add("activeViews中存在null引用，索引=" + index);
+                continue;
+            }
+
+            string relationID = view.RelationID ?? string.Empty;
+            int viewInstanceID = view.GetInstanceID();
+            string rootName = GetTransformPath(view.transform.parent);
+            builder.Append("[ActiveView ").Append(index).Append("] ")
+                .Append("RelationID=").Append(relationID)
+                .Append(" ViewInstanceID=").Append(viewInstanceID)
+                .Append(" Root=").Append(rootName)
+                .Append(" SiblingIndex=").Append(view.transform.GetSiblingIndex())
+                .Append(" OwnsPrimaryCurve=").Append(view.OwnsPrimaryCurve)
+                .Append(" OwnsSecondaryCurve=").Append(view.OwnsSecondaryCurve)
+                .AppendLine();
+
+            IncrementRelationCount(activeViewCounts, relationID);
+            RegisterOwnedInstance(
+                viewOwners,
+                viewInstanceID,
+                relationID,
+                "View",
+                conflicts
+            );
+            AppendCurveDiagnostics(
+                builder,
+                view.PrimaryCurve,
+                "PrimaryCurve",
+                relationID,
+                curveOwners,
+                arrowOwners,
+                conflicts
+            );
+            AppendCurveDiagnostics(
+                builder,
+                view.SecondaryCurve,
+                "SecondaryCurve",
+                relationID,
+                curveOwners,
+                arrowOwners,
+                conflicts
+            );
+        }
+
+        int missingViewCount = 0;
+        foreach (KeyValuePair<string, int> expected in expectedViewCounts)
+        {
+            int actualCount;
+            activeViewCounts.TryGetValue(expected.Key, out actualCount);
+            if (actualCount >= expected.Value)
+            {
+                continue;
+            }
+
+            int missingCount = expected.Value - actualCount;
+            missingViewCount += missingCount;
+            builder.Append("[缺失] Descriptor RelationID=")
+                .Append(expected.Key)
+                .Append(" 缺少activeView数量=").Append(missingCount)
+                .AppendLine();
+        }
+
+        foreach (KeyValuePair<string, int> active in activeViewCounts)
+        {
+            int expectedCount;
+            expectedViewCounts.TryGetValue(active.Key, out expectedCount);
+            if (active.Value <= expectedCount)
+            {
+                continue;
+            }
+
+            conflicts.Add(
+                "RelationID=" + active.Key +
+                " 的activeView数量多于应显示Descriptor数量：" +
+                active.Value + "/" + expectedCount
+            );
+        }
+
+        builder.Append("Descriptor无对应activeView数量=")
+            .Append(missingViewCount).AppendLine();
+        builder.Append("实例分配冲突数量=").Append(conflicts.Count)
+            .AppendLine();
+        for (int index = 0; index < conflicts.Count; index++)
+        {
+            builder.Append("[冲突 ").Append(index).Append("] ")
+                .Append(conflicts[index]).AppendLine();
+        }
+        AppendHierarchyVisualDiagnostics(builder);
+        builder.AppendLine("[关系线真实场景诊断结束]");
+        Debug.Log(builder.ToString(), this);
+    }
+
+    private void AppendHierarchyVisualDiagnostics(StringBuilder builder)
+    {
+        builder.AppendLine("[RelationLineLayer全层级视觉扫描]");
+        if (lineLayer == null)
+        {
+            builder.AppendLine("LineLayer=null，无法扫描层级视觉。");
+            return;
+        }
+
+        BattleActionRelationUIView[] hierarchyViews =
+            lineLayer.GetComponentsInChildren<BattleActionRelationUIView>(true);
+        BattleBezierRelationLineUIView[] hierarchyCurves =
+            lineLayer.GetComponentsInChildren<BattleBezierRelationLineUIView>(true);
+        Image[] hierarchyImages = lineLayer.GetComponentsInChildren<Image>(true);
+
+        builder.Append("HierarchyRelationView数量=")
+            .Append(hierarchyViews.Length)
+            .Append(" HierarchyCurve数量=").Append(hierarchyCurves.Length)
+            .Append(" HierarchyImage数量=").Append(hierarchyImages.Length)
+            .AppendLine();
+
+        List<BattleActionRelationUIView> untrackedVisibleViews =
+            new List<BattleActionRelationUIView>();
+        List<BattleBezierRelationLineUIView> untrackedVisibleCurves =
+            new List<BattleBezierRelationLineUIView>();
+        List<BattleBezierRelationLineUIView> layerCountMismatches =
+            new List<BattleBezierRelationLineUIView>();
+
+        builder.AppendLine("[全部RelationView]");
+        for (int index = 0; index < hierarchyViews.Length; index++)
+        {
+            BattleActionRelationUIView view = hierarchyViews[index];
+            if (view == null)
+            {
+                builder.Append("[HierarchyView ").Append(index)
+                    .AppendLine("] null");
+                continue;
+            }
+
+            int activeIndex = IndexOfView(activeViews, view);
+            int poolIndex = IndexOfView(relationViewPool, view);
+            bool isTrackedActive = activeIndex >= 0;
+            bool isPooled = poolIndex >= 0;
+            bool hasVisibleVisuals = HasVisibleVisuals(view.PrimaryCurve) ||
+                HasVisibleVisuals(view.SecondaryCurve);
+            if (!isTrackedActive && hasVisibleVisuals)
+            {
+                untrackedVisibleViews.Add(view);
+            }
+
+            builder.Append("[HierarchyView ").Append(index).Append("] ")
+                .Append("ViewInstanceID=").Append(view.GetInstanceID())
+                .Append(" Path=").Append(GetTransformPath(view.transform))
+                .Append(" activeSelf=").Append(view.gameObject.activeSelf)
+                .Append(" activeInHierarchy=")
+                .Append(view.gameObject.activeInHierarchy)
+                .Append(" RelationID=").Append(view.RelationID)
+                .Append(" LastDisplayType=").Append(view.Kind)
+                .Append(" IsTrackedActiveView=").Append(isTrackedActive)
+                .Append(" ActiveViewIndex=").Append(activeIndex)
+                .Append(" IsPooledView=").Append(isPooled)
+                .Append(" PoolIndex=").Append(poolIndex)
+                .Append(" IsTemplate=")
+                .Append(object.ReferenceEquals(view, relationViewTemplate))
+                .Append(" RootType=").Append(GetRootType(view.transform))
+                .Append(" HasVisibleVisuals=").Append(hasVisibleVisuals)
+                .AppendLine();
+            AppendHierarchyCurveSummary(
+                builder,
+                "PrimaryCurve",
+                view.PrimaryCurve
+            );
+            AppendHierarchyCurveSummary(
+                builder,
+                "SecondaryCurve",
+                view.SecondaryCurve
+            );
+        }
+
+        builder.AppendLine("[全部Curve]");
+        for (int index = 0; index < hierarchyCurves.Length; index++)
+        {
+            BattleBezierRelationLineUIView curve = hierarchyCurves[index];
+            if (curve == null)
+            {
+                builder.Append("[HierarchyCurve ").Append(index)
+                    .AppendLine("] null");
+                continue;
+            }
+
+            BattleActionRelationUIView ownerView = FindOwningView(
+                curve,
+                hierarchyViews
+            );
+            int activeIndex = IndexOfView(activeViews, ownerView);
+            int poolIndex = IndexOfView(relationViewPool, ownerView);
+            bool belongsToActiveView = activeIndex >= 0;
+            bool belongsToPooledView = poolIndex >= 0;
+            bool belongsToPreview = object.ReferenceEquals(curve, previewCurve);
+            bool belongsToTemplate = IsTemplateCurve(curve);
+            bool isOrphan = ownerView == null &&
+                !belongsToPreview && !belongsToTemplate;
+            bool hasVisibleVisuals = HasVisibleVisuals(curve);
+            if (curve.ActiveUnderlaySegmentCount > 0 &&
+                curve.ActiveMainSegmentCount !=
+                    curve.ActiveUnderlaySegmentCount)
+            {
+                layerCountMismatches.Add(curve);
+            }
+            if (!belongsToActiveView && hasVisibleVisuals)
+            {
+                untrackedVisibleCurves.Add(curve);
+            }
+
+            builder.Append("[HierarchyCurve ").Append(index).Append("] ")
+                .Append("CurveInstanceID=").Append(curve.GetInstanceID())
+                .Append(" Path=").Append(GetTransformPath(curve.transform))
+                .Append(" activeSelf=").Append(curve.gameObject.activeSelf)
+                .Append(" activeInHierarchy=")
+                .Append(curve.gameObject.activeInHierarchy)
+                .Append(" ActiveSegmentCount=")
+                .Append(curve.ActiveSegmentCount)
+                .Append(" ActiveMainSegmentCount=")
+                .Append(curve.ActiveMainSegmentCount)
+                .Append(" ActiveUnderlaySegmentCount=")
+                .Append(curve.ActiveUnderlaySegmentCount)
+                .Append(" MainSegmentPoolCount=")
+                .Append(curve.MainSegmentPoolCount)
+                .Append(" UnderlaySegmentPoolCount=")
+                .Append(curve.UnderlaySegmentPoolCount)
+                .Append(" ArrowInstanceID=").Append(curve.ArrowInstanceID)
+                .Append(" ArrowActiveSelf=").Append(curve.ArrowActiveSelf)
+                .Append(" ArrowAlpha=").Append(curve.ArrowAlpha)
+                .Append(" HasVisibleMainArrow=")
+                .Append(curve.HasVisibleMainArrow)
+                .Append(" HasVisibleUnderlayArrow=")
+                .Append(curve.HasVisibleUnderlayArrow)
+                .Append(" CurrentLineStyle=").Append(curve.CurrentLineStyle)
+                .Append(" PreviousLineStyle=").Append(curve.PreviousLineStyle)
+                .Append(" CurrentRange=").Append(curve.CurrentRange)
+                .Append(" PreviousRange=").Append(curve.PreviousRange)
+                .Append(" RangeStart=").Append(curve.RangeStart)
+                .Append(" RangeEnd=").Append(curve.RangeEnd)
+                .Append(" ArrowTip=").Append(curve.ArrowTip)
+                .Append(" OwnerViewInstanceID=")
+                .Append(ownerView != null ? ownerView.GetInstanceID() : 0)
+                .Append(" OwnerRelationID=")
+                .Append(ownerView != null ? ownerView.RelationID : string.Empty)
+                .Append(" BelongsToPreviewCurve=").Append(belongsToPreview)
+                .Append(" BelongsToActiveView=").Append(belongsToActiveView)
+                .Append(" ActiveViewIndex=").Append(activeIndex)
+                .Append(" BelongsToPooledView=").Append(belongsToPooledView)
+                .Append(" PoolIndex=").Append(poolIndex)
+                .Append(" BelongsToTemplate=").Append(belongsToTemplate)
+                .Append(" IsOrphanCurve=").Append(isOrphan)
+                .Append(" HasVisibleVisuals=").Append(hasVisibleVisuals)
+                .AppendLine();
+        }
+
+        AppendLayerCountMismatchDiagnostics(builder, layerCountMismatches);
+        AppendUntrackedVisibleViewDiagnostics(builder, untrackedVisibleViews);
+        AppendUntrackedVisibleCurveDiagnostics(builder, untrackedVisibleCurves);
+        AppendPreviewCurveDiagnostics(builder);
+        AppendPoolDiagnostics(builder);
+        AppendHierarchyImageDiagnostics(
+            builder,
+            hierarchyImages,
+            hierarchyCurves,
+            hierarchyViews
+        );
+    }
+
+    private static void AppendLayerCountMismatchDiagnostics(
+        StringBuilder builder,
+        List<BattleBezierRelationLineUIView> curves
+    )
+    {
+        builder.AppendLine("[同一Curve主层与底层数量不一致]");
+        builder.Append("数量=").Append(curves.Count).AppendLine();
+        for (int index = 0; index < curves.Count; index++)
+        {
+            BattleBezierRelationLineUIView curve = curves[index];
+            builder.Append("[").Append(index).Append("] ")
+                .Append("CurveInstanceID=").Append(curve.GetInstanceID())
+                .Append(" MainActive=")
+                .Append(curve.ActiveMainSegmentCount)
+                .Append(" UnderlayActive=")
+                .Append(curve.ActiveUnderlaySegmentCount)
+                .Append(" CurrentLineStyle=").Append(curve.CurrentLineStyle)
+                .Append(" PreviousLineStyle=").Append(curve.PreviousLineStyle)
+                .Append(" CurrentRange=").Append(curve.CurrentRange)
+                .Append(" PreviousRange=").Append(curve.PreviousRange)
+                .AppendLine();
+        }
+    }
+
+    private void AppendUntrackedVisibleViewDiagnostics(
+        StringBuilder builder,
+        List<BattleActionRelationUIView> views
+    )
+    {
+        builder.AppendLine("[未追踪但可见的RelationView]");
+        builder.Append("数量=").Append(views.Count).AppendLine();
+        for (int index = 0; index < views.Count; index++)
+        {
+            BattleActionRelationUIView view = views[index];
+            builder.Append("[").Append(index).Append("] ")
+                .Append("ViewInstanceID=").Append(view.GetInstanceID())
+                .Append(" Path=").Append(GetTransformPath(view.transform))
+                .Append(" RelationID=").Append(view.RelationID)
+                .Append(" LastDisplayType=").Append(view.Kind)
+                .Append(" PoolIndex=")
+                .Append(IndexOfView(relationViewPool, view))
+                .Append(" PrimarySegments=")
+                .Append(GetActiveSegmentCount(view.PrimaryCurve))
+                .Append(" PrimaryArrowVisible=")
+                .Append(IsArrowActuallyVisible(view.PrimaryCurve))
+                .Append(" SecondarySegments=")
+                .Append(GetActiveSegmentCount(view.SecondaryCurve))
+                .Append(" SecondaryArrowVisible=")
+                .Append(IsArrowActuallyVisible(view.SecondaryCurve))
+                .AppendLine();
+        }
+    }
+
+    private void AppendUntrackedVisibleCurveDiagnostics(
+        StringBuilder builder,
+        List<BattleBezierRelationLineUIView> curves
+    )
+    {
+        builder.AppendLine("[未追踪但可见的Curve]");
+        builder.Append("数量=").Append(curves.Count).AppendLine();
+        for (int index = 0; index < curves.Count; index++)
+        {
+            BattleBezierRelationLineUIView curve = curves[index];
+            builder.Append("[").Append(index).Append("] ")
+                .Append("CurveInstanceID=").Append(curve.GetInstanceID())
+                .Append(" Path=").Append(GetTransformPath(curve.transform))
+                .Append(" activeInHierarchy=")
+                .Append(curve.gameObject.activeInHierarchy)
+                .Append(" ActiveSegmentCount=")
+                .Append(curve.ActiveSegmentCount)
+                .Append(" ArrowActiveSelf=").Append(curve.ArrowActiveSelf)
+                .Append(" ArrowAlpha=").Append(curve.ArrowAlpha)
+                .AppendLine();
+        }
+    }
+
+    private void AppendPreviewCurveDiagnostics(StringBuilder builder)
+    {
+        builder.AppendLine("[Preview视觉状态]");
+        if (previewCurve == null)
+        {
+            builder.AppendLine("previewCurve=null");
+            return;
+        }
+
+        builder.Append("PreviewActive=").Append(previewActive)
+            .Append(" CurveInstanceID=").Append(previewCurve.GetInstanceID())
+            .Append(" Path=").Append(GetTransformPath(previewCurve.transform))
+            .Append(" activeSelf=").Append(previewCurve.gameObject.activeSelf)
+            .Append(" activeInHierarchy=")
+            .Append(previewCurve.gameObject.activeInHierarchy)
+            .Append(" ActiveSegmentCount=")
+            .Append(previewCurve.ActiveSegmentCount)
+            .Append(" ActiveMainSegmentCount=")
+            .Append(previewCurve.ActiveMainSegmentCount)
+            .Append(" ActiveUnderlaySegmentCount=")
+            .Append(previewCurve.ActiveUnderlaySegmentCount)
+            .Append(" MainSegmentPoolCount=")
+            .Append(previewCurve.MainSegmentPoolCount)
+            .Append(" UnderlaySegmentPoolCount=")
+            .Append(previewCurve.UnderlaySegmentPoolCount)
+            .Append(" ArrowInstanceID=").Append(previewCurve.ArrowInstanceID)
+            .Append(" ArrowActiveSelf=").Append(previewCurve.ArrowActiveSelf)
+            .Append(" ArrowAlpha=").Append(previewCurve.ArrowAlpha)
+            .Append(" HasVisibleMainArrow=")
+            .Append(previewCurve.HasVisibleMainArrow)
+            .Append(" HasVisibleUnderlayArrow=")
+            .Append(previewCurve.HasVisibleUnderlayArrow)
+            .Append(" CurrentLineStyle=")
+            .Append(previewCurve.CurrentLineStyle)
+            .Append(" PreviousLineStyle=")
+            .Append(previewCurve.PreviousLineStyle)
+            .Append(" CurrentRange=").Append(previewCurve.CurrentRange)
+            .Append(" PreviousRange=").Append(previewCurve.PreviousRange)
+            .Append(" RangeStart=").Append(previewCurve.RangeStart)
+            .Append(" RangeEnd=").Append(previewCurve.RangeEnd)
+            .Append(" ArrowTip=").Append(previewCurve.ArrowTip)
+            .AppendLine();
+    }
+
+    private void AppendPoolDiagnostics(StringBuilder builder)
+    {
+        builder.AppendLine("[对象池状态]");
+        builder.Append("relationViewPool总数量=")
+            .Append(relationViewPool.Count)
+            .Append(" activeViews数量=").Append(activeViews.Count)
+            .AppendLine();
+        for (int index = 0; index < relationViewPool.Count; index++)
+        {
+            BattleActionRelationUIView view = relationViewPool[index];
+            if (view == null)
+            {
+                builder.Append("[PoolView ").Append(index)
+                    .AppendLine("] null");
+                continue;
+            }
+
+            builder.Append("[PoolView ").Append(index).Append("] ")
+                .Append("ViewInstanceID=").Append(view.GetInstanceID())
+                .Append(" InActiveViews=")
+                .Append(IndexOfView(activeViews, view) >= 0)
+                .Append(" RelationID=").Append(view.RelationID)
+                .Append(" LastDisplayType=").Append(view.Kind)
+                .Append(" activeSelf=").Append(view.gameObject.activeSelf)
+                .Append(" activeInHierarchy=")
+                .Append(view.gameObject.activeInHierarchy)
+                .Append(" PrimaryActiveSegmentCount=")
+                .Append(GetActiveSegmentCount(view.PrimaryCurve))
+                .Append(" PrimaryMainActive=")
+                .Append(view.PrimaryCurve != null
+                    ? view.PrimaryCurve.ActiveMainSegmentCount
+                    : 0)
+                .Append(" PrimaryUnderlayActive=")
+                .Append(view.PrimaryCurve != null
+                    ? view.PrimaryCurve.ActiveUnderlaySegmentCount
+                    : 0)
+                .Append(" SecondaryActiveSegmentCount=")
+                .Append(GetActiveSegmentCount(view.SecondaryCurve))
+                .Append(" SecondaryMainActive=")
+                .Append(view.SecondaryCurve != null
+                    ? view.SecondaryCurve.ActiveMainSegmentCount
+                    : 0)
+                .Append(" SecondaryUnderlayActive=")
+                .Append(view.SecondaryCurve != null
+                    ? view.SecondaryCurve.ActiveUnderlaySegmentCount
+                    : 0)
+                .Append(" RootPath=")
+                .Append(GetTransformPath(view.transform.parent))
+                .AppendLine();
+        }
+    }
+
+    private void AppendHierarchyImageDiagnostics(
+        StringBuilder builder,
+        Image[] images,
+        BattleBezierRelationLineUIView[] curves,
+        BattleActionRelationUIView[] views
+    )
+    {
+        builder.AppendLine("[全部Arrow与Segment Image]");
+        for (int index = 0; index < images.Length; index++)
+        {
+            Image image = images[index];
+            if (image == null)
+            {
+                builder.Append("[Image ").Append(index).AppendLine("] null");
+                continue;
+            }
+
+            BattleBezierRelationLineUIView ownerCurve = FindOwningCurve(
+                image,
+                curves
+            );
+            BattleActionRelationUIView ownerView = FindOwningView(
+                ownerCurve,
+                views
+            );
+            builder.Append("[Image ").Append(index).Append("] ")
+                .Append("InstanceID=").Append(image.GetInstanceID())
+                .Append(" Type=").Append(GetRelationImageType(image, ownerCurve))
+                .Append(" Path=").Append(GetTransformPath(image.transform))
+                .Append(" activeSelf=").Append(image.gameObject.activeSelf)
+                .Append(" activeInHierarchy=")
+                .Append(image.gameObject.activeInHierarchy)
+                .Append(" Alpha=").Append(image.color.a)
+                .Append(" OwnerCurveInstanceID=")
+                .Append(ownerCurve != null ? ownerCurve.GetInstanceID() : 0)
+                .Append(" OwnerViewInstanceID=")
+                .Append(ownerView != null ? ownerView.GetInstanceID() : 0)
+                .Append(" OwnerRelationID=")
+                .Append(ownerView != null ? ownerView.RelationID : string.Empty)
+                .Append(" OwnerIsActiveView=")
+                .Append(IndexOfView(activeViews, ownerView) >= 0)
+                .Append(" OwnerPoolIndex=")
+                .Append(IndexOfView(relationViewPool, ownerView))
+                .AppendLine();
+        }
+    }
+
     public bool BeginCardTargetingPreview(string sourceSlotID)
     {
         if (isShuttingDown || !IsPlanningState() || previewCurve == null ||
@@ -342,6 +929,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             return false;
         }
         previewSourceSlotID = sourceSlotID;
+        previewTargetSlotID = hoveredSlotID ?? string.Empty;
         previewActive = true;
         if (previewRoot != null &&
             previewCurve.transform.parent != previewRoot)
@@ -412,10 +1000,25 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     {
         previewActive = false;
         previewSourceSlotID = string.Empty;
+        previewTargetSlotID = string.Empty;
         if (previewCurve != null)
         {
             previewCurve.Clear();
         }
+    }
+
+    public void SetCardTargetingDiagnosticState(
+        bool hasCardSelection,
+        string selectedCardID,
+        string selectedActionSlotID,
+        bool isCardTargetingActive
+    )
+    {
+        diagnosticHasCardSelection = hasCardSelection;
+        diagnosticSelectedCardID = selectedCardID ?? string.Empty;
+        diagnosticSelectedActionSlotID =
+            selectedActionSlotID ?? string.Empty;
+        diagnosticIsCardTargetingActive = isCardTargetingActive;
     }
 
     public void ClearAll()
@@ -426,6 +1029,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         selectedSlotID = string.Empty;
         revealAllHeld = false;
         EndCardTargetingPreview();
+        SetCardTargetingDiagnosticState(false, string.Empty, string.Empty, false);
     }
 
     [ContextMenu("验证行动关系线配置")]
@@ -599,7 +1203,8 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             return;
         }
 
-        CountVisibleUnilateralTargets();
+        BuildVisibleArrowEndpointOffsets();
+        usedViewInstanceIDs.Clear();
         for (int index = 0; index < cachedRelations.Count; index++)
         {
             BattleActionRelationDescriptor relation = cachedRelations[index];
@@ -624,7 +1229,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         }
     }
 
-    private void ShowRelation(
+    private bool ShowRelation(
         BattleActionRelationDescriptor relation,
         bool highlighted,
         float arrowEndpointOffset
@@ -635,7 +1240,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         if (!TryGetSlotLocalPoint(relation.SourceSlotID, out source) ||
             !TryGetSlotLocalPoint(relation.TargetSlotID, out target))
         {
-            return;
+            return false;
         }
 
         RectTransform root = highlighted
@@ -646,9 +1251,10 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         BattleActionRelationUIView view = GetPooledView(root);
         if (view == null)
         {
-            return;
+            return false;
         }
 
+        bool shown;
         if (relation.UsesMutualSolidVisual)
         {
             Vector2 playerStart = relation.SourceSide ==
@@ -660,7 +1266,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
                 ? source
                 : target;
             ApplyRelationVisualSettings(view, clashArrowScale);
-            view.ShowClash(
+            shown = view.ShowClash(
                 relation,
                 playerStart,
                 enemyStart,
@@ -682,7 +1288,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
                 ? playerColor
                 : enemyColor;
             ApplyRelationVisualSettings(view, 1f);
-            view.ShowUnilateral(
+            shown = view.ShowUnilateral(
                 relation,
                 source,
                 target,
@@ -696,7 +1302,14 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
                 arrowEndpointOffset
             );
         }
+        if (!shown)
+        {
+            view.ClearView();
+            return false;
+        }
+
         activeViews.Add(view);
+        return true;
     }
 
     private BattleActionRelationUIView GetPooledView(RectTransform root)
@@ -710,7 +1323,10 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         for (int index = 0; index < relationViewPool.Count; index++)
         {
             if (relationViewPool[index] != null &&
-                !relationViewPool[index].gameObject.activeSelf)
+                !relationViewPool[index].gameObject.activeSelf &&
+                !usedViewInstanceIDs.Contains(
+                    relationViewPool[index].GetInstanceID()
+                ))
             {
                 view = relationViewPool[index];
                 break;
@@ -720,6 +1336,11 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         {
             view = Instantiate(relationViewTemplate, root);
             view.name = "RelationView_" + relationViewPool.Count;
+            if (!ValidateNewPooledViewOwnership(view))
+            {
+                Destroy(view.gameObject);
+                return null;
+            }
             relationViewPool.Add(view);
         }
         view.gameObject.SetActive(false);
@@ -737,13 +1358,53 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             rect.localRotation = Quaternion.identity;
         }
         view.PrepareForReuse();
+        // 单次刷新中一个View只能绑定一条关系，不能因inactive状态被重复取出。
+        usedViewInstanceIDs.Add(view.GetInstanceID());
         return view;
     }
 
-    private void CountVisibleUnilateralTargets()
+    private bool ValidateNewPooledViewOwnership(
+        BattleActionRelationUIView view
+    )
+    {
+        if (view == null || !view.EnsureOwnedCurveReferences())
+        {
+            return false;
+        }
+
+        for (int index = 0; index < relationViewPool.Count; index++)
+        {
+            BattleActionRelationUIView existing = relationViewPool[index];
+            if (existing == null ||
+                !view.SharesVisualInstancesWith(existing))
+            {
+                continue;
+            }
+
+            Debug.LogError(
+                "RelationView视觉实例被多个池对象共享：" +
+                "NewView=" + view.GetInstanceID() +
+                "，ExistingView=" + existing.GetInstanceID() +
+                "，PrimaryCurve=" +
+                view.PrimaryCurve.GetInstanceID() +
+                "，PrimaryArrow=" +
+                view.PrimaryCurve.ArrowInstanceID +
+                "，SecondaryCurve=" +
+                view.SecondaryCurve.GetInstanceID() +
+                "，SecondaryArrow=" +
+                view.SecondaryCurve.ArrowInstanceID,
+                view
+            );
+            return false;
+        }
+        return true;
+    }
+
+    private void BuildVisibleArrowEndpointOffsets()
     {
         visibleTargetCounts.Clear();
         visibleTargetOrdinals.Clear();
+        endpointOffsetByRelationID.Clear();
         for (int index = 0; index < cachedRelations.Count; index++)
         {
             BattleActionRelationDescriptor relation = cachedRelations[index];
@@ -757,6 +1418,30 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             visibleTargetCounts.TryGetValue(relation.TargetSlotID, out count);
             visibleTargetCounts[relation.TargetSlotID] = count + 1;
         }
+
+        // 偏移按稳定RelationID分别保存，不能以TargetSlotID覆盖前一条关系。
+        for (int index = 0; index < cachedRelations.Count; index++)
+        {
+            BattleActionRelationDescriptor relation = cachedRelations[index];
+            if (relation.UsesMutualSolidVisual ||
+                !ShouldDisplayRelation(relation))
+            {
+                continue;
+            }
+
+            int count;
+            visibleTargetCounts.TryGetValue(relation.TargetSlotID, out count);
+            int ordinal;
+            visibleTargetOrdinals.TryGetValue(
+                relation.TargetSlotID,
+                out ordinal
+            );
+            visibleTargetOrdinals[relation.TargetSlotID] = ordinal + 1;
+            endpointOffsetByRelationID[relation.RelationID] = count > 1
+                ? (ordinal - (count - 1) * 0.5f) *
+                    sharedArrowEndpointSpacing
+                : 0f;
+        }
     }
 
     private float GetStableArrowEndpointOffset(
@@ -769,21 +1454,11 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
             return 0f;
         }
 
-        int count;
-        if (!visibleTargetCounts.TryGetValue(relation.TargetSlotID, out count) ||
-            count <= 1)
-        {
-            return 0f;
-        }
-
-        int ordinal;
-        visibleTargetOrdinals.TryGetValue(
-            relation.TargetSlotID,
-            out ordinal
-        );
-        visibleTargetOrdinals[relation.TargetSlotID] = ordinal + 1;
-        return (ordinal - (count - 1) * 0.5f) *
-            sharedArrowEndpointSpacing;
+        float offset;
+        return endpointOffsetByRelationID.TryGetValue(
+            relation.RelationID,
+            out offset
+        ) ? offset : 0f;
     }
 
     private bool ShouldDisplayRelation(
@@ -800,6 +1475,336 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         bool selected = !string.IsNullOrEmpty(selectedSlotID) &&
             relation.InvolvesSlot(selectedSlotID);
         return revealAllHeld || hovered || selected;
+    }
+
+    private static int IndexOfView(
+        List<BattleActionRelationUIView> views,
+        BattleActionRelationUIView target
+    )
+    {
+        if (views == null || target == null)
+        {
+            return -1;
+        }
+
+        for (int index = 0; index < views.Count; index++)
+        {
+            if (object.ReferenceEquals(views[index], target))
+            {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private static bool HasVisibleVisuals(
+        BattleBezierRelationLineUIView curve
+    )
+    {
+        return curve != null &&
+            (curve.ActiveSegmentCount > 0 || IsArrowActuallyVisible(curve));
+    }
+
+    private static bool IsArrowActuallyVisible(
+        BattleBezierRelationLineUIView curve
+    )
+    {
+        return curve != null && curve.ArrowActiveSelf &&
+            curve.ArrowAlpha > 0f && curve.gameObject.activeInHierarchy &&
+            curve.IsVisible;
+    }
+
+    private static int GetActiveSegmentCount(
+        BattleBezierRelationLineUIView curve
+    )
+    {
+        return curve != null ? curve.ActiveSegmentCount : 0;
+    }
+
+    private static BattleActionRelationUIView FindOwningView(
+        BattleBezierRelationLineUIView curve,
+        BattleActionRelationUIView[] hierarchyViews
+    )
+    {
+        if (curve == null)
+        {
+            return null;
+        }
+
+        if (hierarchyViews != null)
+        {
+            for (int index = 0; index < hierarchyViews.Length; index++)
+            {
+                BattleActionRelationUIView view = hierarchyViews[index];
+                if (view != null &&
+                    (object.ReferenceEquals(view.PrimaryCurve, curve) ||
+                     object.ReferenceEquals(view.SecondaryCurve, curve)))
+                {
+                    return view;
+                }
+            }
+        }
+
+        return curve.GetComponentInParent<BattleActionRelationUIView>();
+    }
+
+    private static BattleBezierRelationLineUIView FindOwningCurve(
+        Image image,
+        BattleBezierRelationLineUIView[] hierarchyCurves
+    )
+    {
+        if (image == null)
+        {
+            return null;
+        }
+
+        if (hierarchyCurves == null)
+        {
+            return null;
+        }
+
+        int imageInstanceID = image.GetInstanceID();
+        for (int index = 0; index < hierarchyCurves.Length; index++)
+        {
+            BattleBezierRelationLineUIView curve = hierarchyCurves[index];
+            if (curve != null &&
+                (image.transform.IsChildOf(curve.transform) ||
+                 curve.ArrowInstanceID == imageInstanceID ||
+                 curve.UnderlayArrowInstanceID == imageInstanceID ||
+                 curve.SegmentTemplateInstanceID == imageInstanceID))
+            {
+                return curve;
+            }
+        }
+        return null;
+    }
+
+    private static string GetRelationImageType(
+        Image image,
+        BattleBezierRelationLineUIView ownerCurve
+    )
+    {
+        if (image == null)
+        {
+            return "Null";
+        }
+        if (ownerCurve == null)
+        {
+            return "UnownedImage";
+        }
+
+        int imageInstanceID = image.GetInstanceID();
+        if (ownerCurve.ArrowInstanceID == imageInstanceID)
+        {
+            return "MainArrow";
+        }
+        if (ownerCurve.UnderlayArrowInstanceID == imageInstanceID)
+        {
+            return "UnderlayArrow";
+        }
+        if (ownerCurve.SegmentTemplateInstanceID == imageInstanceID)
+        {
+            return "SegmentTemplate";
+        }
+        return image.gameObject.name.Contains("Underlay")
+            ? "UnderlaySegment"
+            : "MainSegment";
+    }
+
+    private bool IsTemplateCurve(BattleBezierRelationLineUIView curve)
+    {
+        if (curve == null || relationViewTemplate == null)
+        {
+            return false;
+        }
+        return object.ReferenceEquals(curve, relationViewTemplate.PrimaryCurve) ||
+            object.ReferenceEquals(curve, relationViewTemplate.SecondaryCurve) ||
+            curve.transform.IsChildOf(relationViewTemplate.transform);
+    }
+
+    private string GetRootType(Transform target)
+    {
+        if (IsUnderRoot(target, normalDashedRoot))
+        {
+            return "NormalDashedRoot";
+        }
+        if (IsUnderRoot(target, normalClashRoot))
+        {
+            return "NormalClashRoot";
+        }
+        if (IsUnderRoot(target, highlightRoot))
+        {
+            return "HighlightRoot";
+        }
+        if (IsUnderRoot(target, previewRoot))
+        {
+            return "PreviewRoot";
+        }
+        return "Other";
+    }
+
+    private static bool IsUnderRoot(Transform target, RectTransform root)
+    {
+        return target != null && root != null &&
+            (object.ReferenceEquals(target, root) || target.IsChildOf(root));
+    }
+
+    private static void AppendHierarchyCurveSummary(
+        StringBuilder builder,
+        string label,
+        BattleBezierRelationLineUIView curve
+    )
+    {
+        builder.Append("  [").Append(label).Append("] ");
+        if (curve == null)
+        {
+            builder.AppendLine("null");
+            return;
+        }
+
+        builder.Append("InstanceID=").Append(curve.GetInstanceID())
+            .Append(" ActiveSegmentCount=").Append(curve.ActiveSegmentCount)
+            .Append(" ActiveMainSegmentCount=")
+            .Append(curve.ActiveMainSegmentCount)
+            .Append(" ActiveUnderlaySegmentCount=")
+            .Append(curve.ActiveUnderlaySegmentCount)
+            .Append(" MainSegmentPoolCount=")
+            .Append(curve.MainSegmentPoolCount)
+            .Append(" UnderlaySegmentPoolCount=")
+            .Append(curve.UnderlaySegmentPoolCount)
+            .Append(" ArrowActiveSelf=").Append(curve.ArrowActiveSelf)
+            .Append(" ArrowAlpha=").Append(curve.ArrowAlpha)
+            .Append(" HasVisibleMainArrow=")
+            .Append(curve.HasVisibleMainArrow)
+            .Append(" HasVisibleUnderlayArrow=")
+            .Append(curve.HasVisibleUnderlayArrow)
+            .Append(" CurrentLineStyle=").Append(curve.CurrentLineStyle)
+            .Append(" PreviousLineStyle=").Append(curve.PreviousLineStyle)
+            .Append(" CurrentRange=").Append(curve.CurrentRange)
+            .Append(" PreviousRange=").Append(curve.PreviousRange)
+            .AppendLine();
+    }
+
+    private static void IncrementRelationCount(
+        Dictionary<string, int> counts,
+        string relationID
+    )
+    {
+        string key = relationID ?? string.Empty;
+        int count;
+        counts.TryGetValue(key, out count);
+        counts[key] = count + 1;
+    }
+
+    private static void RegisterOwnedInstance(
+        Dictionary<int, string> owners,
+        int instanceID,
+        string relationID,
+        string objectType,
+        List<string> conflicts
+    )
+    {
+        if (instanceID == 0)
+        {
+            return;
+        }
+
+        string owner;
+        if (!owners.TryGetValue(instanceID, out owner))
+        {
+            owners.Add(instanceID, relationID ?? string.Empty);
+            return;
+        }
+
+        conflicts.Add(
+            objectType + " InstanceID=" + instanceID +
+            " 被重复分配，首次RelationID=" + owner +
+            "，当前RelationID=" + (relationID ?? string.Empty)
+        );
+    }
+
+    private static void AppendCurveDiagnostics(
+        StringBuilder builder,
+        BattleBezierRelationLineUIView curve,
+        string label,
+        string relationID,
+        Dictionary<int, string> curveOwners,
+        Dictionary<int, string> arrowOwners,
+        List<string> conflicts
+    )
+    {
+        builder.Append("  [").Append(label).Append("] ");
+        if (curve == null)
+        {
+            builder.AppendLine("null");
+            return;
+        }
+
+        int curveInstanceID = curve.GetInstanceID();
+        int arrowInstanceID = curve.ArrowInstanceID;
+        builder.Append("InstanceID=").Append(curveInstanceID)
+            .Append(" activeSelf=").Append(curve.gameObject.activeSelf)
+            .Append(" ActiveSegmentCount=").Append(curve.ActiveSegmentCount)
+            .Append(" ActiveMainSegmentCount=")
+            .Append(curve.ActiveMainSegmentCount)
+            .Append(" ActiveUnderlaySegmentCount=")
+            .Append(curve.ActiveUnderlaySegmentCount)
+            .Append(" MainSegmentPoolCount=")
+            .Append(curve.MainSegmentPoolCount)
+            .Append(" UnderlaySegmentPoolCount=")
+            .Append(curve.UnderlaySegmentPoolCount)
+            .Append(" ArrowInstanceID=").Append(arrowInstanceID)
+            .Append(" ArrowActiveSelf=").Append(curve.ArrowActiveSelf)
+            .Append(" ArrowAlpha=").Append(curve.ArrowAlpha)
+            .Append(" HasVisibleMainArrow=")
+            .Append(curve.HasVisibleMainArrow)
+            .Append(" HasVisibleUnderlayArrow=")
+            .Append(curve.HasVisibleUnderlayArrow)
+            .Append(" CurrentLineStyle=").Append(curve.CurrentLineStyle)
+            .Append(" PreviousLineStyle=").Append(curve.PreviousLineStyle)
+            .Append(" CurrentRange=").Append(curve.CurrentRange)
+            .Append(" PreviousRange=").Append(curve.PreviousRange)
+            .Append(" ArrowTip=").Append(curve.ArrowTip)
+            .Append(" RangeStart=").Append(curve.RangeStart)
+            .Append(" RangeEnd=").Append(curve.RangeEnd)
+            .AppendLine();
+
+        RegisterOwnedInstance(
+            curveOwners,
+            curveInstanceID,
+            relationID,
+            label,
+            conflicts
+        );
+        RegisterOwnedInstance(
+            arrowOwners,
+            arrowInstanceID,
+            relationID,
+            label + " Arrow",
+            conflicts
+        );
+    }
+
+    private static string GetTransformPath(Transform target)
+    {
+        if (target == null)
+        {
+            return "<null>";
+        }
+
+        StringBuilder path = new StringBuilder(target.name);
+        Transform parent = target.parent;
+        while (parent != null)
+        {
+            path.Insert(0, parent.name + "/");
+            parent = parent.parent;
+        }
+        return path.ToString();
+    }
+
+    private static bool IsRelationDiagnosticsInputPressed(Keyboard keyboard)
+    {
+        return keyboard != null && keyboard.f8Key.wasPressedThisFrame;
     }
 
     private void RecycleActiveViews()

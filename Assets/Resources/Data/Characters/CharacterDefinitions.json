@@ -8,7 +8,12 @@
     "actionSlotCount": 2,
     "startingCardIDs": [
       "atk_bullet_001",
-      "atk_bullet_001"
+      "atk_bullet_001",
+      "atk_001",
+      "def_001",
+      "dodge_001",
+      "sin_ability_001",
+      "sin_attack_test_001"
     ],
     "initialBuffs": [
       {
@@ -29,7 +34,10 @@
     "actionSlotCount": 2,
     "startingCardIDs": [
       "def_001",
-      "dodge_001"
+      "dodge_001",
+      "atk_001",
+      "sin_ability_001",
+      "sin_attack_test_001"
     ],
     "initialBuffs": [],
     "prefabKey": "ally_b_test_prefab",
