@@ -142,6 +142,78 @@ public sealed class BattleLifecycleController
         );
     }
 
+    public bool TryExecuteNextItem(
+        out bool planCompleted,
+        out string failureMessage
+    )
+    {
+        planCompleted = false;
+        if (!ValidateRuntimeState(out failureMessage))
+        {
+            return false;
+        }
+        if (runtimeState.currentExecutionPlan == null)
+        {
+            failureMessage = "单项执行失败：当前计划为空";
+            return false;
+        }
+        if (runtimeState.currentExecutionPlan.isCompleted)
+        {
+            planCompleted = true;
+            failureMessage = "单项执行失败：当前计划已经完成";
+            return false;
+        }
+
+        // BattleEnded后只允许继续把剩余Item逐项标记为Skipped，不再执行战斗逻辑。
+        if (runtimeState.IsBattleEnded)
+        {
+            bool skipped = BattleExecutionPlanExecutor
+                .ExecuteNextItemFromLifecycle(this);
+            planCompleted = runtimeState.currentExecutionPlan.isCompleted;
+            failureMessage = skipped
+                ? string.Empty
+                : "单项执行失败：BattleEnded剩余项无法完成跳过";
+            return skipped;
+        }
+
+        if (runtimeState.LifecyclePhase == BattleLifecyclePhase.Prepare ||
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.PlanReady)
+        {
+            if (!runtimeState.TryTransitionTo(
+                    BattleLifecyclePhase.Executing,
+                    out failureMessage
+                ))
+            {
+                return false;
+            }
+        }
+        else if (runtimeState.LifecyclePhase !=
+            BattleLifecyclePhase.Executing)
+        {
+            failureMessage =
+                "单项执行失败：当前阶段必须为Prepare、PlanReady或Executing";
+            return false;
+        }
+
+        if (!BattleExecutionPlanExecutor.ExecuteNextItemFromLifecycle(this))
+        {
+            failureMessage = "单项执行失败：当前Item未能正常完成";
+            return false;
+        }
+
+        planCompleted = runtimeState.currentExecutionPlan.isCompleted;
+        if (runtimeState.IsBattleEnded || !planCompleted)
+        {
+            failureMessage = string.Empty;
+            return true;
+        }
+
+        return runtimeState.TryTransitionTo(
+            BattleLifecyclePhase.TurnResolved,
+            out failureMessage
+        );
+    }
+
     public bool TryEndCurrentTurn(out string failureMessage)
     {
         if (!ValidateActiveBattle(out failureMessage))

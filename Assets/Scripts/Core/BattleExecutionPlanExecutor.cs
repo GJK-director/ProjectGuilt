@@ -13,6 +13,13 @@ public static class BattleExecutionPlanExecutor
         ExecuteExecutionPlanInternal(plan, null);
     }
 
+    // ExecuteNextItem = 无RuntimeState场景下的单项推进兼容入口。
+    // 每次调用最多处理一个尚未完成的ExecutionItem，不会自行执行后续项。
+    public static bool ExecuteNextItem(BattleExecutionPlan plan)
+    {
+        return ExecuteNextItemInternal(plan, null);
+    }
+
     public static void ExecuteExecutionPlan(BattleExecutionPlan plan, BattleRuntimeState runtimeState)
     {
         if (runtimeState == null)
@@ -48,14 +55,24 @@ public static class BattleExecutionPlanExecutor
         ExecuteExecutionPlanInternal(plan, lifecycleController);
     }
 
-    static void ExecuteExecutionPlanInternal(
-        BattleExecutionPlan plan,
+    internal static bool ExecuteNextItemFromLifecycle(
         BattleLifecycleController lifecycleController
     )
     {
         BattleRuntimeState runtimeState = lifecycleController != null
             ? lifecycleController.RuntimeState
             : null;
+        BattleExecutionPlan plan = runtimeState != null
+            ? runtimeState.currentExecutionPlan
+            : null;
+        return ExecuteNextItemInternal(plan, lifecycleController);
+    }
+
+    static void ExecuteExecutionPlanInternal(
+        BattleExecutionPlan plan,
+        BattleLifecycleController lifecycleController
+    )
+    {
         Debug.Log("===== BattleExecutionPlan 正式执行开始 =====");
         Debug.Log("提示：RespondedEnemyIntent / UnrespondedEnemyIntent / FreeAction 已交给 BattleResolver 正式入口处理");
 
@@ -65,102 +82,16 @@ public static class BattleExecutionPlanExecutor
             return;
         }
 
-        bool allItemsCompleted = true;
-
-        for (int i = 0; i < plan.executionItems.Count; i++)
+        while (!plan.isCompleted)
         {
-            if (runtimeState != null && runtimeState.IsBattleEnded)
+            if (!ExecuteNextItemInternal(plan, lifecycleController))
             {
-                Debug.Log("战斗已经结束，Executor 拒绝继续执行 BattleExecutionPlan");
-                MarkRemainingItemsSkippedBecauseBattleEnded(plan, i);
-                allItemsCompleted = true;
                 break;
-            }
-
-            BattleExecutionItem item = plan.executionItems[i];
-
-            if (item == null)
-            {
-                Debug.LogWarning("执行计划项为空，ExecutionPlan 失败并停止");
-                allItemsCompleted = false;
-                break;
-            }
-
-            if (item.status == BattleExecutionItemStatus.Failed)
-            {
-                Debug.LogWarning(item.order + ". 执行项已是 Failed，ExecutionPlan 停止继续执行");
-                allItemsCompleted = false;
-                break;
-            }
-
-            if (item.status == BattleExecutionItemStatus.Executed ||
-                item.status == BattleExecutionItemStatus.Skipped ||
-                item.isCompleted)
-            {
-                Debug.Log(item.order + ". 执行项已完成，跳过重复执行");
-                continue;
-            }
-
-            bool isCompleted = false;
-
-            // 无人响应敌人意图：敌人攻击按 actualTarget 直接处理。
-            if (item.executionType == BattleExecutionItemType.UnrespondedEnemyIntent)
-            {
-                isCompleted = ExecuteUnrespondedEnemyIntent(item, runtimeState);
-            }
-            else if (item.executionType == BattleExecutionItemType.RespondedEnemyIntent)
-            {
-                // 已响应敌人意图：交给 BattleResolver 正式入口处理。
-                isCompleted = ExecuteRespondedEnemyIntent(item, runtimeState);
-            }
-            else if (item.executionType == BattleExecutionItemType.FreeAction)
-            {
-                // 自由行动：交给 BattleResolver 正式入口处理。
-                isCompleted = ExecuteFreeAction(item);
-            }
-            else
-            {
-                item.MarkFailed(BattleExecutionItemOutcomeReason.UnsupportedExecutionType);
-                Debug.LogWarning(item.order + ". 不支持的 ExecutionItem 类型：" + item.executionType);
-                isCompleted = false;
-            }
-
-            if (item.status == BattleExecutionItemStatus.Pending)
-            {
-                item.MarkFailed(BattleExecutionItemOutcomeReason.ResolverFailure);
-                Debug.LogWarning(item.order + ". 执行后仍保持 Pending，按 ResolverFailure 处理并停止计划");
-                isCompleted = false;
-            }
-
-            if (item.status == BattleExecutionItemStatus.Failed)
-            {
-                allItemsCompleted = false;
-                Debug.LogWarning(item.order + ". 执行项 Failed，ExecutionPlan 停止继续执行，后续 item 保持 Pending");
-                break;
-            }
-
-            if (!isCompleted || !item.isCompleted)
-            {
-                allItemsCompleted = false;
-                break;
-            }
-
-            if (runtimeState != null)
-            {
-                lifecycleController.EvaluateBattleEnd();
-
-                if (runtimeState.IsBattleEnded)
-                {
-                    MarkRemainingItemsSkippedBecauseBattleEnded(plan, i + 1);
-                    allItemsCompleted = true;
-                    break;
-                }
             }
         }
 
-        if (allItemsCompleted)
+        if (plan.isCompleted)
         {
-            plan.isCompleted = true;
             Debug.Log("BattleExecutionPlan 已全部完成");
             return;
         }
@@ -168,25 +99,156 @@ public static class BattleExecutionPlanExecutor
         Debug.Log("当前仍有未完成执行项");
     }
 
-    static void MarkRemainingItemsSkippedBecauseBattleEnded(BattleExecutionPlan plan, int startIndex)
+    static bool ExecuteNextItemInternal(
+        BattleExecutionPlan plan,
+        BattleLifecycleController lifecycleController
+    )
     {
-        if (plan == null || plan.executionItems == null)
+        if (plan == null || plan.executionItems == null ||
+            plan.executionItems.Count == 0)
         {
-            return;
+            Debug.Log("当前 BattleExecutionPlan 没有可执行项");
+            return false;
         }
 
-        for (int i = startIndex; i < plan.executionItems.Count; i++)
+        if (plan.isCompleted)
         {
-            BattleExecutionItem item = plan.executionItems[i];
+            Debug.Log("BattleExecutionPlan 已完成，不重复推进");
+            return true;
+        }
 
-            if (item == null || item.isCompleted)
+        int itemIndex = FindNextUnfinishedItemIndex(plan);
+        if (itemIndex < 0)
+        {
+            plan.isCompleted = true;
+            return true;
+        }
+
+        BattleExecutionItem item = plan.executionItems[itemIndex];
+        if (item == null)
+        {
+            Debug.LogWarning("执行计划项为空，ExecutionPlan 失败并停止");
+            return false;
+        }
+
+        if (item.status == BattleExecutionItemStatus.Failed)
+        {
+            Debug.LogWarning(
+                item.order + ". 执行项已是 Failed，ExecutionPlan 停止继续执行"
+            );
+            return false;
+        }
+
+        BattleRuntimeState runtimeState = lifecycleController != null
+            ? lifecycleController.RuntimeState
+            : null;
+        if (runtimeState != null && runtimeState.IsBattleEnded)
+        {
+            item.MarkSkipped(BattleExecutionItemOutcomeReason.BattleEnded);
+            Debug.Log(item.order + ". 因 BattleEnded 跳过");
+            RefreshPlanCompletion(plan);
+            return true;
+        }
+
+        bool isCompleted;
+        if (item.executionType == BattleExecutionItemType.UnrespondedEnemyIntent)
+        {
+            isCompleted = ExecuteUnrespondedEnemyIntent(item, runtimeState);
+        }
+        else if (item.executionType == BattleExecutionItemType.RespondedEnemyIntent)
+        {
+            isCompleted = ExecuteRespondedEnemyIntent(item, runtimeState);
+        }
+        else if (item.executionType == BattleExecutionItemType.FreeAction)
+        {
+            isCompleted = ExecuteFreeAction(item);
+        }
+        else
+        {
+            item.MarkFailed(
+                BattleExecutionItemOutcomeReason.UnsupportedExecutionType
+            );
+            Debug.LogWarning(
+                item.order + ". 不支持的 ExecutionItem 类型：" +
+                item.executionType
+            );
+            isCompleted = false;
+        }
+
+        if (item.status == BattleExecutionItemStatus.Pending)
+        {
+            item.MarkFailed(BattleExecutionItemOutcomeReason.ResolverFailure);
+            Debug.LogWarning(
+                item.order +
+                ". 执行后仍保持 Pending，按 ResolverFailure 处理并停止计划"
+            );
+            isCompleted = false;
+        }
+
+        if (item.status == BattleExecutionItemStatus.Failed)
+        {
+            Debug.LogWarning(
+                item.order +
+                ". 执行项 Failed，ExecutionPlan 停止继续执行，后续 item 保持 Pending"
+            );
+            return false;
+        }
+
+        if (!isCompleted || !item.isCompleted)
+        {
+            return false;
+        }
+
+        if (lifecycleController != null && runtimeState != null)
+        {
+            lifecycleController.EvaluateBattleEnd();
+        }
+
+        RefreshPlanCompletion(plan);
+        return true;
+    }
+
+    static int FindNextUnfinishedItemIndex(BattleExecutionPlan plan)
+    {
+        for (int index = 0; index < plan.executionItems.Count; index++)
+        {
+            BattleExecutionItem item = plan.executionItems[index];
+            if (item == null ||
+                item.status == BattleExecutionItemStatus.Failed)
+            {
+                return index;
+            }
+
+            if (item.status == BattleExecutionItemStatus.Executed ||
+                item.status == BattleExecutionItemStatus.Skipped ||
+                item.isCompleted)
             {
                 continue;
             }
 
-            item.MarkSkipped(BattleExecutionItemOutcomeReason.BattleEnded);
-            Debug.Log(item.order + ". 因 BattleEnded 跳过");
+            return index;
         }
+
+        return -1;
+    }
+
+    static void RefreshPlanCompletion(BattleExecutionPlan plan)
+    {
+        for (int index = 0; index < plan.executionItems.Count; index++)
+        {
+            BattleExecutionItem item = plan.executionItems[index];
+            if (item == null ||
+                item.status == BattleExecutionItemStatus.Failed ||
+                (item.status != BattleExecutionItemStatus.Executed &&
+                 item.status != BattleExecutionItemStatus.Skipped &&
+                 !item.isCompleted))
+            {
+                plan.isCompleted = false;
+                return;
+            }
+        }
+
+        plan.isCompleted = true;
     }
 
     // PrintExecutionPlanStepPreview = 打印执行步骤预览
@@ -283,6 +345,11 @@ public static class BattleExecutionPlanExecutor
 
             LogResolveResult(item.order, "Guard Resolver 结算结果", result);
 
+            if (TryCompleteTieLimit(item, result))
+            {
+                return true;
+            }
+
             if (TryMarkResolveFailure(item, result, false))
             {
                 Debug.LogWarning(
@@ -309,6 +376,11 @@ public static class BattleExecutionPlanExecutor
         result = BattleResolver.ResolveUnrespondedEnemyIntent(item.enemyIntent);
 
         LogResolveResult(item.order, "UnrespondedEnemyIntent Resolver 结算结果", result);
+
+        if (TryCompleteTieLimit(item, result))
+        {
+            return true;
+        }
 
         if (TryMarkResolveFailure(item, result, false))
         {
@@ -368,6 +440,26 @@ public static class BattleExecutionPlanExecutor
         return true;
     }
 
+    static bool TryCompleteTieLimit(
+        BattleExecutionItem item,
+        BattleResolveResult result
+    )
+    {
+        if (item == null || result == null ||
+            !result.isTieLimitReached ||
+            result.resultType != "TieLimit" ||
+            !result.isSuccess ||
+            !result.shouldCompleteItem)
+        {
+            return false;
+        }
+
+        // TieLimit是合法的无胜负终态：当前项完成，但双方卡牌都不提交使用。
+        item.MarkExecuted(BattleExecutionItemOutcomeReason.TieLimitReached);
+        Debug.Log(item.order + ". TieLimit正常结束，ExecutionPlan继续下一项");
+        return true;
+    }
+
     static BattleExecutionItemOutcomeReason GetFailedOutcomeReason(
         BattleResolveResult result,
         bool allowActionUnavailable
@@ -376,11 +468,6 @@ public static class BattleExecutionPlanExecutor
         if (result == null)
         {
             return BattleExecutionItemOutcomeReason.ResolverFailure;
-        }
-
-        if (result.isTieLimitReached)
-        {
-            return BattleExecutionItemOutcomeReason.TieLimitReached;
         }
 
         if (result.resultType == "Invalid")
@@ -483,27 +570,22 @@ public static class BattleExecutionPlanExecutor
             item.enemyIntent
         );
 
+        LogResolveResult(
+            item.order,
+            "RespondedEnemyIntent Resolver 结算结果",
+            result
+        );
+
+        if (TryCompleteTieLimit(item, result))
+        {
+            return true;
+        }
+
         if (TryMarkResolveFailure(item, result, true))
         {
             Debug.LogWarning(item.order + ". RespondedEnemyIntent 失败，ExecutionPlan 停止");
             return false;
         }
-
-        Debug.Log(
-            item.order +
-            ". RespondedEnemyIntent Resolver 结算结果\n" +
-            "   resultType：" + result.resultType + "\n" +
-            "   isSuccess：" + result.isSuccess + "\n" +
-            "   shouldCompleteItem：" + result.shouldCompleteItem + "\n" +
-            "   playerCardUsed：" + result.playerCardUsed + "\n" +
-            "   playerCardParticipated：" + result.playerCardParticipated + "\n" +
-            "   playerCardUseDisposition：" + result.playerCardUseDisposition + "\n" +
-            "   enemyCardUsed：" + result.enemyCardUsed + "\n" +
-            "   hasDamage：" + result.hasDamage + "\n" +
-            "   damage：" + result.damage + "\n" +
-            "   triggeredEventChain：" + result.triggeredEventChain + "\n" +
-            "   message：" + result.message
-        );
 
         if (!result.isSuccess || !result.shouldCompleteItem)
         {
@@ -685,6 +767,11 @@ public static class BattleExecutionPlanExecutor
             "   triggeredEventChain：" + (result != null && result.triggeredEventChain) + "\n" +
             "   message：" + (result != null ? result.message : "BattleResolveResult 为空")
         );
+
+        if (TryCompleteTieLimit(item, result))
+        {
+            return true;
+        }
 
         if (TryMarkResolveFailure(item, result, true))
         {

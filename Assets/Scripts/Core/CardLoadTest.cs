@@ -62,7 +62,8 @@ public enum BattleTestMode
     BattleActionRelationInteractionFix = 75,
     BattleLifecyclePhaseContractBasic = 76,
     BattleLifecycleControllerBasic = 77,
-    BattleInteractionStateAndEndLockBasic = 78
+    BattleInteractionStateAndEndLockBasic = 78,
+    BattleExecutionPlanSingleItemAdvanceBasic = 79
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -377,6 +378,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleInteractionStateAndEndLockBasic)
         {
             BattleInteractionStateAndEndLockTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleExecutionPlanSingleItemAdvanceBasic)
+        {
+            BattleExecutionPlanSingleItemAdvanceTests.Run();
             return;
         }
 
@@ -4554,10 +4561,10 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("执行后 敌人 guilt：" + enemy.currentGuilt);
         Debug.Log("预期 TieLimit 玩家卡状态不变：" + (tiePlayerAttackCardState.currentCooldown == playerCooldownBefore && tiePlayerAttackCardState.currentUseCount == playerUseCountBefore && tiePlayerAttackCardState.isConsumed == playerConsumedBefore && allyA.currentGuilt == playerGuiltBefore));
         Debug.Log("预期 TieLimit 敌人卡状态不变：" + (tieEnemyAttackCardState.currentCooldown == enemyCooldownBefore && tieEnemyAttackCardState.currentUseCount == enemyUseCountBefore && tieEnemyAttackCardState.isConsumed == enemyConsumedBefore && enemy.currentGuilt == enemyGuiltBefore));
-        Debug.Log("预期 TieLimit item为Failed：" + (tieItem != null && tieItem.status == BattleExecutionItemStatus.Failed));
+        Debug.Log("预期 TieLimit item为Executed：" + (tieItem != null && tieItem.status == BattleExecutionItemStatus.Executed));
         Debug.Log("预期 TieLimit reason为TieLimitReached：" + (tieItem != null && tieItem.outcomeReason == BattleExecutionItemOutcomeReason.TieLimitReached));
-        Debug.Log("预期 TieLimit item.isCompleted为False：" + (tieItem != null && !tieItem.isCompleted));
-        Debug.Log("预期 TieLimit plan.isCompleted为False：" + !executionPlan.isCompleted);
+        Debug.Log("预期 TieLimit item.isCompleted为True：" + (tieItem != null && tieItem.isCompleted));
+        Debug.Log("预期 TieLimit plan.isCompleted为True：" + executionPlan.isCompleted);
     }
 
     // RunActionSlotExecutionPlanExecuteMixedBasicTestSequence = 执行已响应 + 未响应混合计划基础测试
@@ -4882,9 +4889,9 @@ public class CardLoadTest : MonoBehaviour
 
         ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
 
-        Debug.Log("模式51 L TieLimit为Failed：" + IsExecutionItemState(tieItem, BattleExecutionItemStatus.Failed, BattleExecutionItemOutcomeReason.TieLimitReached, false));
-        Debug.Log("模式51 L plan不完成：" + !plan.isCompleted);
-        Debug.Log("模式51 L 后续item保持Pending且未执行：" + (IsExecutionItemState(followItem, BattleExecutionItemStatus.Pending, BattleExecutionItemOutcomeReason.None, false) && !followSlot.isUsed));
+        Debug.Log("模式51 L TieLimit为Executed：" + IsExecutionItemState(tieItem, BattleExecutionItemStatus.Executed, BattleExecutionItemOutcomeReason.TieLimitReached, true));
+        Debug.Log("模式51 L plan完成：" + plan.isCompleted);
+        Debug.Log("模式51 L 后续item继续执行：" + (IsExecutionItemState(followItem, BattleExecutionItemStatus.Executed, BattleExecutionItemOutcomeReason.None, true) && followSlot.isUsed));
     }
 
     void RunExecutionItemStatusAllExecutedOrSkippedSubTest()
@@ -5412,15 +5419,17 @@ public class CardLoadTest : MonoBehaviour
         ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, plan);
 
         bool worked =
-            IsExecutionItemState(tieItem, BattleExecutionItemStatus.Failed, BattleExecutionItemOutcomeReason.TieLimitReached, false) &&
-            IsExecutionItemState(followItem, BattleExecutionItemStatus.Pending, BattleExecutionItemOutcomeReason.None, false) &&
+            IsExecutionItemState(tieItem, BattleExecutionItemStatus.Executed, BattleExecutionItemOutcomeReason.TieLimitReached, true) &&
+            IsExecutionItemState(followItem, BattleExecutionItemStatus.Executed, BattleExecutionItemOutcomeReason.None, true) &&
             !responseSlot.isUsed &&
+            followSlot.isUsed &&
+            plan.isCompleted &&
             CountBuffStack(context.allyA, "NextClashPointUp") == 1 &&
             CountBuffStack(context.allyA, "NextCardPointUp") == 1 &&
             CountBuffStack(context.enemy, "NextClashPointUp") == 1 &&
             CountBuffStack(context.enemy, "NextCardPointUp") == 1;
 
-        Debug.Log("模式52 N TieLimit不Resolved不消费Buff不MarkUsed且后续Pending：" + worked);
+        Debug.Log("模式52 N TieLimit不Resolved不消费Buff不MarkUsed且后续继续：" + worked);
     }
 
     void RunCardResourceSnapshotAndConsumeBasicTestSequence()
