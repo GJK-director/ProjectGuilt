@@ -184,11 +184,22 @@ public static class BattleResolutionPlanTests
             new BattleRollGateSettings(BattleRollMode.Manual, 0f, 0f),
             out string beginFailure
         );
-        bool rolled = began && string.IsNullOrEmpty(beginFailure);
+        bool actionBeginShown = began && string.IsNullOrEmpty(beginFailure) &&
+            context.controller.AdvancePausableExecution(
+                0f,
+                out string actionBeginFailure
+            ) &&
+            string.IsNullOrEmpty(actionBeginFailure);
+        bool rolled = actionBeginShown;
         for (int index = 0; index < BattleClashSession.MaxAttackTieCount; index++)
         {
             rolled &= context.controller.TryRequestManualRoll(out string failure) &&
                 string.IsNullOrEmpty(failure);
+            rolled &= context.controller.AdvancePausableExecution(
+                    0f,
+                    out string resultFailure
+                ) &&
+                string.IsNullOrEmpty(resultFailure);
         }
         BattleResolutionPlan plan = context.controller.ExecutionRunner.CurrentResolutionPlan;
         bool committed = CommitRunner(context);
@@ -406,21 +417,51 @@ public static class BattleResolutionPlanTests
 
     static bool BeginAndRoll(TestContext context)
     {
-        return context.controller.TryBeginPausableExecution(
+        bool began = context.controller.TryBeginPausableExecution(
                 new BattleRollGateSettings(BattleRollMode.Manual, 0f, 0f),
                 out string beginFailure
+            );
+        bool actionBeginShown = began && string.IsNullOrEmpty(beginFailure) &&
+            context.controller.AdvancePausableExecution(
+                0f,
+                out string actionBeginFailure
             ) &&
-            string.IsNullOrEmpty(beginFailure) &&
+            string.IsNullOrEmpty(actionBeginFailure);
+        bool rolled = actionBeginShown &&
             context.controller.TryRequestManualRoll(out string rollFailure) &&
             string.IsNullOrEmpty(rollFailure);
+        bool rollResultShown = rolled &&
+            context.controller.AdvancePausableExecution(
+                0f,
+                out string rollResultFailure
+            ) &&
+            string.IsNullOrEmpty(rollResultFailure);
+        return began && actionBeginShown && rolled && rollResultShown;
     }
 
     static bool CommitRunner(TestContext context)
     {
-        return context.controller.TryCommitNextResolutionStep(
-                out string failureMessage
-            ) &&
-            string.IsNullOrEmpty(failureMessage);
+        if (context.item.isCompleted)
+        {
+            return context.controller.TryCommitNextResolutionStep(
+                    out string completedFailure
+                ) &&
+                string.IsNullOrEmpty(completedFailure);
+        }
+
+        for (int step = 0; step < 8 && !context.item.isCompleted; step++)
+        {
+            if (!context.controller.AdvancePausableExecution(
+                    0f,
+                    out string failureMessage
+                ) ||
+                !string.IsNullOrEmpty(failureMessage))
+            {
+                return false;
+            }
+        }
+
+        return context.item.isCompleted;
     }
 
     static TestContext CreateContext(

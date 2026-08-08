@@ -636,10 +636,13 @@ public static class BattleExecutionPlanExecutor
         BattleExecutionItem item,
         BattleRuntimeState runtimeState,
         BattleResolutionPlan plan,
-        out bool itemCompleted
+        out bool resolutionCompleted,
+        out BattleResolveResult result
     )
     {
-        itemCompleted = item != null && item.isCompleted;
+        resolutionCompleted = plan != null &&
+            plan.State == BattleResolutionPlanState.Completed;
+        result = plan != null ? plan.CompletedResult : null;
         if (item == null || runtimeState == null || plan == null)
         {
             return false;
@@ -647,28 +650,44 @@ public static class BattleExecutionPlanExecutor
 
         if (!BattleResolver.TryCommitNextResolutionStep(
                 plan,
-                out BattleResolveResult result
+                out result
             ))
         {
             return false;
         }
 
-        if (plan.State != BattleResolutionPlanState.Completed)
+        resolutionCompleted = plan.State == BattleResolutionPlanState.Completed;
+        return true;
+    }
+
+    // ActionComplete表现结束后才提交槽位与ExecutionItem状态。
+    internal static bool CompletePausableRespondedEnemyIntentAction(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        BattleResolutionPlan plan
+    )
+    {
+        if (item == null || runtimeState == null || plan == null ||
+            plan.State != BattleResolutionPlanState.Completed ||
+            plan.CompletedResult == null)
         {
-            return true;
+            return false;
         }
 
         if (!plan.IsActionCompleted)
         {
-            if (!CompleteRespondedEnemyIntentResult(item, runtimeState, result))
+            if (!CompleteRespondedEnemyIntentResult(
+                    item,
+                    runtimeState,
+                    plan.CompletedResult
+                ))
             {
                 return false;
             }
             plan.MarkActionCompleted();
         }
 
-        itemCompleted = item.isCompleted;
-        return itemCompleted;
+        return item.isCompleted;
     }
 
     static bool TryPrepareRespondedEnemyIntent(

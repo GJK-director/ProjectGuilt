@@ -156,20 +156,30 @@ public static class BattleRollGateTests
             .CurrentClashSession;
         bool firstAttemptOnly = firstRequest && session.AttemptIndex == 1 &&
             session.AttackTieCount == 1 && !session.IsFinalized;
+        bool firstResultShown = context.controller.AdvancePausableExecution(
+            0f,
+            out string firstResultFailure
+        );
 
         SetNextAttackPoints(session, 6, 4);
         bool secondRequest = context.controller.TryRequestManualRoll(
             out string secondFailure
+        );
+        bool secondResultShown = context.controller.AdvancePausableExecution(
+            0f,
+            out string secondResultFailure
         );
         bool resolutionPending = context.controller.ExecutionRunner.Phase ==
             BattleExecutionRunnerPhase.ResolutionPending &&
             !context.item.isCompleted;
         bool committed = CommitPendingResolution(context);
 
-        return began && firstAttemptOnly && secondRequest && resolutionPending &&
-            committed &&
+        return began && firstAttemptOnly && firstResultShown && secondRequest &&
+            secondResultShown && resolutionPending && committed &&
             string.IsNullOrEmpty(firstFailure) &&
+            string.IsNullOrEmpty(firstResultFailure) &&
             string.IsNullOrEmpty(secondFailure) &&
+            string.IsNullOrEmpty(secondResultFailure) &&
             session.AttemptIndex == 2 && session.IsFinalized &&
             session.FinalResult == BattleClashFinalResult.SideAWin &&
             context.item.isCompleted && context.plan.isCompleted;
@@ -201,16 +211,21 @@ public static class BattleRollGateTests
             0.01f,
             out string fourthFailure
         );
+        bool rollResultShown = context.controller.AdvancePausableExecution(
+            0f,
+            out string rollResultFailure
+        );
         bool resolutionPending = runner.Phase ==
             BattleExecutionRunnerPhase.ResolutionPending;
         bool committed = CommitPendingResolution(context);
 
         return began && beforeReadyEnd && readyEnded && delayNotDone && fourth &&
-            resolutionPending && committed &&
+            rollResultShown && resolutionPending && committed &&
             string.IsNullOrEmpty(firstFailure) &&
             string.IsNullOrEmpty(secondFailure) &&
             string.IsNullOrEmpty(thirdFailure) &&
             string.IsNullOrEmpty(fourthFailure) &&
+            string.IsNullOrEmpty(rollResultFailure) &&
             runner.CurrentClashSession.AttemptIndex == 1 && runner.IsCompleted;
     }
 
@@ -225,7 +240,12 @@ public static class BattleRollGateTests
             out string secondFailure
         );
         BattleClashSession session = runner.CurrentClashSession;
-        bool tieReturnedToReady = firstRoll && session.AttemptIndex == 1 &&
+        bool firstResultShown = context.controller.AdvancePausableExecution(
+            0f,
+            out string firstResultFailure
+        );
+        bool tieReturnedToReady = firstRoll && firstResultShown &&
+            session.AttemptIndex == 1 &&
             session.AttackTieCount == 1 &&
             runner.Phase == BattleExecutionRunnerPhase.ClashReadyPause;
 
@@ -240,16 +260,22 @@ public static class BattleRollGateTests
             0.5f,
             out string fourthFailure
         );
+        bool secondResultShown = context.controller.AdvancePausableExecution(
+            0f,
+            out string secondResultFailure
+        );
         bool resolutionPending = runner.Phase ==
             BattleExecutionRunnerPhase.ResolutionPending;
         bool committed = CommitPendingResolution(context);
 
         return began && tieReturnedToReady && noEarlySecondRoll && secondRoll &&
-            resolutionPending && committed &&
+            secondResultShown && resolutionPending && committed &&
             string.IsNullOrEmpty(firstFailure) &&
             string.IsNullOrEmpty(secondFailure) &&
             string.IsNullOrEmpty(thirdFailure) &&
             string.IsNullOrEmpty(fourthFailure) &&
+            string.IsNullOrEmpty(firstResultFailure) &&
+            string.IsNullOrEmpty(secondResultFailure) &&
             session.AttemptIndex == 2 && session.IsFinalized && runner.IsCompleted;
     }
 
@@ -307,11 +333,19 @@ public static class BattleRollGateTests
         BattleClashSession session = context.controller.ExecutionRunner
             .CurrentClashSession;
         SetNextAttackPoints(session, 6, 4);
+        context.controller.AdvancePausableExecution(
+            0f,
+            out string firstResultFailure
+        );
         context.controller.AdvancePausableExecution(1f, out string secondFailure);
         bool secondWaitingExecuting = context.runtimeState.LifecyclePhase ==
             BattleLifecyclePhase.Executing;
         bool secondRequest = context.controller.TryRequestManualRoll(
             out string secondRequestFailure
+        );
+        bool secondResultShown = context.controller.AdvancePausableExecution(
+            0f,
+            out string secondResultFailure
         );
         bool resolutionPending = context.runtimeState.LifecyclePhase ==
             BattleLifecyclePhase.Executing &&
@@ -320,12 +354,14 @@ public static class BattleRollGateTests
         bool committed = CommitPendingResolution(context);
 
         return began && beginExecuting && waitingExecuting && tieExecuting &&
-            secondWaitingExecuting && secondRequest && resolutionPending &&
-            committed &&
+            secondWaitingExecuting && secondRequest && secondResultShown &&
+            resolutionPending && committed &&
             string.IsNullOrEmpty(firstFailure) &&
             string.IsNullOrEmpty(firstRequestFailure) &&
+            string.IsNullOrEmpty(firstResultFailure) &&
             string.IsNullOrEmpty(secondFailure) &&
             string.IsNullOrEmpty(secondRequestFailure) &&
+            string.IsNullOrEmpty(secondResultFailure) &&
             context.runtimeState.LifecyclePhase == BattleLifecyclePhase.TurnResolved &&
             context.item.isCompleted && context.plan.isCompleted;
     }
@@ -406,6 +442,11 @@ public static class BattleRollGateTests
                 out string requestFailure
             );
             allRequestsAccepted &= string.IsNullOrEmpty(requestFailure);
+            allRequestsAccepted &= context.controller.AdvancePausableExecution(
+                0f,
+                out string resultFailure
+            );
+            allRequestsAccepted &= string.IsNullOrEmpty(resultFailure);
         }
         bool resolutionPending = context.controller.ExecutionRunner.Phase ==
             BattleExecutionRunnerPhase.ResolutionPending;
@@ -452,15 +493,20 @@ public static class BattleRollGateTests
         bool requested = context.controller.TryRequestManualRoll(
             out string requestFailure
         );
+        bool resultShown = context.controller.AdvancePausableExecution(
+            0f,
+            out string resultFailure
+        );
         bool resolutionPending = runner.Phase ==
             BattleExecutionRunnerPhase.ResolutionPending;
         bool committed = CommitPendingResolution(context);
 
-        return began && noEarlyRoll && ready && requested && resolutionPending &&
-            committed &&
+        return began && noEarlyRoll && ready && requested && resultShown &&
+            resolutionPending && committed &&
             string.IsNullOrEmpty(pauseFailure) &&
             string.IsNullOrEmpty(readyFailure) &&
             string.IsNullOrEmpty(requestFailure) &&
+            string.IsNullOrEmpty(resultFailure) &&
             runner.CurrentClashSession.AttemptIndex == 1 &&
             runner.CurrentClashSession.FinalResult ==
                 BattleClashFinalResult.DefenseFullBlock &&
@@ -491,15 +537,20 @@ public static class BattleRollGateTests
         bool requested = context.controller.TryRequestManualRoll(
             out string requestFailure
         );
+        bool resultShown = context.controller.AdvancePausableExecution(
+            0f,
+            out string resultFailure
+        );
         bool resolutionPending = runner.Phase ==
             BattleExecutionRunnerPhase.ResolutionPending;
         bool committed = CommitPendingResolution(context);
 
-        return began && noEarlyRoll && ready && requested && resolutionPending &&
-            committed &&
+        return began && noEarlyRoll && ready && requested && resultShown &&
+            resolutionPending && committed &&
             string.IsNullOrEmpty(pauseFailure) &&
             string.IsNullOrEmpty(readyFailure) &&
             string.IsNullOrEmpty(requestFailure) &&
+            string.IsNullOrEmpty(resultFailure) &&
             runner.CurrentClashSession.AttemptIndex == 1 &&
             runner.CurrentClashSession.FinalResult ==
                 BattleClashFinalResult.DodgeSuccess &&
@@ -560,12 +611,24 @@ public static class BattleRollGateTests
 
     static bool CommitPendingResolution(TestContext context)
     {
-        return context != null &&
-            context.controller != null &&
-            context.controller.TryCommitNextResolutionStep(
-                out string failureMessage
-            ) &&
-            string.IsNullOrEmpty(failureMessage);
+        if (context == null || context.controller == null)
+        {
+            return false;
+        }
+
+        for (int step = 0; step < 8 && !context.item.isCompleted; step++)
+        {
+            if (!context.controller.AdvancePausableExecution(
+                    0f,
+                    out string failureMessage
+                ) ||
+                !string.IsNullOrEmpty(failureMessage))
+            {
+                return false;
+            }
+        }
+
+        return context.item.isCompleted;
     }
 
     static TestContext CreateRespondedAttackContext(
@@ -666,10 +729,21 @@ public static class BattleRollGateTests
         float autoDelay
     )
     {
-        return context.controller.TryBeginPausableExecution(
+        bool began = context.controller.TryBeginPausableExecution(
             new BattleRollGateSettings(mode, readyPause, autoDelay),
             out string failureMessage
-        ) && string.IsNullOrEmpty(failureMessage);
+        );
+        if (!began || !string.IsNullOrEmpty(failureMessage))
+        {
+            return false;
+        }
+
+        // ImmediatePresenter也由下一次正式推进消费ActionBegin完成状态。
+        return context.controller.AdvancePausableExecution(
+                0f,
+                out string presentationFailure
+            ) &&
+            string.IsNullOrEmpty(presentationFailure);
     }
 
     static void SetNextAttackPoints(

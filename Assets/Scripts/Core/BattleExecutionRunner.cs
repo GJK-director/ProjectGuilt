@@ -1,4 +1,4 @@
-// Phase 3.3：可暂停的执行推进器。只控制等待和Roll时机，不负责表现或战斗结算规则。
+// 可暂停执行推进器：协调Roll、表现等待和提交边界，不拥有具体表现或战斗规则。
 using UnityEngine;
 
 public enum BattleRollMode
@@ -16,9 +16,19 @@ public enum BattleExecutionRunnerPhase
     Rolling,
     Finalizing,
     ResolutionPending,
+    WaitingForPresentation,
     ItemCompleted,
     Completed,
     Failed
+}
+
+enum BattlePresentationContinuation
+{
+    None,
+    AfterActionBegin,
+    AfterRollResult,
+    AfterImpact,
+    AfterActionComplete
 }
 
 [System.Serializable]
@@ -59,10 +69,16 @@ public sealed class BattleExecutionRunner
 
     readonly BattleLifecycleController lifecycleController;
     readonly BattleRollGateSettings settings;
+    readonly IBattleExecutionPresenter presenter;
+
+    static long nextPresentationRequestId;
+    BattlePresentationContinuation presentationContinuation;
 
     public BattleExecutionItem CurrentItem { get; private set; }
     public BattleClashSession CurrentClashSession { get; private set; }
     public BattleResolutionPlan CurrentResolutionPlan { get; private set; }
+    public BattlePresentationRequest CurrentPresentationRequest { get; private set; }
+    public BattlePresentationCompletion CurrentPresentationCompletion { get; private set; }
     public BattleExecutionRunnerPhase Phase { get; private set; }
     public float ClashReadyPauseRemaining { get; private set; }
     public float AutoRollDelayRemaining { get; private set; }
@@ -84,13 +100,15 @@ public sealed class BattleExecutionRunner
 
     internal BattleExecutionRunner(
         BattleLifecycleController lifecycleController,
-        BattleRollGateSettings settings
+        BattleRollGateSettings settings,
+        IBattleExecutionPresenter presenter
     )
     {
         this.lifecycleController = lifecycleController;
         this.settings = settings != null
             ? settings.CloneNormalized()
             : new BattleRollGateSettings();
+        this.presenter = presenter ?? BattleImmediatePresenter.Instance;
         Phase = BattleExecutionRunnerPhase.Idle;
     }
 
@@ -120,6 +138,16 @@ public sealed class BattleExecutionRunner
         }
 
         float safeDeltaTime = Mathf.Max(0f, deltaTime);
+        if (Phase == BattleExecutionRunnerPhase.WaitingForPresentation)
+        {
+            return AdvanceWaitingPresentation(out failureMessage);
+        }
+
+        if (Phase == BattleExecutionRunnerPhase.ResolutionPending)
+        {
+            return AdvanceResolutionPending(out failureMessage);
+        }
+
         if (Phase == BattleExecutionRunnerPhase.ItemCompleted)
         {
             CurrentItem = null;
@@ -191,6 +219,7 @@ public sealed class BattleExecutionRunner
         CurrentItem = FindNextPendingItem(plan);
         CurrentClashSession = null;
         CurrentResolutionPlan = null;
+        ClearPresentationReferences();
         CurrentItemCompleted = false;
 
         if (CurrentItem == null)
@@ -234,8 +263,12 @@ public sealed class BattleExecutionRunner
         }
 
         CurrentClashSession = session;
-        EnterReadyPause();
-        return true;
+        return BeginPresentation(
+            BattlePresentationCue.ActionBegin,
+            BattlePresentationContinuation.AfterActionBegin,
+            null,
+            session.ClashType.ToString()
+        );
     }
 
     void EnterReadyPause()
@@ -290,8 +323,12 @@ public sealed class BattleExecutionRunner
                 return Fail("Clash Finalize失败：无法建立ResolutionPlan", out failureMessage);
             }
 
-            Phase = BattleExecutionRunnerPhase.ResolutionPending;
-            return true;
+            return BeginPresentation(
+                BattlePresentationCue.RollResult,
+                BattlePresentationContinuation.AfterRollResult,
+                null,
+                CurrentClashSession.FinalResult.ToString()
+            );
         }
 
         if (!CurrentClashSession.RequiresAnotherRoll)
@@ -299,9 +336,13 @@ public sealed class BattleExecutionRunner
             return Fail("Clash Attempt结束后既未Finalized也未请求下一次Roll", out failureMessage);
         }
 
-        // AttackTie只回到新一轮ReadyPause，本次请求不会继续产生第二个Attempt。
-        EnterReadyPause();
-        return true;
+        // AttackTie的结果也必须先完成表现，之后才能回到新一轮ReadyPause。
+        return BeginPresentation(
+            BattlePresentationCue.RollResult,
+            BattlePresentationContinuation.AfterRollResult,
+            null,
+            CurrentClashSession.AttemptResult.ToString()
+        );
     }
 
     public bool TryCommitNextResolutionStep(out string failureMessage)
@@ -316,30 +357,219 @@ public sealed class BattleExecutionRunner
         {
             return true;
         }
-        if (Phase != BattleExecutionRunnerPhase.ResolutionPending ||
-            CurrentResolutionPlan == null)
+
+        if (Phase == BattleExecutionRunnerPhase.ResolutionPending)
         {
-            failureMessage = "Resolution提交失败：当前没有等待提交的ResolutionPlan";
+            return AdvanceResolutionPending(out failureMessage);
+        }
+
+        if (Phase == BattleExecutionRunnerPhase.WaitingForPresentation &&
+            presentationContinuation == BattlePresentationContinuation.AfterImpact)
+        {
+            return AdvanceWaitingPresentation(out failureMessage);
+        }
+
+        failureMessage = "Resolution提交失败：当前没有可推进的Resolution表现步骤";
+        return false;
+    }
+
+    public bool CancelPendingPresentation(string reason = "Runner Cancel")
+    {
+        if (CurrentPresentationRequest == null ||
+            CurrentPresentationCompletion == null)
+        {
             return false;
         }
 
+        presenter.Cancel(
+            CurrentPresentationRequest,
+            CurrentPresentationCompletion
+        );
+        CurrentPresentationCompletion.TryCancel(
+            CurrentPresentationRequest.RequestId
+        );
+        ClearPresentationReferences();
+        HasFailed = true;
+        Phase = BattleExecutionRunnerPhase.Failed;
+        Debug.Log("Pausable表现等待已取消：" + reason);
+        return true;
+    }
+
+    bool AdvanceWaitingPresentation(out string failureMessage)
+    {
+        failureMessage = string.Empty;
+        if (CurrentPresentationRequest == null ||
+            CurrentPresentationCompletion == null)
+        {
+            return Fail("表现推进失败：当前Presentation Request为空", out failureMessage);
+        }
+
+        if (!CurrentPresentationCompletion.IsCompleted)
+        {
+            return true;
+        }
+
+        long requestId = CurrentPresentationRequest.RequestId;
+        if (!CurrentPresentationCompletion.TryConsume(requestId))
+        {
+            return Fail("表现推进失败：Completion已失效或重复消费", out failureMessage);
+        }
+
+        BattlePresentationContinuation continuation = presentationContinuation;
+        ClearPresentationReferences();
+
+        if (continuation == BattlePresentationContinuation.AfterActionBegin)
+        {
+            EnterReadyPause();
+            return true;
+        }
+
+        if (continuation == BattlePresentationContinuation.AfterRollResult)
+        {
+            if (CurrentClashSession == null)
+            {
+                return Fail("RollResult表现完成失败：ClashSession为空", out failureMessage);
+            }
+
+            if (CurrentClashSession.IsFinalized)
+            {
+                if (CurrentResolutionPlan == null)
+                {
+                    return Fail("RollResult表现完成失败：ResolutionPlan为空", out failureMessage);
+                }
+
+                Phase = BattleExecutionRunnerPhase.ResolutionPending;
+                return true;
+            }
+
+            if (!CurrentClashSession.RequiresAnotherRoll)
+            {
+                return Fail("RollResult表现完成后没有合法后续Roll", out failureMessage);
+            }
+
+            EnterReadyPause();
+            return true;
+        }
+
+        if (continuation == BattlePresentationContinuation.AfterImpact)
+        {
+            return CommitOneResolutionStep(out failureMessage);
+        }
+
+        if (continuation == BattlePresentationContinuation.AfterActionComplete)
+        {
+            if (!BattleExecutionPlanExecutor
+                    .CompletePausableRespondedEnemyIntentAction(
+                        CurrentItem,
+                        lifecycleController.RuntimeState,
+                        CurrentResolutionPlan
+                    ))
+            {
+                return Fail("ActionComplete后未能完成ExecutionItem", out failureMessage);
+            }
+
+            return FinishCurrentItem(out failureMessage);
+        }
+
+        return Fail("表现推进失败：Continuation无效", out failureMessage);
+    }
+
+    bool AdvanceResolutionPending(out string failureMessage)
+    {
+        failureMessage = string.Empty;
+        if (CurrentResolutionPlan == null)
+        {
+            return Fail("Resolution推进失败：ResolutionPlan为空", out failureMessage);
+        }
+
+        BattleImpact impact = CurrentResolutionPlan.GetNextPendingImpact();
+        if (impact != null)
+        {
+            return BeginPresentation(
+                BattlePresentationCue.Impact,
+                BattlePresentationContinuation.AfterImpact,
+                impact,
+                CurrentResolutionPlan.resultType
+            );
+        }
+
+        // 0-impact结果不伪造Impact；独立推进一次Activation与CompleteResolution。
+        return CommitOneResolutionStep(out failureMessage);
+    }
+
+    bool CommitOneResolutionStep(out string failureMessage)
+    {
+        failureMessage = string.Empty;
         if (!BattleExecutionPlanExecutor
                 .TryCommitPausableRespondedEnemyIntentResolutionStep(
                     CurrentItem,
                     lifecycleController.RuntimeState,
                     CurrentResolutionPlan,
-                    out bool itemCompleted
+                    out bool resolutionCompleted,
+                    out BattleResolveResult result
                 ))
         {
             return Fail("Resolution提交失败：当前步骤未能完成", out failureMessage);
         }
 
-        if (!itemCompleted)
+        if (!resolutionCompleted)
         {
+            Phase = BattleExecutionRunnerPhase.ResolutionPending;
             return true;
         }
 
-        return FinishCurrentItem(out failureMessage);
+        if (result == null)
+        {
+            return Fail("Resolution提交失败：完成结果为空", out failureMessage);
+        }
+
+        return BeginPresentation(
+            BattlePresentationCue.ActionComplete,
+            BattlePresentationContinuation.AfterActionComplete,
+            null,
+            result.resultType
+        );
+    }
+
+    bool BeginPresentation(
+        BattlePresentationCue cue,
+        BattlePresentationContinuation continuation,
+        BattleImpact impact,
+        string outcome
+    )
+    {
+        long requestId = System.Threading.Interlocked.Increment(
+            ref nextPresentationRequestId
+        );
+        CurrentPresentationRequest = new BattlePresentationRequest(
+            requestId,
+            cue,
+            CurrentItem,
+            CurrentClashSession,
+            CurrentResolutionPlan,
+            impact,
+            outcome
+        );
+        CurrentPresentationCompletion = new BattlePresentationCompletion(
+            requestId
+        );
+        presentationContinuation = continuation;
+        Phase = BattleExecutionRunnerPhase.WaitingForPresentation;
+
+        presenter.Present(
+            CurrentPresentationRequest,
+            CurrentPresentationCompletion
+        );
+
+        // 即使Presenter同步完成，本次调用也必须停在新建的表现边界。
+        return true;
+    }
+
+    void ClearPresentationReferences()
+    {
+        CurrentPresentationRequest = null;
+        CurrentPresentationCompletion = null;
+        presentationContinuation = BattlePresentationContinuation.None;
     }
 
     bool FinishCurrentItem(out string failureMessage)

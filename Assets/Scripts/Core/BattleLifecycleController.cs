@@ -5,6 +5,7 @@ using UnityEngine;
 public sealed class BattleLifecycleController
 {
     private readonly BattleRuntimeState runtimeState;
+    private readonly IBattleExecutionPresenter executionPresenter;
     private BattleExecutionRunner executionRunner;
 
     public BattleRuntimeState RuntimeState
@@ -18,8 +19,18 @@ public sealed class BattleLifecycleController
     }
 
     public BattleLifecycleController(BattleRuntimeState runtimeState)
+        : this(runtimeState, BattleImmediatePresenter.Instance)
+    {
+    }
+
+    public BattleLifecycleController(
+        BattleRuntimeState runtimeState,
+        IBattleExecutionPresenter executionPresenter
+    )
     {
         this.runtimeState = runtimeState;
+        this.executionPresenter = executionPresenter ??
+            BattleImmediatePresenter.Instance;
     }
 
     public bool TryBeginPausableExecution(
@@ -59,8 +70,18 @@ public sealed class BattleLifecycleController
             return false;
         }
 
-        executionRunner = new BattleExecutionRunner(this, settings);
+        executionRunner = new BattleExecutionRunner(
+            this,
+            settings,
+            executionPresenter
+        );
         return executionRunner.Begin(out failureMessage);
+    }
+
+    public bool CancelPausableExecution(string reason = "Lifecycle Cancel")
+    {
+        return executionRunner != null &&
+            executionRunner.CancelPendingPresentation(reason);
     }
 
     public bool AdvancePausableExecution(
@@ -502,6 +523,12 @@ public sealed class BattleLifecycleController
         }
 
         runtimeState.battleResult = result;
+        if (executionRunner != null &&
+            executionRunner.Phase ==
+                BattleExecutionRunnerPhase.WaitingForPresentation)
+        {
+            executionRunner.CancelPendingPresentation("BattleEnded");
+        }
         BattleContinuousDodgeManager.FinalizeActiveDodges(
             runtimeState,
             "BattleEnded"
