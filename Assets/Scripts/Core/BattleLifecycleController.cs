@@ -5,15 +5,137 @@ using UnityEngine;
 public sealed class BattleLifecycleController
 {
     private readonly BattleRuntimeState runtimeState;
+    private BattleExecutionRunner executionRunner;
 
     public BattleRuntimeState RuntimeState
     {
         get { return runtimeState; }
     }
 
+    public BattleExecutionRunner ExecutionRunner
+    {
+        get { return executionRunner; }
+    }
+
     public BattleLifecycleController(BattleRuntimeState runtimeState)
     {
         this.runtimeState = runtimeState;
+    }
+
+    public bool TryBeginPausableExecution(
+        BattleRollGateSettings settings,
+        out string failureMessage
+    )
+    {
+        if (!ValidateActiveBattle(out failureMessage))
+        {
+            return false;
+        }
+        if (runtimeState.currentExecutionPlan == null ||
+            runtimeState.currentExecutionPlan.isCompleted)
+        {
+            failureMessage = "Pausable执行启动失败：当前计划为空或已完成";
+            return false;
+        }
+        if (executionRunner != null &&
+            !executionRunner.IsCompleted &&
+            !executionRunner.HasFailed)
+        {
+            failureMessage = "Pausable执行启动失败：当前Runner仍在执行";
+            return false;
+        }
+        if (runtimeState.LifecyclePhase != BattleLifecyclePhase.Prepare &&
+            runtimeState.LifecyclePhase != BattleLifecyclePhase.PlanReady)
+        {
+            failureMessage = "Pausable执行启动失败：当前阶段必须为Prepare或PlanReady";
+            return false;
+        }
+
+        if (!runtimeState.TryTransitionTo(
+                BattleLifecyclePhase.Executing,
+                out failureMessage
+            ))
+        {
+            return false;
+        }
+
+        executionRunner = new BattleExecutionRunner(this, settings);
+        return executionRunner.Begin(out failureMessage);
+    }
+
+    public bool AdvancePausableExecution(
+        float deltaTime,
+        out string failureMessage
+    )
+    {
+        if (executionRunner == null)
+        {
+            failureMessage = "Pausable执行推进失败：当前没有Runner";
+            return false;
+        }
+
+        return executionRunner.Advance(deltaTime, out failureMessage);
+    }
+
+    public bool TryRequestManualRoll(out string failureMessage)
+    {
+        if (executionRunner == null)
+        {
+            failureMessage = "Manual Roll请求失败：当前没有Runner";
+            return false;
+        }
+
+        return executionRunner.TryRequestManualRoll(out failureMessage);
+    }
+
+    internal bool HandlePausableItemCompleted(out string failureMessage)
+    {
+        if (!ValidateRuntimeState(out failureMessage) ||
+            runtimeState.currentExecutionPlan == null)
+        {
+            return false;
+        }
+
+        EvaluateBattleEnd();
+        BattleExecutionPlanExecutor.RefreshPlanCompletionFromRunner(
+            runtimeState.currentExecutionPlan
+        );
+        failureMessage = string.Empty;
+        return true;
+    }
+
+    internal bool TryCompletePausableExecution(out string failureMessage)
+    {
+        if (!ValidateRuntimeState(out failureMessage))
+        {
+            return false;
+        }
+        if (runtimeState.IsBattleEnded)
+        {
+            failureMessage = string.Empty;
+            return true;
+        }
+        if (runtimeState.currentExecutionPlan == null ||
+            !runtimeState.currentExecutionPlan.isCompleted)
+        {
+            failureMessage = "Pausable执行完成失败：ExecutionPlan尚未完成";
+            return false;
+        }
+        if (runtimeState.LifecyclePhase == BattleLifecyclePhase.TurnResolved)
+        {
+            failureMessage = string.Empty;
+            return true;
+        }
+        if (runtimeState.LifecyclePhase != BattleLifecyclePhase.Executing)
+        {
+            failureMessage = "Pausable执行完成失败：当前阶段必须为Executing";
+            return false;
+        }
+
+        return runtimeState.TryTransitionTo(
+            BattleLifecyclePhase.TurnResolved,
+            out failureMessage
+        );
     }
 
     public bool TryInitializeToPrepare(out string failureMessage)
@@ -98,6 +220,11 @@ public sealed class BattleLifecycleController
         {
             return false;
         }
+        if (HasActivePausableRunner())
+        {
+            failureMessage = "执行计划失败：Pausable Runner仍在执行";
+            return false;
+        }
         if (runtimeState.currentExecutionPlan == null)
         {
             failureMessage = "执行计划失败：当前计划为空";
@@ -150,6 +277,11 @@ public sealed class BattleLifecycleController
         planCompleted = false;
         if (!ValidateRuntimeState(out failureMessage))
         {
+            return false;
+        }
+        if (HasActivePausableRunner())
+        {
+            failureMessage = "单项执行失败：Pausable Runner仍在执行";
             return false;
         }
         if (runtimeState.currentExecutionPlan == null)
@@ -379,6 +511,13 @@ public sealed class BattleLifecycleController
 
         failureMessage = string.Empty;
         return true;
+    }
+
+    private bool HasActivePausableRunner()
+    {
+        return executionRunner != null &&
+            !executionRunner.IsCompleted &&
+            !executionRunner.HasFailed;
     }
 
     private bool ValidateActiveBattle(out string failureMessage)

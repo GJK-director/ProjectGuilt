@@ -367,6 +367,34 @@ public static class BattleResolver
         IReadOnlyList<BattleActionSlot> passiveGuardCandidates
     )
     {
+        BattleClashSession session;
+        BattleResolveResult beginFailure = TryBeginRespondedClash(
+            actionSlot,
+            enemyIntent,
+            out session
+        );
+        if (beginFailure != null)
+        {
+            return beginFailure;
+        }
+
+        // 旧同步入口保持兼容：内部持续推进Session，直到可以沿用正式提交逻辑。
+        while (!session.IsFinalized)
+        {
+            session.RollNextAttempt();
+        }
+
+        return FinalizeRespondedClash(actionSlot, enemyIntent, session);
+    }
+
+    // Runner与同步入口共用同一套验证和初始化，等待期间不会重复触发初始化事件。
+    internal static BattleResolveResult TryBeginRespondedClash(
+        BattleActionSlot actionSlot,
+        BattleEnemyIntent enemyIntent,
+        out BattleClashSession session
+    )
+    {
+        session = null;
         if (actionSlot == null)
         {
             return CreateInvalidResolveResult("ResolveRespondedEnemyIntent 失败：行动槽位为空");
@@ -457,7 +485,8 @@ public static class BattleResolver
                 );
             }
 
-            return ResolveRespondedAttackVsAttack(actionSlot, enemyIntent);
+            session = CreateRespondedAttackClashSession(actionSlot, enemyIntent);
+            return null;
         }
 
         if (playerCard.cardType == CardType.Dodge)
@@ -482,7 +511,8 @@ public static class BattleResolver
                 );
             }
 
-            return ResolveRespondedDodgeVsAttack(actionSlot, enemyIntent);
+            session = CreateRespondedDodgeClashSession(actionSlot, enemyIntent);
+            return null;
         }
 
         if (playerCard.cardType == CardType.Defense)
@@ -507,7 +537,8 @@ public static class BattleResolver
                 );
             }
 
-            return ResolveRespondedDefenseVsAttack(actionSlot, enemyIntent);
+            session = CreateRespondedDefenseClashSession(actionSlot, enemyIntent);
+            return null;
         }
 
         return CreateUnsupportedResolveResult(
@@ -515,6 +546,55 @@ public static class BattleResolver
             playerCard.cardType +
             " / 敌人 " +
             enemyCard.cardType
+        );
+    }
+
+    // Session Finalized后仍由Resolver统一提交Buff、资源、事件与伤害。
+    internal static BattleResolveResult FinalizeRespondedClash(
+        BattleActionSlot actionSlot,
+        BattleEnemyIntent enemyIntent,
+        BattleClashSession session
+    )
+    {
+        if (session == null)
+        {
+            return CreateInvalidResolveResult("FinalizeRespondedClash 失败：ClashSession为空");
+        }
+
+        if (!session.IsFinalized)
+        {
+            return CreateInvalidResolveResult("FinalizeRespondedClash 失败：ClashSession尚未完成");
+        }
+
+        if (session.ClashType == BattleClashType.AttackVsAttack)
+        {
+            return FinalizeRespondedAttackVsAttack(actionSlot, enemyIntent, session);
+        }
+
+        if (session.ClashType == BattleClashType.DodgeVsAttack)
+        {
+            return FinalizeRespondedDodgeVsAttack(
+                actionSlot,
+                enemyIntent,
+                false,
+                session
+            );
+        }
+
+        if (session.ClashType == BattleClashType.DefenseVsAttack)
+        {
+            return ResolveDefenseVsAttackCore(
+                actionSlot,
+                enemyIntent,
+                true,
+                true,
+                "ResolveRespondedDefenseVsAttack",
+                session
+            );
+        }
+
+        return CreateUnsupportedResolveResult(
+            "FinalizeRespondedClash 暂不支持Clash类型：" + session.ClashType
         );
     }
 
@@ -715,23 +795,10 @@ public static class BattleResolver
         BattleEnemyIntent enemyIntent
     )
     {
-        CharacterData playerUnit = actionSlot.actor;
-        BattleCardState playerCardState = actionSlot.cardState;
-        CharacterData enemyUnit = enemyIntent.enemy;
-        BattleCardState enemyCardState = enemyIntent.enemyCardState;
-        CharacterData actualTarget = enemyIntent.actualTargetCharacter;
         BattleClashSession session = CreateRespondedAttackClashSession(
             actionSlot,
             enemyIntent
         );
-        BattleClashPointSnapshot playerPointBuffSnapshot =
-            session.SideA.pointSnapshot;
-        BattleClashPointSnapshot enemyPointBuffSnapshot =
-            session.SideB.pointSnapshot;
-        BattleClashResourceSnapshot playerResourceSnapshot =
-            session.SideA.resourceSnapshot;
-        BattleClashResourceSnapshot enemyResourceSnapshot =
-            session.SideB.resourceSnapshot;
 
         // 同步兼容入口仍会主动推进至Finalized；单次Roll能力保留在Session中。
         while (!session.IsFinalized)
@@ -749,6 +816,33 @@ public static class BattleResolver
                 );
             }
         }
+
+        return FinalizeRespondedAttackVsAttack(
+            actionSlot,
+            enemyIntent,
+            session
+        );
+    }
+
+    static BattleResolveResult FinalizeRespondedAttackVsAttack(
+        BattleActionSlot actionSlot,
+        BattleEnemyIntent enemyIntent,
+        BattleClashSession session
+    )
+    {
+        CharacterData playerUnit = actionSlot.actor;
+        BattleCardState playerCardState = actionSlot.cardState;
+        CharacterData enemyUnit = enemyIntent.enemy;
+        BattleCardState enemyCardState = enemyIntent.enemyCardState;
+        CharacterData actualTarget = enemyIntent.actualTargetCharacter;
+        BattleClashPointSnapshot playerPointBuffSnapshot =
+            session.SideA.pointSnapshot;
+        BattleClashPointSnapshot enemyPointBuffSnapshot =
+            session.SideB.pointSnapshot;
+        BattleClashResourceSnapshot playerResourceSnapshot =
+            session.SideA.resourceSnapshot;
+        BattleClashResourceSnapshot enemyResourceSnapshot =
+            session.SideB.resourceSnapshot;
 
         int playerPoint = session.SideAPoint;
         int enemyPoint = session.SideBPoint;
@@ -1394,7 +1488,15 @@ public static class BattleResolver
         BattleCardState enemyCardState = enemyIntent.enemyCardState;
         CharacterData actualTarget = enemyIntent.actualTargetCharacter;
 
-        session.RollNextAttempt();
+        if (!session.IsFinalized && !session.RollNextAttempt())
+        {
+            return CreateInvalidResolveResult(messagePrefix + " 失败：Defense Clash无法Roll");
+        }
+
+        if (!session.IsFinalized)
+        {
+            return CreateInvalidResolveResult(messagePrefix + " 失败：Defense Clash尚未完成");
+        }
 
         int enemyFinalAttackPoint = session.SideBPoint;
         int playerFinalDefensePoint = session.SideAPoint;
@@ -1829,7 +1931,37 @@ public static class BattleResolver
             enemyIntent,
             isContinuousDodgeContinuation
         );
-        session.RollNextAttempt();
+
+        if (!session.RollNextAttempt())
+        {
+            return CreateInvalidResolveResult("ResolveRespondedDodgeVsAttack 失败：Dodge Clash无法Roll");
+        }
+
+        return FinalizeRespondedDodgeVsAttack(
+            playerSlot,
+            enemyIntent,
+            isContinuousDodgeContinuation,
+            session
+        );
+    }
+
+    static BattleResolveResult FinalizeRespondedDodgeVsAttack(
+        BattleActionSlot playerSlot,
+        BattleEnemyIntent enemyIntent,
+        bool isContinuousDodgeContinuation,
+        BattleClashSession session
+    )
+    {
+        if (session == null || !session.IsFinalized)
+        {
+            return CreateInvalidResolveResult("FinalizeRespondedDodgeVsAttack 失败：Dodge Clash尚未完成");
+        }
+
+        CharacterData playerUnit = playerSlot.actor;
+        BattleCardState dodgeCardState = playerSlot.cardState;
+        CharacterData enemyUnit = enemyIntent.enemy;
+        BattleCardState enemyCardState = enemyIntent.enemyCardState;
+        CharacterData actualTarget = enemyIntent.actualTargetCharacter;
         BattleClashPointSnapshot playerPointBuffSnapshot =
             session.SideA.pointSnapshot;
         BattleClashPointSnapshot enemyPointBuffSnapshot =

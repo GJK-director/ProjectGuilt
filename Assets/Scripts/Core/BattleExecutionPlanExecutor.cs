@@ -251,6 +251,16 @@ public static class BattleExecutionPlanExecutor
         plan.isCompleted = true;
     }
 
+    internal static void RefreshPlanCompletionFromRunner(
+        BattleExecutionPlan plan
+    )
+    {
+        if (plan != null && plan.executionItems != null)
+        {
+            RefreshPlanCompletion(plan);
+        }
+    }
+
     // PrintExecutionPlanStepPreview = 打印执行步骤预览
     // Preview = 预览，只看顺序，不应该改变战斗状态。
     public static void PrintExecutionPlanStepPreview(BattleExecutionPlan executionPlan)
@@ -529,6 +539,108 @@ public static class BattleExecutionPlanExecutor
     // Executor 只负责分派和完成状态，正式结算交给 BattleResolver。
     static bool ExecuteRespondedEnemyIntent(BattleExecutionItem item, BattleRuntimeState runtimeState)
     {
+        bool handledBeforeResolver;
+        bool preResolveResult;
+        if (!TryPrepareRespondedEnemyIntent(
+                item,
+                runtimeState,
+                out handledBeforeResolver,
+                out preResolveResult
+            ))
+        {
+            return handledBeforeResolver && preResolveResult;
+        }
+
+        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
+            item.actionSlot,
+            item.enemyIntent
+        );
+
+        return CompleteRespondedEnemyIntentResult(item, runtimeState, result);
+    }
+
+    // Pausable Runner在Begin时复用与同步入口完全相同的前置检查。
+    internal static bool TryBeginPausableRespondedEnemyIntent(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        out BattleClashSession session,
+        out bool itemCompleted,
+        out string failureMessage
+    )
+    {
+        session = null;
+        itemCompleted = false;
+        failureMessage = string.Empty;
+
+        bool handledBeforeResolver;
+        bool preResolveResult;
+        if (!TryPrepareRespondedEnemyIntent(
+                item,
+                runtimeState,
+                out handledBeforeResolver,
+                out preResolveResult
+            ))
+        {
+            itemCompleted = handledBeforeResolver && item != null && item.isCompleted;
+            if (!preResolveResult)
+            {
+                failureMessage = "Pausable RespondedEnemyIntent前置检查未能完成当前Item";
+            }
+            return preResolveResult;
+        }
+
+        BattleResolveResult beginFailure = BattleResolver.TryBeginRespondedClash(
+            item.actionSlot,
+            item.enemyIntent,
+            out session
+        );
+        if (beginFailure == null && session != null)
+        {
+            return true;
+        }
+
+        bool completed = CompleteRespondedEnemyIntentResult(
+            item,
+            runtimeState,
+            beginFailure
+        );
+        itemCompleted = item != null && item.isCompleted;
+        if (!completed)
+        {
+            failureMessage = "Pausable RespondedEnemyIntent初始化失败";
+        }
+        return completed;
+    }
+
+    internal static bool FinalizePausableRespondedEnemyIntent(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        BattleClashSession session
+    )
+    {
+        if (item == null)
+        {
+            return false;
+        }
+
+        BattleResolveResult result = BattleResolver.FinalizeRespondedClash(
+            item.actionSlot,
+            item.enemyIntent,
+            session
+        );
+        return CompleteRespondedEnemyIntentResult(item, runtimeState, result);
+    }
+
+    static bool TryPrepareRespondedEnemyIntent(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        out bool handledBeforeResolver,
+        out bool handledResult
+    )
+    {
+        handledBeforeResolver = false;
+        handledResult = false;
+
         if (item == null)
         {
             Debug.LogWarning("执行 RespondedEnemyIntent 失败：item 为空");
@@ -540,36 +652,44 @@ public static class BattleExecutionPlanExecutor
             item.actionSlot.cardState == null ||
             item.actionSlot.cardState.cardData == null)
         {
-            return ExecuteRespondedFallbackToUnresponded(
+            handledBeforeResolver = true;
+            handledResult = ExecuteRespondedFallbackToUnresponded(
                 item,
                 runtimeState,
                 item.order + ". 精确响应槽位或卡牌在进入Resolver前已失效，恢复原目标并转为Unresponded处理",
                 BattleExecutionItemOutcomeReason.None
             );
+            return false;
         }
 
-        if (item.actionSlot != null &&
-            item.actionSlot.actor != null &&
-            item.actionSlot.actor.IsDead())
+        if (item.actionSlot.actor.IsDead())
         {
-            return ExecuteRespondedFallbackToUnresponded(
+            handledBeforeResolver = true;
+            handledResult = ExecuteRespondedFallbackToUnresponded(
                 item,
                 runtimeState,
                 item.order + ". 响应角色已死亡，原响应失效，恢复原目标并转为Unresponded处理",
                 BattleExecutionItemOutcomeReason.None
             );
+            return false;
         }
 
         if (TryCompleteEnemyItemBecauseActualTargetDead(item))
         {
-            return true;
+            handledBeforeResolver = true;
+            handledResult = true;
+            return false;
         }
 
-        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
-            item.actionSlot,
-            item.enemyIntent
-        );
+        return true;
+    }
 
+    static bool CompleteRespondedEnemyIntentResult(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        BattleResolveResult result
+    )
+    {
         LogResolveResult(
             item.order,
             "RespondedEnemyIntent Resolver 结算结果",
@@ -599,7 +719,6 @@ public static class BattleExecutionPlanExecutor
                 item.order +
                 ". RespondedEnemyIntent 未完成：Resolver 未返回可完成结果，Executor 不补做结算"
             );
-
             return false;
         }
 
