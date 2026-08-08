@@ -63,7 +63,8 @@ public enum BattleTestMode
     BattleLifecyclePhaseContractBasic = 76,
     BattleLifecycleControllerBasic = 77,
     BattleInteractionStateAndEndLockBasic = 78,
-    BattleExecutionPlanSingleItemAdvanceBasic = 79
+    BattleExecutionPlanSingleItemAdvanceBasic = 79,
+    BattleClashSessionBasic = 80
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -384,6 +385,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleExecutionPlanSingleItemAdvanceBasic)
         {
             BattleExecutionPlanSingleItemAdvanceTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleClashSessionBasic)
+        {
+            BattleClashSessionTests.Run();
             return;
         }
 
@@ -1177,15 +1184,14 @@ public class CardLoadTest : MonoBehaviour
     void RunBattleResolverRespondedDodgeVsAttackBasicTestSequence()
     {
         Debug.Log("===== BattleResolver Responded Dodge vs Attack 聚合测试开始 =====");
-        Debug.Log("本测试只新增一个下拉入口，内部依次执行 DodgeSuccess / DodgeFailed / DodgeTieLimit 三组独立子测试");
+        Debug.Log("本测试只新增一个下拉入口，内部依次执行 DodgeSuccess / DodgeFailed / DodgeEqualitySuccess 三组独立子测试");
 
         RunRespondedDodgeVsAttackExecutionSubTest(
             "DodgeSuccess",
             8,
             5,
             "DodgeSuccess",
-            0,
-            false
+            0
         );
 
         RunRespondedDodgeVsAttackExecutionSubTest(
@@ -1193,17 +1199,15 @@ public class CardLoadTest : MonoBehaviour
             4,
             8,
             "DodgeFailed",
-            8,
-            false
+            8
         );
 
         RunRespondedDodgeVsAttackExecutionSubTest(
-            "DodgeTieLimit",
+            "DodgeEqualitySuccess",
             5,
             5,
-            "TieLimit",
-            0,
-            true
+            "DodgeSuccess",
+            0
         );
     }
 
@@ -1719,15 +1723,14 @@ public class CardLoadTest : MonoBehaviour
         int dodgePoint,
         int enemyAttackPoint,
         string expectedResultType,
-        int expectedHpDamage,
-        bool expectTieLimit
+        int expectedHpDamage
     )
     {
         Debug.Log("===== " + title + " Dodge vs Attack 子测试开始 =====");
         Debug.Log("预期 resultType：" + expectedResultType);
         Debug.Log("预期玩家 Dodge 最终点数：" + dodgePoint);
         Debug.Log("预期敌人 Attack 最终点数：" + enemyAttackPoint);
-        Debug.Log("预期尝试次数：" + (expectTieLimit ? 10 : 1));
+        Debug.Log("预期尝试次数：1");
 
         CharacterData dodgeUser = new CharacterData(title + "_玩家", 30, 3, 3);
         CharacterData enemyUnit = new CharacterData(title + "_敌人", 30, 5, 5);
@@ -1779,11 +1782,6 @@ public class CardLoadTest : MonoBehaviour
         int enemyCooldownBefore = enemyAttackCardState.currentCooldown;
         int dodgeUseCountBefore = dodgeCardState.currentUseCount;
         int enemyUseCountBefore = enemyAttackCardState.currentUseCount;
-        int dodgeGuiltBefore = dodgeUser.currentGuilt;
-        int enemyGuiltBefore = enemyUnit.currentGuilt;
-        bool dodgeConsumedBefore = dodgeCardState.isConsumed;
-        bool enemyConsumedBefore = enemyAttackCardState.isConsumed;
-
         Debug.Log("安排 Dodge 响应是否成功：" + assignResult);
         Debug.Log("执行前目标 HP：" + hpBefore + " / " + dodgeUser.maxHP);
         Debug.Log("执行前玩家 Dodge CD：" + dodgeCooldownBefore);
@@ -1800,9 +1798,7 @@ public class CardLoadTest : MonoBehaviour
         int expectedDodgeCooldown = expectDodgeFailed
             ? GetExpectedResolvedCooldown(dodgeCardState)
             : dodgeCooldownBefore;
-        int expectedEnemyCooldown = expectTieLimit
-            ? enemyCooldownBefore
-            : GetExpectedResolvedCooldown(enemyAttackCardState);
+        int expectedEnemyCooldown = GetExpectedResolvedCooldown(enemyAttackCardState);
         bool expectedSlotUsed = expectDodgeFailed;
 
         Debug.Log("执行后目标 HP：" + hpAfter + " / " + dodgeUser.maxHP);
@@ -1836,24 +1832,6 @@ public class CardLoadTest : MonoBehaviour
             Debug.Log("DodgeFailed 分支：复用敌人最终胜利点数，未重新 Roll，预期伤害来自敌人点数 " + enemyAttackPoint + "：" + (hpAfter == hpBefore - enemyAttackPoint));
         }
 
-        if (expectTieLimit)
-        {
-            bool dodgeStateUnchanged =
-                dodgeCardState.currentCooldown == dodgeCooldownBefore &&
-                dodgeCardState.currentUseCount == dodgeUseCountBefore &&
-                dodgeCardState.isConsumed == dodgeConsumedBefore &&
-                dodgeUser.currentGuilt == dodgeGuiltBefore;
-
-            bool enemyStateUnchanged =
-                enemyAttackCardState.currentCooldown == enemyCooldownBefore &&
-                enemyAttackCardState.currentUseCount == enemyUseCountBefore &&
-                enemyAttackCardState.isConsumed == enemyConsumedBefore &&
-                enemyUnit.currentGuilt == enemyGuiltBefore;
-
-            Debug.Log("TieLimit 预期玩家 Dodge 状态完全不变：" + dodgeStateUnchanged);
-            Debug.Log("TieLimit 预期敌人 Attack 状态完全不变：" + enemyStateUnchanged);
-            Debug.Log("TieLimit 预期目标 HP 不变：" + (hpAfter == hpBefore));
-        }
     }
 
     void RunBattleResolverRespondedAttackVsAttackSubTest(
@@ -3516,13 +3494,13 @@ public class CardLoadTest : MonoBehaviour
         );
 
         RunPassiveDodgeUnrespondedDodgeFirstSubTest(
-            "PassiveDodgeTieLimit",
+            "PassiveDodgeEqualitySuccess",
             5,
             5,
-            "TieLimit",
+            "DodgeSuccess",
             0,
             false,
-            false
+            true
         );
 
         RunPassiveDodgeSkipInvalidToDefenseSubTest();
@@ -3616,14 +3594,6 @@ public class CardLoadTest : MonoBehaviour
             (dodgeSlot != null &&
              dodgeSlot.isContinuousDodgeActive == (expectedResultType == "DodgeSuccess"))
         );
-
-        if (expectedResultType == "TieLimit")
-        {
-            Debug.Log("TieLimit 额外验证：Dodge状态完全不变：" + (passiveDodge.currentCooldown == dodgeCooldownBefore && passiveDodge.currentUseCount == dodgeUseCountBefore && passiveDodge.isConsumed == dodgeConsumedBefore && allyB.currentGuilt == dodgeGuiltBefore));
-            Debug.Log("TieLimit 额外验证：Enemy Attack状态完全不变：" + (enemyAttack.currentCooldown == enemyCooldownBefore && enemyAttack.currentUseCount == enemyUseCountBefore && enemyAttack.isConsumed == enemyConsumedBefore && enemy.currentGuilt == enemyGuiltBefore));
-            Debug.Log("TieLimit 额外验证：后续Defense完全未触发：" + (defenseSlot != null && !defenseSlot.isUsed && followDefense.currentCooldown == defenseCooldownBefore));
-            Debug.Log("TieLimit 额外验证：未回落Unresponded伤害：" + (hpAfter == hpBefore));
-        }
 
         Debug.Log("Enemy item 是否完成：" + (item != null && item.isCompleted));
         Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
@@ -3856,7 +3826,7 @@ public class CardLoadTest : MonoBehaviour
 
         Debug.Log("预期主拼点为 EnemyWin，后续比较固定敌人点数 " + enemyAttackPoint + "：" + (candidateCount == 2));
         Debug.Log("预期目标 HP 变化为 " + expectedDamage + "：" + (allyB.currentHP == hpBefore - expectedDamage));
-        bool expectResponseSlotUsed = expectedResultType != "TieLimit";
+        bool expectResponseSlotUsed = true;
         Debug.Log("预期主Attack槽位 isUsed = " + expectResponseSlotUsed + "：" + (responseSlot != null && responseSlot.isUsed == expectResponseSlotUsed));
         Debug.Log("预期Dodge槽位 isUsed = " + expectDodgeUsed + "：" + (dodgeSlot != null && dodgeSlot.isUsed == expectDodgeUsed));
         Debug.Log("预期Defense槽位未使用：" + (defenseSlot != null && !defenseSlot.isUsed));
@@ -3869,16 +3839,6 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期Dodge UseCount / isConsumed前后符合：" + (passiveDodge.currentUseCount == dodgeUseCountBefore && passiveDodge.isConsumed == dodgeConsumedBefore));
         Debug.Log("预期只造成一次伤害：" + (allyB.currentHP == hpBefore - expectedDamage));
         Debug.Log("预期使用固定敌人点数，未重新Roll：" + (enemyAttackPoint == enemyAttack.cardData.minPoint && enemyAttackPoint == enemyAttack.cardData.maxPoint));
-
-        if (expectedResultType == "TieLimit")
-        {
-            Debug.Log("TieLimit 额外验证：主Attack槽位不MarkUsed且卡不Resolved：" + (responseSlot != null && !responseSlot.isUsed && responseAttack.currentCooldown == responseAttackCooldownBefore));
-            Debug.Log("TieLimit 额外验证：Enemy Attack已使用：" + (enemyAttack.currentCooldown == GetExpectedResolvedCooldown(enemyAttack)));
-            Debug.Log("TieLimit 额外验证：Dodge未使用：" + (passiveDodge.currentCooldown == dodgeCooldownBefore && passiveDodge.currentUseCount == dodgeUseCountBefore && passiveDodge.isConsumed == dodgeConsumedBefore));
-            Debug.Log("TieLimit 额外验证：Dodge槽位未MarkUsed：" + (dodgeSlot != null && !dodgeSlot.isUsed));
-            Debug.Log("TieLimit 额外验证：后续Defense未触发：" + (defenseSlot != null && !defenseSlot.isUsed && followDefense.currentCooldown == defenseCooldownBefore));
-            Debug.Log("TieLimit 额外验证：未回落EnemyWin伤害：" + (allyB.currentHP == hpBefore));
-        }
 
         Debug.Log("ExecutionPlan 是否完成：" + executionPlan.isCompleted);
     }
@@ -19333,6 +19293,9 @@ public class CardLoadTest : MonoBehaviour
         defenseContext.enemy.AddBuff("NextClashPointUp", 7, 1);
         BattleActionSlot passiveDefenseSlot = new BattleActionSlot(defenseContext.allyB, 1);
         passiveDefenseSlot.AssignPassiveGuard(defenseContext.allyB, passiveDefense);
+        defenseContext.runtimeState.SetActionSlots(
+            new List<BattleActionSlot> { passiveDefenseSlot }
+        );
         BattleExecutionPlan defensePlan = BattleExecutionPlanManager.CreateBasicExecutionPlan(
             new List<BattleActionSlot> { passiveDefenseSlot },
             new List<BattleEnemyIntent>
@@ -19355,7 +19318,7 @@ public class CardLoadTest : MonoBehaviour
 
     void RunBuffNoSuccessNoConsumeSubTest()
     {
-        Debug.Log("===== 模式49 子测试I：未成功使用不消费 =====");
+        Debug.Log("===== 模式49 子测试I：未成功不消费与Dodge相等成功消费 =====");
 
         BattleEndedTestContext unavailableContext = CreateBattleEndedTestContext("buff49_unavailable", 30, 30, 50, 10, 3, 8);
         BattleCardState unavailableAttack = CreateBulletLockedFreeAttackCard(unavailableContext.allyB, "buff49_unavailable_attack", 5, 3);
@@ -19381,29 +19344,31 @@ public class CardLoadTest : MonoBehaviour
             CountBuffStack(deadContext.allyB, "NextCardPointUp") == 4 &&
             deadPlan.isCompleted;
 
-        BattleEndedTestContext tieContext = CreateBattleEndedTestContext("buff49_dodge_tie", 30, 30, 50, 10, 3, 8);
-        BattleCardState dodge = CreateFixedDodgeCardForCharacter(tieContext.allyA, "buff49_dodge_tie_card", 5, 1);
-        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(tieContext.enemy, "buff49_dodge_tie_enemy", 5, 0);
-        tieContext.allyA.AddBuff("NextClashPointUp", 1, 1);
-        tieContext.allyA.AddBuff("NextCardPointUp", 1, 1);
-        tieContext.enemy.AddBuff("NextClashPointUp", 1, 1);
-        tieContext.enemy.AddBuff("NextCardPointUp", 1, 1);
-        BattleResolveResult tieResult = BattleResolver.ResolveRespondedEnemyIntent(
-            CreateRespondedSlot(tieContext.allyA, dodge),
-            CreateEnemyAttackIntent("buff49_dodge_tie_intent", tieContext.enemy, enemyAttack, tieContext.allyA, 1)
+        BattleEndedTestContext equalityContext = CreateBattleEndedTestContext("buff49_dodge_equal", 30, 30, 50, 10, 3, 8);
+        BattleCardState dodge = CreateFixedDodgeCardForCharacter(equalityContext.allyA, "buff49_dodge_equal_card", 5, 1);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(equalityContext.enemy, "buff49_dodge_equal_enemy", 5, 0);
+        equalityContext.allyA.AddBuff("NextClashPointUp", 1, 1);
+        equalityContext.allyA.AddBuff("NextCardPointUp", 1, 1);
+        equalityContext.enemy.AddBuff("NextClashPointUp", 1, 1);
+        equalityContext.enemy.AddBuff("NextCardPointUp", 1, 1);
+        BattleResolveResult equalityResult = BattleResolver.ResolveRespondedEnemyIntent(
+            CreateRespondedSlot(equalityContext.allyA, dodge),
+            CreateEnemyAttackIntent("buff49_dodge_equal_intent", equalityContext.enemy, enemyAttack, equalityContext.allyA, 1)
         );
 
-        bool tieLimitNoConsume =
-            tieResult != null &&
-            tieResult.resultType == "TieLimit" &&
-            CountBuffStack(tieContext.allyA, "NextClashPointUp") == 1 &&
-            CountBuffStack(tieContext.allyA, "NextCardPointUp") == 1 &&
-            CountBuffStack(tieContext.enemy, "NextClashPointUp") == 1 &&
-            CountBuffStack(tieContext.enemy, "NextCardPointUp") == 1;
+        bool dodgeEqualityConsumes =
+            equalityResult != null &&
+            equalityResult.resultType == "DodgeSuccess" &&
+            equalityResult.clashAttemptCount == 1 &&
+            !equalityResult.isTieLimitReached &&
+            CountBuffStack(equalityContext.allyA, "NextClashPointUp") == 0 &&
+            CountBuffStack(equalityContext.allyA, "NextCardPointUp") == 0 &&
+            CountBuffStack(equalityContext.enemy, "NextClashPointUp") == 0 &&
+            CountBuffStack(equalityContext.enemy, "NextCardPointUp") == 0;
 
         Debug.Log("ActionUnavailable不消费NextCardPointUp：" + actionUnavailableNoConsume);
         Debug.Log("死亡角色FreeAction跳过不消费NextCardPointUp：" + deadSkipNoConsume);
-        Debug.Log("Dodge TieLimit不消费一次性Buff：" + tieLimitNoConsume);
+        Debug.Log("Dodge相等成功并消费双方一次性点数Buff：" + dodgeEqualityConsumes);
     }
 
     void RunBuffDurationPendingAndPermanentSubTest()
@@ -19698,7 +19663,7 @@ public class CardLoadTest : MonoBehaviour
         RunBuffClashRerollKeepUntilConsumeSubTest();
         RunBuffAttackTieLimitKeepSubTest();
         RunBuffDodgeConsumeSubTest();
-        RunBuffDodgeTieLimitKeepSubTest();
+        RunBuffDodgeEqualityConsumeSubTest();
         RunBuffKnownPointDodgeConsumeSubTest();
         RunBuffDefenseConsumeSubTest();
         RunBuffEventNewNextClashBuffKeptSubTest();
@@ -19883,9 +19848,9 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("Dodge不读取或消费Strength / Weakness：" + (CountBuffStack(successContext.allyA, "Strength") == 9));
     }
 
-    void RunBuffDodgeTieLimitKeepSubTest()
+    void RunBuffDodgeEqualityConsumeSubTest()
     {
-        Debug.Log("===== 模式47 子测试F：Dodge TieLimit不消费 =====");
+        Debug.Log("===== 模式47 子测试F：Dodge相等成功并消费Buff =====");
 
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff_f", 30, 30, 50, 10, 3, 8);
         BattleCardState dodge = CreateFixedDodgeCardForCharacter(context.allyA, "buff_f_dodge", 5, 1);
@@ -19899,18 +19864,23 @@ public class CardLoadTest : MonoBehaviour
             CreateEnemyAttackIntent("buff_f_intent", context.enemy, enemyAttack, context.allyA, 1)
         );
 
-        bool kept =
+        bool consumed =
             result != null &&
-            result.resultType == "TieLimit" &&
-            CountBuffStack(context.allyA, "NextClashPointUp") == 3 &&
-            CountBuffStack(context.enemy, "NextClashPointUp") == 3 &&
+            result.resultType == "DodgeSuccess" &&
+            result.clashAttemptCount == 1 &&
+            !result.isTieLimitReached &&
+            CountBuffStack(context.allyA, "NextClashPointUp") == 0 &&
+            CountBuffStack(context.enemy, "NextClashPointUp") == 0 &&
             !actionSlot.isUsed &&
             dodge.currentCooldown == 0;
 
-        Debug.Log("Dodge Buff不消费：" + kept);
-        Debug.Log("敌人Attack Buff不消费：" + (CountBuffStack(context.enemy, "NextClashPointUp") == 3));
-        Debug.Log("双方卡牌不使用：" + (result != null && !result.playerCardUsed && !result.enemyCardUsed));
-        Debug.Log("槽位不MarkUsed：" + !actionSlot.isUsed);
+        Debug.Log("Dodge相等一次判定成功：" + consumed);
+        Debug.Log("双方NextClashPointUp结算后消费：" +
+            (CountBuffStack(context.allyA, "NextClashPointUp") == 0 &&
+             CountBuffStack(context.enemy, "NextClashPointUp") == 0));
+        Debug.Log("Dodge延迟结算且敌人Attack完成使用：" +
+            (result != null && !result.playerCardUsed && result.enemyCardUsed));
+        Debug.Log("直接Resolver调用不MarkUsed槽位：" + !actionSlot.isUsed);
     }
 
     void RunBuffKnownPointDodgeConsumeSubTest()
@@ -19918,34 +19888,44 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("===== 模式47 子测试G：known-point Dodge不重复消费敌人Buff =====");
 
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff_g", 30, 30, 50, 10, 3, 8);
-        BattleCardState responseAttack = CreateFixedAttackCardForCharacter(context.allyA, "buff_g_response_attack", 4);
-        BattleCardState enemyAttack = CreateAttackCardWithNextClashBuffEffect(context.enemy, "buff_g_enemy_attack", 5, BattleTiming.Resolved, 9);
+        BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_g_enemy_attack", 5, 0);
         BattleCardState passiveDodge = CreateFixedDodgeCardForCharacter(context.allyB, "buff_g_passive_dodge", 4, 1);
-        AddClashStartOneShotBuff(context.enemy, "NextClashPointUp", 2, 1);
+        AddClashStartOneShotBuff(context.enemy, "NextClashPointUp", 9, 1);
         AddClashStartOneShotBuff(context.allyB, "NextClashPointUp", 4, 1);
 
         BattleEnemyIntent intent = CreateEnemyAttackIntent("buff_g_intent", context.enemy, enemyAttack, context.allyB, 1);
-        BattleActionSlot responseSlot = CreateRespondedSlot(context.allyA, responseAttack);
         BattleActionSlot passiveDodgeSlot = new BattleActionSlot(context.allyB, 2);
         passiveDodgeSlot.AssignPassiveGuard(context.allyB, passiveDodge);
-        BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
-            responseSlot,
+        const int knownEnemyAttackPoint = 7;
+        BattleResolveResult result = BattleResolver.ResolveDodgeVsAttackWithKnownEnemyPoint(
+            passiveDodgeSlot,
             intent,
-            new List<BattleActionSlot> { passiveDodgeSlot }
+            knownEnemyAttackPoint
         );
 
+        bool dodgePointBoosted = result != null && result.playerPoint == 8;
+        bool dodgeSucceeded = result != null && result.resultType == "DodgeSuccess";
         bool dodgeConsumed = CountBuffStack(context.allyB, "NextClashPointUp") == 0;
+        bool knownEnemyPointKept =
+            result != null &&
+            result.enemyPoint == knownEnemyAttackPoint;
         bool enemyNewBuffKept = CountBuffStack(context.enemy, "NextClashPointUp") == 9;
         bool knownPointWorked =
             result != null &&
-            result.resultType == "DodgeSuccess" &&
-            result.enemyPoint == 7 &&
-            result.triggeredPassiveGuardSlot == passiveDodgeSlot;
+            dodgePointBoosted &&
+            dodgeSucceeded &&
+            knownEnemyPointKept &&
+            result.clashAttemptCount == 1 &&
+            result.playerCardUsed &&
+            !result.enemyCardUsed;
 
-        Debug.Log("Dodge点数获得加成：" + knownPointWorked);
+        Debug.Log("Dodge点数获得加成：" + dodgePointBoosted);
+        Debug.Log("known-point Dodge结果为DodgeSuccess：" + dodgeSucceeded);
         Debug.Log("DodgeSuccess或DodgeFailed后Dodge Buff消费：" + dodgeConsumed);
-        Debug.Log("known-point Dodge未重复消费敌人Buff：" + (enemyNewBuffKept && knownPointWorked));
-        Debug.Log("known-point敌人点数不重新Roll：" + (result != null && result.enemyPoint == 7));
+        Debug.Log("known-point Dodge未重复读取敌人Buff：" + knownEnemyPointKept);
+        Debug.Log("known-point Dodge未重复消费敌人Buff：" + enemyNewBuffKept);
+        Debug.Log("known-point敌人点数不重新Roll：" + (knownEnemyPointKept && result.clashAttemptCount == 1));
+        Debug.Log("known-point Dodge完整语义：" + (knownPointWorked && dodgeConsumed && enemyNewBuffKept));
     }
 
     void RunBuffDefenseConsumeSubTest()

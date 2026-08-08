@@ -40,7 +40,6 @@ public class BattleResolveResult
 // 负责处理卡牌使用、拼点、生效、命中、伤害、击杀等流程
 public static class BattleResolver
 {
-    const int MaxRespondedEnemyIntentClashAttempts = 10;
     const string BuffNextClashPointUp = "NextClashPointUp";
     const string BuffNextCardPointUp = "NextCardPointUp";
     const string BuffGuardUp = "GuardUp";
@@ -48,28 +47,6 @@ public static class BattleResolver
     const string ConsumeRuleFormalClashResolved = "FormalClashResolved";
     const string ConsumeRuleSuccessfulPointCardUsed = "SuccessfulPointCardUsed";
     const string ResourceTypeBuffStack = "BuffStack";
-
-    struct PointBuffSnapshot
-    {
-        public int nextCardPointStack;
-        public int nextCardPointModifier;
-        public int nextClashPointStack;
-        public int nextClashPointModifier;
-    }
-
-    struct CardResourceSnapshot
-    {
-        public BattleCardState cardState;
-        public string resourceID;
-        public int capturedStack;
-        public bool hasRule;
-        public bool normalVersionEnabled;
-        public int selectedMinPoint;
-        public int selectedMaxPoint;
-        public int pointModifierFromResource;
-        public int plannedConsumeAmount;
-        public bool shouldConsumeOnSuccess;
-    }
 
     // ResolveFreeAction = 正式结算自由行动
     // 第一版支持 Ability FreeAction 和 Attack FreeAction，不处理防御、闪避等自由行动。
@@ -206,9 +183,9 @@ public static class BattleResolver
             "，不进入拼点"
         );
 
-        PointBuffSnapshot userPointBuffSnapshot = CapturePointBuffSnapshot(user);
+        BattleClashPointSnapshot userPointBuffSnapshot = CapturePointBuffSnapshot(user);
 
-        // PointBuffSnapshot 在 ActionStart 前捕获。
+        // BattleClashPointSnapshot 在 ActionStart 前捕获。
         // 因此 ActionStart 新增的 NextCardPointUp / NextClashPointUp
         // 不影响当前卡，只保留给后续卡牌或后续正式拼点。
         // ActionStart 中对资源的修改会影响随后捕获的 ResourceSnapshot。
@@ -217,7 +194,7 @@ public static class BattleResolver
         // ActionStart 中产生或减少的资源可以影响当前卡。
         // BeforeUse 中产生或减少的资源不会回头改变当前卡资源快照，
         // 只影响后续行动。卡牌设计应避免依赖 BeforeUse 修改自身资源计算。
-        CardResourceSnapshot userResourceSnapshot = CaptureResourceSnapshot(user, actionSlot.cardState);
+        BattleClashResourceSnapshot userResourceSnapshot = CaptureResourceSnapshot(user, actionSlot.cardState);
 
         TriggerBattleEvent(BattleTiming.BeforeUse, user, target, actionSlot.cardState, 0, 0, false, false);
 
@@ -602,10 +579,10 @@ public static class BattleResolver
 
         CharacterData enemyUnit = enemyIntent.enemy;
         CharacterData target = enemyIntent.actualTargetCharacter;
-        PointBuffSnapshot enemyPointBuffSnapshot = CapturePointBuffSnapshot(enemyUnit);
+        BattleClashPointSnapshot enemyPointBuffSnapshot = CapturePointBuffSnapshot(enemyUnit);
 
         TriggerActionStart(enemyUnit, target, enemyIntent.enemyCardState);
-        CardResourceSnapshot enemyResourceSnapshot = CaptureResourceSnapshot(enemyUnit, enemyIntent.enemyCardState);
+        BattleClashResourceSnapshot enemyResourceSnapshot = CaptureResourceSnapshot(enemyUnit, enemyIntent.enemyCardState);
 
         TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, target, enemyIntent.enemyCardState, 0, 0, false, false);
 
@@ -743,193 +720,232 @@ public static class BattleResolver
         CharacterData enemyUnit = enemyIntent.enemy;
         BattleCardState enemyCardState = enemyIntent.enemyCardState;
         CharacterData actualTarget = enemyIntent.actualTargetCharacter;
+        BattleClashSession session = CreateRespondedAttackClashSession(
+            actionSlot,
+            enemyIntent
+        );
+        BattleClashPointSnapshot playerPointBuffSnapshot =
+            session.SideA.pointSnapshot;
+        BattleClashPointSnapshot enemyPointBuffSnapshot =
+            session.SideB.pointSnapshot;
+        BattleClashResourceSnapshot playerResourceSnapshot =
+            session.SideA.resourceSnapshot;
+        BattleClashResourceSnapshot enemyResourceSnapshot =
+            session.SideB.resourceSnapshot;
 
-        PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(playerUnit);
-        PointBuffSnapshot enemyPointBuffSnapshot = CapturePointBuffSnapshot(enemyUnit);
+        // 同步兼容入口仍会主动推进至Finalized；单次Roll能力保留在Session中。
+        while (!session.IsFinalized)
+        {
+            session.RollNextAttempt();
+            if (session.AttemptResult == BattleClashAttemptResult.AttackTie)
+            {
+                Debug.Log(
+                    "ResolveRespondedEnemyIntent 第" +
+                    session.AttemptIndex +
+                    "次拼点平局：玩家点数 " +
+                    session.SideAPoint +
+                    "，敌人点数 " +
+                    session.SideBPoint
+                );
+            }
+        }
+
+        int playerPoint = session.SideAPoint;
+        int enemyPoint = session.SideBPoint;
+        if (session.FinalResult == BattleClashFinalResult.TieLimit)
+        {
+            BattleResolveResult tieLimitResult = new BattleResolveResult();
+            tieLimitResult.isSuccess = true;
+            tieLimitResult.shouldCompleteItem = true;
+            tieLimitResult.playerCardUsed = false;
+            tieLimitResult.enemyCardUsed = false;
+            tieLimitResult.hasDamage = false;
+            tieLimitResult.damage = 0;
+            tieLimitResult.damagedCharacter = null;
+            tieLimitResult.resultType = "TieLimit";
+            tieLimitResult.playerPoint = playerPoint;
+            tieLimitResult.enemyPoint = enemyPoint;
+            tieLimitResult.clashAttemptCount = session.AttemptIndex;
+            tieLimitResult.isTieLimitReached = true;
+            tieLimitResult.triggeredEventChain = false;
+            tieLimitResult.message =
+                "ResolveRespondedEnemyIntent 连续拼点 " +
+                session.AttackTieCount +
+                " 次仍未分出胜负，自动结束，双方不造成伤害，双方卡牌不算成功使用";
+
+            Debug.Log(tieLimitResult.message);
+            return tieLimitResult;
+        }
+
+        bool isPlayerWin =
+            session.FinalResult == BattleClashFinalResult.SideAWin;
+        CharacterData attacker = isPlayerWin ? playerUnit : enemyUnit;
+        CharacterData defender = isPlayerWin ? enemyUnit : actualTarget;
+        BattleCardState winnerCardState = isPlayerWin
+            ? playerCardState
+            : enemyCardState;
+        BattleCardState loserCardState = isPlayerWin
+            ? enemyCardState
+            : playerCardState;
+        CharacterData loser = isPlayerWin ? enemyUnit : playerUnit;
+        int winnerPoint = isPlayerWin ? playerPoint : enemyPoint;
+        int loserPoint = isPlayerWin ? enemyPoint : playerPoint;
+        string resultType = isPlayerWin ? "PlayerWin" : "EnemyWin";
+
+        ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
+        ConsumeClashPointBuffs(enemyUnit, enemyPointBuffSnapshot);
+
+        if (isPlayerWin)
+        {
+            ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
+            PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
+        }
+        else
+        {
+            ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
+            PayDefaultResourceCostOnSuccessfulUse(enemyUnit, enemyResourceSnapshot);
+        }
+
+        TriggerBattleEvent(
+            BattleTiming.ClashWin,
+            attacker,
+            defender,
+            winnerCardState,
+            winnerPoint,
+            0,
+            false,
+            false,
+            ClashResult.Win
+        );
+
+        TriggerBattleEvent(
+            BattleTiming.ClashLose,
+            loser,
+            attacker,
+            loserCardState,
+            loserPoint,
+            0,
+            false,
+            false,
+            ClashResult.Lose
+        );
+
+        TriggerBattleEvent(
+            BattleTiming.Resolved,
+            attacker,
+            defender,
+            winnerCardState,
+            winnerPoint,
+            0,
+            false,
+            false,
+            ClashResult.Win
+        );
+
+        int damageScaled = BattleCalculator.GetFinalDamageScaled(
+            attacker,
+            defender,
+            winnerCardState.cardData,
+            winnerPoint
+        );
+        int hpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+
+        TriggerBattleEvent(
+            BattleTiming.Hit,
+            attacker,
+            defender,
+            winnerCardState,
+            winnerPoint,
+            hpDamage,
+            true,
+            false,
+            ClashResult.Win
+        );
+
+        ApplyDamageAndTriggerEvents(
+            attacker,
+            defender,
+            winnerCardState,
+            hpDamage,
+            winnerPoint
+        );
+
+        BattleResolveResult result = new BattleResolveResult();
+        result.isSuccess = true;
+        result.shouldCompleteItem = true;
+        result.playerCardUsed = isPlayerWin;
+        result.enemyCardUsed = !isPlayerWin;
+        result.hasDamage = hpDamage > 0;
+        result.damage = hpDamage;
+        result.damagedCharacter = hpDamage > 0 ? defender : null;
+        result.resultType = resultType;
+        result.playerPoint = playerPoint;
+        result.enemyPoint = enemyPoint;
+        result.clashAttemptCount = session.AttemptIndex;
+        result.isTieLimitReached = false;
+        result.triggeredEventChain = true;
+        result.message =
+            "ResolveRespondedEnemyIntent 完成：" +
+            resultType +
+            "，玩家点数 " +
+            playerPoint +
+            "，敌人点数 " +
+            enemyPoint +
+            "，造成伤害 " +
+            hpDamage;
+
+        Debug.Log(result.message);
+        return result;
+    }
+
+    // 只初始化一次正式Attack Clash，供同步Resolver与后续逐Attempt执行入口共用。
+    internal static BattleClashSession CreateRespondedAttackClashSession(
+        BattleActionSlot actionSlot,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        CharacterData playerUnit = actionSlot.actor;
+        BattleCardState playerCardState = actionSlot.cardState;
+        CharacterData enemyUnit = enemyIntent.enemy;
+        BattleCardState enemyCardState = enemyIntent.enemyCardState;
+        CharacterData actualTarget = enemyIntent.actualTargetCharacter;
+
+        BattleClashPointSnapshot playerPointBuffSnapshot =
+            CapturePointBuffSnapshot(playerUnit);
+        BattleClashPointSnapshot enemyPointBuffSnapshot =
+            CapturePointBuffSnapshot(enemyUnit);
 
         TriggerActionStart(enemyUnit, actualTarget, enemyCardState);
         TriggerActionStart(playerUnit, enemyUnit, playerCardState);
 
-        CardResourceSnapshot playerResourceSnapshot = CaptureResourceSnapshot(playerUnit, playerCardState);
-        CardResourceSnapshot enemyResourceSnapshot = CaptureResourceSnapshot(enemyUnit, enemyCardState);
+        BattleClashResourceSnapshot playerResourceSnapshot =
+            CaptureResourceSnapshot(playerUnit, playerCardState);
+        BattleClashResourceSnapshot enemyResourceSnapshot =
+            CaptureResourceSnapshot(enemyUnit, enemyCardState);
 
-        TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, actualTarget, enemyCardState, 0, 0, false, false);
-        TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, playerCardState, 0, 0, false, false);
+        TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, actualTarget,
+            enemyCardState, 0, 0, false, false);
+        TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit,
+            playerCardState, 0, 0, false, false);
 
         enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
         playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
-        int playerPoint = 0;
-        int enemyPoint = 0;
-
-        for (int attempt = 1; attempt <= MaxRespondedEnemyIntentClashAttempts; attempt++)
-        {
-            playerPoint = BattleCalculator.GetFinalClashPoint(
+        return BattleClashSession.CreateAttackVsAttack(
+            new BattleClashSideState(
                 playerUnit,
-                playerCardState.cardData,
-                playerPointBuffSnapshot.nextClashPointModifier,
-                playerPointBuffSnapshot.nextCardPointModifier,
-                playerResourceSnapshot.selectedMinPoint,
-                playerResourceSnapshot.selectedMaxPoint,
-                playerResourceSnapshot.pointModifierFromResource
-            );
-            enemyPoint = BattleCalculator.GetFinalClashPoint(
+                playerCardState,
+                playerPointBuffSnapshot,
+                playerResourceSnapshot
+            ),
+            new BattleClashSideState(
                 enemyUnit,
-                enemyCardState.cardData,
-                enemyPointBuffSnapshot.nextClashPointModifier,
-                enemyPointBuffSnapshot.nextCardPointModifier,
-                enemyResourceSnapshot.selectedMinPoint,
-                enemyResourceSnapshot.selectedMaxPoint,
-                enemyResourceSnapshot.pointModifierFromResource
-            );
-
-            if (playerPoint == enemyPoint)
-            {
-                Debug.Log(
-                    "ResolveRespondedEnemyIntent 第" +
-                    attempt +
-                    "次拼点平局：玩家点数 " +
-                    playerPoint +
-                    "，敌人点数 " +
-                    enemyPoint
-                );
-
-                continue;
-            }
-
-            bool isPlayerWin = playerPoint > enemyPoint;
-            CharacterData attacker = isPlayerWin ? playerUnit : enemyUnit;
-            CharacterData defender = isPlayerWin ? enemyUnit : actualTarget;
-            BattleCardState winnerCardState = isPlayerWin ? playerCardState : enemyCardState;
-            BattleCardState loserCardState = isPlayerWin ? enemyCardState : playerCardState;
-            CharacterData loser = isPlayerWin ? enemyUnit : playerUnit;
-            int winnerPoint = isPlayerWin ? playerPoint : enemyPoint;
-            int loserPoint = isPlayerWin ? enemyPoint : playerPoint;
-            string resultType = isPlayerWin ? "PlayerWin" : "EnemyWin";
-
-            ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
-            ConsumeClashPointBuffs(enemyUnit, enemyPointBuffSnapshot);
-
-            if (isPlayerWin)
-            {
-                ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
-                PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
-            }
-            else
-            {
-                ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
-                PayDefaultResourceCostOnSuccessfulUse(enemyUnit, enemyResourceSnapshot);
-            }
-
-            TriggerBattleEvent(
-                BattleTiming.ClashWin,
-                attacker,
-                defender,
-                winnerCardState,
-                winnerPoint,
-                0,
-                false,
-                false,
-                ClashResult.Win
-            );
-
-            TriggerBattleEvent(
-                BattleTiming.ClashLose,
-                loser,
-                attacker,
-                loserCardState,
-                loserPoint,
-                0,
-                false,
-                false,
-                ClashResult.Lose
-            );
-
-            TriggerBattleEvent(
-                BattleTiming.Resolved,
-                attacker,
-                defender,
-                winnerCardState,
-                winnerPoint,
-                0,
-                false,
-                false,
-                ClashResult.Win
-            );
-
-            int damageScaled = BattleCalculator.GetFinalDamageScaled(
-                attacker,
-                defender,
-                winnerCardState.cardData,
-                winnerPoint
-            );
-            int hpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
-
-            TriggerBattleEvent(
-                BattleTiming.Hit,
-                attacker,
-                defender,
-                winnerCardState,
-                winnerPoint,
-                hpDamage,
-                true,
-                false,
-                ClashResult.Win
-            );
-
-            ApplyDamageAndTriggerEvents(attacker, defender, winnerCardState, hpDamage, winnerPoint);
-
-            BattleResolveResult result = new BattleResolveResult();
-            result.isSuccess = true;
-            result.shouldCompleteItem = true;
-            result.playerCardUsed = isPlayerWin;
-            result.enemyCardUsed = !isPlayerWin;
-            result.hasDamage = hpDamage > 0;
-            result.damage = hpDamage;
-            result.damagedCharacter = hpDamage > 0 ? defender : null;
-            result.resultType = resultType;
-            result.playerPoint = playerPoint;
-            result.enemyPoint = enemyPoint;
-            result.clashAttemptCount = attempt;
-            result.isTieLimitReached = false;
-            result.triggeredEventChain = true;
-            result.message =
-                "ResolveRespondedEnemyIntent 完成：" +
-                resultType +
-                "，玩家点数 " +
-                playerPoint +
-                "，敌人点数 " +
-                enemyPoint +
-                "，造成伤害 " +
-                hpDamage;
-
-            Debug.Log(result.message);
-
-            return result;
-        }
-
-        BattleResolveResult tieLimitResult = new BattleResolveResult();
-        tieLimitResult.isSuccess = true;
-        tieLimitResult.shouldCompleteItem = true;
-        tieLimitResult.playerCardUsed = false;
-        tieLimitResult.enemyCardUsed = false;
-        tieLimitResult.hasDamage = false;
-        tieLimitResult.damage = 0;
-        tieLimitResult.damagedCharacter = null;
-        tieLimitResult.resultType = "TieLimit";
-        tieLimitResult.playerPoint = playerPoint;
-        tieLimitResult.enemyPoint = enemyPoint;
-        tieLimitResult.clashAttemptCount = MaxRespondedEnemyIntentClashAttempts;
-        tieLimitResult.isTieLimitReached = true;
-        tieLimitResult.triggeredEventChain = false;
-        tieLimitResult.message =
-            "ResolveRespondedEnemyIntent 连续拼点 " +
-            MaxRespondedEnemyIntentClashAttempts +
-            " 次仍未分出胜负，自动结束，双方不造成伤害，双方卡牌不算成功使用";
-
-        Debug.Log(tieLimitResult.message);
-
-        return tieLimitResult;
+                enemyCardState,
+                enemyPointBuffSnapshot,
+                enemyResourceSnapshot
+            ),
+            actualTarget
+        );
     }
 
     // 旧兼容方法：正式 Responded Attack 路径已不再调用精确响应后的后备守备。
@@ -1171,42 +1187,13 @@ public static class BattleResolver
             );
         }
 
-        PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(playerUnit);
-        PointBuffSnapshot enemyPointBuffSnapshot = CapturePointBuffSnapshot(enemyUnit);
-
-        TriggerActionStart(enemyUnit, actualTarget, enemyCardState);
-        TriggerActionStart(playerUnit, enemyUnit, defenseCardState);
-
-        CardResourceSnapshot playerResourceSnapshot = CaptureResourceSnapshot(playerUnit, defenseCardState);
-        CardResourceSnapshot enemyResourceSnapshot = CaptureResourceSnapshot(enemyUnit, enemyCardState);
-
-        TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, actualTarget, enemyCardState, 0, 0, false, false);
-        TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, defenseCardState, 0, 0, false, false);
-
-        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
-        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
-
-        int enemyFinalAttackPoint = BattleCalculator.GetFinalAttackPointWithoutClash(
-            enemyUnit,
-            enemyCardState.cardData,
-            enemyPointBuffSnapshot.nextCardPointModifier,
-            enemyResourceSnapshot.selectedMinPoint,
-            enemyResourceSnapshot.selectedMaxPoint,
-            enemyResourceSnapshot.pointModifierFromResource
-        );
-
         return ResolveDefenseVsAttackCore(
             actionSlot,
             enemyIntent,
-            enemyFinalAttackPoint,
             true,
             true,
             "ResolveRespondedDefenseVsAttack",
-            false,
-            playerPointBuffSnapshot,
-            enemyPointBuffSnapshot,
-            playerResourceSnapshot,
-            enemyResourceSnapshot
+            CreateRespondedDefenseClashSession(actionSlot, enemyIntent)
         );
     }
 
@@ -1289,44 +1276,116 @@ public static class BattleResolver
             );
         }
 
-        PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(defenseSlot.actor);
-
-        TriggerActionStart(defenseSlot.actor, enemyIntent.enemy, defenseSlot.cardState);
-        CardResourceSnapshot playerResourceSnapshot = CaptureResourceSnapshot(defenseSlot.actor, defenseSlot.cardState);
-
-        TriggerBattleEvent(BattleTiming.BeforeUse, defenseSlot.actor, enemyIntent.enemy, defenseSlot.cardState, 0, 0, false, false);
-
-        defenseSlot.actor.CheckBuffsByTiming(BattleTiming.ClashStart, false);
-
-        int clampedKnownEnemyAttackPoint = Mathf.Max(0, knownEnemyAttackPoint);
-
         return ResolveDefenseVsAttackCore(
             defenseSlot,
             enemyIntent,
-            clampedKnownEnemyAttackPoint,
             false,
             false,
             "ResolveDefenseVsAttackWithKnownEnemyPoint",
+            CreateKnownPointDefenseClashSession(
+                defenseSlot,
+                enemyIntent,
+                knownEnemyAttackPoint
+            )
+        );
+    }
+
+    internal static BattleClashSession CreateRespondedDefenseClashSession(
+        BattleActionSlot defenseSlot,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        CharacterData playerUnit = defenseSlot.actor;
+        BattleCardState defenseCardState = defenseSlot.cardState;
+        CharacterData enemyUnit = enemyIntent.enemy;
+        BattleCardState enemyCardState = enemyIntent.enemyCardState;
+        CharacterData actualTarget = enemyIntent.actualTargetCharacter;
+        BattleClashPointSnapshot playerPointBuffSnapshot =
+            CapturePointBuffSnapshot(playerUnit);
+        BattleClashPointSnapshot enemyPointBuffSnapshot =
+            CapturePointBuffSnapshot(enemyUnit);
+
+        TriggerActionStart(enemyUnit, actualTarget, enemyCardState);
+        TriggerActionStart(playerUnit, enemyUnit, defenseCardState);
+
+        BattleClashResourceSnapshot playerResourceSnapshot =
+            CaptureResourceSnapshot(playerUnit, defenseCardState);
+        BattleClashResourceSnapshot enemyResourceSnapshot =
+            CaptureResourceSnapshot(enemyUnit, enemyCardState);
+
+        TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, actualTarget,
+            enemyCardState, 0, 0, false, false);
+        TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit,
+            defenseCardState, 0, 0, false, false);
+        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
+        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
+
+        return BattleClashSession.CreateDefenseVsAttack(
+            new BattleClashSideState(
+                playerUnit,
+                defenseCardState,
+                playerPointBuffSnapshot,
+                playerResourceSnapshot
+            ),
+            new BattleClashSideState(
+                enemyUnit,
+                enemyCardState,
+                enemyPointBuffSnapshot,
+                enemyResourceSnapshot
+            ),
+            actualTarget
+        );
+    }
+
+    internal static BattleClashSession CreateKnownPointDefenseClashSession(
+        BattleActionSlot defenseSlot,
+        BattleEnemyIntent enemyIntent,
+        int knownEnemyAttackPoint
+    )
+    {
+        CharacterData playerUnit = defenseSlot.actor;
+        BattleCardState defenseCardState = defenseSlot.cardState;
+        CharacterData enemyUnit = enemyIntent.enemy;
+        BattleCardState enemyCardState = enemyIntent.enemyCardState;
+        BattleClashPointSnapshot playerPointBuffSnapshot =
+            CapturePointBuffSnapshot(playerUnit);
+
+        TriggerActionStart(playerUnit, enemyUnit, defenseCardState);
+        BattleClashResourceSnapshot playerResourceSnapshot =
+            CaptureResourceSnapshot(playerUnit, defenseCardState);
+        TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit,
+            defenseCardState, 0, 0, false, false);
+        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
+
+        return BattleClashSession.CreateDefenseVsAttack(
+            new BattleClashSideState(
+                playerUnit,
+                defenseCardState,
+                playerPointBuffSnapshot,
+                playerResourceSnapshot
+            ),
+            new BattleClashSideState(
+                enemyUnit,
+                enemyCardState,
+                new BattleClashPointSnapshot(),
+                new BattleClashResourceSnapshot
+                {
+                    cardState = enemyCardState
+                }
+            ),
+            enemyIntent.actualTargetCharacter,
             true,
-            playerPointBuffSnapshot,
-            new PointBuffSnapshot(),
-            playerResourceSnapshot,
-            new CardResourceSnapshot()
+            Mathf.Max(0, knownEnemyAttackPoint)
         );
     }
 
     static BattleResolveResult ResolveDefenseVsAttackCore(
         BattleActionSlot defenseSlot,
         BattleEnemyIntent enemyIntent,
-        int enemyFinalAttackPoint,
         bool shouldTriggerEnemyResolved,
         bool enemyCardUsed,
         string messagePrefix,
-        bool isKnownPointContinuation,
-        PointBuffSnapshot playerPointBuffSnapshot,
-        PointBuffSnapshot enemyPointBuffSnapshot,
-        CardResourceSnapshot playerResourceSnapshot,
-        CardResourceSnapshot enemyResourceSnapshot
+        BattleClashSession session
     )
     {
         CharacterData playerUnit = defenseSlot.actor;
@@ -1335,27 +1394,25 @@ public static class BattleResolver
         BattleCardState enemyCardState = enemyIntent.enemyCardState;
         CharacterData actualTarget = enemyIntent.actualTargetCharacter;
 
-        enemyFinalAttackPoint = Mathf.Max(0, enemyFinalAttackPoint);
+        session.RollNextAttempt();
 
-        int playerFinalDefensePointScaled = BattleCalculator.GetFinalDefensePointScaled(
-            playerUnit,
-            defenseCardState.cardData,
-            playerPointBuffSnapshot.nextCardPointModifier,
-            playerResourceSnapshot.selectedMinPoint,
-            playerResourceSnapshot.selectedMaxPoint,
-            playerResourceSnapshot.pointModifierFromResource
-        );
-        int playerFinalDefensePoint = BattleCalculator.ConvertScaledDamageToHPDamage(playerFinalDefensePointScaled);
-        int remainingAttackPoint = BattleCalculator.CalculateRemainingAttackPointAfterDefense(
-            enemyFinalAttackPoint,
-            playerFinalDefensePointScaled
-        );
+        int enemyFinalAttackPoint = session.SideBPoint;
+        int playerFinalDefensePoint = session.SideAPoint;
+        int remainingAttackPoint = session.RemainingAttackPoint;
+        BattleClashPointSnapshot playerPointBuffSnapshot =
+            session.SideA.pointSnapshot;
+        BattleClashPointSnapshot enemyPointBuffSnapshot =
+            session.SideB.pointSnapshot;
+        BattleClashResourceSnapshot playerResourceSnapshot =
+            session.SideA.resourceSnapshot;
+        BattleClashResourceSnapshot enemyResourceSnapshot =
+            session.SideB.resourceSnapshot;
 
         ConsumeDefensePointBuffs(playerUnit);
         ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
         PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
 
-        if (!isKnownPointContinuation)
+        if (!session.UsesKnownSideBPoint)
         {
             ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
             PayDefaultResourceCostOnSuccessfulUse(enemyUnit, enemyResourceSnapshot);
@@ -1369,7 +1426,7 @@ public static class BattleResolver
         TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, defenseCardState, playerFinalDefensePoint, 0, false, false);
 
         int finalHpDamage = 0;
-        bool isFullBlock = remainingAttackPoint == 0;
+        bool isFullBlock = session.IsFullBlock;
 
         if (!isFullBlock)
         {
@@ -1397,10 +1454,13 @@ public static class BattleResolver
         result.resultType = isFullBlock ? "DefenseFullBlock" : "DefenseReducedDamage";
         result.playerPoint = playerFinalDefensePoint;
         result.enemyPoint = enemyFinalAttackPoint;
+        // 兼容旧BattleResolveResult契约：Defense不计入Attack拼点尝试次数。
         result.clashAttemptCount = 0;
         result.isTieLimitReached = false;
         result.triggeredEventChain = true;
-        string enemyPointLabel = isKnownPointContinuation ? "knownEnemyAttackPoint " : "敌人最终攻击点数 ";
+        string enemyPointLabel = session.UsesKnownSideBPoint
+            ? "knownEnemyAttackPoint "
+            : "敌人最终攻击点数 ";
 
         result.message =
             messagePrefix +
@@ -1416,7 +1476,7 @@ public static class BattleResolver
             "，最终 HP 伤害 " +
             finalHpDamage;
 
-        if (isKnownPointContinuation)
+        if (session.UsesKnownSideBPoint)
         {
             result.message += "。使用已确定敌人点数，未重新 Roll";
         }
@@ -1498,7 +1558,6 @@ public static class BattleResolver
             );
         }
 
-        int fixedEnemyAttackPoint = Mathf.Max(0, knownEnemyAttackPoint);
         CharacterData playerUnit = dodgeSlot.actor;
         CharacterData enemyUnit = enemyIntent.enemy;
         CharacterData actualTarget = enemyIntent.actualTargetCharacter;
@@ -1515,147 +1574,134 @@ public static class BattleResolver
             );
         }
 
-        PointBuffSnapshot playerPointBuffSnapshot = CapturePointBuffSnapshot(playerUnit);
+        BattleClashSession session = CreateKnownPointDodgeClashSession(
+            dodgeSlot,
+            enemyIntent,
+            knownEnemyAttackPoint
+        );
+        session.RollNextAttempt();
 
-        TriggerActionStart(playerUnit, enemyUnit, dodgeCardState);
-        CardResourceSnapshot playerResourceSnapshot = CaptureResourceSnapshot(playerUnit, dodgeCardState);
+        BattleClashPointSnapshot playerPointBuffSnapshot =
+            session.SideA.pointSnapshot;
+        BattleClashResourceSnapshot playerResourceSnapshot =
+            session.SideA.resourceSnapshot;
+        int playerDodgePoint = session.SideAPoint;
+        int fixedEnemyAttackPoint = session.SideBPoint;
+        ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
+        ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
+        PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
 
-        TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, dodgeCardState, 0, 0, false, false);
-
-        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
-
-        int playerDodgePoint = 0;
-
-        for (int attempt = 1; attempt <= MaxRespondedEnemyIntentClashAttempts; attempt++)
+        if (session.FinalResult == BattleClashFinalResult.DodgeSuccess)
         {
-            playerDodgePoint = BattleCalculator.GetFinalClashPoint(
-                playerUnit,
-                dodgeCardState.cardData,
-                playerPointBuffSnapshot.nextClashPointModifier,
-                playerPointBuffSnapshot.nextCardPointModifier,
-                playerResourceSnapshot.selectedMinPoint,
-                playerResourceSnapshot.selectedMaxPoint,
-                playerResourceSnapshot.pointModifierFromResource
-            );
+            TriggerBattleEvent(BattleTiming.ClashWin, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
+            TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
 
-            if (playerDodgePoint == fixedEnemyAttackPoint)
-            {
-                Debug.Log(
-                    "ResolveDodgeVsAttackWithKnownEnemyPoint 第" +
-                    attempt +
-                    "次平局：玩家 Dodge 点数 " +
-                    playerDodgePoint +
-                    "，固定敌人 Attack 点数 " +
-                    fixedEnemyAttackPoint +
-                    "。只重新 Roll Dodge"
-                );
-
-                continue;
-            }
-
-            if (playerDodgePoint > fixedEnemyAttackPoint)
-            {
-                ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
-                ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
-                PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
-
-                TriggerBattleEvent(BattleTiming.ClashWin, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
-                TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
-
-                BattleResolveResult successResult = new BattleResolveResult();
-                successResult.isSuccess = true;
-                successResult.shouldCompleteItem = true;
-                successResult.playerCardUsed = true;
-                successResult.enemyCardUsed = false;
-                successResult.hasDamage = false;
-                successResult.damage = 0;
-                successResult.damagedCharacter = null;
-                successResult.resultType = "DodgeSuccess";
-                successResult.playerPoint = playerDodgePoint;
-                successResult.enemyPoint = fixedEnemyAttackPoint;
-                successResult.clashAttemptCount = attempt;
-                successResult.isTieLimitReached = false;
-                successResult.triggeredEventChain = true;
-                successResult.message =
-                    "ResolveDodgeVsAttackWithKnownEnemyPoint 完成：DodgeSuccess，玩家 Dodge 点数 " +
-                    playerDodgePoint +
-                    "，固定敌人 Attack 点数 " +
-                    fixedEnemyAttackPoint +
-                    "。使用已确定敌人点数，未重新 Roll，闪避成功，无伤害";
-
-                Debug.Log(successResult.message);
-
-                return successResult;
-            }
-
-            ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
-            ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
-            PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
-
-            TriggerBattleEvent(BattleTiming.ClashLose, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
-            TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
-
-            int damageScaled = BattleCalculator.GetFinalDamageScaled(
-                enemyUnit,
-                actualTarget,
-                enemyCardState.cardData,
-                fixedEnemyAttackPoint
-            );
-            int hpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
-
-            TriggerBattleEvent(BattleTiming.Hit, enemyUnit, actualTarget, enemyCardState, fixedEnemyAttackPoint, hpDamage, true, false, ClashResult.Win);
-            ApplyDamageAndTriggerEvents(enemyUnit, actualTarget, enemyCardState, hpDamage, fixedEnemyAttackPoint);
-
-            BattleResolveResult failedResult = new BattleResolveResult();
-            failedResult.isSuccess = true;
-            failedResult.shouldCompleteItem = true;
-            failedResult.playerCardUsed = true;
-            failedResult.enemyCardUsed = false;
-            failedResult.hasDamage = hpDamage > 0;
-            failedResult.damage = hpDamage;
-            failedResult.damagedCharacter = hpDamage > 0 ? actualTarget : null;
-            failedResult.resultType = "DodgeFailed";
-            failedResult.playerPoint = playerDodgePoint;
-            failedResult.enemyPoint = fixedEnemyAttackPoint;
-            failedResult.clashAttemptCount = attempt;
-            failedResult.isTieLimitReached = false;
-            failedResult.triggeredEventChain = true;
-            failedResult.message =
-                "ResolveDodgeVsAttackWithKnownEnemyPoint 完成：DodgeFailed，玩家 Dodge 点数 " +
+            BattleResolveResult successResult = new BattleResolveResult();
+            successResult.isSuccess = true;
+            successResult.shouldCompleteItem = true;
+            successResult.playerCardUsed = true;
+            successResult.enemyCardUsed = false;
+            successResult.hasDamage = false;
+            successResult.damage = 0;
+            successResult.damagedCharacter = null;
+            successResult.resultType = "DodgeSuccess";
+            successResult.playerPoint = playerDodgePoint;
+            successResult.enemyPoint = fixedEnemyAttackPoint;
+            successResult.clashAttemptCount = session.AttemptIndex;
+            successResult.isTieLimitReached = false;
+            successResult.triggeredEventChain = true;
+            successResult.message =
+                "ResolveDodgeVsAttackWithKnownEnemyPoint 完成：DodgeSuccess，玩家 Dodge 点数 " +
                 playerDodgePoint +
                 "，固定敌人 Attack 点数 " +
                 fixedEnemyAttackPoint +
-                "，最终 HP 伤害 " +
-                hpDamage +
-                "。使用已确定敌人点数，未重新 Roll";
+                "。使用已确定敌人点数，未重新 Roll，闪避成功，无伤害";
 
-            Debug.Log(failedResult.message);
-
-            return failedResult;
+            Debug.Log(successResult.message);
+            return successResult;
         }
 
-        BattleResolveResult tieLimitResult = new BattleResolveResult();
-        tieLimitResult.isSuccess = true;
-        tieLimitResult.shouldCompleteItem = true;
-        tieLimitResult.playerCardUsed = false;
-        tieLimitResult.enemyCardUsed = false;
-        tieLimitResult.hasDamage = false;
-        tieLimitResult.damage = 0;
-        tieLimitResult.damagedCharacter = null;
-        tieLimitResult.resultType = "TieLimit";
-        tieLimitResult.playerPoint = playerDodgePoint;
-        tieLimitResult.enemyPoint = fixedEnemyAttackPoint;
-        tieLimitResult.clashAttemptCount = MaxRespondedEnemyIntentClashAttempts;
-        tieLimitResult.isTieLimitReached = true;
-        tieLimitResult.triggeredEventChain = false;
-        tieLimitResult.message =
-            "ResolveDodgeVsAttackWithKnownEnemyPoint 连续 " +
-            MaxRespondedEnemyIntentClashAttempts +
-            " 次与固定敌人点数相等，进入 TieLimit。Dodge 不算使用，不回落 EnemyWin 伤害";
+        TriggerBattleEvent(BattleTiming.ClashLose, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
+        TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
 
-        Debug.Log(tieLimitResult.message);
+        int damageScaled = BattleCalculator.GetFinalDamageScaled(
+            enemyUnit,
+            actualTarget,
+            enemyCardState.cardData,
+            fixedEnemyAttackPoint
+        );
+        int hpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
 
-        return tieLimitResult;
+        TriggerBattleEvent(BattleTiming.Hit, enemyUnit, actualTarget, enemyCardState, fixedEnemyAttackPoint, hpDamage, true, false, ClashResult.Win);
+        ApplyDamageAndTriggerEvents(enemyUnit, actualTarget, enemyCardState, hpDamage, fixedEnemyAttackPoint);
+
+        BattleResolveResult failedResult = new BattleResolveResult();
+        failedResult.isSuccess = true;
+        failedResult.shouldCompleteItem = true;
+        failedResult.playerCardUsed = true;
+        failedResult.enemyCardUsed = false;
+        failedResult.hasDamage = hpDamage > 0;
+        failedResult.damage = hpDamage;
+        failedResult.damagedCharacter = hpDamage > 0 ? actualTarget : null;
+        failedResult.resultType = "DodgeFailed";
+        failedResult.playerPoint = playerDodgePoint;
+        failedResult.enemyPoint = fixedEnemyAttackPoint;
+        failedResult.clashAttemptCount = session.AttemptIndex;
+        failedResult.isTieLimitReached = false;
+        failedResult.triggeredEventChain = true;
+        failedResult.message =
+            "ResolveDodgeVsAttackWithKnownEnemyPoint 完成：DodgeFailed，玩家 Dodge 点数 " +
+            playerDodgePoint +
+            "，固定敌人 Attack 点数 " +
+            fixedEnemyAttackPoint +
+            "，最终 HP 伤害 " +
+            hpDamage +
+            "。使用已确定敌人点数，未重新 Roll";
+
+        Debug.Log(failedResult.message);
+        return failedResult;
+    }
+
+    internal static BattleClashSession CreateKnownPointDodgeClashSession(
+        BattleActionSlot dodgeSlot,
+        BattleEnemyIntent enemyIntent,
+        int knownEnemyAttackPoint
+    )
+    {
+        CharacterData playerUnit = dodgeSlot.actor;
+        BattleCardState dodgeCardState = dodgeSlot.cardState;
+        CharacterData enemyUnit = enemyIntent.enemy;
+        BattleCardState enemyCardState = enemyIntent.enemyCardState;
+        BattleClashPointSnapshot playerPointBuffSnapshot =
+            CapturePointBuffSnapshot(playerUnit);
+
+        TriggerActionStart(playerUnit, enemyUnit, dodgeCardState);
+        BattleClashResourceSnapshot playerResourceSnapshot =
+            CaptureResourceSnapshot(playerUnit, dodgeCardState);
+        TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit,
+            dodgeCardState, 0, 0, false, false);
+        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
+
+        return BattleClashSession.CreateDodgeVsAttack(
+            new BattleClashSideState(
+                playerUnit,
+                dodgeCardState,
+                playerPointBuffSnapshot,
+                playerResourceSnapshot
+            ),
+            new BattleClashSideState(
+                enemyUnit,
+                enemyCardState,
+                new BattleClashPointSnapshot(),
+                new BattleClashResourceSnapshot
+                {
+                    cardState = enemyCardState
+                }
+            ),
+            enemyIntent.actualTargetCharacter,
+            true,
+            Mathf.Max(0, knownEnemyAttackPoint)
+        );
     }
 
     public static BattleResolveResult ResolveContinuousDodgeVsAttack(
@@ -1778,121 +1824,25 @@ public static class BattleResolver
             );
         }
 
-        PointBuffSnapshot playerPointBuffSnapshot = isContinuousDodgeContinuation
-            ? new PointBuffSnapshot()
-            : CapturePointBuffSnapshot(playerUnit);
-        PointBuffSnapshot enemyPointBuffSnapshot = CapturePointBuffSnapshot(enemyUnit);
+        BattleClashSession session = CreateRespondedDodgeClashSession(
+            playerSlot,
+            enemyIntent,
+            isContinuousDodgeContinuation
+        );
+        session.RollNextAttempt();
+        BattleClashPointSnapshot playerPointBuffSnapshot =
+            session.SideA.pointSnapshot;
+        BattleClashPointSnapshot enemyPointBuffSnapshot =
+            session.SideB.pointSnapshot;
+        BattleClashResourceSnapshot playerResourceSnapshot =
+            session.SideA.resourceSnapshot;
+        BattleClashResourceSnapshot enemyResourceSnapshot =
+            session.SideB.resourceSnapshot;
+        int playerDodgePoint = session.SideAPoint;
+        int enemyAttackPoint = session.SideBPoint;
 
-        TriggerActionStart(enemyUnit, actualTarget, enemyCardState);
-        if (!isContinuousDodgeContinuation)
+        if (session.FinalResult == BattleClashFinalResult.DodgeSuccess)
         {
-            TriggerActionStart(playerUnit, enemyUnit, dodgeCardState);
-        }
-
-        CardResourceSnapshot playerResourceSnapshot = isContinuousDodgeContinuation
-            ? new CardResourceSnapshot
-            {
-                cardState = dodgeCardState,
-                selectedMinPoint = dodgeCardState.cardData.minPoint,
-                selectedMaxPoint = dodgeCardState.cardData.maxPoint
-            }
-            : CaptureResourceSnapshot(playerUnit, dodgeCardState);
-        CardResourceSnapshot enemyResourceSnapshot = CaptureResourceSnapshot(enemyUnit, enemyCardState);
-
-        TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, actualTarget, enemyCardState, 0, 0, false, false);
-        if (!isContinuousDodgeContinuation)
-        {
-            TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit, dodgeCardState, 0, 0, false, false);
-        }
-
-        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
-        if (!isContinuousDodgeContinuation)
-        {
-            playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
-        }
-
-        int playerDodgePoint = 0;
-        int enemyAttackPoint = 0;
-
-        for (int attempt = 1; attempt <= MaxRespondedEnemyIntentClashAttempts; attempt++)
-        {
-            playerDodgePoint = BattleCalculator.GetFinalClashPoint(
-                playerUnit,
-                dodgeCardState.cardData,
-                playerPointBuffSnapshot.nextClashPointModifier,
-                playerPointBuffSnapshot.nextCardPointModifier,
-                playerResourceSnapshot.selectedMinPoint,
-                playerResourceSnapshot.selectedMaxPoint,
-                playerResourceSnapshot.pointModifierFromResource
-            );
-            enemyAttackPoint = BattleCalculator.GetFinalClashPoint(
-                enemyUnit,
-                enemyCardState.cardData,
-                enemyPointBuffSnapshot.nextClashPointModifier,
-                enemyPointBuffSnapshot.nextCardPointModifier,
-                enemyResourceSnapshot.selectedMinPoint,
-                enemyResourceSnapshot.selectedMaxPoint,
-                enemyResourceSnapshot.pointModifierFromResource
-            );
-
-            if (playerDodgePoint == enemyAttackPoint)
-            {
-                Debug.Log(
-                    "ResolveRespondedDodgeVsAttack 第" +
-                    attempt +
-                    "次平局：玩家 Dodge 点数 " +
-                    playerDodgePoint +
-                    "，敌人 Attack 点数 " +
-                    enemyAttackPoint
-                );
-
-                continue;
-            }
-
-            if (playerDodgePoint > enemyAttackPoint)
-            {
-                if (!isContinuousDodgeContinuation)
-                {
-                    ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
-                    ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
-                    PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
-                }
-                ConsumeClashPointBuffs(enemyUnit, enemyPointBuffSnapshot);
-                ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
-                PayDefaultResourceCostOnSuccessfulUse(enemyUnit, enemyResourceSnapshot);
-
-                TriggerBattleEvent(BattleTiming.ClashWin, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
-                TriggerBattleEvent(BattleTiming.ClashLose, enemyUnit, playerUnit, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Lose);
-                TriggerBattleEvent(BattleTiming.Resolved, enemyUnit, playerUnit, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Lose);
-
-                BattleResolveResult result = new BattleResolveResult();
-                result.isSuccess = true;
-                result.shouldCompleteItem = true;
-                result.playerCardUsed = false;
-                result.enemyCardUsed = true;
-                result.playerCardParticipated = true;
-                result.playerCardUseDisposition = BattleCardUseDisposition.DeferForContinuousDodge;
-                result.hasDamage = false;
-                result.damage = 0;
-                result.damagedCharacter = null;
-                result.resultType = "DodgeSuccess";
-                result.playerPoint = playerDodgePoint;
-                result.enemyPoint = enemyAttackPoint;
-                result.clashAttemptCount = attempt;
-                result.isTieLimitReached = false;
-                result.triggeredEventChain = true;
-                result.message =
-                    "ResolveRespondedDodgeVsAttack 完成：DodgeSuccess，玩家 Dodge 点数 " +
-                    playerDodgePoint +
-                    "，敌人 Attack 点数 " +
-                    enemyAttackPoint +
-                    "。闪避成功，不触发 Hit / AfterDamage / AfterKill";
-
-                Debug.Log(result.message);
-
-                return result;
-            }
-
             if (!isContinuousDodgeContinuation)
             {
                 ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
@@ -1903,74 +1853,160 @@ public static class BattleResolver
             ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
             PayDefaultResourceCostOnSuccessfulUse(enemyUnit, enemyResourceSnapshot);
 
-            TriggerBattleEvent(BattleTiming.ClashWin, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Win);
-            TriggerBattleEvent(BattleTiming.ClashLose, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
-            TriggerBattleEvent(BattleTiming.Resolved, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Win);
-            TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
+            TriggerBattleEvent(BattleTiming.ClashWin, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Win);
+            TriggerBattleEvent(BattleTiming.ClashLose, enemyUnit, playerUnit, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Lose);
+            TriggerBattleEvent(BattleTiming.Resolved, enemyUnit, playerUnit, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Lose);
 
-            int damageScaled = BattleCalculator.GetFinalDamageScaled(
-                enemyUnit,
-                actualTarget,
-                enemyCardState.cardData,
-                enemyAttackPoint
-            );
-            int hpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
-
-            TriggerBattleEvent(BattleTiming.Hit, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, hpDamage, true, false, ClashResult.Win);
-            ApplyDamageAndTriggerEvents(enemyUnit, actualTarget, enemyCardState, hpDamage, enemyAttackPoint);
-
-            BattleResolveResult failedResult = new BattleResolveResult();
-            failedResult.isSuccess = true;
-            failedResult.shouldCompleteItem = true;
-            failedResult.playerCardUsed = true;
-            failedResult.enemyCardUsed = true;
-            failedResult.playerCardParticipated = true;
-            failedResult.playerCardUseDisposition = BattleCardUseDisposition.FinalizeImmediately;
-            failedResult.hasDamage = hpDamage > 0;
-            failedResult.damage = hpDamage;
-            failedResult.damagedCharacter = hpDamage > 0 ? actualTarget : null;
-            failedResult.resultType = "DodgeFailed";
-            failedResult.playerPoint = playerDodgePoint;
-            failedResult.enemyPoint = enemyAttackPoint;
-            failedResult.clashAttemptCount = attempt;
-            failedResult.isTieLimitReached = false;
-            failedResult.triggeredEventChain = true;
-            failedResult.message =
-                "ResolveRespondedDodgeVsAttack 完成：DodgeFailed，玩家 Dodge 点数 " +
+            BattleResolveResult result = new BattleResolveResult();
+            result.isSuccess = true;
+            result.shouldCompleteItem = true;
+            result.playerCardUsed = false;
+            result.enemyCardUsed = true;
+            result.playerCardParticipated = true;
+            result.playerCardUseDisposition = BattleCardUseDisposition.DeferForContinuousDodge;
+            result.hasDamage = false;
+            result.damage = 0;
+            result.damagedCharacter = null;
+            result.resultType = "DodgeSuccess";
+            result.playerPoint = playerDodgePoint;
+            result.enemyPoint = enemyAttackPoint;
+            result.clashAttemptCount = session.AttemptIndex;
+            result.isTieLimitReached = false;
+            result.triggeredEventChain = true;
+            result.message =
+                "ResolveRespondedDodgeVsAttack 完成：DodgeSuccess，玩家 Dodge 点数 " +
                 playerDodgePoint +
                 "，敌人 Attack 点数 " +
                 enemyAttackPoint +
-                "，最终 HP 伤害 " +
-                hpDamage +
-                "。复用敌人最终胜利点数，未重新 Roll";
+                "。闪避成功，不触发 Hit / AfterDamage / AfterKill";
 
-            Debug.Log(failedResult.message);
-
-            return failedResult;
+            Debug.Log(result.message);
+            return result;
         }
 
-        BattleResolveResult tieLimitResult = new BattleResolveResult();
-        tieLimitResult.isSuccess = true;
-        tieLimitResult.shouldCompleteItem = true;
-        tieLimitResult.playerCardUsed = false;
-        tieLimitResult.enemyCardUsed = false;
-        tieLimitResult.hasDamage = false;
-        tieLimitResult.damage = 0;
-        tieLimitResult.damagedCharacter = null;
-        tieLimitResult.resultType = "TieLimit";
-        tieLimitResult.playerPoint = playerDodgePoint;
-        tieLimitResult.enemyPoint = enemyAttackPoint;
-        tieLimitResult.clashAttemptCount = MaxRespondedEnemyIntentClashAttempts;
-        tieLimitResult.isTieLimitReached = true;
-        tieLimitResult.triggeredEventChain = false;
-        tieLimitResult.message =
-            "ResolveRespondedDodgeVsAttack 连续 " +
-            MaxRespondedEnemyIntentClashAttempts +
-            " 次平局仍未分出胜负，自动结束，双方不造成伤害，双方卡牌不算成功使用";
+        if (!isContinuousDodgeContinuation)
+        {
+            ConsumeClashPointBuffs(playerUnit, playerPointBuffSnapshot);
+            ConsumeSuccessfulPointCardBuffs(playerUnit, playerPointBuffSnapshot);
+            PayDefaultResourceCostOnSuccessfulUse(playerUnit, playerResourceSnapshot);
+        }
+        ConsumeClashPointBuffs(enemyUnit, enemyPointBuffSnapshot);
+        ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
+        PayDefaultResourceCostOnSuccessfulUse(enemyUnit, enemyResourceSnapshot);
 
-        Debug.Log(tieLimitResult.message);
+        TriggerBattleEvent(BattleTiming.ClashWin, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Win);
+        TriggerBattleEvent(BattleTiming.ClashLose, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
+        TriggerBattleEvent(BattleTiming.Resolved, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, 0, false, false, ClashResult.Win);
+        TriggerBattleEvent(BattleTiming.Resolved, playerUnit, enemyUnit, dodgeCardState, playerDodgePoint, 0, false, false, ClashResult.Lose);
 
-        return tieLimitResult;
+        int damageScaled = BattleCalculator.GetFinalDamageScaled(
+            enemyUnit,
+            actualTarget,
+            enemyCardState.cardData,
+            enemyAttackPoint
+        );
+        int hpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+
+        TriggerBattleEvent(BattleTiming.Hit, enemyUnit, actualTarget, enemyCardState, enemyAttackPoint, hpDamage, true, false, ClashResult.Win);
+        ApplyDamageAndTriggerEvents(enemyUnit, actualTarget, enemyCardState, hpDamage, enemyAttackPoint);
+
+        BattleResolveResult failedResult = new BattleResolveResult();
+        failedResult.isSuccess = true;
+        failedResult.shouldCompleteItem = true;
+        failedResult.playerCardUsed = true;
+        failedResult.enemyCardUsed = true;
+        failedResult.playerCardParticipated = true;
+        failedResult.playerCardUseDisposition = BattleCardUseDisposition.FinalizeImmediately;
+        failedResult.hasDamage = hpDamage > 0;
+        failedResult.damage = hpDamage;
+        failedResult.damagedCharacter = hpDamage > 0 ? actualTarget : null;
+        failedResult.resultType = "DodgeFailed";
+        failedResult.playerPoint = playerDodgePoint;
+        failedResult.enemyPoint = enemyAttackPoint;
+        failedResult.clashAttemptCount = session.AttemptIndex;
+        failedResult.isTieLimitReached = false;
+        failedResult.triggeredEventChain = true;
+        failedResult.message =
+            "ResolveRespondedDodgeVsAttack 完成：DodgeFailed，玩家 Dodge 点数 " +
+            playerDodgePoint +
+            "，敌人 Attack 点数 " +
+            enemyAttackPoint +
+            "，最终 HP 伤害 " +
+            hpDamage +
+            "。复用敌人最终胜利点数，未重新 Roll";
+
+        Debug.Log(failedResult.message);
+        return failedResult;
+    }
+
+    internal static BattleClashSession CreateRespondedDodgeClashSession(
+        BattleActionSlot playerSlot,
+        BattleEnemyIntent enemyIntent,
+        bool isContinuousDodgeContinuation = false
+    )
+    {
+        CharacterData playerUnit = playerSlot.actor;
+        BattleCardState dodgeCardState = playerSlot.cardState;
+        CharacterData enemyUnit = enemyIntent.enemy;
+        BattleCardState enemyCardState = enemyIntent.enemyCardState;
+        CharacterData actualTarget = enemyIntent.actualTargetCharacter;
+        BattleClashPointSnapshot playerPointBuffSnapshot =
+            isContinuousDodgeContinuation
+                ? new BattleClashPointSnapshot()
+                : CapturePointBuffSnapshot(playerUnit);
+        BattleClashPointSnapshot enemyPointBuffSnapshot =
+            CapturePointBuffSnapshot(enemyUnit);
+
+        TriggerActionStart(enemyUnit, actualTarget, enemyCardState);
+        if (!isContinuousDodgeContinuation)
+        {
+            TriggerActionStart(playerUnit, enemyUnit, dodgeCardState);
+        }
+
+        BattleClashResourceSnapshot playerResourceSnapshot =
+            isContinuousDodgeContinuation
+                ? new BattleClashResourceSnapshot
+                {
+                    cardState = dodgeCardState,
+                    selectedMinPoint = dodgeCardState.cardData.minPoint,
+                    selectedMaxPoint = dodgeCardState.cardData.maxPoint
+                }
+                : CaptureResourceSnapshot(playerUnit, dodgeCardState);
+        BattleClashResourceSnapshot enemyResourceSnapshot =
+            CaptureResourceSnapshot(enemyUnit, enemyCardState);
+
+        TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, actualTarget,
+            enemyCardState, 0, 0, false, false);
+        if (!isContinuousDodgeContinuation)
+        {
+            TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit,
+                dodgeCardState, 0, 0, false, false);
+        }
+
+        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
+        if (!isContinuousDodgeContinuation)
+        {
+            playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
+        }
+
+        return BattleClashSession.CreateDodgeVsAttack(
+            new BattleClashSideState(
+                playerUnit,
+                dodgeCardState,
+                playerPointBuffSnapshot,
+                playerResourceSnapshot
+            ),
+            new BattleClashSideState(
+                enemyUnit,
+                enemyCardState,
+                enemyPointBuffSnapshot,
+                enemyResourceSnapshot
+            ),
+            actualTarget,
+            false,
+            0,
+            isContinuousDodgeContinuation
+        );
     }
 
     static void HandleDodgeVsMultipleAttacks(
@@ -1989,7 +2025,7 @@ public static class BattleResolver
         int dodgePoint = RollCardPoint(dodgeCard);
         int enemyPoint = RollCardPoint(enemyCard);
 
-        if (dodgePoint > enemyPoint)
+        if (dodgePoint >= enemyPoint)
         {
             Debug.Log(allyUnit.characterName + " 闪避成功，闪避卡继续保留");
 
@@ -2002,7 +2038,7 @@ public static class BattleResolver
             // 闪避卡生效
             TriggerBattleEvent(BattleTiming.Resolved, allyUnit, enemyUnit, dodgeCardState, dodgePoint, 0, false, false, ClashResult.Win);
         }
-        else if (enemyPoint > dodgePoint)
+        else
         {
             Debug.Log(allyUnit.characterName + " 闪避失败，闪避被打破");
 
@@ -2021,10 +2057,6 @@ public static class BattleResolver
             TriggerBattleEvent(BattleTiming.Hit, enemyUnit, allyUnit, enemyCardState, enemyPoint, hpDamage, true, false, ClashResult.Win);
 
             ApplyDamageAndTriggerEvents(enemyUnit, allyUnit, enemyCardState, hpDamage, enemyPoint);
-        }
-        else
-        {
-            Debug.Log("闪避与攻击拼点平局，攻击被抵消");
         }
     }
 
@@ -2142,7 +2174,7 @@ public static class BattleResolver
         return unit.ConsumeBuffsByRule(ConsumeRuleFormalClashResolved);
     }
 
-    static int ConsumeClashPointBuffs(CharacterData unit, PointBuffSnapshot snapshot)
+    static int ConsumeClashPointBuffs(CharacterData unit, BattleClashPointSnapshot snapshot)
     {
         if (unit == null)
         {
@@ -2166,7 +2198,7 @@ public static class BattleResolver
         return unit.ConsumeBuffsByRule(ConsumeRuleSuccessfulPointCardUsed);
     }
 
-    static int ConsumeSuccessfulPointCardBuffs(CharacterData unit, PointBuffSnapshot snapshot)
+    static int ConsumeSuccessfulPointCardBuffs(CharacterData unit, BattleClashPointSnapshot snapshot)
     {
         if (unit == null)
         {
@@ -2272,9 +2304,9 @@ public static class BattleResolver
         return Random.Range(min, max + 1);
     }
 
-    static PointBuffSnapshot CapturePointBuffSnapshot(CharacterData unit)
+    static BattleClashPointSnapshot CapturePointBuffSnapshot(CharacterData unit)
     {
-        PointBuffSnapshot snapshot = new PointBuffSnapshot();
+        BattleClashPointSnapshot snapshot = new BattleClashPointSnapshot();
 
         if (unit == null)
         {
@@ -2289,9 +2321,9 @@ public static class BattleResolver
         return snapshot;
     }
 
-    static CardResourceSnapshot CaptureResourceSnapshot(CharacterData unit, BattleCardState cardState)
+    static BattleClashResourceSnapshot CaptureResourceSnapshot(CharacterData unit, BattleCardState cardState)
     {
-        CardResourceSnapshot snapshot = new CardResourceSnapshot();
+        BattleClashResourceSnapshot snapshot = new BattleClashResourceSnapshot();
         snapshot.cardState = cardState;
 
         if (cardState == null || cardState.cardData == null)
@@ -2378,7 +2410,7 @@ public static class BattleResolver
         TriggerBattleEvent(BattleTiming.ActionStart, user, target, cardState, 0, 0, false, false);
     }
 
-    static void PayDefaultResourceCostOnSuccessfulUse(CharacterData unit, CardResourceSnapshot snapshot)
+    static void PayDefaultResourceCostOnSuccessfulUse(CharacterData unit, BattleClashResourceSnapshot snapshot)
     {
         // 默认资源成本只在本次卡牌被视为成功使用时支付。
         // Attack拼点失败、ActionUnavailable、TieLimit和死亡跳过不会支付。
