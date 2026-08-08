@@ -65,7 +65,8 @@ public enum BattleTestMode
     BattleInteractionStateAndEndLockBasic = 78,
     BattleExecutionPlanSingleItemAdvanceBasic = 79,
     BattleClashSessionBasic = 80,
-    BattleRollGateBasic = 81
+    BattleRollGateBasic = 81,
+    BattleResolutionPlanBasic = 82
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -398,6 +399,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleRollGateBasic)
         {
             BattleRollGateTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleResolutionPlanBasic)
+        {
+            BattleResolutionPlanTests.Run();
             return;
         }
 

@@ -1088,6 +1088,56 @@ public class CharacterData
         return consumedStack;
     }
 
+    // 延迟结算只消费计算阶段实际参与的层数，避免等待期间新增同名Buff被整批移除。
+    public int ConsumeTriggeredBuffStack(string timing, string buffID, int amount)
+    {
+        if (string.IsNullOrEmpty(timing) ||
+            string.IsNullOrEmpty(buffID) ||
+            amount <= 0)
+        {
+            return 0;
+        }
+
+        int remainingAmount = amount;
+        int consumedStack = 0;
+
+        for (int i = 0; i < buffs.Count && remainingAmount > 0; i++)
+        {
+            BuffData buff = buffs[i];
+            if (buff == null ||
+                buff.buffID != buffID ||
+                buff.checkTiming != timing ||
+                buff.expireRule != "ConsumeOnTrigger")
+            {
+                continue;
+            }
+
+            int consumeFromBatch = Mathf.Min(buff.stack, remainingAmount);
+            buff.stack -= consumeFromBatch;
+            remainingAmount -= consumeFromBatch;
+            consumedStack += consumeFromBatch;
+
+            if (BattleDebugSettings.ShowBuffLog)
+            {
+                Debug.Log(
+                    characterName +
+                    " 按数量消费一次性数值Buff：" +
+                    buff.buffName +
+                    " x" +
+                    consumeFromBatch
+                );
+            }
+
+            if (buff.stack <= 0)
+            {
+                buffs.RemoveAt(i);
+                i--;
+            }
+        }
+
+        return consumedStack;
+    }
+
     public int ConsumeBuffsByRule(string consumeRule)
     {
         if (string.IsNullOrEmpty(consumeRule) || consumeRule == "None")

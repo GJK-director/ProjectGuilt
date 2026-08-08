@@ -15,6 +15,7 @@ public enum BattleExecutionRunnerPhase
     AutoRollDelay,
     Rolling,
     Finalizing,
+    ResolutionPending,
     ItemCompleted,
     Completed,
     Failed
@@ -61,6 +62,7 @@ public sealed class BattleExecutionRunner
 
     public BattleExecutionItem CurrentItem { get; private set; }
     public BattleClashSession CurrentClashSession { get; private set; }
+    public BattleResolutionPlan CurrentResolutionPlan { get; private set; }
     public BattleExecutionRunnerPhase Phase { get; private set; }
     public float ClashReadyPauseRemaining { get; private set; }
     public float AutoRollDelayRemaining { get; private set; }
@@ -122,6 +124,7 @@ public sealed class BattleExecutionRunner
         {
             CurrentItem = null;
             CurrentClashSession = null;
+            CurrentResolutionPlan = null;
             CurrentItemCompleted = false;
             return BeginNextItem(out failureMessage);
         }
@@ -187,6 +190,7 @@ public sealed class BattleExecutionRunner
             : null;
         CurrentItem = FindNextPendingItem(plan);
         CurrentClashSession = null;
+        CurrentResolutionPlan = null;
         CurrentItemCompleted = false;
 
         if (CurrentItem == null)
@@ -275,18 +279,19 @@ public sealed class BattleExecutionRunner
         if (CurrentClashSession.IsFinalized)
         {
             Phase = BattleExecutionRunnerPhase.Finalizing;
-            bool finalized = BattleExecutionPlanExecutor
-                .FinalizePausableRespondedEnemyIntent(
+            CurrentResolutionPlan = BattleExecutionPlanExecutor
+                .BuildPausableRespondedEnemyIntentResolutionPlan(
                     CurrentItem,
                     lifecycleController.RuntimeState,
                     CurrentClashSession
                 );
-            if (!finalized || CurrentItem == null || !CurrentItem.isCompleted)
+            if (CurrentResolutionPlan == null)
             {
-                return Fail("Clash Finalize失败：当前Item未完成", out failureMessage);
+                return Fail("Clash Finalize失败：无法建立ResolutionPlan", out failureMessage);
             }
 
-            return FinishCurrentItem(out failureMessage);
+            Phase = BattleExecutionRunnerPhase.ResolutionPending;
+            return true;
         }
 
         if (!CurrentClashSession.RequiresAnotherRoll)
@@ -297,6 +302,44 @@ public sealed class BattleExecutionRunner
         // AttackTie只回到新一轮ReadyPause，本次请求不会继续产生第二个Attempt。
         EnterReadyPause();
         return true;
+    }
+
+    public bool TryCommitNextResolutionStep(out string failureMessage)
+    {
+        failureMessage = string.Empty;
+        if (HasFailed)
+        {
+            failureMessage = "Resolution提交失败：Runner已失败";
+            return false;
+        }
+        if (IsCompleted)
+        {
+            return true;
+        }
+        if (Phase != BattleExecutionRunnerPhase.ResolutionPending ||
+            CurrentResolutionPlan == null)
+        {
+            failureMessage = "Resolution提交失败：当前没有等待提交的ResolutionPlan";
+            return false;
+        }
+
+        if (!BattleExecutionPlanExecutor
+                .TryCommitPausableRespondedEnemyIntentResolutionStep(
+                    CurrentItem,
+                    lifecycleController.RuntimeState,
+                    CurrentResolutionPlan,
+                    out bool itemCompleted
+                ))
+        {
+            return Fail("Resolution提交失败：当前步骤未能完成", out failureMessage);
+        }
+
+        if (!itemCompleted)
+        {
+            return true;
+        }
+
+        return FinishCurrentItem(out failureMessage);
     }
 
     bool FinishCurrentItem(out string failureMessage)

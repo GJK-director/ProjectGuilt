@@ -93,10 +93,11 @@ public static class BattleRollGateTests
         bool freshRequest = context.controller.TryRequestManualRoll(
             out string requestFailure
         );
+        bool committed = CommitPendingResolution(context);
 
         return began && earlyRejected && !string.IsNullOrEmpty(earlyFailure) &&
             string.IsNullOrEmpty(advanceFailure) && stillWaiting &&
-            freshRequest && string.IsNullOrEmpty(requestFailure) &&
+            freshRequest && committed && string.IsNullOrEmpty(requestFailure) &&
             runner.CurrentClashSession.AttemptIndex == 1 && runner.IsCompleted;
     }
 
@@ -160,8 +161,13 @@ public static class BattleRollGateTests
         bool secondRequest = context.controller.TryRequestManualRoll(
             out string secondFailure
         );
+        bool resolutionPending = context.controller.ExecutionRunner.Phase ==
+            BattleExecutionRunnerPhase.ResolutionPending &&
+            !context.item.isCompleted;
+        bool committed = CommitPendingResolution(context);
 
-        return began && firstAttemptOnly && secondRequest &&
+        return began && firstAttemptOnly && secondRequest && resolutionPending &&
+            committed &&
             string.IsNullOrEmpty(firstFailure) &&
             string.IsNullOrEmpty(secondFailure) &&
             session.AttemptIndex == 2 && session.IsFinalized &&
@@ -195,8 +201,12 @@ public static class BattleRollGateTests
             0.01f,
             out string fourthFailure
         );
+        bool resolutionPending = runner.Phase ==
+            BattleExecutionRunnerPhase.ResolutionPending;
+        bool committed = CommitPendingResolution(context);
 
         return began && beforeReadyEnd && readyEnded && delayNotDone && fourth &&
+            resolutionPending && committed &&
             string.IsNullOrEmpty(firstFailure) &&
             string.IsNullOrEmpty(secondFailure) &&
             string.IsNullOrEmpty(thirdFailure) &&
@@ -230,8 +240,12 @@ public static class BattleRollGateTests
             0.5f,
             out string fourthFailure
         );
+        bool resolutionPending = runner.Phase ==
+            BattleExecutionRunnerPhase.ResolutionPending;
+        bool committed = CommitPendingResolution(context);
 
         return began && tieReturnedToReady && noEarlySecondRoll && secondRoll &&
+            resolutionPending && committed &&
             string.IsNullOrEmpty(firstFailure) &&
             string.IsNullOrEmpty(secondFailure) &&
             string.IsNullOrEmpty(thirdFailure) &&
@@ -249,6 +263,9 @@ public static class BattleRollGateTests
         bool requested = context.controller.TryRequestManualRoll(
             out string requestFailure
         );
+        int hpAfterCalculate = context.enemy.currentHP;
+        int buffAfterCalculate = context.ally.GetBuffStack("NextClashPointUp");
+        bool committed = CommitPendingResolution(context);
         int hpAfterFinalize = context.enemy.currentHP;
         int useCountAfterFinalize = context.playerCard.currentUseCount;
         int buffAfterFinalize = context.ally.GetBuffStack("NextClashPointUp");
@@ -260,7 +277,9 @@ public static class BattleRollGateTests
             out string extraRequestFailure
         );
 
-        return began && requested && extraAdvance && extraRequestRejected &&
+        return began && requested && committed && extraAdvance &&
+            extraRequestRejected && hpAfterCalculate == hpBefore &&
+            buffAfterCalculate == 2 &&
             string.IsNullOrEmpty(requestFailure) &&
             string.IsNullOrEmpty(advanceFailure) &&
             !string.IsNullOrEmpty(extraRequestFailure) &&
@@ -294,9 +313,15 @@ public static class BattleRollGateTests
         bool secondRequest = context.controller.TryRequestManualRoll(
             out string secondRequestFailure
         );
+        bool resolutionPending = context.runtimeState.LifecyclePhase ==
+            BattleLifecyclePhase.Executing &&
+            context.controller.ExecutionRunner.Phase ==
+                BattleExecutionRunnerPhase.ResolutionPending;
+        bool committed = CommitPendingResolution(context);
 
         return began && beginExecuting && waitingExecuting && tieExecuting &&
-            secondWaitingExecuting && secondRequest &&
+            secondWaitingExecuting && secondRequest && resolutionPending &&
+            committed &&
             string.IsNullOrEmpty(firstFailure) &&
             string.IsNullOrEmpty(firstRequestFailure) &&
             string.IsNullOrEmpty(secondFailure) &&
@@ -382,10 +407,14 @@ public static class BattleRollGateTests
             );
             allRequestsAccepted &= string.IsNullOrEmpty(requestFailure);
         }
+        bool resolutionPending = context.controller.ExecutionRunner.Phase ==
+            BattleExecutionRunnerPhase.ResolutionPending;
+        bool committed = CommitPendingResolution(context);
 
         BattleClashSession session = context.controller.ExecutionRunner
             .CurrentClashSession;
-        return began && allRequestsAccepted && session.AttemptIndex == 10 &&
+        return began && allRequestsAccepted && resolutionPending && committed &&
+            session.AttemptIndex == 10 &&
             session.AttackTieCount == 10 && session.IsFinalized &&
             session.FinalResult == BattleClashFinalResult.TieLimit &&
             context.item.status == BattleExecutionItemStatus.Executed &&
@@ -423,8 +452,12 @@ public static class BattleRollGateTests
         bool requested = context.controller.TryRequestManualRoll(
             out string requestFailure
         );
+        bool resolutionPending = runner.Phase ==
+            BattleExecutionRunnerPhase.ResolutionPending;
+        bool committed = CommitPendingResolution(context);
 
-        return began && noEarlyRoll && ready && requested &&
+        return began && noEarlyRoll && ready && requested && resolutionPending &&
+            committed &&
             string.IsNullOrEmpty(pauseFailure) &&
             string.IsNullOrEmpty(readyFailure) &&
             string.IsNullOrEmpty(requestFailure) &&
@@ -458,8 +491,12 @@ public static class BattleRollGateTests
         bool requested = context.controller.TryRequestManualRoll(
             out string requestFailure
         );
+        bool resolutionPending = runner.Phase ==
+            BattleExecutionRunnerPhase.ResolutionPending;
+        bool committed = CommitPendingResolution(context);
 
-        return began && noEarlyRoll && ready && requested &&
+        return began && noEarlyRoll && ready && requested && resolutionPending &&
+            committed &&
             string.IsNullOrEmpty(pauseFailure) &&
             string.IsNullOrEmpty(readyFailure) &&
             string.IsNullOrEmpty(requestFailure) &&
@@ -499,7 +536,10 @@ public static class BattleRollGateTests
             out string requestFailure
         );
         BattleExecutionRunner runner = context.controller.ExecutionRunner;
-        bool fatalItemCompleted = requested && context.runtimeState.IsBattleEnded &&
+        bool calculateDidNotEndBattle = requested &&
+            !context.runtimeState.IsBattleEnded && !context.item.isCompleted;
+        bool committed = CommitPendingResolution(context);
+        bool fatalItemCompleted = committed && context.runtimeState.IsBattleEnded &&
             context.item.isCompleted && !remainingItem.isCompleted &&
             runner.Phase == BattleExecutionRunnerPhase.ItemCompleted;
         bool advanced = context.controller.AdvancePausableExecution(
@@ -507,7 +547,7 @@ public static class BattleRollGateTests
             out string advanceFailure
         );
 
-        return began && fatalItemCompleted && advanced &&
+        return began && calculateDidNotEndBattle && fatalItemCompleted && advanced &&
             string.IsNullOrEmpty(requestFailure) &&
             string.IsNullOrEmpty(advanceFailure) &&
             remainingItem.status == BattleExecutionItemStatus.Skipped &&
@@ -516,6 +556,16 @@ public static class BattleRollGateTests
             remainingCard.currentUseCount == remainingUseCountBefore &&
             !remainingSlot.isUsed && context.plan.isCompleted &&
             runner.IsCompleted;
+    }
+
+    static bool CommitPendingResolution(TestContext context)
+    {
+        return context != null &&
+            context.controller != null &&
+            context.controller.TryCommitNextResolutionStep(
+                out string failureMessage
+            ) &&
+            string.IsNullOrEmpty(failureMessage);
     }
 
     static TestContext CreateRespondedAttackContext(

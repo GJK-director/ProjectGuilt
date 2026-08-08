@@ -88,6 +88,17 @@ public sealed class BattleLifecycleController
         return executionRunner.TryRequestManualRoll(out failureMessage);
     }
 
+    public bool TryCommitNextResolutionStep(out string failureMessage)
+    {
+        if (executionRunner == null)
+        {
+            failureMessage = "Resolution提交失败：当前没有Runner";
+            return false;
+        }
+
+        return executionRunner.TryCommitNextResolutionStep(out failureMessage);
+    }
+
     internal bool HandlePausableItemCompleted(out string failureMessage)
     {
         if (!ValidateRuntimeState(out failureMessage) ||

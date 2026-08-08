@@ -612,23 +612,63 @@ public static class BattleExecutionPlanExecutor
         return completed;
     }
 
-    internal static bool FinalizePausableRespondedEnemyIntent(
+    internal static BattleResolutionPlan BuildPausableRespondedEnemyIntentResolutionPlan(
         BattleExecutionItem item,
         BattleRuntimeState runtimeState,
         BattleClashSession session
     )
     {
-        if (item == null)
+        if (item == null || runtimeState == null || session == null ||
+            !session.IsFinalized)
+        {
+            return null;
+        }
+
+        return BattleResolver.BuildRespondedClashResolutionPlan(
+            item.actionSlot,
+            item.enemyIntent,
+            session,
+            item
+        );
+    }
+
+    internal static bool TryCommitPausableRespondedEnemyIntentResolutionStep(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        BattleResolutionPlan plan,
+        out bool itemCompleted
+    )
+    {
+        itemCompleted = item != null && item.isCompleted;
+        if (item == null || runtimeState == null || plan == null)
         {
             return false;
         }
 
-        BattleResolveResult result = BattleResolver.FinalizeRespondedClash(
-            item.actionSlot,
-            item.enemyIntent,
-            session
-        );
-        return CompleteRespondedEnemyIntentResult(item, runtimeState, result);
+        if (!BattleResolver.TryCommitNextResolutionStep(
+                plan,
+                out BattleResolveResult result
+            ))
+        {
+            return false;
+        }
+
+        if (plan.State != BattleResolutionPlanState.Completed)
+        {
+            return true;
+        }
+
+        if (!plan.IsActionCompleted)
+        {
+            if (!CompleteRespondedEnemyIntentResult(item, runtimeState, result))
+            {
+                return false;
+            }
+            plan.MarkActionCompleted();
+        }
+
+        itemCompleted = item.isCompleted;
+        return itemCompleted;
     }
 
     static bool TryPrepareRespondedEnemyIntent(
