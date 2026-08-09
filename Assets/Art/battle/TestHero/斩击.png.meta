@@ -5,9 +5,6 @@ TextureImporter:
   - first:
       213: 8670024208804956579
     second: "\u65A9\u51FB_0"
-  - first:
-      213: 8091598695494224500
-    second: "\u65A9\u51FB_1"
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -49,12 +46,12 @@ TextureImporter:
   nPOTScale: 0
   lightmap: 0
   compressionQuality: 50
-  spriteMode: 2
+  spriteMode: 1
   spriteExtrude: 1
-  spriteMeshType: 1
-  alignment: 0
-  spritePivot: {x: 0.5, y: 0.5}
-  spritePixelsToUnits: 100
+  spriteMeshType: 0
+  alignment: 9
+  spritePivot: {x: 0.5338217, y: 0.018664828}
+  spritePixelsToUnits: 300
   spriteBorder: {x: 0, y: 0, z: 0, w: 0}
   spriteGenerateFallbackPhysicsShape: 1
   alphaUsage: 1
@@ -106,12 +103,12 @@ TextureImporter:
       name: "\u65A9\u51FB_0"
       rect:
         serializedVersion: 2
-        x: 0
-        y: 128
-        width: 1325
-        height: 601
+        x: 12
+        y: 17
+        width: 1165
+        height: 717
       alignment: 0
-      pivot: {x: 0, y: 0}
+      pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
       customData: 
       outline: []
@@ -124,34 +121,12 @@ TextureImporter:
       indices: 
       edges: []
       weights: []
-    - serializedVersion: 2
-      name: "\u65A9\u51FB_1"
-      rect:
-        serializedVersion: 2
-        x: 567
-        y: 687
-        width: 162
-        height: 47
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 47a82f574222b4070800000000000000
-      internalID: 8091598695494224500
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
     outline: []
     customData: 
     physicsShape: []
     bones: []
-    spriteID: 
-    internalID: 0
+    spriteID: 5e97eb03825dee720800000000000000
+    internalID: 1537655665
     vertices: []
     indices: 
     edges: []
@@ -161,7 +136,6 @@ TextureImporter:
       entries: []
     nameFileIdTable:
       "\u65A9\u51FB_0": 8670024208804956579
-      "\u65A9\u51FB_1": 8091598695494224500
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

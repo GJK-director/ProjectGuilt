@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: 13af2084e2d55f2488e87caa40476223
+guid: f0743090b03bec2438d0c61c8301fc54
 TextureImporter:
   internalIDToNameTable:
   - first:
@@ -50,7 +50,7 @@ TextureImporter:
   spriteExtrude: 1
   spriteMeshType: 0
   alignment: 9
-  spritePivot: {x: 0.48945972, y: 0.04852874}
+  spritePivot: {x: 0.47785342, y: 0.016029831}
   spritePixelsToUnits: 300
   spriteBorder: {x: 0, y: 0, z: 0, w: 0}
   spriteGenerateFallbackPhysicsShape: 1
@@ -103,10 +103,10 @@ TextureImporter:
       name: "\u51B2\u523A_0"
       rect:
         serializedVersion: 2
-        x: 121
-        y: 41
-        width: 759
-        height: 917
+        x: 3
+        y: 4
+        width: 742
+        height: 812
       alignment: 0
       pivot: {x: 0.5, y: 0.5}
       border: {x: 0, y: 0, z: 0, w: 0}
