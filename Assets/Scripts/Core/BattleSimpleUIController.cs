@@ -2376,7 +2376,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
         foreach (BattleActionSlot slot in runtimeState.actionSlots)
         {
-            if (slot == null || slot.IsEmpty())
+            if (slot == null)
             {
                 continue;
             }
@@ -2387,6 +2387,13 @@ public class BattleSimpleUIController : MonoBehaviour
             if (ownerStatusView == null ||
                 ownerUISlotIndex < 0 ||
                 ownerUISlotIndex > 1)
+            {
+                continue;
+            }
+
+            ownerStatusView.SetBoundActionSlot(ownerUISlotIndex, slot);
+
+            if (slot.IsEmpty())
             {
                 continue;
             }
@@ -2415,6 +2422,9 @@ public class BattleSimpleUIController : MonoBehaviour
         {
             enemy02StatusView.ClearBoundEnemyIntents();
         }
+
+        ally01StatusView?.ClearBoundActionSlots();
+        ally02StatusView?.ClearBoundActionSlots();
     }
 
     private void SetTwoSlotStates(

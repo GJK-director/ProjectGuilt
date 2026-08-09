@@ -42,6 +42,8 @@ public class BattleActionSlotUIView : MonoBehaviour,
     private int slotIndex = -1;
     private bool isEnemySlot;
     private BattleEnemyIntent boundEnemyIntent;
+    private BattleActionSlot boundActionSlot;
+    private bool isPointerInsideSlot;
     private Action<BattleActionSlotUIView> leftClickHandler;
     private Action<BattleActionSlotUIView> rightClickHandler;
     private Coroutine stateFeedbackCoroutine;
@@ -55,6 +57,7 @@ public class BattleActionSlotUIView : MonoBehaviour,
     public bool IsHovered => isHovered;
     public BattleActionSlotUIState CurrentBaseState => currentBaseState;
     public BattleEnemyIntent BoundEnemyIntent => boundEnemyIntent;
+    public BattleActionSlot BoundActionSlot => boundActionSlot;
     public RectTransform RelationLineAnchor => relationLineAnchor != null
         ? relationLineAnchor
         : transform as RectTransform;
@@ -171,6 +174,21 @@ public class BattleActionSlotUIView : MonoBehaviour,
     public void SetBoundEnemyIntent(BattleEnemyIntent enemyIntent)
     {
         boundEnemyIntent = enemyIntent;
+
+        if (isPointerInsideSlot)
+        {
+            NotifyCardInfoPanel(true, null);
+        }
+    }
+
+    public void SetBoundActionSlot(BattleActionSlot actionSlot)
+    {
+        boundActionSlot = actionSlot;
+
+        if (isPointerInsideSlot)
+        {
+            NotifyCardInfoPanel(true, null);
+        }
     }
 
     internal void ConfigureTestVisuals(Image image, Sprite sprite)
@@ -220,6 +238,9 @@ public class BattleActionSlotUIView : MonoBehaviour,
 
     public void OnPointerEnter(PointerEventData eventData)
     {
+        isPointerInsideSlot = true;
+        NotifyCardInfoPanel(true, eventData);
+
         if (boundCharacter == null || isEnemySlot)
         {
             return;
@@ -234,6 +255,9 @@ public class BattleActionSlotUIView : MonoBehaviour,
 
     public void OnPointerExit(PointerEventData eventData)
     {
+        isPointerInsideSlot = false;
+        NotifyCardInfoPanel(false, eventData);
+
         if (boundCharacter == null || isEnemySlot)
         {
             return;
@@ -243,6 +267,34 @@ public class BattleActionSlotUIView : MonoBehaviour,
         RefreshDisplayedSprite();
         RefreshSelectionEffectReference();
         selectionEffectView?.SetPersistentVisible(isSelected);
+    }
+
+    private void NotifyCardInfoPanel(
+        bool pointerInside,
+        PointerEventData eventData
+    )
+    {
+        BattleCardState cardState = isEnemySlot
+            ? boundEnemyIntent?.enemyCardState
+            : boundActionSlot?.cardState;
+        CharacterData owner = isEnemySlot
+            ? boundEnemyIntent?.enemy
+            : (boundActionSlot?.actor ?? boundCharacter);
+        CharacterData target = isEnemySlot
+            ? (boundEnemyIntent?.actualTargetCharacter ??
+                boundEnemyIntent?.originalTargetCharacter)
+            : boundActionSlot?.target;
+
+        BattleActionSlotCardInfoPanelHost.HandlePointer(
+            new BattleActionSlotCardInfoHoverRequest(
+                gameObject,
+                isEnemySlot,
+                owner,
+                target,
+                cardState,
+                pointerInside
+            )
+        );
     }
 
     private void RefreshDisplayedSprite()
@@ -396,7 +448,13 @@ public class BattleActionSlotUIView : MonoBehaviour,
 
     void OnDisable()
     {
+        if (isPointerInsideSlot)
+        {
+            NotifyCardInfoPanel(false, null);
+        }
+
         StopStateFeedbackCommit();
+        isPointerInsideSlot = false;
         isHovered = false;
         selectionEffectView?.StopAndReset();
         RefreshDisplayedSprite();

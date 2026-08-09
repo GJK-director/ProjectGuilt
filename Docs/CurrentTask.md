@@ -10465,3 +10465,86 @@ BattleSecondaryInfoPanelHost.HandlePointer(...)
 - Unity Editor.log 未发现二级面板、Canvas、Layout、空引用或 MissingReference 相关错误。
 - 静态响应式计算已覆盖 640x480、800x600、1280x720、1920x1080、2560x1080、720x1280、3840x2160。
 - `git diff --check` 通过。
+
+## 九十一、二级信息预设体与行动槽位卡牌详情已接入
+
+### 一、通用二级信息面板预设体
+
+新增预设体：
+
+```text
+Assets/Prefabs/BattleSecondaryInfoPanel.prefab
+```
+
+当前规则：
+
+- 预设体可直接拖入场景使用。
+- 标题、正文、页脚 TMP 子节点可直接在预设体模式中修改。
+- 背景、边框、字体、字号、间距和布局组件均保留为可编辑 UI。
+- 运行时悬停内容仍会覆盖预览文字。
+- `BattleSecondaryInfoPanelHost` 优先使用预设体序列化引用；场景漏放时仍保留原有运行时创建兜底。
+- 对业务触发源继续只暴露 `BattleSecondaryInfoPanelHost.HandlePointer(...)`。
+
+`BattleScene` 已放入该预设体的最新实例，替代此前完全依赖运行时创建的示例方式。
+
+### 二、行动槽位卡牌详情预设体
+
+新增预设体：
+
+```text
+Assets/Prefabs/BattleActionSlotCardInfoPanel.prefab
+```
+
+当前规则：
+
+- 光标停留在有卡牌的行动槽位约 0.25 秒后显示卡牌详情。
+- 我方行动槽位固定显示在屏幕安全区域左上侧。
+- 敌方行动槽位固定显示在屏幕安全区域右上侧。
+- 空槽位不显示详情。
+- 离开行动槽位立即关闭详情。
+- 显示卡牌名称、角色、点数、类型、基础 CD、说明、当前 CD / 消耗状态、使用次数和关键词。
+- 面板使用 `ScreenSpaceOverlay`、最高 Sorting Layer、Sorting Order 32767，并在运行时保持最后兄弟顺序。
+- 面板宽高和边距会根据 Canvas 实际尺寸与 `Screen.safeArea` 动态调整。
+- 卡牌图像区域、阵营配色、文字和所有 UI 子节点均可在预设体中直接修改。
+- 行动槽业务只调用 `BattleActionSlotCardInfoPanelHost.HandlePointer(...)`。
+
+### 三、最小数据接线
+
+没有修改战斗结算、卡牌安排或敌人意图规则。
+
+只补充：
+
+- `BattleActionSlotUIView` 保存当前友方 `BattleActionSlot` 引用。
+- 敌方继续复用原有 `BattleEnemyIntent.enemyCardState`。
+- `BattleSimpleUIController.RefreshActionSlotIntentViews()` 在原有槽位刷新循环中同步友方槽位引用。
+- `BattleCharacterStatusUIView` 提供对应的槽位引用转发与清理。
+
+### 四、BattleScene 示例
+
+`BattleScene` 当前已放入：
+
+```text
+BattleSecondaryInfoPanel
+BattleActionSlotCardInfoPanel
+```
+
+两者都是 `Assets/Prefabs` 中最新预设体的场景实例；预览面板在编辑状态保持关闭，运行时由宿主按悬停状态控制。
+
+### 五、编辑器工具与验证
+
+新增菜单：
+
+```text
+Project Guilt/UI/重新生成二级信息面板预设体
+```
+
+首次导入只补齐缺失资源，不会自动覆盖后续人工修改过的既有预设体；只有显式点击该菜单才会重建。
+
+验证记录：
+
+- Unity 6000.3.7f1 批处理完整导入与 C# 编译通过。
+- 两个预设体均通过 Unity PrefabImporter 导入。
+- 两个预设体的宿主、面板、TMP、左右 View 序列化引用均已落盘。
+- `BattleScene` 已保存两个预设体实例，并分别引用其 prefab GUID。
+- 独立只读校验确认：两个预设体引用完整，左右 View 恰好为两个，场景中两个宿主各恰好一个。
+- 最终批处理返回码为 0，日志中没有 C#、MissingReference 或 NullReference 错误。
