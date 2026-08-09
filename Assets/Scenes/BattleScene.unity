@@ -4430,6 +4430,14 @@ PrefabInstance:
       propertyPath: m_AnchoredPosition.y
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 3631119153412777744, guid: dfdb996a02d64b84bb19c9c1ede5d688, type: 3}
+      propertyPath: m_fontColor32.rgba
+      value: 3538411998
+      objectReference: {fileID: 0}
+    - target: {fileID: 3631119153412777744, guid: dfdb996a02d64b84bb19c9c1ede5d688, type: 3}
+      propertyPath: m_TextStyleHashCode
+      value: -1183493901
+      objectReference: {fileID: 0}
     - target: {fileID: 3981177728625837412, guid: dfdb996a02d64b84bb19c9c1ede5d688, type: 3}
       propertyPath: m_AnchorMax.x
       value: 0
@@ -4993,6 +5001,10 @@ PrefabInstance:
     - target: {fileID: 8730759163411012583, guid: dfdb996a02d64b84bb19c9c1ede5d688, type: 3}
       propertyPath: m_AnchoredPosition.y
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 9142641495335049815, guid: dfdb996a02d64b84bb19c9c1ede5d688, type: 3}
+      propertyPath: showDelay
+      value: 0.1
       objectReference: {fileID: 0}
     - target: {fileID: 9144105078489793213, guid: dfdb996a02d64b84bb19c9c1ede5d688, type: 3}
       propertyPath: m_IsActive
