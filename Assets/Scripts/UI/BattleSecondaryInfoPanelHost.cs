@@ -73,13 +73,15 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
 
     static BattleSecondaryInfoPanelHost instance;
 
+    [Header("预设体引用（可直接修改子节点 UI）")]
+    [SerializeField] RectTransform panelRect;
+    [SerializeField] TMP_Text titleText;
+    [SerializeField] TMP_Text bodyText;
+    [SerializeField] TMP_Text footerText;
+    [SerializeField] VerticalLayoutGroup panelLayout;
+    [SerializeField] Canvas overlayCanvas;
+
     RectTransform hostRect;
-    RectTransform panelRect;
-    TMP_Text titleText;
-    TMP_Text bodyText;
-    TMP_Text footerText;
-    VerticalLayoutGroup panelLayout;
-    Canvas overlayCanvas;
     Canvas sourceRootCanvas;
 
     GameObject activeSource;
@@ -173,8 +175,15 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
     void Awake()
     {
         hostRect = transform as RectTransform;
-        overlayCanvas = GetComponent<Canvas>();
+        if (overlayCanvas == null)
+        {
+            overlayCanvas = GetComponent<Canvas>();
+        }
+
+        ResolvePrefabReferences();
         BuildPanel();
+        EnsurePanelPointerRelay();
+        HidePanelOnly();
         KeepCanvasInFront();
 
         if (instance == null)
@@ -302,7 +311,7 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
 
     void BuildPanel()
     {
-        if (panelRect != null)
+        if (HasCompletePanelReferences())
         {
             return;
         }
@@ -373,6 +382,76 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
         relay.Bind(this);
 
         panelObject.SetActive(false);
+    }
+
+    void ResolvePrefabReferences()
+    {
+        if (panelRect == null)
+        {
+            Transform panelTransform = transform.Find("SecondaryInfoPanel");
+            panelRect = panelTransform as RectTransform;
+        }
+
+        if (panelRect == null)
+        {
+            return;
+        }
+
+        if (panelLayout == null)
+        {
+            panelLayout = panelRect.GetComponent<VerticalLayoutGroup>();
+        }
+
+        TMP_Text[] texts = panelRect.GetComponentsInChildren<TMP_Text>(true);
+        for (int index = 0; index < texts.Length; index++)
+        {
+            TMP_Text text = texts[index];
+            if (text == null)
+            {
+                continue;
+            }
+
+            if (titleText == null && text.gameObject.name == "Title")
+            {
+                titleText = text;
+            }
+            else if (bodyText == null && text.gameObject.name == "Body")
+            {
+                bodyText = text;
+            }
+            else if (footerText == null && text.gameObject.name == "Footer")
+            {
+                footerText = text;
+            }
+        }
+    }
+
+    bool HasCompletePanelReferences()
+    {
+        return panelRect != null &&
+            panelLayout != null &&
+            titleText != null &&
+            bodyText != null &&
+            footerText != null;
+    }
+
+    void EnsurePanelPointerRelay()
+    {
+        if (panelRect == null)
+        {
+            return;
+        }
+
+        BattleSecondaryInfoPanelPointerRelay relay =
+            panelRect.GetComponent<BattleSecondaryInfoPanelPointerRelay>();
+        if (relay == null)
+        {
+            relay = panelRect.gameObject.AddComponent<
+                BattleSecondaryInfoPanelPointerRelay
+            >();
+        }
+
+        relay.Bind(this);
     }
 
     TMP_Text CreateText(

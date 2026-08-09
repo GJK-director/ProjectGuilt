@@ -71,6 +71,18 @@ public class BattleCharacterStatusUIView : MonoBehaviour
         }
     }
 
+    public void ClearBoundActionSlots()
+    {
+        slot01View?.SetBoundActionSlot(null);
+        slot02View?.SetBoundActionSlot(null);
+    }
+
+    public void SetBoundActionSlot(int slotIndex, BattleActionSlot actionSlot)
+    {
+        BattleActionSlotUIView slotView = GetSlotView(slotIndex);
+        slotView?.SetBoundActionSlot(actionSlot);
+    }
+
     public CharacterData BoundCharacter => boundCharacter;
 
     public bool IsEnemyView => isEnemy;
@@ -150,6 +162,7 @@ public class BattleCharacterStatusUIView : MonoBehaviour
         }
 
         ClearBoundEnemyIntents();
+        ClearBoundActionSlots();
         RefreshAllInteractionBindings();
     }
 
