@@ -654,7 +654,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 181188a2a2e742d7913064bfd2cc6771, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleSceneBootstrap
-  encounterID: encounter_invalid_test
+  encounterID: encounter_test_001
   battleUIController: {fileID: 107164112}
   useDebugTestInitialization: 0
 --- !u!4 &283409991
