@@ -442,6 +442,8 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
         // Prefab中的Sprite是当前默认外观。这里不写sprite、不改Scale，
         // 只对敌方应用阵营朝向，因此同阵营两名单位可以安全共用模板。
         ApplyCampVisualSettings(worldVisual.renderer, camp);
+        BattleCharacterPresentationController presentationController =
+            worldRoot.GetComponent<BattleCharacterPresentationController>();
 
         GameObject statusRoot = Instantiate(
             statusPrefab,
@@ -518,6 +520,7 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
             camp,
             worldRoot,
             worldVisual.renderer,
+            presentationController,
             worldVisual.headAnchor,
             worldVisual.footAnchor,
             worldVisual.centerAnchor,

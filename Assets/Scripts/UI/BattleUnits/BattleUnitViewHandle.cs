@@ -17,6 +17,7 @@ public sealed class BattleUnitViewHandle
     public BattleUnitCamp Camp { get; }
     public GameObject WorldRoot { get; }
     public SpriteRenderer WorldRenderer { get; }
+    public BattleCharacterPresentationController PresentationController { get; }
     public Transform HeadUIAnchor { get; }
     public Transform FootUIAnchor { get; }
     public Transform CenterAnchor { get; }
@@ -37,6 +38,7 @@ public sealed class BattleUnitViewHandle
         BattleUnitCamp camp,
         GameObject worldRoot,
         SpriteRenderer worldRenderer,
+        BattleCharacterPresentationController presentationController,
         Transform headUIAnchor,
         Transform footUIAnchor,
         Transform centerAnchor,
@@ -52,6 +54,7 @@ public sealed class BattleUnitViewHandle
         Camp = camp;
         WorldRoot = worldRoot;
         WorldRenderer = worldRenderer;
+        PresentationController = presentationController;
         HeadUIAnchor = headUIAnchor;
         FootUIAnchor = footUIAnchor;
         CenterAnchor = centerAnchor;

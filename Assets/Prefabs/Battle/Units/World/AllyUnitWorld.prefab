@@ -256,6 +256,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8322905608939587015}
+  - component: {fileID: 905814505359435800}
   m_Layer: 0
   m_Name: AllyUnitWorld
   m_TagString: Untagged
@@ -283,3 +284,39 @@ Transform:
   - {fileID: 8864134179066633530}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &905814505359435800
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6478388234597724174}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fca67d063733d874489e2f94bc6a9e54, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleCharacterPresentationController
+  characterSprite: {fileID: 2867870923967540766}
+  bodyVisualRoot: {fileID: 6821699187834357049}
+  idleSprite: {fileID: 21300000, guid: 27c534e09be133c4fa5f157117cf2310, type: 3}
+  sprintSprite: {fileID: 21300000, guid: f0743090b03bec2438d0c61c8301fc54, type: 3}
+  slashSprite: {fileID: 0}
+  hitSprite: {fileID: 0}
+  slashBackEffect: {fileID: 0}
+  slashFrontEffect: {fileID: 0}
+  slashEffectFadeInDuration: 0.05
+  slashEffectShakeDuration: 0.12
+  slashEffectShakeAmplitude: 0.08
+  slashEffectFadeOutDuration: 0.08
+  afterimageLifetime: 0.18
+  afterimageStartAlpha: 0.35
+  slashLungeDistance: 0.2
+  slashLungeForwardDuration: 0.05
+  slashAfterimageCount: 2
+  slashAfterimageLifetime: 0.1
+  slashAfterimageStartAlpha: 0.28
+  hitRecoilDistance: 0.15
+  hitRecoilDuration: 0.06
+  hitShakeAmplitude: 0.04
+  hitShakeDuration: 0.12
+  hitPoseHoldDuration: 0.16

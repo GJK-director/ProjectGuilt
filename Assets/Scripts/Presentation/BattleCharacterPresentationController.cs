@@ -1,0 +1,780 @@
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+// 控制单个战斗角色当前显示的静态姿态，不负责动画流程或角色移动。
+public sealed class BattleCharacterPresentationController : MonoBehaviour
+{
+    private sealed class ActiveAfterimage
+    {
+        public GameObject root;
+        public Coroutine fadeCoroutine;
+    }
+
+    [SerializeField] private SpriteRenderer characterSprite;
+    [SerializeField] private Transform bodyVisualRoot;
+    [SerializeField] private Sprite idleSprite;
+    [SerializeField] private Sprite sprintSprite;
+    [SerializeField] private Sprite slashSprite;
+    [SerializeField] private Sprite hitSprite;
+    [SerializeField] private SpriteRenderer slashBackEffect;
+    [SerializeField] private SpriteRenderer slashFrontEffect;
+    [SerializeField] private float slashEffectFadeInDuration = 0.05f;
+    [SerializeField] private float slashEffectShakeDuration = 0.12f;
+    [SerializeField] private float slashEffectShakeAmplitude = 0.08f;
+    [SerializeField] private float slashEffectFadeOutDuration = 0.08f;
+    [SerializeField] private float afterimageLifetime = 0.18f;
+    [SerializeField, Range(0f, 1f)]
+    private float afterimageStartAlpha = 0.35f;
+    [SerializeField] private float slashLungeDistance = 0.20f;
+    [SerializeField] private float slashLungeForwardDuration = 0.05f;
+    [SerializeField] private int slashAfterimageCount = 2;
+    [SerializeField] private float slashAfterimageLifetime = 0.10f;
+    [SerializeField, Range(0f, 1f)]
+    private float slashAfterimageStartAlpha = 0.28f;
+    [SerializeField] private float hitRecoilDistance = 0.15f;
+    [SerializeField] private float hitRecoilDuration = 0.06f;
+    [SerializeField] private float hitShakeAmplitude = 0.04f;
+    [SerializeField] private float hitShakeDuration = 0.12f;
+    [SerializeField] private float hitPoseHoldDuration = 0.16f;
+
+    private Vector3 bodyBaseLocalPosition;
+    private Vector3 bodyMotionOffset;
+    private Vector3 bodyShakeOffset;
+    private bool bodyBaseStateCached;
+    private Vector3 slashBackOriginalLocalPosition;
+    private Vector3 slashFrontOriginalLocalPosition;
+    private Color slashBackOriginalColor;
+    private Color slashFrontOriginalColor;
+    private bool slashBackStateCached;
+    private bool slashFrontStateCached;
+    private bool presentationPaused;
+    private readonly List<ActiveAfterimage> activeAfterimages =
+        new List<ActiveAfterimage>();
+
+    void Awake()
+    {
+        CacheBodyVisualState();
+        ApplyBodyVisualOffset();
+        CacheSlashEffectState();
+        SetIdle();
+        ClearSlashEffect();
+    }
+
+    void OnDisable()
+    {
+        presentationPaused = false;
+        ClearBodyVisualOffsets();
+        ClearAfterimages();
+        ClearSlashEffect();
+        SetIdle();
+    }
+
+    public void SetIdle()
+    {
+        SetPose(idleSprite);
+    }
+
+    public void SetSprint()
+    {
+        SetPose(sprintSprite);
+    }
+
+    public void SetSlash()
+    {
+        SetPose(slashSprite);
+    }
+
+    public void SetHit()
+    {
+        SetPose(hitSprite);
+    }
+
+    public void SetPresentationPaused(bool paused)
+    {
+        presentationPaused = paused;
+    }
+
+    public void FinishSlashPresentation()
+    {
+        SetIdle();
+        ResetBodyMotionOffset();
+    }
+
+    public void FinishHitReaction()
+    {
+        SetIdle();
+        bodyMotionOffset = Vector3.zero;
+        bodyShakeOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+    }
+
+    public void ClearBodyVisualOffsets()
+    {
+        bodyMotionOffset = Vector3.zero;
+        bodyShakeOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+    }
+
+    public void ShowSlashEffect()
+    {
+        if (slashBackEffect != null)
+        {
+            slashBackEffect.enabled = true;
+        }
+
+        if (slashFrontEffect != null)
+        {
+            slashFrontEffect.enabled = true;
+        }
+    }
+
+    public void ClearSlashEffect()
+    {
+        CacheSlashEffectState();
+
+        if (slashBackEffect != null)
+        {
+            if (slashBackStateCached)
+            {
+                slashBackEffect.transform.localPosition =
+                    slashBackOriginalLocalPosition;
+                slashBackEffect.color = slashBackOriginalColor;
+            }
+            slashBackEffect.enabled = false;
+        }
+
+        if (slashFrontEffect != null)
+        {
+            if (slashFrontStateCached)
+            {
+                slashFrontEffect.transform.localPosition =
+                    slashFrontOriginalLocalPosition;
+                slashFrontEffect.color = slashFrontOriginalColor;
+            }
+            slashFrontEffect.enabled = false;
+        }
+    }
+
+    public IEnumerator PlaySlashEffect(Action onImpact = null)
+    {
+        CacheSlashEffectState();
+        RestoreSlashEffectPositions();
+        SetSlashEffectAlpha(0f);
+        ShowSlashEffect();
+
+        bool impactTriggered = false;
+        if (slashEffectFadeInDuration <= 0f)
+        {
+            SetSlashEffectAlpha(1f);
+            InvokeImpactOnce(onImpact, ref impactTriggered);
+        }
+
+        float revealAndShakeDuration = Mathf.Max(
+            Mathf.Max(0f, slashEffectFadeInDuration),
+            Mathf.Max(0f, slashEffectShakeDuration)
+        );
+        float elapsed = 0f;
+        while (elapsed < revealAndShakeDuration)
+        {
+            if (!isActiveAndEnabled)
+            {
+                ClearSlashEffect();
+                yield break;
+            }
+
+            if (presentationPaused)
+            {
+                yield return null;
+                continue;
+            }
+
+            elapsed = Mathf.Min(
+                revealAndShakeDuration,
+                elapsed + Time.deltaTime
+            );
+            float fadeInT = slashEffectFadeInDuration <= 0f
+                ? 1f
+                : EaseOutQuad(elapsed / slashEffectFadeInDuration);
+            SetSlashEffectAlpha(fadeInT);
+            ApplySlashEffectShake(elapsed);
+
+            if (!impactTriggered &&
+                elapsed >= slashEffectFadeInDuration)
+            {
+                SetSlashEffectAlpha(1f);
+                InvokeImpactOnce(onImpact, ref impactTriggered);
+            }
+
+            yield return null;
+        }
+
+        SetSlashEffectAlpha(1f);
+        InvokeImpactOnce(onImpact, ref impactTriggered);
+
+        // Impact 回调可能刚刚开启 Hit Stop，等待恢复后再进入淡出阶段。
+        while (presentationPaused)
+        {
+            if (!isActiveAndEnabled)
+            {
+                ClearSlashEffect();
+                yield break;
+            }
+
+            yield return null;
+        }
+
+        RestoreSlashEffectPositions();
+
+        if (slashEffectFadeOutDuration > 0f)
+        {
+            elapsed = 0f;
+            while (elapsed < slashEffectFadeOutDuration)
+            {
+                if (!isActiveAndEnabled)
+                {
+                    ClearSlashEffect();
+                    yield break;
+                }
+
+                if (presentationPaused)
+                {
+                    yield return null;
+                    continue;
+                }
+
+                float fadeOutT = EaseOutQuad(
+                    elapsed / slashEffectFadeOutDuration
+                );
+                SetSlashEffectAlpha(1f - fadeOutT);
+                elapsed += Time.deltaTime;
+                yield return null;
+            }
+        }
+
+        SetSlashEffectAlpha(0f);
+        ClearSlashEffect();
+    }
+
+    public IEnumerator PlaySlashPresentation(
+        float directionSign,
+        Action onImpact = null
+    )
+    {
+        bool impactReached = false;
+        Action impactHandler = () =>
+        {
+            impactReached = true;
+            onImpact?.Invoke();
+        };
+        IEnumerator lunge = PlaySlashLunge(
+            directionSign,
+            () => impactReached
+        );
+        IEnumerator effect = PlaySlashEffect(impactHandler);
+        bool lungeRunning = true;
+        bool effectRunning = true;
+
+        while (lungeRunning || effectRunning)
+        {
+            // 先推进前刺，使同帧 Impact 暂停时身体已经抵达对应位置。
+            if (lungeRunning)
+            {
+                lungeRunning = lunge.MoveNext();
+            }
+
+            if (effectRunning)
+            {
+                effectRunning = effect.MoveNext();
+            }
+
+            if (lungeRunning || effectRunning)
+            {
+                yield return null;
+            }
+        }
+
+    }
+
+    public IEnumerator PlayHitReaction(float recoilDirectionSign)
+    {
+        yield return PlayHitReactionInternal(recoilDirectionSign, true);
+    }
+
+    public IEnumerator PlaySustainedHitReaction(float recoilDirectionSign)
+    {
+        yield return PlayHitReactionInternal(recoilDirectionSign, false);
+    }
+
+    private IEnumerator PlayHitReactionInternal(
+        float recoilDirectionSign,
+        bool finishAutomatically
+    )
+    {
+        SetHit();
+        bodyMotionOffset = Vector3.zero;
+        bodyShakeOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+
+        float normalizedDirection = recoilDirectionSign >= 0f ? 1f : -1f;
+        Vector3 maximumRecoilOffset = Vector3.right *
+            normalizedDirection * hitRecoilDistance;
+        float recoilDuration = Mathf.Max(0f, hitRecoilDuration);
+        float shakeDuration = Mathf.Max(0f, hitShakeDuration);
+        float holdDuration = finishAutomatically
+            ? Mathf.Max(0f, hitPoseHoldDuration)
+            : 0f;
+        float recoilElapsed = 0f;
+        float shakeElapsed = 0f;
+        float holdElapsed = 0f;
+
+        if (recoilDuration <= 0f)
+        {
+            bodyMotionOffset = maximumRecoilOffset;
+        }
+
+        if (shakeDuration <= 0f)
+        {
+            bodyShakeOffset = Vector3.zero;
+        }
+
+        ApplyBodyVisualOffset();
+
+        while (recoilElapsed < recoilDuration ||
+            shakeElapsed < shakeDuration ||
+            holdElapsed < holdDuration)
+        {
+            if (!isActiveAndEnabled)
+            {
+                FinishHitReaction();
+                yield break;
+            }
+
+            if (presentationPaused)
+            {
+                yield return null;
+                continue;
+            }
+
+            float deltaTime = Time.deltaTime;
+            if (recoilElapsed < recoilDuration)
+            {
+                recoilElapsed = Mathf.Min(
+                    recoilDuration,
+                    recoilElapsed + deltaTime
+                );
+                float recoilT = EaseOutQuad(
+                    recoilElapsed / recoilDuration
+                );
+                bodyMotionOffset = Vector3.zero +
+                    (maximumRecoilOffset - Vector3.zero) * recoilT;
+            }
+            else
+            {
+                bodyMotionOffset = maximumRecoilOffset;
+            }
+
+            if (shakeElapsed < shakeDuration)
+            {
+                shakeElapsed = Mathf.Min(
+                    shakeDuration,
+                    shakeElapsed + deltaTime
+                );
+                float shakeT = shakeElapsed / shakeDuration;
+                float currentAmplitude = Mathf.Max(0f, hitShakeAmplitude) *
+                    (1f - EaseOutQuad(shakeT));
+                Vector2 randomDirection = UnityEngine.Random.insideUnitCircle;
+                bodyShakeOffset = new Vector3(
+                    randomDirection.x,
+                    randomDirection.y,
+                    0f
+                ) * currentAmplitude;
+            }
+            else
+            {
+                bodyShakeOffset = Vector3.zero;
+            }
+
+            holdElapsed = Mathf.Min(holdDuration, holdElapsed + deltaTime);
+            ApplyBodyVisualOffset();
+            yield return null;
+        }
+
+        bodyMotionOffset = maximumRecoilOffset;
+        bodyShakeOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+        if (finishAutomatically)
+        {
+            FinishHitReaction();
+        }
+    }
+
+    public void SpawnAfterimage()
+    {
+        SpawnAfterimageInternal(afterimageLifetime, afterimageStartAlpha);
+    }
+
+    private void SpawnAfterimageInternal(float lifetime, float startAlpha)
+    {
+        if (characterSprite == null || characterSprite.sprite == null)
+        {
+            return;
+        }
+
+        Transform sourceTransform = characterSprite.transform;
+        GameObject afterimageRoot = new GameObject("BattleCharacterAfterimage");
+        afterimageRoot.layer = characterSprite.gameObject.layer;
+        afterimageRoot.transform.SetPositionAndRotation(
+            sourceTransform.position,
+            sourceTransform.rotation
+        );
+        // 残影不设置父节点，以生成瞬间的世界缩放固定在原地。
+        afterimageRoot.transform.localScale = sourceTransform.lossyScale;
+
+        SpriteRenderer afterimage = afterimageRoot.AddComponent<SpriteRenderer>();
+        afterimage.sprite = characterSprite.sprite;
+        afterimage.flipX = characterSprite.flipX;
+        afterimage.flipY = characterSprite.flipY;
+        afterimage.sortingLayerID = characterSprite.sortingLayerID;
+        afterimage.sortingOrder = characterSprite.sortingOrder - 1;
+
+        Color sourceColor = characterSprite.color;
+        sourceColor.a *= Mathf.Clamp01(startAlpha);
+        afterimage.color = sourceColor;
+
+        if (lifetime <= 0f)
+        {
+            Destroy(afterimageRoot);
+            return;
+        }
+
+        ActiveAfterimage entry = new ActiveAfterimage
+        {
+            root = afterimageRoot
+        };
+        activeAfterimages.Add(entry);
+        entry.fadeCoroutine = StartCoroutine(
+            FadeAfterimage(entry, afterimage, sourceColor, lifetime)
+        );
+    }
+
+    public void ClearAfterimages()
+    {
+        for (int index = activeAfterimages.Count - 1; index >= 0; index--)
+        {
+            ActiveAfterimage entry = activeAfterimages[index];
+            if (entry == null)
+            {
+                continue;
+            }
+
+            if (entry.fadeCoroutine != null)
+            {
+                StopCoroutine(entry.fadeCoroutine);
+            }
+
+            if (entry.root != null)
+            {
+                Destroy(entry.root);
+            }
+        }
+
+        activeAfterimages.Clear();
+    }
+
+    private IEnumerator FadeAfterimage(
+        ActiveAfterimage entry,
+        SpriteRenderer afterimage,
+        Color startColor,
+        float lifetime
+    )
+    {
+        float elapsed = 0f;
+        while (elapsed < lifetime)
+        {
+            if (entry.root == null || afterimage == null)
+            {
+                activeAfterimages.Remove(entry);
+                yield break;
+            }
+
+            if (presentationPaused)
+            {
+                yield return null;
+                continue;
+            }
+
+            float easedT = EaseOutQuad(elapsed / lifetime);
+            Color color = startColor;
+            color.a = startColor.a + (0f - startColor.a) * easedT;
+            afterimage.color = color;
+
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (afterimage != null)
+        {
+            Color finalColor = startColor;
+            finalColor.a = 0f;
+            afterimage.color = finalColor;
+        }
+
+        activeAfterimages.Remove(entry);
+        if (entry.root != null)
+        {
+            Destroy(entry.root);
+        }
+    }
+
+    private static void InvokeImpactOnce(
+        Action onImpact,
+        ref bool impactTriggered
+    )
+    {
+        if (impactTriggered)
+        {
+            return;
+        }
+
+        impactTriggered = true;
+        onImpact?.Invoke();
+    }
+
+    private IEnumerator PlaySlashLunge(
+        float directionSign,
+        Func<bool> hasImpactOccurred
+    )
+    {
+        CacheBodyVisualState();
+        if (!bodyBaseStateCached || bodyVisualRoot == null)
+        {
+            yield break;
+        }
+
+        float normalizedDirection = directionSign >= 0f ? 1f : -1f;
+        Vector3 maximumOffset = Vector3.right *
+            normalizedDirection * slashLungeDistance;
+
+        bodyMotionOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+        int slashAfterimageTotal = Mathf.Max(0, slashAfterimageCount);
+        int nextSlashAfterimageIndex = 0;
+        SpawnSlashAfterimagesThroughProgress(
+            0f,
+            maximumOffset,
+            slashAfterimageTotal,
+            ref nextSlashAfterimageIndex
+        );
+
+        if (slashLungeForwardDuration <= 0f)
+        {
+            bodyMotionOffset = maximumOffset;
+            ApplyBodyVisualOffset();
+        }
+        else
+        {
+            float elapsed = 0f;
+            while (elapsed < slashLungeForwardDuration)
+            {
+                if (!isActiveAndEnabled)
+                {
+                    ClearBodyVisualOffsets();
+                    yield break;
+                }
+
+                if (presentationPaused)
+                {
+                    yield return null;
+                    continue;
+                }
+
+                elapsed = Mathf.Min(
+                    slashLungeForwardDuration,
+                    elapsed + Time.deltaTime
+                );
+                float normalizedProgress = Mathf.Clamp01(
+                    elapsed / slashLungeForwardDuration
+                );
+                if (hasImpactOccurred == null || !hasImpactOccurred())
+                {
+                    SpawnSlashAfterimagesThroughProgress(
+                        normalizedProgress,
+                        maximumOffset,
+                        slashAfterimageTotal,
+                        ref nextSlashAfterimageIndex
+                    );
+                }
+                float easedT = EaseOutQuad(normalizedProgress);
+                bodyMotionOffset = Vector3.zero +
+                    (maximumOffset - Vector3.zero) * easedT;
+                ApplyBodyVisualOffset();
+                yield return null;
+            }
+        }
+
+        bodyMotionOffset = maximumOffset;
+        ApplyBodyVisualOffset();
+    }
+
+    private void SpawnSlashAfterimagesThroughProgress(
+        float normalizedProgress,
+        Vector3 maximumOffset,
+        int totalCount,
+        ref int nextIndex
+    )
+    {
+        if (totalCount <= 0)
+        {
+            return;
+        }
+
+        float currentProgress = Mathf.Clamp01(normalizedProgress);
+        while (nextIndex < totalCount)
+        {
+            float spawnProgress = (float)nextIndex / totalCount;
+            if (spawnProgress >= 1f || spawnProgress > currentProgress)
+            {
+                break;
+            }
+
+            // 按固定进度捕获世界位置，避免低帧率改变残影数量与分布。
+            bodyMotionOffset = maximumOffset * EaseOutQuad(spawnProgress);
+            ApplyBodyVisualOffset();
+            SpawnAfterimageInternal(
+                slashAfterimageLifetime,
+                slashAfterimageStartAlpha
+            );
+            nextIndex++;
+        }
+    }
+
+    private void CacheBodyVisualState()
+    {
+        if (bodyBaseStateCached || bodyVisualRoot == null)
+        {
+            return;
+        }
+
+        bodyBaseLocalPosition = bodyVisualRoot.localPosition;
+        bodyBaseStateCached = true;
+    }
+
+    private void ApplyBodyVisualOffset()
+    {
+        if (!bodyBaseStateCached || bodyVisualRoot == null)
+        {
+            return;
+        }
+
+        bodyVisualRoot.localPosition = bodyBaseLocalPosition +
+            bodyMotionOffset + bodyShakeOffset;
+    }
+
+    private void ResetBodyMotionOffset()
+    {
+        bodyMotionOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+    }
+
+    private void CacheSlashEffectState()
+    {
+        if (!slashBackStateCached && slashBackEffect != null)
+        {
+            slashBackOriginalLocalPosition =
+                slashBackEffect.transform.localPosition;
+            slashBackOriginalColor = slashBackEffect.color;
+            slashBackStateCached = true;
+        }
+
+        if (!slashFrontStateCached && slashFrontEffect != null)
+        {
+            slashFrontOriginalLocalPosition =
+                slashFrontEffect.transform.localPosition;
+            slashFrontOriginalColor = slashFrontEffect.color;
+            slashFrontStateCached = true;
+        }
+    }
+
+    private void ApplySlashEffectShake(float elapsed)
+    {
+        if (slashEffectShakeDuration <= 0f ||
+            slashEffectShakeAmplitude <= 0f)
+        {
+            RestoreSlashEffectPositions();
+            return;
+        }
+
+        float shakeT = Mathf.Clamp01(elapsed / slashEffectShakeDuration);
+        float amplitude = slashEffectShakeAmplitude *
+            (1f - EaseOutQuad(shakeT));
+        float phase = elapsed * 90f;
+        Vector3 shakeOffset = new Vector3(
+            Mathf.Sin(phase),
+            Mathf.Cos(phase),
+            0f
+        ) * amplitude;
+
+        if (slashBackStateCached && slashBackEffect != null)
+        {
+            slashBackEffect.transform.localPosition =
+                slashBackOriginalLocalPosition + shakeOffset;
+        }
+
+        if (slashFrontStateCached && slashFrontEffect != null)
+        {
+            slashFrontEffect.transform.localPosition =
+                slashFrontOriginalLocalPosition + shakeOffset;
+        }
+    }
+
+    private void RestoreSlashEffectPositions()
+    {
+        if (slashBackStateCached && slashBackEffect != null)
+        {
+            slashBackEffect.transform.localPosition =
+                slashBackOriginalLocalPosition;
+        }
+
+        if (slashFrontStateCached && slashFrontEffect != null)
+        {
+            slashFrontEffect.transform.localPosition =
+                slashFrontOriginalLocalPosition;
+        }
+    }
+
+    private void SetSlashEffectAlpha(float alpha)
+    {
+        float safeAlpha = Mathf.Clamp01(alpha);
+        if (slashBackStateCached && slashBackEffect != null)
+        {
+            Color color = slashBackOriginalColor;
+            color.a *= safeAlpha;
+            slashBackEffect.color = color;
+        }
+
+        if (slashFrontStateCached && slashFrontEffect != null)
+        {
+            Color color = slashFrontOriginalColor;
+            color.a *= safeAlpha;
+            slashFrontEffect.color = color;
+        }
+    }
+
+    private static float EaseOutQuad(float t)
+    {
+        t = Mathf.Clamp01(t);
+        return 1f - (1f - t) * (1f - t);
+    }
+
+    private void SetPose(Sprite poseSprite)
+    {
+        if (characterSprite == null || poseSprite == null)
+        {
+            return;
+        }
+
+        characterSprite.sprite = poseSprite;
+    }
+}

@@ -46,6 +46,8 @@ public class BattleSimpleUIController : MonoBehaviour
     [SerializeField]
     private BattleActionRelationLineController actionRelationLineController;
     [SerializeField] private BattleUnitViewSpawner unitViewSpawner;
+    [SerializeField]
+    private BattleSceneExecutionPresenter sceneExecutionPresenter;
 
     [SerializeField] private Button assignA1FreeAttackButton;
     [SerializeField] private Button assignA1AbilityButton;
@@ -119,6 +121,8 @@ public class BattleSimpleUIController : MonoBehaviour
     private bool showingSinCards = false;
 
     private bool isRunningCompleteTurnCycle;
+    private bool isScenePresentedTurnCycleRunning;
+    private BattleAutomaticTurnCycleResult scenePresentedTurnCycleResult;
     private bool terminalInteractionStateCleared;
     private readonly BattleCardSelectionController cardSelectionController =
         new BattleCardSelectionController();
@@ -168,6 +172,14 @@ public class BattleSimpleUIController : MonoBehaviour
             OnSourceSlotSelectionChanged;
         cardSelectionController.SelectionChanged +=
             OnCardSelectionChanged;
+    }
+
+    void Update()
+    {
+        if (isScenePresentedTurnCycleRunning)
+        {
+            AdvanceScenePresentedTurnCycle();
+        }
     }
 
     void OnDestroy()
@@ -329,6 +341,12 @@ public class BattleSimpleUIController : MonoBehaviour
             ClearRuntimeStatusViewReferences();
             actionRelationLineController?.ClearAll();
             return false;
+        }
+
+        if (sceneExecutionPresenter != null)
+        {
+            // 正式角色表现生成完成后，再把同一个Spawner交给场景Presenter建立角色映射。
+            sceneExecutionPresenter.Initialize(unitViewSpawner);
         }
 
         BindCharacterStatusSlotInteractions();
@@ -744,7 +762,7 @@ public class BattleSimpleUIController : MonoBehaviour
     )
     {
         runtimeState = initializedRuntimeState;
-        lifecycleController = new BattleLifecycleController(runtimeState);
+        lifecycleController = CreateLifecycleController(runtimeState);
         terminalInteractionStateCleared = false;
         ally01 = runtimeState.allyA;
         ally02 = runtimeState.allyB;
@@ -808,7 +826,7 @@ public class BattleSimpleUIController : MonoBehaviour
         CreateTestBattleCards(cards);
 
         runtimeState = new BattleRuntimeState();
-        lifecycleController = new BattleLifecycleController(runtimeState);
+        lifecycleController = CreateLifecycleController(runtimeState);
         runtimeState.SetCharacters(ally01, ally02, enemy01, enemy02);
         List<BattleActionSlot> initialActionSlots = BattleActionSlotManager.CreatePartyActionSlots(ally01, ally02, 2);
         runtimeState.SetActionSlots(initialActionSlots);
@@ -823,6 +841,22 @@ public class BattleSimpleUIController : MonoBehaviour
 
         lastLog = "初始化完成：已进入 Prepare 阶段";
         return true;
+    }
+
+    private BattleLifecycleController CreateLifecycleController(
+        BattleRuntimeState state
+    )
+    {
+        if (sceneExecutionPresenter != null)
+        {
+            return new BattleLifecycleController(
+                state,
+                sceneExecutionPresenter
+            );
+        }
+
+        // 未绑定正式场景Presenter时，保持原有Immediate同步行为。
+        return new BattleLifecycleController(state);
     }
 
     void CreateTestCharacters()
@@ -2029,6 +2063,22 @@ public class BattleSimpleUIController : MonoBehaviour
         actionRelationLineController?.ClearAll();
         RefreshBattleStartButtonState();
 
+        if (sceneExecutionPresenter != null)
+        {
+            if (!TryBeginScenePresentedTurnCycle(out string failureMessage))
+            {
+                isRunningCompleteTurnCycle = false;
+                lastLog = failureMessage;
+                RefreshView();
+                return;
+            }
+
+            lastLog = "完整回合已进入跨帧执行，阶段：" +
+                runtimeState.LifecyclePhase;
+            RefreshView();
+            return;
+        }
+
         try
         {
             BattleAutomaticTurnCycleResult result = BattleAutomaticTurnCycle.TryRun(
@@ -2053,6 +2103,158 @@ public class BattleSimpleUIController : MonoBehaviour
             isRunningCompleteTurnCycle = false;
             RefreshView();
         }
+    }
+
+    private bool TryBeginScenePresentedTurnCycle(
+        out string failureMessage
+    )
+    {
+        failureMessage = string.Empty;
+        if (lifecycleController == null || runtimeState == null)
+        {
+            failureMessage = "完整回合启动失败：生命周期控制器或RuntimeState为空";
+            return false;
+        }
+        if (!BattleAutomaticTurnCycle.CanStart(runtimeState))
+        {
+            failureMessage =
+                "完整回合启动失败：必须处于Prepare、战斗未结束且没有已有计划";
+            return false;
+        }
+
+        BattleAutomaticTurnCycleResult result =
+            new BattleAutomaticTurnCycleResult
+            {
+                startingTurn = runtimeState.currentTurn,
+                endingTurn = runtimeState.currentTurn,
+                message = "完整回合跨帧执行尚未完成"
+            };
+        if (!lifecycleController.TryCreateExecutionPlan(
+                false,
+                out BattleExecutionPlan executionPlan,
+                out failureMessage
+            ))
+        {
+            Debug.LogWarning(
+                "完整回合启动失败：ExecutionPlan为空，已安全返回Prepare"
+            );
+            return false;
+        }
+
+        result.executedPlan = executionPlan;
+        BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
+
+        BattleRollGateSettings settings = new BattleRollGateSettings(
+            BattleRollMode.Auto,
+            0f,
+            0f
+        );
+        if (!lifecycleController.TryBeginPausableExecution(
+                settings,
+                out failureMessage
+            ))
+        {
+            return false;
+        }
+
+        scenePresentedTurnCycleResult = result;
+        isScenePresentedTurnCycleRunning = true;
+        return true;
+    }
+
+    private void AdvanceScenePresentedTurnCycle()
+    {
+        BattleExecutionRunner runner = lifecycleController != null
+            ? lifecycleController.ExecutionRunner
+            : null;
+        if (runner == null)
+        {
+            FailScenePresentedTurnCycle(
+                "Pausable执行失败：正式场景Runner为空"
+            );
+            return;
+        }
+        if (runner.HasFailed)
+        {
+            FailScenePresentedTurnCycle(
+                "Pausable执行失败：正式场景Runner已失败"
+            );
+            return;
+        }
+
+        if (!runner.IsCompleted)
+        {
+            if (!lifecycleController.AdvancePausableExecution(
+                    Time.deltaTime,
+                    out string failureMessage
+                ))
+            {
+                FailScenePresentedTurnCycle(failureMessage);
+                return;
+            }
+
+            runner = lifecycleController.ExecutionRunner;
+            if (runner == null || runner.HasFailed)
+            {
+                FailScenePresentedTurnCycle(
+                    "Pausable执行失败：正式场景Runner推进后失效"
+                );
+                return;
+            }
+        }
+
+        if (!runner.IsCompleted)
+        {
+            return;
+        }
+
+        BattleAutomaticTurnCycleResult result =
+            BattleAutomaticTurnCycle.CompleteTurnCycleAfterExecution(
+                scenePresentedTurnCycleResult,
+                lifecycleController,
+                runtimeState,
+                scenePresentedTurnCycleResult != null
+                    ? scenePresentedTurnCycleResult.executedPlan
+                    : null,
+                ally01,
+                ally02,
+                enemy01,
+                enemyAttackCardState,
+                enemy02,
+                enemy02AttackCardState
+            );
+        CompleteScenePresentedTurnCycle(result);
+    }
+
+    private void CompleteScenePresentedTurnCycle(
+        BattleAutomaticTurnCycleResult result
+    )
+    {
+        isScenePresentedTurnCycleRunning = false;
+        scenePresentedTurnCycleResult = null;
+        isRunningCompleteTurnCycle = false;
+        lastLog = result != null
+            ? result.message
+            : "完整回合收尾失败：结果为空";
+
+        if (result != null &&
+            (result.advancedToNextTurn || result.battleEnded))
+        {
+            ClearAllUISelectionState();
+        }
+
+        RefreshView();
+    }
+
+    private void FailScenePresentedTurnCycle(string failureMessage)
+    {
+        isScenePresentedTurnCycleRunning = false;
+        scenePresentedTurnCycleResult = null;
+        isRunningCompleteTurnCycle = false;
+        lastLog = string.IsNullOrEmpty(failureMessage)
+            ? "完整回合跨帧执行失败"
+            : failureMessage;
+        RefreshView();
     }
 
     private void OnClickCreateExecutionPlan()
@@ -2134,7 +2336,11 @@ public class BattleSimpleUIController : MonoBehaviour
 
         string transitionFailure = "生命周期控制器为空";
         if (lifecycleController == null ||
-            !lifecycleController.TryExecuteCurrentPlan(out transitionFailure))
+            !BattleAutomaticTurnCycle.TryExecuteCurrentPlan(
+                lifecycleController,
+                sceneExecutionPresenter != null,
+                out transitionFailure
+            ))
         {
             lastLog = transitionFailure;
             RefreshView();
@@ -3526,6 +3732,29 @@ public static class BattleAutomaticTurnCycle
         BattleCardState enemy02AttackCardState
     )
     {
+        return TryRun(
+            runtimeState,
+            ally01,
+            ally02,
+            enemy01,
+            enemyAttackCardState,
+            enemy02,
+            enemy02AttackCardState,
+            null
+        );
+    }
+
+    public static BattleAutomaticTurnCycleResult TryRun(
+        BattleRuntimeState runtimeState,
+        CharacterData ally01,
+        CharacterData ally02,
+        CharacterData enemy01,
+        BattleCardState enemyAttackCardState,
+        CharacterData enemy02,
+        BattleCardState enemy02AttackCardState,
+        IBattleExecutionPresenter executionPresenter
+    )
+    {
         BattleAutomaticTurnCycleResult result = new BattleAutomaticTurnCycleResult
         {
             startingTurn = runtimeState != null ? runtimeState.currentTurn : 0,
@@ -3540,7 +3769,12 @@ public static class BattleAutomaticTurnCycle
         }
 
         BattleLifecycleController lifecycleController =
-            new BattleLifecycleController(runtimeState);
+            executionPresenter != null
+                ? new BattleLifecycleController(
+                    runtimeState,
+                    executionPresenter
+                )
+                : new BattleLifecycleController(runtimeState);
         BattleExecutionPlan executionPlan;
         string failureMessage;
         if (!lifecycleController.TryCreateExecutionPlan(
@@ -3556,12 +3790,64 @@ public static class BattleAutomaticTurnCycle
 
         result.executedPlan = executionPlan;
         BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
-        if (!lifecycleController.TryExecuteCurrentPlan(out failureMessage))
+        if (!TryExecuteCurrentPlan(
+                lifecycleController,
+                executionPresenter != null,
+                out failureMessage
+            ))
         {
             result.executionPlanCompleted = executionPlan.isCompleted;
             result.battleEnded = runtimeState.IsBattleEnded;
             result.message = failureMessage;
             result.endingTurn = runtimeState.currentTurn;
+            return result;
+        }
+
+        return CompleteTurnCycleAfterExecution(
+            result,
+            lifecycleController,
+            runtimeState,
+            executionPlan,
+            ally01,
+            ally02,
+            enemy01,
+            enemyAttackCardState,
+            enemy02,
+            enemy02AttackCardState
+        );
+    }
+
+    internal static BattleAutomaticTurnCycleResult
+        CompleteTurnCycleAfterExecution(
+            BattleAutomaticTurnCycleResult result,
+            BattleLifecycleController lifecycleController,
+            BattleRuntimeState runtimeState,
+            BattleExecutionPlan executionPlan,
+            CharacterData ally01,
+            CharacterData ally02,
+            CharacterData enemy01,
+            BattleCardState enemyAttackCardState,
+            CharacterData enemy02,
+            BattleCardState enemy02AttackCardState
+        )
+    {
+        if (result == null)
+        {
+            result = new BattleAutomaticTurnCycleResult
+            {
+                startingTurn = runtimeState != null
+                    ? runtimeState.currentTurn
+                    : 0,
+                message = "完整回合收尾失败：结果为空"
+            };
+        }
+        if (lifecycleController == null || runtimeState == null ||
+            executionPlan == null)
+        {
+            result.message = "完整回合收尾失败：运行时引用不完整";
+            result.endingTurn = runtimeState != null
+                ? runtimeState.currentTurn
+                : result.startingTurn;
             return result;
         }
 
@@ -3584,7 +3870,7 @@ public static class BattleAutomaticTurnCycle
             return result;
         }
 
-        if (!lifecycleController.TryEndCurrentTurn(out failureMessage))
+        if (!lifecycleController.TryEndCurrentTurn(out string failureMessage))
         {
             result.message = failureMessage;
             result.endingTurn = runtimeState.currentTurn;
@@ -3644,6 +3930,73 @@ public static class BattleAutomaticTurnCycle
             : "下一回合准备失败";
 
         return result;
+    }
+
+    internal static bool TryExecuteCurrentPlan(
+        BattleLifecycleController lifecycleController,
+        bool usePausableExecution,
+        out string failureMessage
+    )
+    {
+        if (lifecycleController == null)
+        {
+            failureMessage = "执行计划失败：生命周期控制器为空";
+            return false;
+        }
+
+        if (!usePausableExecution)
+        {
+            return lifecycleController.TryExecuteCurrentPlan(
+                out failureMessage
+            );
+        }
+
+        BattleRollGateSettings settings = new BattleRollGateSettings(
+            BattleRollMode.Auto,
+            0f,
+            0f
+        );
+        if (!lifecycleController.TryBeginPausableExecution(
+                settings,
+                out failureMessage
+            ))
+        {
+            return false;
+        }
+
+        // A3的场景Presenter会立即完成请求；推进仍由生命周期宿主逐步消费。
+        const int maxAdvanceCount = 10000;
+        for (int advanceCount = 0;
+            advanceCount < maxAdvanceCount;
+            advanceCount++)
+        {
+            BattleExecutionRunner runner = lifecycleController.ExecutionRunner;
+            if (runner == null)
+            {
+                failureMessage = "Pausable执行失败：Runner为空";
+                return false;
+            }
+            if (runner.HasFailed)
+            {
+                failureMessage = "Pausable执行失败：Runner已失败";
+                return false;
+            }
+            if (runner.IsCompleted)
+            {
+                failureMessage = string.Empty;
+                return true;
+            }
+            if (!lifecycleController.AdvancePausableExecution(
+                    0f,
+                    out failureMessage
+                ))
+            {
+                return false;
+            }
+        }
+
+        failureMessage = "Pausable执行失败：超过最大推进次数";
+        return false;
     }
 
     public static List<BattleEnemyIntent> CreateFixedEnemyIntentQueue(
