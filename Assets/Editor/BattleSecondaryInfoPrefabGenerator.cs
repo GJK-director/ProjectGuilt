@@ -16,6 +16,8 @@ public static class BattleSecondaryInfoPrefabGenerator
         "Assets/Prefabs/BattleSecondaryInfoPanel.prefab";
     const string SlotCardPrefabPath =
         "Assets/Prefabs/BattleActionSlotCardInfoPanel.prefab";
+    const string CardUIPrefabPath =
+        "Assets/Art/battle/kapai/BattleCardUI.prefab";
     const string BattleScenePath = "Assets/Scenes/BattleScene.unity";
     const string FontPath = "Assets/Fonts/TMP_Font_CN_Runtime.asset";
     const string SessionKey =
@@ -37,6 +39,21 @@ public static class BattleSecondaryInfoPrefabGenerator
     public static void RebuildPrefabsAndRefreshBattleScene()
     {
         GenerateAll(true);
+    }
+
+    [MenuItem("Project Guilt/UI/重新生成行动槽位卡牌详情预设体")]
+    public static void RebuildActionSlotCardInfoPrefab()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            return;
+        }
+
+        EnsureAssetFolder("Assets/Prefabs");
+        CreateActionSlotCardInfoPrefab();
+        AssetDatabase.SaveAssets();
+        AssetDatabase.Refresh();
+        Debug.Log("行动槽位卡牌详情预设体已重新生成：\n" + SlotCardPrefabPath);
     }
 
     public static void ValidateGeneratedSetup()
@@ -84,6 +101,7 @@ public static class BattleSecondaryInfoPrefabGenerator
                 new SerializedObject(sideViews[index]),
                 "accentImage",
                 "artworkImage",
+                "cardPreviewPrefab",
                 "sideLabelText",
                 "ownerText",
                 "cardNameText",
@@ -263,6 +281,15 @@ public static class BattleSecondaryInfoPrefabGenerator
     {
         TMP_FontAsset font =
             AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(FontPath);
+        GameObject cardUIPrefab =
+            AssetDatabase.LoadAssetAtPath<GameObject>(CardUIPrefabPath);
+        if (cardUIPrefab == null)
+        {
+            throw new InvalidOperationException(
+                "找不到行动卡牌 UI 预设体：" + CardUIPrefabPath
+            );
+        }
+
         GameObject root = CreateOverlayCanvasRoot(
             "BattleActionSlotCardInfoPanel",
             out Canvas canvas
@@ -275,6 +302,7 @@ public static class BattleSecondaryInfoPrefabGenerator
             "AllyCardInfoPanel",
             false,
             font,
+            cardUIPrefab,
             out RectTransform allyRect
         );
         BattleActionSlotCardInfoPanelView enemyView = CreateCardInfoSide(
@@ -282,6 +310,7 @@ public static class BattleSecondaryInfoPrefabGenerator
             "EnemyCardInfoPanel",
             true,
             font,
+            cardUIPrefab,
             out RectTransform enemyRect
         );
 
@@ -291,7 +320,6 @@ public static class BattleSecondaryInfoPrefabGenerator
         SetObjectReference(serializedHost, "enemyPanelRect", enemyRect);
         SetObjectReference(serializedHost, "allyPanelView", allyView);
         SetObjectReference(serializedHost, "enemyPanelView", enemyView);
-        serializedHost.FindProperty("showDelay").floatValue = 0.25f;
         serializedHost.ApplyModifiedPropertiesWithoutUndo();
 
         GameObject prefab = PrefabUtility.SaveAsPrefabAsset(
@@ -307,6 +335,7 @@ public static class BattleSecondaryInfoPrefabGenerator
         string objectName,
         bool enemySide,
         TMP_FontAsset font,
+        GameObject cardUIPrefab,
         out RectTransform panelRect
     )
     {
@@ -363,17 +392,14 @@ public static class BattleSecondaryInfoPrefabGenerator
             new Vector2(18f, 20f),
             new Vector2(-8f, -24f)
         );
-        TMP_Text artworkHint = CreateText(
-            artwork.rectTransform,
-            "ArtworkHint",
-            "卡牌图像\n（可在预设体替换）",
-            19f,
-            new Color32(222, 225, 231, 210),
-            FontStyles.Normal,
-            font
-        );
-        Stretch(artworkHint.rectTransform, 12f);
-        artworkHint.alignment = TextAlignmentOptions.Center;
+        BattleCardUIView cardPreviewPrefab =
+            cardUIPrefab.GetComponent<BattleCardUIView>();
+        if (cardPreviewPrefab == null)
+        {
+            throw new InvalidOperationException(
+                "行动卡牌 UI 预设体缺少 BattleCardUIView。"
+            );
+        }
 
         GameObject infoObject = new GameObject(
             "InfoColumn",
@@ -485,6 +511,11 @@ public static class BattleSecondaryInfoPrefabGenerator
         SerializedObject serializedView = new SerializedObject(view);
         SetObjectReference(serializedView, "accentImage", accent);
         SetObjectReference(serializedView, "artworkImage", artwork);
+        SetObjectReference(
+            serializedView,
+            "cardPreviewPrefab",
+            cardPreviewPrefab
+        );
         SetObjectReference(serializedView, "sideLabelText", sideLabel);
         SetObjectReference(serializedView, "ownerText", owner);
         SetObjectReference(serializedView, "cardNameText", cardName);

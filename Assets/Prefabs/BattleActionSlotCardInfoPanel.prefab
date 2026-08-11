@@ -122,6 +122,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleActionSlotCardInfoPanelView
   accentImage: {fileID: 4342251801418227160}
   artworkImage: {fileID: 2727069911905339747}
+  cardPreviewPrefab: {fileID: 7128350634053751510, guid: 3ef73dfda84cb4d429d58f196d28f02c, type: 3}
   sideLabelText: {fileID: 4990882998251639072}
   ownerText: {fileID: 3091343799641133907}
   cardNameText: {fileID: 8277070921008847859}
@@ -1832,7 +1833,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &2011529653428040108
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2285,7 +2286,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &3568163283168474075
 RectTransform:
   m_ObjectHideFlags: 0
@@ -3620,6 +3621,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleActionSlotCardInfoPanelView
   accentImage: {fileID: 1812204999261408476}
   artworkImage: {fileID: 7618648363397388607}
+  cardPreviewPrefab: {fileID: 7128350634053751510, guid: 3ef73dfda84cb4d429d58f196d28f02c, type: 3}
   sideLabelText: {fileID: 8128795591509955295}
   ownerText: {fileID: 469136263076653844}
   cardNameText: {fileID: 5442153595981436392}
