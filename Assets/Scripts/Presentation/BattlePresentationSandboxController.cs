@@ -11,9 +11,6 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
     [SerializeField] private float dualClashReadyGap = 2.8f;
     [SerializeField] private float sprintDistance = 2f;
     [SerializeField] private float sprintDuration = 0.35f;
-    [SerializeField, Range(0f, 1f)]
-    private float repeatedLerpFactor = 0.2f;
-    [SerializeField] private float repeatedLerpSnapRatio = 0.01f;
     [SerializeField] private float slashHoldDuration = 0.2f;
     [SerializeField] private float afterimageSpawnInterval = 0.08f;
     [SerializeField] private float hitStopDuration = 0.08f;
@@ -27,6 +24,9 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
     private Coroutine characterTieSlashCoroutine;
     private Coroutine defenderTieSlashCoroutine;
     private Coroutine tieClashRecoilCoroutine;
+    private Coroutine parryRecoilCoroutine;
+    private Coroutine perfectGuardEffectCoroutine;
+    private Coroutine partialGuardRecoilCoroutine;
     private bool waitingForManualRoll;
     private bool attackImpactHandled;
     private bool characterTieImpactReached;
@@ -35,14 +35,15 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
     private bool characterTieSlashCompleted;
     private bool defenderTieSlashCompleted;
     private bool tieClashRecoilCompleted;
+    private bool perfectGuardImpactHandled;
+    private bool partialGuardImpactHandled;
     private float currentTieDirectionSign = 1f;
     private bool hasWarnedMissingDefender;
     private bool hasWarnedMissingAttackPair;
     private bool hasWarnedMissingTiePair;
+    private bool hasWarnedMissingGuardPair;
     private Vector3 characterResetPosition;
     private bool hasCharacterResetPosition;
-
-    private const int RepeatedLerpMaxFrames = 600;
 
     void Awake()
     {
@@ -103,9 +104,17 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         {
             StartAttackTieLoopTest();
         }
-        else if (keyboard.qKey.wasPressedThisFrame)
+        else if (keyboard.gKey.wasPressedThisFrame)
         {
-            StartRepeatedLerpSprintForward();
+            SetGuardPoseForInspection();
+        }
+        else if (keyboard.hKey.wasPressedThisFrame)
+        {
+            StartPerfectGuardTest();
+        }
+        else if (keyboard.jKey.wasPressedThisFrame)
+        {
+            StartPartialGuardTest();
         }
         else if (keyboard.rKey.wasPressedThisFrame)
         {
@@ -145,6 +154,24 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             tieClashRecoilCoroutine = null;
         }
 
+        if (parryRecoilCoroutine != null)
+        {
+            StopCoroutine(parryRecoilCoroutine);
+            parryRecoilCoroutine = null;
+        }
+
+        if (perfectGuardEffectCoroutine != null)
+        {
+            StopCoroutine(perfectGuardEffectCoroutine);
+            perfectGuardEffectCoroutine = null;
+        }
+
+        if (partialGuardRecoilCoroutine != null)
+        {
+            StopCoroutine(partialGuardRecoilCoroutine);
+            partialGuardRecoilCoroutine = null;
+        }
+
         if (hitStopCoroutine != null)
         {
             StopCoroutine(hitStopCoroutine);
@@ -159,6 +186,8 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
 
         waitingForManualRoll = false;
         attackImpactHandled = false;
+        perfectGuardImpactHandled = false;
+        partialGuardImpactHandled = false;
         ResetTieRoundState();
 
         if (character != null)
@@ -167,6 +196,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             character.ClearBodyVisualOffsets();
             character.ClearAfterimages();
             character.ClearSlashEffect();
+            character.ClearPerfectGuardEffect();
             character.SetIdle();
         }
 
@@ -175,43 +205,14 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             defender.SetPresentationPaused(false);
             defender.ClearAfterimages();
             defender.ClearSlashEffect();
-            defender.FinishHitReaction();
+            defender.ClearPerfectGuardEffect();
+            defender.FinishGuardPresentation();
         }
     }
 
     private void StartSprintForward()
     {
         StartDynamicTest(false);
-    }
-
-    private void StartRepeatedLerpSprintForward()
-    {
-        if (character == null || dynamicTestCoroutine != null)
-        {
-            return;
-        }
-
-        Vector3 startPosition = character.transform.position;
-        Vector3 targetPosition = startPosition + Vector3.right * sprintDistance;
-        float totalDistance = Vector3.Distance(startPosition, targetPosition);
-        float safeLerpFactor = Mathf.Clamp01(repeatedLerpFactor);
-
-        character.SetSprint();
-        if (totalDistance <= Mathf.Epsilon || safeLerpFactor <= 0f)
-        {
-            character.transform.position = targetPosition;
-            character.SetIdle();
-            return;
-        }
-
-        dynamicTestCoroutine = StartCoroutine(
-            RunRepeatedLerpSprintTest(
-                startPosition,
-                targetPosition,
-                totalDistance,
-                safeLerpFactor
-            )
-        );
     }
 
     private void StartSprintSlash()
@@ -227,6 +228,321 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         }
 
         dynamicTestCoroutine = StartCoroutine(RunHitReactionTest());
+    }
+
+    private void SetGuardPoseForInspection()
+    {
+        BattleCharacterPresentationController guardCharacter =
+            defender != null ? defender : character;
+        if (guardCharacter != null)
+        {
+            guardCharacter.SetGuard();
+        }
+    }
+
+    private void StartPerfectGuardTest()
+    {
+        if (character == null || defender == null)
+        {
+            if (!hasWarnedMissingGuardPair)
+            {
+                Debug.LogWarning(
+                    "BattlePresentationSandboxController：按键H/J需要同时绑定Character和Defender。"
+                );
+                hasWarnedMissingGuardPair = true;
+            }
+            return;
+        }
+
+        hasWarnedMissingGuardPair = false;
+        if (dynamicTestCoroutine != null)
+        {
+            return;
+        }
+
+        perfectGuardImpactHandled = false;
+        dynamicTestCoroutine = StartCoroutine(RunPerfectGuardTest());
+    }
+
+    private IEnumerator RunPerfectGuardTest()
+    {
+        if (character == null || defender == null)
+        {
+            FinishPerfectGuardTest();
+            yield break;
+        }
+
+        PrepareGuardResultTest();
+        defender.SetGuard();
+        float attackDirectionSign = GetHorizontalDirectionSign(
+            defender.transform.position.x - character.transform.position.x
+        );
+        character.SetSlash();
+        yield return character.PlaySlashPresentation(
+            attackDirectionSign,
+            () => BeginPerfectGuardImpact(attackDirectionSign),
+            playAttackEffect: false
+        );
+
+        if (!perfectGuardImpactHandled)
+        {
+            BeginPerfectGuardImpact(attackDirectionSign);
+        }
+
+        while (parryRecoilCoroutine != null ||
+            perfectGuardEffectCoroutine != null ||
+            dualHitStopCoroutine != null)
+        {
+            if (character == null || defender == null)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        FinishPerfectGuardTest();
+    }
+
+    private void BeginPerfectGuardImpact(float attackDirectionSign)
+    {
+        if (perfectGuardImpactHandled)
+        {
+            return;
+        }
+
+        perfectGuardImpactHandled = true;
+        if (character == null || defender == null)
+        {
+            return;
+        }
+
+        defender.SetGuard();
+        perfectGuardEffectCoroutine = StartCoroutine(
+            RunPerfectGuardEffect()
+        );
+        parryRecoilCoroutine = StartCoroutine(
+            RunParryRecoil(attackDirectionSign)
+        );
+
+        if (hitStopDuration <= 0f || dualHitStopCoroutine != null)
+        {
+            return;
+        }
+
+        character.SetPresentationPaused(true);
+        defender.SetPresentationPaused(true);
+        dualHitStopCoroutine = StartCoroutine(
+            RunDualHitStop(character, defender)
+        );
+    }
+
+    private IEnumerator RunParryRecoil(float attackDirectionSign)
+    {
+        if (character != null)
+        {
+            yield return character.PlayParryRecoil(attackDirectionSign);
+        }
+
+        parryRecoilCoroutine = null;
+    }
+
+    private IEnumerator RunPerfectGuardEffect()
+    {
+        if (defender != null)
+        {
+            yield return defender.PlayPerfectGuardEffect();
+        }
+
+        perfectGuardEffectCoroutine = null;
+    }
+
+    private void FinishPerfectGuardTest()
+    {
+        if (dualHitStopCoroutine != null)
+        {
+            StopCoroutine(dualHitStopCoroutine);
+            dualHitStopCoroutine = null;
+        }
+
+        if (parryRecoilCoroutine != null)
+        {
+            StopCoroutine(parryRecoilCoroutine);
+            parryRecoilCoroutine = null;
+        }
+
+        if (perfectGuardEffectCoroutine != null)
+        {
+            StopCoroutine(perfectGuardEffectCoroutine);
+            perfectGuardEffectCoroutine = null;
+        }
+
+        if (character != null)
+        {
+            character.SetPresentationPaused(false);
+            character.ClearSlashEffect();
+            character.FinishSlashPresentation();
+        }
+
+        if (defender != null)
+        {
+            defender.SetPresentationPaused(false);
+            defender.ClearPerfectGuardEffect();
+            defender.FinishGuardPresentation();
+        }
+
+        perfectGuardImpactHandled = false;
+        dynamicTestCoroutine = null;
+    }
+
+    private void StartPartialGuardTest()
+    {
+        if (character == null || defender == null)
+        {
+            if (!hasWarnedMissingGuardPair)
+            {
+                Debug.LogWarning(
+                    "BattlePresentationSandboxController：按键H/J需要同时绑定Character和Defender。"
+                );
+                hasWarnedMissingGuardPair = true;
+            }
+            return;
+        }
+
+        hasWarnedMissingGuardPair = false;
+        if (dynamicTestCoroutine != null)
+        {
+            return;
+        }
+
+        partialGuardImpactHandled = false;
+        dynamicTestCoroutine = StartCoroutine(RunPartialGuardTest());
+    }
+
+    private IEnumerator RunPartialGuardTest()
+    {
+        if (character == null || defender == null)
+        {
+            FinishPartialGuardTest();
+            yield break;
+        }
+
+        PrepareGuardResultTest();
+        defender.SetGuard();
+        float attackDirectionSign = GetHorizontalDirectionSign(
+            defender.transform.position.x - character.transform.position.x
+        );
+        character.SetSlash();
+        yield return character.PlaySlashPresentation(
+            attackDirectionSign,
+            () => BeginPartialGuardImpact(attackDirectionSign),
+            playAttackEffect: true
+        );
+
+        if (!partialGuardImpactHandled)
+        {
+            BeginPartialGuardImpact(attackDirectionSign);
+        }
+
+        while (partialGuardRecoilCoroutine != null ||
+            dualHitStopCoroutine != null)
+        {
+            if (character == null || defender == null)
+            {
+                break;
+            }
+
+            yield return null;
+        }
+
+        FinishPartialGuardTest();
+    }
+
+    private void BeginPartialGuardImpact(float attackDirectionSign)
+    {
+        if (partialGuardImpactHandled)
+        {
+            return;
+        }
+
+        partialGuardImpactHandled = true;
+        if (character == null || defender == null)
+        {
+            return;
+        }
+
+        defender.SetGuard();
+        partialGuardRecoilCoroutine = StartCoroutine(
+            RunPartialGuardRecoil(attackDirectionSign)
+        );
+
+        if (hitStopDuration <= 0f || dualHitStopCoroutine != null)
+        {
+            return;
+        }
+
+        character.SetPresentationPaused(true);
+        defender.SetPresentationPaused(true);
+        dualHitStopCoroutine = StartCoroutine(
+            RunDualHitStop(character, defender)
+        );
+    }
+
+    private IEnumerator RunPartialGuardRecoil(float recoilDirectionSign)
+    {
+        if (defender != null)
+        {
+            yield return defender.PlayGuardRecoil(
+                recoilDirectionSign
+            );
+        }
+
+        partialGuardRecoilCoroutine = null;
+    }
+
+    private void FinishPartialGuardTest()
+    {
+        if (dualHitStopCoroutine != null)
+        {
+            StopCoroutine(dualHitStopCoroutine);
+            dualHitStopCoroutine = null;
+        }
+
+        if (partialGuardRecoilCoroutine != null)
+        {
+            StopCoroutine(partialGuardRecoilCoroutine);
+            partialGuardRecoilCoroutine = null;
+        }
+
+        if (character != null)
+        {
+            character.SetPresentationPaused(false);
+            character.ClearSlashEffect();
+            character.FinishSlashPresentation();
+        }
+
+        if (defender != null)
+        {
+            defender.SetPresentationPaused(false);
+            defender.ClearPerfectGuardEffect();
+            defender.FinishGuardPresentation();
+        }
+
+        partialGuardImpactHandled = false;
+        dynamicTestCoroutine = null;
+    }
+
+    private void PrepareGuardResultTest()
+    {
+        character.SetPresentationPaused(false);
+        character.ClearSlashEffect();
+        character.ClearPerfectGuardEffect();
+        character.ClearBodyVisualOffsets();
+
+        defender.SetPresentationPaused(false);
+        defender.ClearSlashEffect();
+        defender.ClearPerfectGuardEffect();
+        defender.ClearBodyVisualOffsets();
     }
 
     private IEnumerator RunHitReactionTest()
@@ -369,91 +685,6 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         yield return WaitForManualRollAndSlash();
     }
 
-    private IEnumerator RunRepeatedLerpSprintTest(
-        Vector3 startPosition,
-        Vector3 targetPosition,
-        float totalDistance,
-        float safeLerpFactor
-    )
-    {
-        yield return RunRepeatedLerpSprintMovement(
-            startPosition,
-            targetPosition,
-            totalDistance,
-            safeLerpFactor
-        );
-
-        if (character != null)
-        {
-            character.transform.position = targetPosition;
-            character.SetIdle();
-        }
-
-        dynamicTestCoroutine = null;
-    }
-
-    private IEnumerator RunRepeatedLerpSprintMovement(
-        Vector3 startPosition,
-        Vector3 targetPosition,
-        float totalDistance,
-        float safeLerpFactor
-    )
-    {
-        if (character == null)
-        {
-            yield break;
-        }
-
-        float safeSnapRatio = Mathf.Max(0f, repeatedLerpSnapRatio);
-        float snapDistance = totalDistance * safeSnapRatio;
-        float afterimageElapsed = 0f;
-        bool spawnRepeatedAfterimages = afterimageSpawnInterval > 0f;
-        int frameCount = 0;
-
-        character.SpawnAfterimage();
-        while (frameCount < RepeatedLerpMaxFrames)
-        {
-            if (character == null)
-            {
-                yield break;
-            }
-
-            Vector3 currentPosition = character.transform.position;
-            character.transform.position = currentPosition +
-                (targetPosition - currentPosition) * safeLerpFactor;
-            frameCount++;
-
-            float remainingDistance = Vector3.Distance(
-                character.transform.position,
-                targetPosition
-            );
-            bool shouldContinue = remainingDistance > snapDistance &&
-                frameCount < RepeatedLerpMaxFrames;
-
-            if (spawnRepeatedAfterimages && shouldContinue)
-            {
-                afterimageElapsed += Time.deltaTime;
-                if (afterimageElapsed >= afterimageSpawnInterval)
-                {
-                    character.SpawnAfterimage();
-                    afterimageElapsed = 0f;
-                }
-            }
-
-            if (!shouldContinue)
-            {
-                break;
-            }
-
-            yield return null;
-        }
-
-        if (character != null)
-        {
-            character.transform.position = targetPosition;
-        }
-    }
-
     private void CacheCharacterResetPosition()
     {
         if (character == null || hasCharacterResetPosition)
@@ -518,7 +749,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
 
             elapsed += Time.deltaTime;
             float linearT = Mathf.Clamp01(elapsed / sprintDuration);
-            float easedT = EaseOutQuad(linearT);
+            float easedT = BattlePresentationEasing.EaseOutQuad(linearT);
             character.transform.position = startPosition +
                 (targetPosition - startPosition) * easedT;
 
@@ -590,7 +821,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
 
             elapsed += Time.deltaTime;
             float linearT = Mathf.Clamp01(elapsed / sprintDuration);
-            float easedT = EaseOutQuad(linearT);
+            float easedT = BattlePresentationEasing.EaseOutQuad(linearT);
             character.transform.position = characterStartPosition +
                 (characterTargetPosition - characterStartPosition) * easedT;
             defender.transform.position = defenderStartPosition +
@@ -1009,7 +1240,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
 
             elapsed += Time.deltaTime;
             float linearT = Mathf.Clamp01(elapsed / clashRecoilDuration);
-            float easedT = EaseOutQuad(linearT);
+            float easedT = BattlePresentationEasing.EaseOutQuad(linearT);
             character.transform.position = characterStartPosition +
                 (characterTargetPosition - characterStartPosition) * easedT;
             defender.transform.position = defenderStartPosition +
@@ -1283,12 +1514,6 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         }
 
         hitStopCoroutine = null;
-    }
-
-    private static float EaseOutQuad(float t)
-    {
-        t = Mathf.Clamp01(t);
-        return 1f - (1f - t) * (1f - t);
     }
 
     private static float GetHorizontalDirectionSign(float horizontalDelta)
