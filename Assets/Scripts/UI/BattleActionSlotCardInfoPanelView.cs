@@ -10,6 +10,7 @@ public sealed class BattleActionSlotCardInfoPanelView : MonoBehaviour
     [Header("可编辑 UI 引用")]
     [SerializeField] Image accentImage;
     [SerializeField] Image artworkImage;
+    [SerializeField] BattleCardUIView cardPreviewPrefab;
     [SerializeField] TMP_Text sideLabelText;
     [SerializeField] TMP_Text ownerText;
     [SerializeField] TMP_Text cardNameText;
@@ -24,6 +25,9 @@ public sealed class BattleActionSlotCardInfoPanelView : MonoBehaviour
         new Color32(83, 183, 127, 255);
     [SerializeField] Color enemyAccentColor =
         new Color32(174, 87, 215, 255);
+
+    RectTransform cardPreviewRect;
+    BattleCardUIView cardPreviewView;
 
     internal void ShowCard(
         CharacterData owner,
@@ -40,6 +44,14 @@ public sealed class BattleActionSlotCardInfoPanelView : MonoBehaviour
 
         BattleCardUIPreviewData preview =
             BattleCardUIPreviewBuilder.Build(owner, target, cardState);
+
+        EnsureCardPreview();
+        if (cardPreviewView != null)
+        {
+            cardPreviewView.BindCard(owner, cardState, preview, null);
+            cardPreviewView.SetSelected(false);
+            cardPreviewView.gameObject.SetActive(true);
+        }
 
         SetText(sideLabelText, enemySide ? "敌方意图" : "我方行动");
         SetText(
@@ -77,11 +89,95 @@ public sealed class BattleActionSlotCardInfoPanelView : MonoBehaviour
         }
 
         gameObject.SetActive(true);
+        RefreshCardPreviewLayout();
     }
 
     internal void Hide()
     {
         gameObject.SetActive(false);
+    }
+
+    void OnEnable()
+    {
+        RefreshCardPreviewLayout();
+    }
+
+    void OnRectTransformDimensionsChange()
+    {
+        RefreshCardPreviewLayout();
+    }
+
+    void RefreshCardPreviewLayout()
+    {
+        if (artworkImage == null || cardPreviewRect == null)
+        {
+            return;
+        }
+
+        float viewportWidth = Mathf.Max(
+            0f,
+            artworkImage.rectTransform.rect.width - 20f
+        );
+        float viewportHeight = Mathf.Max(
+            0f,
+            artworkImage.rectTransform.rect.height - 20f
+        );
+        float cardWidth = Mathf.Max(1f, cardPreviewRect.sizeDelta.x);
+        float cardHeight = Mathf.Max(1f, cardPreviewRect.sizeDelta.y);
+        float scale = Mathf.Min(
+            viewportWidth / cardWidth,
+            viewportHeight / cardHeight
+        );
+
+        cardPreviewRect.anchorMin = new Vector2(0.5f, 0.5f);
+        cardPreviewRect.anchorMax = new Vector2(0.5f, 0.5f);
+        cardPreviewRect.pivot = new Vector2(0.5f, 0.5f);
+        cardPreviewRect.anchoredPosition = Vector2.zero;
+        cardPreviewRect.localRotation = Quaternion.identity;
+        cardPreviewRect.localScale = Vector3.one * Mathf.Max(0f, scale);
+    }
+
+    void EnsureCardPreview()
+    {
+        if (cardPreviewView != null ||
+            cardPreviewPrefab == null ||
+            artworkImage == null)
+        {
+            return;
+        }
+
+        cardPreviewView = Instantiate(
+            cardPreviewPrefab,
+            artworkImage.rectTransform
+        );
+        cardPreviewView.name = "CardPreview";
+        cardPreviewRect =
+            cardPreviewView.transform as RectTransform;
+
+        BattleCardMotionUIView cardMotion =
+            cardPreviewView.GetComponent<BattleCardMotionUIView>();
+        if (cardMotion != null)
+        {
+            cardMotion.enabled = false;
+        }
+
+        GraphicRaycaster cardRaycaster =
+            cardPreviewView.GetComponent<GraphicRaycaster>();
+        if (cardRaycaster != null)
+        {
+            cardRaycaster.enabled = false;
+        }
+
+        CanvasGroup cardCanvasGroup =
+            cardPreviewView.GetComponent<CanvasGroup>();
+        if (cardCanvasGroup != null)
+        {
+            cardCanvasGroup.interactable = false;
+            cardCanvasGroup.blocksRaycasts = false;
+        }
+
+        cardPreviewView.gameObject.SetActive(true);
+        RefreshCardPreviewLayout();
     }
 
     static string BuildStateText(BattleCardState cardState)

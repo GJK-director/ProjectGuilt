@@ -43,7 +43,6 @@ public class BattleActionSlotUIView : MonoBehaviour,
     private bool isEnemySlot;
     private BattleEnemyIntent boundEnemyIntent;
     private BattleActionSlot boundActionSlot;
-    private bool isPointerInsideSlot;
     private Action<BattleActionSlotUIView> leftClickHandler;
     private Action<BattleActionSlotUIView> rightClickHandler;
     private Coroutine stateFeedbackCoroutine;
@@ -154,6 +153,11 @@ public class BattleActionSlotUIView : MonoBehaviour,
 
         if (bindingChanged)
         {
+            if (BattleActionSlotCardInfoPanelHost.IsActiveSource(gameObject))
+            {
+                NotifyCardInfoPanel(false);
+            }
+
             isHovered = false;
             isSelected = false;
             StopStateFeedbackCommit();
@@ -175,9 +179,9 @@ public class BattleActionSlotUIView : MonoBehaviour,
     {
         boundEnemyIntent = enemyIntent;
 
-        if (isPointerInsideSlot)
+        if (BattleActionSlotCardInfoPanelHost.IsActiveSource(gameObject))
         {
-            NotifyCardInfoPanel(true, null);
+            NotifyCardInfoPanel(true);
         }
     }
 
@@ -185,9 +189,9 @@ public class BattleActionSlotUIView : MonoBehaviour,
     {
         boundActionSlot = actionSlot;
 
-        if (isPointerInsideSlot)
+        if (BattleActionSlotCardInfoPanelHost.IsActiveSource(gameObject))
         {
-            NotifyCardInfoPanel(true, null);
+            NotifyCardInfoPanel(true);
         }
     }
 
@@ -226,6 +230,7 @@ public class BattleActionSlotUIView : MonoBehaviour,
                 selectionEffectView?.PlayPulse();
             }
 
+            NotifyCardInfoPanel(true);
             return;
         }
 
@@ -238,9 +243,6 @@ public class BattleActionSlotUIView : MonoBehaviour,
 
     public void OnPointerEnter(PointerEventData eventData)
     {
-        isPointerInsideSlot = true;
-        NotifyCardInfoPanel(true, eventData);
-
         if (boundCharacter == null || isEnemySlot)
         {
             return;
@@ -255,9 +257,6 @@ public class BattleActionSlotUIView : MonoBehaviour,
 
     public void OnPointerExit(PointerEventData eventData)
     {
-        isPointerInsideSlot = false;
-        NotifyCardInfoPanel(false, eventData);
-
         if (boundCharacter == null || isEnemySlot)
         {
             return;
@@ -269,10 +268,7 @@ public class BattleActionSlotUIView : MonoBehaviour,
         selectionEffectView?.SetPersistentVisible(isSelected);
     }
 
-    private void NotifyCardInfoPanel(
-        bool pointerInside,
-        PointerEventData eventData
-    )
+    private void NotifyCardInfoPanel(bool selectedSourceIsValid)
     {
         BattleCardState cardState = isEnemySlot
             ? boundEnemyIntent?.enemyCardState
@@ -292,7 +288,7 @@ public class BattleActionSlotUIView : MonoBehaviour,
                 owner,
                 target,
                 cardState,
-                pointerInside
+                selectedSourceIsValid
             )
         );
     }
@@ -448,13 +444,12 @@ public class BattleActionSlotUIView : MonoBehaviour,
 
     void OnDisable()
     {
-        if (isPointerInsideSlot)
+        if (BattleActionSlotCardInfoPanelHost.IsActiveSource(gameObject))
         {
-            NotifyCardInfoPanel(false, null);
+            NotifyCardInfoPanel(false);
         }
 
         StopStateFeedbackCommit();
-        isPointerInsideSlot = false;
         isHovered = false;
         selectionEffectView?.StopAndReset();
         RefreshDisplayedSprite();

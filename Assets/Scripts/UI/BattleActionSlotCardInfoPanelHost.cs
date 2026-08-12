@@ -30,11 +30,11 @@ public sealed class BattleActionSlotCardInfoHoverRequest
 }
 
 // 行动槽位卡牌详情宿主。
-// 槽位只调用 HandlePointer(...)；延时、左右分流、顶层 Canvas 和分辨率适配均封装在这里。
+// 为保持既有接线，入口和请求类型仍沿用 HandlePointer / HoverRequest 命名；
+// 当前实际语义为“点击槽位后按阵营分别锁定”，友方与敌方面板可以同时显示。
 public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
 {
     const int OverlaySortingOrder = 32767;
-    const float DefaultShowDelay = 0.25f;
     static readonly Vector2 ReferenceResolution =
         new Vector2(1920f, 1080f);
 
@@ -46,18 +46,18 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
     [SerializeField] RectTransform enemyPanelRect;
     [SerializeField] BattleActionSlotCardInfoPanelView allyPanelView;
     [SerializeField] BattleActionSlotCardInfoPanelView enemyPanelView;
-    [SerializeField, Min(0f)] float showDelay = DefaultShowDelay;
 
     RectTransform hostRect;
-    GameObject activeSource;
-    BattleActionSlotCardInfoHoverRequest activeRequest;
-    float showAtUnscaledTime;
-    bool panelVisible;
+    GameObject allyActiveSource;
+    GameObject enemyActiveSource;
+    BattleActionSlotCardInfoHoverRequest allyActiveRequest;
+    BattleActionSlotCardInfoHoverRequest enemyActiveRequest;
     int lastScreenWidth = -1;
     int lastScreenHeight = -1;
     Rect lastSafeArea;
 
     // 给所有行动槽位保留的唯一宿主调用接口。
+    // isPointerInside=true 表示点击选择或刷新当前槽位；false 表示来源失效。
     public static void HandlePointer(
         BattleActionSlotCardInfoHoverRequest request
     )
@@ -76,6 +76,14 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
         BattleActionSlotCardInfoPanelHost host =
             GetOrCreateHost(request.source);
         host?.ReceivePointerRequest(request);
+    }
+
+    public static bool IsActiveSource(GameObject source)
+    {
+        return instance != null &&
+            source != null &&
+            (instance.allyActiveSource == source ||
+                instance.enemyActiveSource == source);
     }
 
     static BattleActionSlotCardInfoPanelHost GetOrCreateHost(
@@ -142,18 +150,14 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
 
     void Update()
     {
-        if (activeSource == null)
+        if (allyActiveRequest != null && allyActiveSource == null)
         {
-            CloseAndClear();
-            return;
+            CloseSide(false);
         }
 
-        if (!panelVisible &&
-            activeRequest != null &&
-            activeRequest.cardState != null &&
-            Time.unscaledTime >= showAtUnscaledTime)
+        if (enemyActiveRequest != null && enemyActiveSource == null)
         {
-            ShowActivePanel();
+            CloseSide(true);
         }
     }
 
@@ -185,9 +189,14 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
     {
         if (!request.isPointerInside)
         {
-            if (activeSource == request.source)
+            if (allyActiveSource == request.source)
             {
-                CloseAndClear();
+                CloseSide(false);
+            }
+
+            if (enemyActiveSource == request.source)
+            {
+                CloseSide(true);
             }
 
             return;
@@ -195,69 +204,73 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
 
         if (request.cardState == null)
         {
-            if (activeSource == request.source)
+            if (GetActiveSource(request.isEnemySide) == request.source)
             {
-                CloseAndClear();
+                CloseSide(request.isEnemySide);
             }
 
             return;
         }
 
-        bool targetChanged = activeSource != request.source ||
-            activeRequest == null ||
-            activeRequest.cardState != request.cardState ||
-            activeRequest.isEnemySide != request.isEnemySide;
-
-        activeSource = request.source;
-        activeRequest = request;
-
-        if (targetChanged)
+        if (request.isEnemySide)
         {
-            HidePanels();
-            showAtUnscaledTime = Time.unscaledTime + showDelay;
+            enemyActiveSource = request.source;
+            enemyActiveRequest = request;
         }
-        else if (panelVisible)
+        else
         {
-            ShowActivePanel();
+            allyActiveSource = request.source;
+            allyActiveRequest = request;
         }
+
+        ShowPanel(request);
     }
 
-    void ShowActivePanel()
+    void ShowPanel(BattleActionSlotCardInfoHoverRequest request)
     {
-        if (activeRequest == null || activeRequest.cardState == null)
+        if (request == null || request.cardState == null)
         {
             return;
         }
 
-        HidePanels();
         BattleActionSlotCardInfoPanelView targetView =
-            activeRequest.isEnemySide
+            request.isEnemySide
                 ? enemyPanelView
                 : allyPanelView;
         targetView?.ShowCard(
-            activeRequest.owner,
-            activeRequest.target,
-            activeRequest.cardState,
-            activeRequest.isEnemySide
+            request.owner,
+            request.target,
+            request.cardState,
+            request.isEnemySide
         );
-        panelVisible = targetView != null;
         KeepCanvasInFront();
         RefreshResponsiveLayout();
     }
 
-    void CloseAndClear()
+    GameObject GetActiveSource(bool enemySide)
     {
-        HidePanels();
-        activeSource = null;
-        activeRequest = null;
-        panelVisible = false;
+        return enemySide ? enemyActiveSource : allyActiveSource;
+    }
+
+    void CloseSide(bool enemySide)
+    {
+        if (enemySide)
+        {
+            enemyPanelView?.Hide();
+            enemyActiveSource = null;
+            enemyActiveRequest = null;
+            return;
+        }
+
+        allyPanelView?.Hide();
+        allyActiveSource = null;
+        allyActiveRequest = null;
     }
 
     void HidePanels()
     {
         allyPanelView?.Hide();
         enemyPanelView?.Hide();
-        panelVisible = false;
     }
 
     void MatchSourceDisplay(GameObject source)
