@@ -1,12 +1,13 @@
 ﻿using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// 战斗场景灰盒 Camera 控制器。
 ///
 /// 当前功能：
 /// 1. 鼠标右键左右拖动：Camera 横向移动
-/// 2. 鼠标右键上下拖动：先纵向平移，仅向下侧到达极限后再 Tilt
+/// 2. 鼠标右键上下拖动：先纵向平移，背景侧到达极限后再 Orbit + Pitch
 /// 3. 鼠标滚轮：改变圆弧半径，实现 Zoom
 ///
 /// 设计原则：
@@ -55,39 +56,51 @@ public class GrayboxBattleCameraController : MonoBehaviour
 
     [Header("上下平移")]
 
-    [Tooltip("Camera 与 Pivot 沿 Camera Up 方向允许平移的最大距离")]
-    [SerializeField]
-    private float verticalPanLimit = 2f;
+    [Tooltip("从默认位置朝显示更多 Background 的方向允许平移的最大距离")]
+    [FormerlySerializedAs("verticalPanLimit")]
+    [SerializeField, Min(0f)]
+    private float backgroundPanLimit = 1.2f;
+
+    [Tooltip("从默认位置朝显示更多 Floor 的方向允许平移的最大距离")]
+    [SerializeField, Min(0f)]
+    private float floorPanLimit = 1.2f;
 
     [Tooltip("鼠标上下拖动控制纵向平移的灵敏度")]
     [SerializeField]
     private float verticalPanSensitivity = 0.003f;
 
+    [Tooltip("从默认位置到 Background Threshold 期间逐渐增加的 Camera X 轴 Pitch")]
+    [SerializeField]
+    private float backgroundPanPitchOffset = 0f;
+
+    [Tooltip("从默认位置到 Floor Pan Limit 期间逐渐增加的 Camera X 轴 Pitch")]
+    [SerializeField]
+    private float floorPanPitchOffset = 0f;
+
 
     // =========================================================
-    // 上下 Tilt
+    // 第二阶段 Orbit + Pitch
     // =========================================================
 
-    [Header("上下平移极限后的 Tilt")]
+    [Header("背景侧第二阶段")]
 
-    [Tooltip("最低允许的圆弧角度，目前只是灰盒测试值")]
+    [Tooltip("Camera 公转的最终圆弧角度")]
     [SerializeField]
     private float minOrbitAngle = 15f;
 
-    [Tooltip("最高允许的圆弧角度，目前只是灰盒测试值")]
-#pragma warning disable 0414 // 单侧 Orbit 暂不使用上限，保留字段以避免丢失 Inspector 数据。
+    [Tooltip("最高允许的圆弧角度，单侧 Orbit 暂不使用")]
+#pragma warning disable 0414 // 保留字段以避免丢失 Inspector 数据。
     [SerializeField]
     private float maxOrbitAngle = 40f;
 #pragma warning restore 0414
 
-    [Tooltip("纵向平移到达极限后，鼠标继续拖动时的 Tilt 灵敏度")]
+    [Tooltip("第二阶段统一 Progress 的输入灵敏度，以公转角范围换算")]
     [SerializeField]
     private float orbitSensitivity = 0.05f;
 
-    [Tooltip("第二阶段达到 Tilt 极限时，Camera 沿世界 Y 负方向下降的总距离")]
+    [Tooltip("Camera 自转的最终 X 轴 Pitch 角度")]
     [SerializeField]
-    private float secondStageVerticalDrop = 0f;
-
+    private float finalCameraPitch = 13.5f;
 
     // =========================================================
     // 左右移动
@@ -155,7 +168,28 @@ public class GrayboxBattleCameraController : MonoBehaviour
     private float currentOrbitAngle;
 
     [SerializeField]
+    private float currentPitchAngle;
+
+    [SerializeField]
     private float currentOrbitRadius;
+
+    [SerializeField, Range(0f, 1f)]
+    private float secondStageProgress;
+
+    [SerializeField]
+    private float secondStageStartOrbitAngle;
+
+    [SerializeField]
+    private float secondStageOrbitRadius;
+
+    [SerializeField]
+    private Vector3 orbitCenter;
+
+    [SerializeField]
+    private float distanceToOrbitCenter;
+
+    [SerializeField]
+    private bool isInSecondStage;
 
 
     // =========================================================
@@ -244,8 +278,8 @@ public class GrayboxBattleCameraController : MonoBehaviour
     // =========================================================
 
     /// <summary>
-    /// 先应用 invertVertical，再由最终逻辑方向决定 Pan-only 或 Pan→Orbit。
-    /// 从 Tilt 反向时必须先恢复默认角度，之后才能离开 Pan 边界。
+    /// 先应用 invertVertical，再由最终逻辑方向决定 Floor Pan 或 Background Pan→Orbit/Pitch。
+    /// 反向时必须先同步恢复公转和 Pitch，之后才能离开 Pan 边界。
     /// </summary>
     private void UpdateVertical(float mouseDeltaY)
     {
@@ -254,41 +288,77 @@ public class GrayboxBattleCameraController : MonoBehaviour
         if (Mathf.Abs(logicalVerticalDelta) <= Mathf.Epsilon)
             return;
 
-        bool isPanOnlyDirection = logicalVerticalDelta > 0f;
+        bool isFloorViewDirection = logicalVerticalDelta < 0f;
         float remainingMouseDelta = Mathf.Abs(logicalVerticalDelta);
-        float safeLimit = Mathf.Abs(verticalPanLimit);
+        float safeBackgroundLimit = Mathf.Max(
+            0f,
+            backgroundPanLimit
+        );
+        float safeFloorLimit = Mathf.Max(0f, floorPanLimit);
 
-        if (isPanOnlyDirection)
+        currentVerticalPan = Mathf.Clamp(
+            currentVerticalPan,
+            -safeFloorLimit,
+            safeBackgroundLimit
+        );
+
+        // Threshold 以下绝对属于 Pure Pan。
+        // 即使外部状态异常残留，也不允许它抢占纵向输入。
+        if (currentVerticalPan < safeBackgroundLimit &&
+            isInSecondStage)
         {
-            // 逻辑正方向只允许 Pan；若已有 Tilt，必须先原路恢复。
-            if (currentOrbitAngle < defaultOrbitAngle)
+            ClearSecondStageForPurePan();
+        }
+
+        if (isFloorViewDirection)
+        {
+            // Floor 方向只允许 Pan；若已进入第二阶段，必须先恢复统一 Progress。
+            if (isInSecondStage)
             {
-                remainingMouseDelta = ConsumeOrbitInputToward(
-                    defaultOrbitAngle,
+                remainingMouseDelta = ConsumeSecondStageProgressToward(
+                    0f,
                     remainingMouseDelta
                 );
+
+                if (secondStageProgress <= Mathf.Epsilon)
+                    ClearSecondStageForPurePan();
             }
 
             if (remainingMouseDelta > Mathf.Epsilon)
             {
-                ConsumePanInputToward(safeLimit, remainingMouseDelta);
+                ConsumePanInputToward(
+                    -safeFloorLimit,
+                    remainingMouseDelta
+                );
             }
 
-            // Pan-only 一侧抵达极限后的剩余输入直接丢弃。
+            // Floor 一侧抵达极限后的剩余输入直接丢弃。
             return;
         }
 
-        // 逻辑负方向先走完整个 Pure Pan 区域。
-        remainingMouseDelta = ConsumePanInputToward(
-            -safeLimit,
-            remainingMouseDelta
-        );
+        // Threshold 前 Pure Pan 拥有绝对优先级。
+        if (currentVerticalPan < safeBackgroundLimit)
+        {
+            remainingMouseDelta = ConsumePanInputToward(
+                safeBackgroundLimit,
+                remainingMouseDelta
+            );
+
+            if (currentVerticalPan < safeBackgroundLimit)
+                return;
+        }
 
         if (remainingMouseDelta <= Mathf.Epsilon)
             return;
 
-        // Pan→Tilt 一侧到达极限后，才允许继续降低俯视角度。
-        ConsumeOrbitInputToward(minOrbitAngle, remainingMouseDelta);
+        if (!EnsureSecondStageStarted(safeBackgroundLimit))
+            return;
+
+        // 到达 Background 侧阈值后，输入只推进唯一 Progress。
+        ConsumeSecondStageProgressToward(
+            1f,
+            remainingMouseDelta
+        );
     }
 
     private float ConsumePanInputToward(
@@ -298,7 +368,10 @@ public class GrayboxBattleCameraController : MonoBehaviour
     {
         float distance = Mathf.Abs(target - currentVerticalPan);
         if (distance <= Mathf.Epsilon)
+        {
+            currentVerticalPan = target;
             return availableMouseDelta;
+        }
 
         float sensitivity = Mathf.Abs(verticalPanSensitivity);
         if (sensitivity <= Mathf.Epsilon)
@@ -320,35 +393,176 @@ public class GrayboxBattleCameraController : MonoBehaviour
         );
     }
 
-    private float ConsumeOrbitInputToward(
-        float target,
+    private float ConsumeSecondStageProgressToward(
+        float targetProgress,
         float availableMouseDelta
     )
     {
-        float distance = Mathf.Abs(target - currentOrbitAngle);
+        targetProgress = Mathf.Clamp01(targetProgress);
+        float distance = Mathf.Abs(
+            targetProgress - secondStageProgress
+        );
         if (distance <= Mathf.Epsilon)
+        {
+            secondStageProgress = targetProgress;
+            UpdateSecondStageAnglesFromProgress();
             return availableMouseDelta;
+        }
 
-        float sensitivity = Mathf.Abs(orbitSensitivity);
-        if (sensitivity <= Mathf.Epsilon)
+        float progressSensitivity =
+            GetSecondStageProgressSensitivity();
+        if (progressSensitivity <= Mathf.Epsilon)
             return 0f;
 
         float movement = Mathf.Min(
             distance,
-            availableMouseDelta * sensitivity
+            availableMouseDelta * progressSensitivity
         );
-        currentOrbitAngle = Mathf.MoveTowards(
-            currentOrbitAngle,
-            target,
+        secondStageProgress = Mathf.MoveTowards(
+            secondStageProgress,
+            targetProgress,
             movement
         );
+        UpdateSecondStageAnglesFromProgress();
 
-        return Mathf.Max(
-            0f,
-            availableMouseDelta - movement / sensitivity
+        return Mathf.Abs(secondStageProgress - targetProgress)
+                <= Mathf.Epsilon
+            ? Mathf.Max(
+                0f,
+                availableMouseDelta
+                - movement / progressSensitivity
+            )
+            : 0f;
+    }
+
+    private bool EnsureSecondStageStarted(float backgroundThreshold)
+    {
+        if (currentVerticalPan < backgroundThreshold ||
+            orbitPivot == null)
+        {
+            return false;
+        }
+
+        if (isInSecondStage)
+            return true;
+
+        // 先把 Camera 精确放到 Pure Pan 的 Threshold Pose，
+        // 再相对真实 Pivot 反算公转起点，避免切换跳变。
+        ApplyCameraTransform();
+
+        Vector3 startOffset =
+            transform.position - orbitPivot.position;
+        secondStageOrbitRadius = startOffset.magnitude;
+        secondStageStartOrbitAngle = Mathf.Atan2(
+            startOffset.y,
+            -startOffset.z
+        ) * Mathf.Rad2Deg;
+
+        secondStageProgress = 0f;
+        UpdateSecondStageAnglesFromProgress();
+        isInSecondStage = true;
+        return true;
+    }
+
+    private void ClearSecondStageForPurePan()
+    {
+        isInSecondStage = false;
+        secondStageProgress = 0f;
+        UpdateSecondStageAnglesFromProgress();
+    }
+
+    private float GetSecondStageProgressSensitivity()
+    {
+        float referenceAngleRange = Mathf.Abs(
+            minOrbitAngle - secondStageStartOrbitAngle
+        );
+        if (referenceAngleRange <= Mathf.Epsilon)
+        {
+            referenceAngleRange = Mathf.Abs(
+                finalCameraPitch - GetBackgroundThresholdPitch()
+            );
+        }
+
+        return referenceAngleRange > Mathf.Epsilon
+            ? Mathf.Abs(orbitSensitivity) / referenceAngleRange
+            : 0f;
+    }
+
+    private void UpdateSecondStageAnglesFromProgress()
+    {
+        secondStageProgress = Mathf.Clamp01(
+            secondStageProgress
+        );
+        currentOrbitAngle = Mathf.Lerp(
+            secondStageStartOrbitAngle,
+            minOrbitAngle,
+            secondStageProgress
+        );
+        currentPitchAngle = Mathf.Lerp(
+            GetBackgroundThresholdPitch(),
+            finalCameraPitch,
+            secondStageProgress
         );
     }
 
+    private float GetDefaultCameraPitch()
+    {
+        return defaultOrbitAngle - framingPitchOffset;
+    }
+
+    private float GetBackgroundThresholdPitch()
+    {
+        return GetDefaultCameraPitch() + backgroundPanPitchOffset;
+    }
+
+    private float GetFloorLimitPitch()
+    {
+        return GetDefaultCameraPitch() + floorPanPitchOffset;
+    }
+
+    private float GetFloorPanProgress()
+    {
+        float safeFloorLimit = Mathf.Max(0f, floorPanLimit);
+        if (safeFloorLimit <= Mathf.Epsilon)
+            return 1f;
+
+        return Mathf.Clamp01(
+            (currentVerticalPan + safeFloorLimit)
+            / safeFloorLimit
+        );
+    }
+
+    private float GetBackgroundPanProgress()
+    {
+        float safeBackgroundLimit = Mathf.Max(
+            0f,
+            backgroundPanLimit
+        );
+        if (safeBackgroundLimit <= Mathf.Epsilon)
+            return 1f;
+
+        return Mathf.Clamp01(
+            currentVerticalPan / safeBackgroundLimit
+        );
+    }
+
+    private float GetPurePanCameraPitch()
+    {
+        if (currentVerticalPan < 0f)
+        {
+            return Mathf.Lerp(
+                GetFloorLimitPitch(),
+                GetDefaultCameraPitch(),
+                GetFloorPanProgress()
+            );
+        }
+
+        return Mathf.Lerp(
+            GetDefaultCameraPitch(),
+            GetBackgroundThresholdPitch(),
+            GetBackgroundPanProgress()
+        );
+    }
 
     // =========================================================
     // Zoom
@@ -373,6 +587,7 @@ public class GrayboxBattleCameraController : MonoBehaviour
             return;
 
         float direction = invertZoom ? -1f : 1f;
+        float previousOrbitRadius = currentOrbitRadius;
 
         currentOrbitRadius -=
             scrollY
@@ -384,6 +599,16 @@ public class GrayboxBattleCameraController : MonoBehaviour
             minOrbitRadius,
             maxOrbitRadius
         );
+
+        if (isInSecondStage)
+        {
+            secondStageOrbitRadius = Mathf.Max(
+                Mathf.Epsilon,
+                secondStageOrbitRadius
+                + currentOrbitRadius
+                - previousOrbitRadius
+            );
+        }
     }
 
 
@@ -398,7 +623,7 @@ public class GrayboxBattleCameraController : MonoBehaviour
     /// +
     /// Horizontal / Vertical Pan Offset
     /// +
-    /// Position Angle / Tilt Angle
+    /// Orbit Position Angle / Camera Pitch Angle
     /// +
     /// Orbit Radius
     ///
@@ -409,57 +634,57 @@ public class GrayboxBattleCameraController : MonoBehaviour
         if (orbitPivot == null)
             return;
 
+        if (isInSecondStage)
+            UpdateSecondStageAnglesFromProgress();
+        else
+            currentPitchAngle = GetPurePanCameraPitch();
+
 
         // -----------------------------------------------------
-        // Camera 的圆弧位置始终使用默认角度。
-        // 第二阶段只改变 Pitch，不再沿圆弧改变 Camera Position。
+        // 公转角度只负责 Camera 在圆上的位置。
+        // 第二阶段以外一直使用默认公转角度。
         // -----------------------------------------------------
 
-        float angleRad =
-            defaultOrbitAngle * Mathf.Deg2Rad;
+        float positionAngle = isInSecondStage
+            ? currentOrbitAngle
+            : defaultOrbitAngle;
+        float angleRad = positionAngle * Mathf.Deg2Rad;
 
 
         // -----------------------------------------------------
         // Camera Rotation
         //
-        // currentOrbitAngle 暂时沿用原字段名，但只负责 Tilt / Pitch。
+        // Camera 自转只使用独立 Pitch，不参与公转位置计算。
         // -----------------------------------------------------
-
-        float cameraPitch =
-            currentOrbitAngle - framingPitchOffset;
 
         Quaternion cameraRotation = Quaternion.Euler(
-            cameraPitch,
+            currentPitchAngle,
             0f,
             0f
         );
 
 
         // -----------------------------------------------------
-        // 平移当前圆心
+        // 计算独立 Camera Vertical Pan Offset
         //
-        // 横向沿世界 X；纵向沿默认构图时的 Camera Up。
-        // Pan 方向固定后，Tilt 阶段 Pivot 会停在已经达到的边界位置。
+        // Threshold 前的 Pure Pan 只沿世界 Y 轴运动，
+        // 不因 Camera 自身 Pitch 额外改变 Z。
         // -----------------------------------------------------
 
-        Quaternion defaultCameraRotation = Quaternion.Euler(
-            defaultOrbitAngle - framingPitchOffset,
-            0f,
-            0f
-        );
-        Vector3 verticalDirection =
-            defaultCameraRotation * Vector3.up;
         Vector3 verticalOffset =
-            verticalDirection * currentVerticalPan;
+            Vector3.up * currentVerticalPan;
 
+        // Horizontal 继续让 Camera 与 Pivot 一起沿世界 X 平移；
+        // Pivot 的 Y/Z 始终保持启动时记录的舞台空间基准。
         orbitPivot.position =
             basePivotPosition
-            + Vector3.right * currentX
-            + verticalOffset;
+            + Vector3.right * currentX;
 
-        // 当前圆弧中心就是实际 Pivot 的位置
-        Vector3 currentOrbitCenter =
-            orbitPivot.position;
+        // 第二阶段始终直接使用 Inspector 绑定的真实 Pivot。
+        orbitCenter = orbitPivot.position;
+        Vector3 currentOrbitCenter = isInSecondStage
+            ? orbitCenter
+            : orbitCenter + verticalOffset;
         // -----------------------------------------------------
         // 根据圆周运动计算 Camera Y / Z
         //
@@ -469,34 +694,14 @@ public class GrayboxBattleCameraController : MonoBehaviour
         // 因此 Camera 始终位于 Pivot 的后上方。
         // -----------------------------------------------------
 
+        float activeOrbitRadius = isInSecondStage
+            ? secondStageOrbitRadius
+            : currentOrbitRadius;
         Vector3 orbitOffset = new Vector3(
             0f,
-            Mathf.Sin(angleRad) * currentOrbitRadius,
-            -Mathf.Cos(angleRad) * currentOrbitRadius
+            Mathf.Sin(angleRad) * activeOrbitRadius,
+            -Mathf.Cos(angleRad) * activeOrbitRadius
         );
-
-
-        // -----------------------------------------------------
-        // 第二阶段 Camera Down
-        //
-        // Tilt 只改变旋转；Camera 额外沿世界 Y 负方向下降。
-        // 不移动 Pivot，也不改变由 Zoom 决定的圆弧 Z 与半径。
-        // -----------------------------------------------------
-
-        float tiltRange =
-            defaultOrbitAngle - minOrbitAngle;
-        float tiltProgress =
-            Mathf.Abs(tiltRange) > Mathf.Epsilon
-                ? Mathf.Clamp01(
-                    (defaultOrbitAngle - currentOrbitAngle)
-                    / tiltRange
-                )
-                : 0f;
-        float cameraDrop =
-            secondStageVerticalDrop * tiltProgress;
-        Vector3 secondStageDropOffset =
-            Vector3.down * cameraDrop;
-
 
         // -----------------------------------------------------
         // Camera 世界坐标
@@ -504,16 +709,19 @@ public class GrayboxBattleCameraController : MonoBehaviour
 
         transform.position =
             currentOrbitCenter
-            + orbitOffset
-            + secondStageDropOffset;
+            + orbitOffset;
+
+        distanceToOrbitCenter = Vector3.Distance(
+            transform.position,
+            orbitCenter
+        );
 
         // -----------------------------------------------------
-        // 应用前面已用于纵向 Pan 计算的同一旋转。
+        // 应用独立 Camera Pitch。
         // -----------------------------------------------------
 
         transform.rotation = cameraRotation;
     }
-
 
     // =========================================================
     // Reset
@@ -534,8 +742,20 @@ public class GrayboxBattleCameraController : MonoBehaviour
         currentOrbitAngle =
             defaultOrbitAngle;
 
+        currentPitchAngle =
+            GetDefaultCameraPitch();
+
         currentOrbitRadius =
             defaultOrbitRadius;
+
+        secondStageStartOrbitAngle =
+            defaultOrbitAngle;
+        secondStageOrbitRadius =
+            defaultOrbitRadius;
+        secondStageProgress = 0f;
+        isInSecondStage = false;
+
+        UpdateSecondStageAnglesFromProgress();
 
         ApplyCameraTransform();
     }
