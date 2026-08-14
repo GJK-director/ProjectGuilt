@@ -18,6 +18,8 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     [SerializeField] private Sprite sprintSprite;
     [SerializeField] private Sprite slashSprite;
     [SerializeField] private Sprite hitSprite;
+    [SerializeField] private Sprite guardSprite;
+    [SerializeField] private SpriteRenderer perfectGuardEffect;
     [SerializeField] private SpriteRenderer slashBackEffect;
     [SerializeField] private SpriteRenderer slashFrontEffect;
     [SerializeField] private float slashEffectFadeInDuration = 0.05f;
@@ -38,6 +40,18 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     [SerializeField] private float hitShakeAmplitude = 0.04f;
     [SerializeField] private float hitShakeDuration = 0.12f;
     [SerializeField] private float hitPoseHoldDuration = 0.16f;
+    [SerializeField] private float parryRecoilDistance = 0.20f;
+    [SerializeField] private float parryRecoilDuration = 0.08f;
+    [SerializeField] private float parryShakeAmplitude = 0.03f;
+    [SerializeField] private float parryShakeDuration = 0.10f;
+    [SerializeField] private float parryHoldDuration = 0.10f;
+    [SerializeField] private float guardRecoilDistance = 0.10f;
+    [SerializeField] private float guardRecoilDuration = 0.06f;
+    [SerializeField] private float guardShakeAmplitude = 0.025f;
+    [SerializeField] private float guardShakeDuration = 0.10f;
+    [SerializeField] private float guardHoldDuration = 0.10f;
+    [SerializeField] private float perfectGuardEffectHoldDuration = 0.06f;
+    [SerializeField] private float perfectGuardEffectFadeOutDuration = 0.10f;
 
     private Vector3 bodyBaseLocalPosition;
     private Vector3 bodyMotionOffset;
@@ -49,6 +63,8 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     private Color slashFrontOriginalColor;
     private bool slashBackStateCached;
     private bool slashFrontStateCached;
+    private Color perfectGuardEffectOriginalColor;
+    private bool perfectGuardEffectStateCached;
     private bool presentationPaused;
     private readonly List<ActiveAfterimage> activeAfterimages =
         new List<ActiveAfterimage>();
@@ -58,8 +74,10 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         CacheBodyVisualState();
         ApplyBodyVisualOffset();
         CacheSlashEffectState();
+        CachePerfectGuardEffectState();
         SetIdle();
         ClearSlashEffect();
+        ClearPerfectGuardEffect();
     }
 
     void OnDisable()
@@ -68,6 +86,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         ClearBodyVisualOffsets();
         ClearAfterimages();
         ClearSlashEffect();
+        ClearPerfectGuardEffect();
         SetIdle();
     }
 
@@ -91,6 +110,11 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         SetPose(hitSprite);
     }
 
+    public void SetGuard()
+    {
+        SetPose(guardSprite);
+    }
+
     public void SetPresentationPaused(bool paused)
     {
         presentationPaused = paused;
@@ -99,7 +123,9 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     public void FinishSlashPresentation()
     {
         SetIdle();
-        ResetBodyMotionOffset();
+        bodyMotionOffset = Vector3.zero;
+        bodyShakeOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
     }
 
     public void FinishHitReaction()
@@ -108,6 +134,30 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         bodyMotionOffset = Vector3.zero;
         bodyShakeOffset = Vector3.zero;
         ApplyBodyVisualOffset();
+    }
+
+    public void FinishGuardPresentation()
+    {
+        SetIdle();
+        bodyMotionOffset = Vector3.zero;
+        bodyShakeOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+    }
+
+    public void ClearPerfectGuardEffect()
+    {
+        CachePerfectGuardEffectState();
+        if (perfectGuardEffect == null)
+        {
+            return;
+        }
+
+        if (perfectGuardEffectStateCached)
+        {
+            perfectGuardEffect.color = perfectGuardEffectOriginalColor;
+        }
+
+        perfectGuardEffect.enabled = false;
     }
 
     public void ClearBodyVisualOffsets()
@@ -196,7 +246,9 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
             );
             float fadeInT = slashEffectFadeInDuration <= 0f
                 ? 1f
-                : EaseOutQuad(elapsed / slashEffectFadeInDuration);
+                : BattlePresentationEasing.EaseOutQuad(
+                    elapsed / slashEffectFadeInDuration
+                );
             SetSlashEffectAlpha(fadeInT);
             ApplySlashEffectShake(elapsed);
 
@@ -244,7 +296,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
                     continue;
                 }
 
-                float fadeOutT = EaseOutQuad(
+                float fadeOutT = BattlePresentationEasing.EaseOutQuad(
                     elapsed / slashEffectFadeOutDuration
                 );
                 SetSlashEffectAlpha(1f - fadeOutT);
@@ -259,7 +311,8 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
 
     public IEnumerator PlaySlashPresentation(
         float directionSign,
-        Action onImpact = null
+        Action onImpact = null,
+        bool playAttackEffect = true
     )
     {
         bool impactReached = false;
@@ -272,9 +325,11 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
             directionSign,
             () => impactReached
         );
-        IEnumerator effect = PlaySlashEffect(impactHandler);
+        IEnumerator effect = playAttackEffect
+            ? PlaySlashEffect(impactHandler)
+            : null;
         bool lungeRunning = true;
-        bool effectRunning = true;
+        bool effectRunning = effect != null;
 
         while (lungeRunning || effectRunning)
         {
@@ -282,6 +337,10 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
             if (lungeRunning)
             {
                 lungeRunning = lunge.MoveNext();
+                if (!lungeRunning && !playAttackEffect && !impactReached)
+                {
+                    impactHandler();
+                }
             }
 
             if (effectRunning)
@@ -305,6 +364,209 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     public IEnumerator PlaySustainedHitReaction(float recoilDirectionSign)
     {
         yield return PlayHitReactionInternal(recoilDirectionSign, false);
+    }
+
+    public IEnumerator PlayParryRecoil(float attackDirectionSign)
+    {
+        Vector3 startMotionOffset = bodyMotionOffset;
+        bodyShakeOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+
+        float normalizedAttackDirection = attackDirectionSign >= 0f
+            ? 1f
+            : -1f;
+        Vector3 maximumRecoilOffset = Vector3.right *
+            -normalizedAttackDirection * parryRecoilDistance;
+        float recoilDuration = Mathf.Max(0f, parryRecoilDuration);
+        float shakeDuration = Mathf.Max(0f, parryShakeDuration);
+        float holdDuration = Mathf.Max(0f, parryHoldDuration);
+        float recoilElapsed = 0f;
+        float shakeElapsed = 0f;
+        float holdElapsed = 0f;
+
+        if (recoilDuration <= 0f)
+        {
+            bodyMotionOffset = maximumRecoilOffset;
+        }
+
+        ApplyBodyVisualOffset();
+        while (recoilElapsed < recoilDuration ||
+            shakeElapsed < shakeDuration ||
+            holdElapsed < holdDuration)
+        {
+            if (!isActiveAndEnabled)
+            {
+                FinishSlashPresentation();
+                yield break;
+            }
+
+            if (presentationPaused)
+            {
+                yield return null;
+                continue;
+            }
+
+            float deltaTime = Time.deltaTime;
+            if (recoilElapsed < recoilDuration)
+            {
+                recoilElapsed = Mathf.Min(
+                    recoilDuration,
+                    recoilElapsed + deltaTime
+                );
+                float recoilT = BattlePresentationEasing.EaseOutQuad(
+                    recoilElapsed / recoilDuration
+                );
+                bodyMotionOffset = startMotionOffset +
+                    (maximumRecoilOffset - startMotionOffset) * recoilT;
+            }
+            else
+            {
+                bodyMotionOffset = maximumRecoilOffset;
+            }
+
+            if (shakeElapsed < shakeDuration)
+            {
+                shakeElapsed = Mathf.Min(
+                    shakeDuration,
+                    shakeElapsed + deltaTime
+                );
+                float shakeT = shakeElapsed / shakeDuration;
+                float currentAmplitude = Mathf.Max(
+                    0f,
+                    parryShakeAmplitude
+                ) * (1f - BattlePresentationEasing.EaseOutQuad(shakeT));
+                Vector2 randomDirection = UnityEngine.Random.insideUnitCircle;
+                bodyShakeOffset = new Vector3(
+                    randomDirection.x,
+                    randomDirection.y,
+                    0f
+                ) * currentAmplitude;
+            }
+            else
+            {
+                bodyShakeOffset = Vector3.zero;
+            }
+
+            holdElapsed = Mathf.Min(holdDuration, holdElapsed + deltaTime);
+            ApplyBodyVisualOffset();
+            yield return null;
+        }
+
+        bodyMotionOffset = maximumRecoilOffset;
+        bodyShakeOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+    }
+
+    public IEnumerator PlayGuardRecoil(float recoilDirectionSign)
+    {
+        SetGuard();
+        bodyMotionOffset = Vector3.zero;
+        bodyShakeOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+
+        float normalizedDirection = recoilDirectionSign >= 0f ? 1f : -1f;
+        Vector3 maximumRecoilOffset = Vector3.right *
+            normalizedDirection * guardRecoilDistance;
+        float recoilDuration = Mathf.Max(0f, guardRecoilDuration);
+        float shakeDuration = Mathf.Max(0f, guardShakeDuration);
+        float holdDuration = Mathf.Max(0f, guardHoldDuration);
+        float recoilElapsed = 0f;
+        float shakeElapsed = 0f;
+        float holdElapsed = 0f;
+
+        if (recoilDuration <= 0f)
+        {
+            bodyMotionOffset = maximumRecoilOffset;
+        }
+
+        ApplyBodyVisualOffset();
+        while (recoilElapsed < recoilDuration ||
+            shakeElapsed < shakeDuration ||
+            holdElapsed < holdDuration)
+        {
+            if (!isActiveAndEnabled)
+            {
+                FinishGuardPresentation();
+                yield break;
+            }
+
+            if (presentationPaused)
+            {
+                yield return null;
+                continue;
+            }
+
+            float deltaTime = Time.deltaTime;
+            if (recoilElapsed < recoilDuration)
+            {
+                recoilElapsed = Mathf.Min(
+                    recoilDuration,
+                    recoilElapsed + deltaTime
+                );
+                float recoilT = BattlePresentationEasing.EaseOutQuad(
+                    recoilElapsed / recoilDuration
+                );
+                bodyMotionOffset = maximumRecoilOffset * recoilT;
+            }
+            else
+            {
+                bodyMotionOffset = maximumRecoilOffset;
+            }
+
+            if (shakeElapsed < shakeDuration)
+            {
+                shakeElapsed = Mathf.Min(
+                    shakeDuration,
+                    shakeElapsed + deltaTime
+                );
+                float shakeT = shakeElapsed / shakeDuration;
+                float currentAmplitude = Mathf.Max(
+                    0f,
+                    guardShakeAmplitude
+                ) * (1f - BattlePresentationEasing.EaseOutQuad(shakeT));
+                Vector2 randomDirection = UnityEngine.Random.insideUnitCircle;
+                bodyShakeOffset = new Vector3(
+                    randomDirection.x,
+                    randomDirection.y,
+                    0f
+                ) * currentAmplitude;
+            }
+            else
+            {
+                bodyShakeOffset = Vector3.zero;
+            }
+
+            holdElapsed = Mathf.Min(holdDuration, holdElapsed + deltaTime);
+            ApplyBodyVisualOffset();
+            yield return null;
+        }
+
+        bodyMotionOffset = maximumRecoilOffset;
+        bodyShakeOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+    }
+
+    public IEnumerator PlayPerfectGuardEffect()
+    {
+        CachePerfectGuardEffectState();
+        if (!perfectGuardEffectStateCached || perfectGuardEffect == null)
+        {
+            yield break;
+        }
+
+        SetPerfectGuardEffectAlpha(1f);
+        perfectGuardEffect.enabled = true;
+
+        yield return WaitForPerfectGuardEffect(
+            perfectGuardEffectHoldDuration
+        );
+        yield return RunPerfectGuardEffectPhase(
+            perfectGuardEffectFadeOutDuration,
+            1f,
+            0f
+        );
+
+        ClearPerfectGuardEffect();
     }
 
     private IEnumerator PlayHitReactionInternal(
@@ -364,7 +626,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
                     recoilDuration,
                     recoilElapsed + deltaTime
                 );
-                float recoilT = EaseOutQuad(
+                float recoilT = BattlePresentationEasing.EaseOutQuad(
                     recoilElapsed / recoilDuration
                 );
                 bodyMotionOffset = Vector3.zero +
@@ -383,7 +645,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
                 );
                 float shakeT = shakeElapsed / shakeDuration;
                 float currentAmplitude = Mathf.Max(0f, hitShakeAmplitude) *
-                    (1f - EaseOutQuad(shakeT));
+                    (1f - BattlePresentationEasing.EaseOutQuad(shakeT));
                 Vector2 randomDirection = UnityEngine.Random.insideUnitCircle;
                 bodyShakeOffset = new Vector3(
                     randomDirection.x,
@@ -505,7 +767,9 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
                 continue;
             }
 
-            float easedT = EaseOutQuad(elapsed / lifetime);
+            float easedT = BattlePresentationEasing.EaseOutQuad(
+                elapsed / lifetime
+            );
             Color color = startColor;
             color.a = startColor.a + (0f - startColor.a) * easedT;
             afterimage.color = color;
@@ -606,7 +870,9 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
                         ref nextSlashAfterimageIndex
                     );
                 }
-                float easedT = EaseOutQuad(normalizedProgress);
+                float easedT = BattlePresentationEasing.EaseOutQuad(
+                    normalizedProgress
+                );
                 bodyMotionOffset = Vector3.zero +
                     (maximumOffset - Vector3.zero) * easedT;
                 ApplyBodyVisualOffset();
@@ -640,7 +906,8 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
             }
 
             // 按固定进度捕获世界位置，避免低帧率改变残影数量与分布。
-            bodyMotionOffset = maximumOffset * EaseOutQuad(spawnProgress);
+            bodyMotionOffset = maximumOffset *
+                BattlePresentationEasing.EaseOutQuad(spawnProgress);
             ApplyBodyVisualOffset();
             SpawnAfterimageInternal(
                 slashAfterimageLifetime,
@@ -672,12 +939,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
             bodyMotionOffset + bodyShakeOffset;
     }
 
-    private void ResetBodyMotionOffset()
-    {
-        bodyMotionOffset = Vector3.zero;
-        ApplyBodyVisualOffset();
-    }
-
     private void CacheSlashEffectState()
     {
         if (!slashBackStateCached && slashBackEffect != null)
@@ -697,6 +958,93 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         }
     }
 
+    private void CachePerfectGuardEffectState()
+    {
+        if (perfectGuardEffectStateCached || perfectGuardEffect == null)
+        {
+            return;
+        }
+
+        perfectGuardEffectOriginalColor = perfectGuardEffect.color;
+        perfectGuardEffectStateCached = true;
+    }
+
+    private IEnumerator RunPerfectGuardEffectPhase(
+        float duration,
+        float startAlpha,
+        float targetAlpha
+    )
+    {
+        float safeDuration = Mathf.Max(0f, duration);
+        if (safeDuration <= 0f)
+        {
+            SetPerfectGuardEffectAlpha(targetAlpha);
+            yield break;
+        }
+
+        float elapsed = 0f;
+        while (elapsed < safeDuration)
+        {
+            if (!isActiveAndEnabled || perfectGuardEffect == null)
+            {
+                ClearPerfectGuardEffect();
+                yield break;
+            }
+
+            if (presentationPaused)
+            {
+                yield return null;
+                continue;
+            }
+
+            elapsed = Mathf.Min(safeDuration, elapsed + Time.deltaTime);
+            float easedT = BattlePresentationEasing.EaseOutQuad(
+                elapsed / safeDuration
+            );
+            SetPerfectGuardEffectAlpha(
+                startAlpha + (targetAlpha - startAlpha) * easedT
+            );
+            yield return null;
+        }
+
+        SetPerfectGuardEffectAlpha(targetAlpha);
+    }
+
+    private IEnumerator WaitForPerfectGuardEffect(float duration)
+    {
+        float safeDuration = Mathf.Max(0f, duration);
+        float elapsed = 0f;
+        while (elapsed < safeDuration)
+        {
+            if (!isActiveAndEnabled || perfectGuardEffect == null)
+            {
+                ClearPerfectGuardEffect();
+                yield break;
+            }
+
+            if (presentationPaused)
+            {
+                yield return null;
+                continue;
+            }
+
+            elapsed = Mathf.Min(safeDuration, elapsed + Time.deltaTime);
+            yield return null;
+        }
+    }
+
+    private void SetPerfectGuardEffectAlpha(float alpha)
+    {
+        if (!perfectGuardEffectStateCached || perfectGuardEffect == null)
+        {
+            return;
+        }
+
+        Color color = perfectGuardEffectOriginalColor;
+        color.a *= Mathf.Clamp01(alpha);
+        perfectGuardEffect.color = color;
+    }
+
     private void ApplySlashEffectShake(float elapsed)
     {
         if (slashEffectShakeDuration <= 0f ||
@@ -708,7 +1056,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
 
         float shakeT = Mathf.Clamp01(elapsed / slashEffectShakeDuration);
         float amplitude = slashEffectShakeAmplitude *
-            (1f - EaseOutQuad(shakeT));
+            (1f - BattlePresentationEasing.EaseOutQuad(shakeT));
         float phase = elapsed * 90f;
         Vector3 shakeOffset = new Vector3(
             Mathf.Sin(phase),
@@ -760,12 +1108,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
             color.a *= safeAlpha;
             slashFrontEffect.color = color;
         }
-    }
-
-    private static float EaseOutQuad(float t)
-    {
-        t = Mathf.Clamp01(t);
-        return 1f - (1f - t) * (1f - t);
     }
 
     private void SetPose(Sprite poseSprite)

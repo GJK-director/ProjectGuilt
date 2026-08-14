@@ -27,11 +27,18 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public BattleCharacterPresentationController CurrentTargetPresentation;
         public int ImpactIndex = -1;
 
+        public bool DefaultAttackStarted;
+        public bool DefaultAttackImpactReached;
+        public bool DefaultAttackFinished;
+        public long DefaultAttackImpactRequestId;
+
         public long LastRequestId;
         public bool Cancelled;
     }
 
     [SerializeField] private BattleUnitViewSpawner unitViewSpawner;
+    [SerializeField]
+    private BattleDefaultAttackPresentationPlayer defaultAttackPresentationPlayer;
     [SerializeField] private bool verboseLogging = false;
     [SerializeField] private float actionBeginApproachDuration = 0.35f;
     [SerializeField] private float clashReadyGap = 2.8f;
@@ -40,9 +47,15 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     private Coroutine activePresentationCoroutine;
     private long activePresentationRequestId;
 
+    void Awake()
+    {
+        ResolveDefaultAttackPresentationPlayer();
+    }
+
     public void Initialize(BattleUnitViewSpawner spawner)
     {
         unitViewSpawner = spawner;
+        ResolveDefaultAttackPresentationPlayer();
     }
 
     public void Present(
@@ -85,10 +98,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        if (activePresentationCoroutine != null &&
-            activePresentationRequestId == request.RequestId)
+        if (activePresentationRequestId == request.RequestId)
         {
-            StopCoroutine(activePresentationCoroutine);
+            if (activePresentationCoroutine != null)
+            {
+                StopCoroutine(activePresentationCoroutine);
+            }
             activePresentationCoroutine = null;
             activePresentationRequestId = 0L;
             RestoreClashActorsToIdle(activeContext);
@@ -100,6 +115,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 request.ExecutionItem))
         {
             activeContext.Cancelled = true;
+            if (activeContext.DefaultAttackStarted &&
+                defaultAttackPresentationPlayer != null)
+            {
+                defaultAttackPresentationPlayer.CancelAndReset();
+            }
             activeContext = null;
         }
 
@@ -251,7 +271,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             float linearT = Mathf.Clamp01(
                 elapsed / actionBeginApproachDuration
             );
-            float easedT = EaseOutQuad(linearT);
+            float easedT = BattlePresentationEasing.EaseOutQuad(linearT);
             sideARoot.position = sideAStart +
                 (sideATarget - sideAStart) * easedT;
             sideBRoot.position = sideBStart +
@@ -338,12 +358,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
     }
 
-    private static float EaseOutQuad(float t)
-    {
-        t = Mathf.Clamp01(t);
-        return 1f - (1f - t) * (1f - t);
-    }
-
     private void HandleRollResult(
         BattlePresentationRequest request,
         BattlePresentationCompletion completion
@@ -380,7 +394,16 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         );
 
         LogRequest(request, context);
-        CompleteRequest(request, completion);
+        if (!ShouldPlayDefaultAttackImpact(request, context))
+        {
+            CompleteRequest(request, completion);
+            return;
+        }
+
+        if (!TryStartDefaultAttackImpact(request, completion, context))
+        {
+            CompleteRequest(request, completion);
+        }
     }
 
     private void HandleActionComplete(
@@ -391,8 +414,204 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ActionPresentationContext context = EnsureContext(request);
         RefreshRequestState(context, request);
         LogRequest(request, context);
-        CompleteRequest(request, completion);
+
+        if (!context.DefaultAttackStarted || context.DefaultAttackFinished)
+        {
+            CompleteRequest(request, completion);
+            activeContext = null;
+            return;
+        }
+
+        activePresentationRequestId = request.RequestId;
+        activePresentationCoroutine = StartCoroutine(
+            WaitForDefaultAttackTail(
+                request,
+                completion,
+                context
+            )
+        );
+    }
+
+    private bool ShouldPlayDefaultAttackImpact(
+        BattlePresentationRequest request,
+        ActionPresentationContext context
+    )
+    {
+        // Phase 4.2-C1只接第一个Default Attack Impact；多段演出后续处理。
+        return request.ExecutionItem != null &&
+            request.ExecutionItem.executionType ==
+                BattleExecutionItemType.RespondedEnemyIntent &&
+            request.ClashSession != null &&
+            request.ClashSession.ClashType == BattleClashType.AttackVsAttack &&
+            request.Impact != null &&
+            request.ImpactIndex == 0 &&
+            context != null &&
+            context.CurrentAttackerHandle != null &&
+            context.CurrentTargetHandle != null &&
+            context.CurrentAttackerPresentation != null &&
+            context.CurrentTargetPresentation != null &&
+            defaultAttackPresentationPlayer != null &&
+            defaultAttackPresentationPlayer.isActiveAndEnabled;
+    }
+
+    private bool TryStartDefaultAttackImpact(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        float directionSign = GetAttackDirectionSign(
+            context.CurrentAttackerHandle,
+            context.CurrentTargetHandle
+        );
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+
+        context.DefaultAttackStarted = true;
+        context.DefaultAttackImpactReached = false;
+        context.DefaultAttackFinished = false;
+        context.DefaultAttackImpactRequestId = requestId;
+        activePresentationRequestId = requestId;
+
+        bool started = defaultAttackPresentationPlayer.TryPlayDefaultAttack(
+            context.CurrentAttackerPresentation,
+            context.CurrentTargetPresentation,
+            directionSign,
+            () => CompleteDefaultAttackImpact(
+                context,
+                executionItem,
+                requestId,
+                completion
+            ),
+            () => MarkDefaultAttackFinished(context, executionItem)
+        );
+
+        if (started)
+        {
+            return true;
+        }
+
+        context.DefaultAttackStarted = false;
+        context.DefaultAttackImpactRequestId = 0L;
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        return false;
+    }
+
+    private void CompleteDefaultAttackImpact(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsOwnedDefaultAttackContext(context, executionItem) ||
+            context.DefaultAttackImpactReached ||
+            context.DefaultAttackImpactRequestId != requestId ||
+            activePresentationRequestId != requestId)
+        {
+            return;
+        }
+
+        context.DefaultAttackImpactReached = true;
+        activePresentationRequestId = 0L;
+        completion.TryComplete(requestId);
+    }
+
+    private void MarkDefaultAttackFinished(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem
+    )
+    {
+        if (!IsOwnedDefaultAttackContext(context, executionItem))
+        {
+            return;
+        }
+
+        context.DefaultAttackFinished = true;
+    }
+
+    private IEnumerator WaitForDefaultAttackTail(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        while (IsCurrentPresentationRequest(requestId) &&
+            IsOwnedDefaultAttackContext(context, executionItem) &&
+            !context.DefaultAttackFinished)
+        {
+            if (defaultAttackPresentationPlayer == null ||
+                (!defaultAttackPresentationPlayer.IsRunning &&
+                    !defaultAttackPresentationPlayer.IsFinished))
+            {
+                context.DefaultAttackFinished = true;
+                break;
+            }
+
+            yield return null;
+        }
+
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !IsOwnedDefaultAttackContext(context, executionItem))
+        {
+            yield break;
+        }
+
+        activePresentationCoroutine = null;
+        activePresentationRequestId = 0L;
+        completion.TryComplete(requestId);
         activeContext = null;
+    }
+
+    private bool IsOwnedDefaultAttackContext(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem
+    )
+    {
+        return context != null &&
+            object.ReferenceEquals(activeContext, context) &&
+            object.ReferenceEquals(context.ExecutionItem, executionItem) &&
+            context.DefaultAttackStarted &&
+            !context.Cancelled;
+    }
+
+    private static float GetAttackDirectionSign(
+        BattleUnitViewHandle attackerHandle,
+        BattleUnitViewHandle targetHandle
+    )
+    {
+        if (attackerHandle != null && targetHandle != null &&
+            attackerHandle.WorldRoot != null &&
+            targetHandle.WorldRoot != null)
+        {
+            float horizontalDelta =
+                targetHandle.WorldRoot.transform.position.x -
+                attackerHandle.WorldRoot.transform.position.x;
+            if (Mathf.Abs(horizontalDelta) > 0.0001f)
+            {
+                return Mathf.Sign(horizontalDelta);
+            }
+        }
+
+        return attackerHandle != null &&
+            attackerHandle.WorldRenderer != null &&
+            attackerHandle.WorldRenderer.flipX
+                ? -1f
+                : 1f;
+    }
+
+    private void ResolveDefaultAttackPresentationPlayer()
+    {
+        if (defaultAttackPresentationPlayer == null)
+        {
+            defaultAttackPresentationPlayer =
+                GetComponent<BattleDefaultAttackPresentationPlayer>();
+        }
     }
 
     private ActionPresentationContext EnsureContext(
