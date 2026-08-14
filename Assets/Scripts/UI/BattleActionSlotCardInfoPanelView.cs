@@ -1,33 +1,46 @@
-using System.Text;
-using TMPro;
+using System;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
-// 行动槽位卡牌详情的单侧视图。布局和文字引用全部序列化，
-// 可直接在 BattleActionSlotCardInfoPanel 预设体中调整。
-public sealed class BattleActionSlotCardInfoPanelView : MonoBehaviour
+// 行动槽位放大卡牌的单侧视图。
+// 面板只保留正式卡面和关闭按钮，关键词仍由 BattleCardUIView 处理。
+public sealed class BattleActionSlotCardInfoPanelView : MonoBehaviour,
+    IPointerEnterHandler,
+    IPointerExitHandler
 {
     [Header("可编辑 UI 引用")]
-    [SerializeField] Image accentImage;
     [SerializeField] Image artworkImage;
     [SerializeField] BattleCardUIView cardPreviewPrefab;
-    [SerializeField] TMP_Text sideLabelText;
-    [SerializeField] TMP_Text ownerText;
-    [SerializeField] TMP_Text cardNameText;
-    [SerializeField] TMP_Text pointText;
-    [SerializeField] TMP_Text typeAndCooldownText;
-    [SerializeField] TMP_Text descriptionText;
-    [SerializeField] TMP_Text stateText;
-    [SerializeField] TMP_Text keywordText;
-
-    [Header("阵营配色")]
-    [SerializeField] Color allyAccentColor =
-        new Color32(83, 183, 127, 255);
-    [SerializeField] Color enemyAccentColor =
-        new Color32(174, 87, 215, 255);
+    [SerializeField] Button closeButton;
 
     RectTransform cardPreviewRect;
     BattleCardUIView cardPreviewView;
+    Action closeHandler;
+    Action<bool> pointerPresenceHandler;
+    bool closeButtonBound;
+    bool pointerInside;
+
+    internal void SetCloseHandler(Action handler)
+    {
+        closeHandler = handler;
+        BindCloseButton();
+    }
+
+    internal void SetPointerPresenceHandler(Action<bool> handler)
+    {
+        pointerPresenceHandler = handler;
+    }
+
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        SetPointerInside(true);
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        SetPointerInside(false);
+    }
 
     internal void ShowCard(
         CharacterData owner,
@@ -38,7 +51,7 @@ public sealed class BattleActionSlotCardInfoPanelView : MonoBehaviour
     {
         if (cardState == null)
         {
-            gameObject.SetActive(false);
+            Hide();
             return;
         }
 
@@ -46,48 +59,15 @@ public sealed class BattleActionSlotCardInfoPanelView : MonoBehaviour
             BattleCardUIPreviewBuilder.Build(owner, target, cardState);
 
         EnsureCardPreview();
-        if (cardPreviewView != null)
+        if (cardPreviewView == null)
         {
-            cardPreviewView.BindCard(owner, cardState, preview, null);
-            cardPreviewView.SetSelected(false);
-            cardPreviewView.gameObject.SetActive(true);
+            Hide();
+            return;
         }
 
-        SetText(sideLabelText, enemySide ? "敌方意图" : "我方行动");
-        SetText(
-            ownerText,
-            owner != null ? owner.characterName : "未知角色"
-        );
-        SetText(cardNameText, preview.cardName);
-        SetText(pointText, "点数  " + preview.pointText);
-        SetText(
-            typeAndCooldownText,
-            "类型  " + preview.typeText +
-            "    基础 CD  " + preview.cooldownText
-        );
-        SetText(
-            descriptionText,
-            string.IsNullOrWhiteSpace(preview.descriptionText)
-                ? "暂无卡牌说明。"
-                : preview.descriptionText
-        );
-        SetText(stateText, BuildStateText(cardState));
-        SetText(keywordText, BuildKeywordText(preview.keywords));
-
-        if (accentImage != null)
-        {
-            accentImage.color = enemySide
-                ? enemyAccentColor
-                : allyAccentColor;
-        }
-
-        if (artworkImage != null)
-        {
-            artworkImage.color = enemySide
-                ? new Color32(76, 47, 93, 255)
-                : new Color32(41, 78, 61, 255);
-        }
-
+        cardPreviewView.BindCard(owner, cardState, preview, null);
+        cardPreviewView.SetSelected(false);
+        cardPreviewView.gameObject.SetActive(true);
         gameObject.SetActive(true);
         RefreshCardPreviewLayout();
     }
@@ -99,12 +79,54 @@ public sealed class BattleActionSlotCardInfoPanelView : MonoBehaviour
 
     void OnEnable()
     {
+        pointerInside = false;
+        BindCloseButton();
         RefreshCardPreviewLayout();
+    }
+
+    void OnDisable()
+    {
+        pointerInside = false;
     }
 
     void OnRectTransformDimensionsChange()
     {
         RefreshCardPreviewLayout();
+    }
+
+    void OnDestroy()
+    {
+        if (closeButtonBound && closeButton != null)
+        {
+            closeButton.onClick.RemoveListener(HandleCloseButtonClicked);
+        }
+    }
+
+    void BindCloseButton()
+    {
+        if (closeButtonBound || closeButton == null)
+        {
+            return;
+        }
+
+        closeButton.onClick.AddListener(HandleCloseButtonClicked);
+        closeButtonBound = true;
+    }
+
+    void HandleCloseButtonClicked()
+    {
+        closeHandler?.Invoke();
+    }
+
+    void SetPointerInside(bool inside)
+    {
+        if (pointerInside == inside)
+        {
+            return;
+        }
+
+        pointerInside = inside;
+        pointerPresenceHandler?.Invoke(inside);
     }
 
     void RefreshCardPreviewLayout()
@@ -116,11 +138,11 @@ public sealed class BattleActionSlotCardInfoPanelView : MonoBehaviour
 
         float viewportWidth = Mathf.Max(
             0f,
-            artworkImage.rectTransform.rect.width - 20f
+            artworkImage.rectTransform.rect.width - 8f
         );
         float viewportHeight = Mathf.Max(
             0f,
-            artworkImage.rectTransform.rect.height - 20f
+            artworkImage.rectTransform.rect.height - 8f
         );
         float cardWidth = Mathf.Max(1f, cardPreviewRect.sizeDelta.x);
         float cardHeight = Mathf.Max(1f, cardPreviewRect.sizeDelta.y);
@@ -151,9 +173,9 @@ public sealed class BattleActionSlotCardInfoPanelView : MonoBehaviour
             artworkImage.rectTransform
         );
         cardPreviewView.name = "CardPreview";
-        cardPreviewRect =
-            cardPreviewView.transform as RectTransform;
+        cardPreviewRect = cardPreviewView.transform as RectTransform;
 
+        // 固定面板中的卡面位置，但保留 BattleCardUIView 的射线与关键词交互。
         BattleCardMotionUIView cardMotion =
             cardPreviewView.GetComponent<BattleCardMotionUIView>();
         if (cardMotion != null)
@@ -165,89 +187,18 @@ public sealed class BattleActionSlotCardInfoPanelView : MonoBehaviour
             cardPreviewView.GetComponent<GraphicRaycaster>();
         if (cardRaycaster != null)
         {
-            cardRaycaster.enabled = false;
+            cardRaycaster.enabled = true;
         }
 
         CanvasGroup cardCanvasGroup =
             cardPreviewView.GetComponent<CanvasGroup>();
         if (cardCanvasGroup != null)
         {
-            cardCanvasGroup.interactable = false;
-            cardCanvasGroup.blocksRaycasts = false;
+            cardCanvasGroup.interactable = true;
+            cardCanvasGroup.blocksRaycasts = true;
         }
 
         cardPreviewView.gameObject.SetActive(true);
         RefreshCardPreviewLayout();
-    }
-
-    static string BuildStateText(BattleCardState cardState)
-    {
-        if (cardState == null)
-        {
-            return string.Empty;
-        }
-
-        StringBuilder builder = new StringBuilder();
-        if (cardState.isConsumed)
-        {
-            builder.Append("当前状态：已消耗");
-        }
-        else if (cardState.currentCooldown > 0)
-        {
-            builder.Append("当前剩余 CD：");
-            builder.Append(cardState.currentCooldown);
-        }
-        else
-        {
-            builder.Append("当前状态：可行动");
-        }
-
-        if (cardState.maxUseCount > 0)
-        {
-            builder.Append("    使用次数：");
-            builder.Append(cardState.currentUseCount);
-            builder.Append('/');
-            builder.Append(cardState.maxUseCount);
-        }
-
-        return builder.ToString();
-    }
-
-    static string BuildKeywordText(CardKeywordData[] keywords)
-    {
-        if (keywords == null || keywords.Length == 0)
-        {
-            return "关键词：无";
-        }
-
-        StringBuilder builder = new StringBuilder("关键词：");
-        bool hasKeyword = false;
-        for (int index = 0; index < keywords.Length; index++)
-        {
-            CardKeywordData keyword = keywords[index];
-            if (keyword == null ||
-                string.IsNullOrWhiteSpace(keyword.displayName))
-            {
-                continue;
-            }
-
-            if (hasKeyword)
-            {
-                builder.Append(" / ");
-            }
-
-            builder.Append(keyword.displayName);
-            hasKeyword = true;
-        }
-
-        return hasKeyword ? builder.ToString() : "关键词：无";
-    }
-
-    static void SetText(TMP_Text target, string value)
-    {
-        if (target != null)
-        {
-            target.text = value ?? string.Empty;
-        }
     }
 }

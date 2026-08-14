@@ -155,7 +155,9 @@ public class BattleActionSlotUIView : MonoBehaviour,
         {
             if (BattleActionSlotCardInfoPanelHost.IsActiveSource(gameObject))
             {
-                NotifyCardInfoPanel(false);
+                NotifyCardInfoPanel(
+                    BattleActionSlotCardInfoPointerEvent.SourceInvalidated
+                );
             }
 
             isHovered = false;
@@ -181,7 +183,9 @@ public class BattleActionSlotUIView : MonoBehaviour,
 
         if (BattleActionSlotCardInfoPanelHost.IsActiveSource(gameObject))
         {
-            NotifyCardInfoPanel(true);
+            NotifyCardInfoPanel(
+                BattleActionSlotCardInfoPointerEvent.Refresh
+            );
         }
     }
 
@@ -191,7 +195,9 @@ public class BattleActionSlotUIView : MonoBehaviour,
 
         if (BattleActionSlotCardInfoPanelHost.IsActiveSource(gameObject))
         {
-            NotifyCardInfoPanel(true);
+            NotifyCardInfoPanel(
+                BattleActionSlotCardInfoPointerEvent.Refresh
+            );
         }
     }
 
@@ -230,7 +236,9 @@ public class BattleActionSlotUIView : MonoBehaviour,
                 selectionEffectView?.PlayPulse();
             }
 
-            NotifyCardInfoPanel(true);
+            NotifyCardInfoPanel(
+                BattleActionSlotCardInfoPointerEvent.ClickLock
+            );
             return;
         }
 
@@ -243,32 +251,48 @@ public class BattleActionSlotUIView : MonoBehaviour,
 
     public void OnPointerEnter(PointerEventData eventData)
     {
-        if (boundCharacter == null || isEnemySlot)
+        if (boundCharacter == null)
         {
             return;
         }
 
-        isHovered = true;
-        RefreshDisplayedSprite();
-        RefreshSelectionEffectReference();
-        selectionEffectView?.SetPersistentVisible(true);
-        selectionEffectView?.ShowImmediate();
+        if (!isEnemySlot)
+        {
+            isHovered = true;
+            RefreshDisplayedSprite();
+            RefreshSelectionEffectReference();
+            selectionEffectView?.SetPersistentVisible(true);
+            selectionEffectView?.ShowImmediate();
+        }
+
+        NotifyCardInfoPanel(
+            BattleActionSlotCardInfoPointerEvent.HoverEnter
+        );
     }
 
     public void OnPointerExit(PointerEventData eventData)
     {
-        if (boundCharacter == null || isEnemySlot)
+        if (boundCharacter == null)
         {
             return;
         }
 
-        isHovered = false;
-        RefreshDisplayedSprite();
-        RefreshSelectionEffectReference();
-        selectionEffectView?.SetPersistentVisible(isSelected);
+        if (!isEnemySlot)
+        {
+            isHovered = false;
+            RefreshDisplayedSprite();
+            RefreshSelectionEffectReference();
+            selectionEffectView?.SetPersistentVisible(isSelected);
+        }
+
+        NotifyCardInfoPanel(
+            BattleActionSlotCardInfoPointerEvent.HoverExit
+        );
     }
 
-    private void NotifyCardInfoPanel(bool selectedSourceIsValid)
+    private void NotifyCardInfoPanel(
+        BattleActionSlotCardInfoPointerEvent pointerEvent
+    )
     {
         BattleCardState cardState = isEnemySlot
             ? boundEnemyIntent?.enemyCardState
@@ -288,7 +312,7 @@ public class BattleActionSlotUIView : MonoBehaviour,
                 owner,
                 target,
                 cardState,
-                selectedSourceIsValid
+                pointerEvent
             )
         );
     }
@@ -446,7 +470,9 @@ public class BattleActionSlotUIView : MonoBehaviour,
     {
         if (BattleActionSlotCardInfoPanelHost.IsActiveSource(gameObject))
         {
-            NotifyCardInfoPanel(false);
+            NotifyCardInfoPanel(
+                BattleActionSlotCardInfoPointerEvent.SourceInvalidated
+            );
         }
 
         StopStateFeedbackCommit();

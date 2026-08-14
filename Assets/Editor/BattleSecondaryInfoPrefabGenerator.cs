@@ -21,7 +21,7 @@ public static class BattleSecondaryInfoPrefabGenerator
     const string BattleScenePath = "Assets/Scenes/BattleScene.unity";
     const string FontPath = "Assets/Fonts/TMP_Font_CN_Runtime.asset";
     const string SessionKey =
-        "ProjectGuilt.BattleSecondaryInfoPrefabGenerator.Checked";
+        "ProjectGuilt.BattleSecondaryInfoPrefabGenerator.CardOnlyV2Checked";
 
     [InitializeOnLoadMethod]
     static void ScheduleMissingAssetCheck()
@@ -50,9 +50,16 @@ public static class BattleSecondaryInfoPrefabGenerator
         }
 
         EnsureAssetFolder("Assets/Prefabs");
-        CreateActionSlotCardInfoPrefab();
+        GameObject slotCardPrefab = CreateActionSlotCardInfoPrefab();
         AssetDatabase.SaveAssets();
         AssetDatabase.Refresh();
+        GameObject genericPrefab =
+            AssetDatabase.LoadAssetAtPath<GameObject>(GenericPrefabPath);
+        EnsureBattleSceneInstances(
+            genericPrefab,
+            slotCardPrefab,
+            true
+        );
         Debug.Log("行动槽位卡牌详情预设体已重新生成：\n" + SlotCardPrefabPath);
     }
 
@@ -99,17 +106,9 @@ public static class BattleSecondaryInfoPrefabGenerator
         {
             ValidateObjectReferences(
                 new SerializedObject(sideViews[index]),
-                "accentImage",
                 "artworkImage",
                 "cardPreviewPrefab",
-                "sideLabelText",
-                "ownerText",
-                "cardNameText",
-                "pointText",
-                "typeAndCooldownText",
-                "descriptionText",
-                "stateText",
-                "keywordText"
+                "closeButton"
             );
         }
 
@@ -165,14 +164,21 @@ public static class BattleSecondaryInfoPrefabGenerator
 
             GameObject slotCardPrefab =
                 AssetDatabase.LoadAssetAtPath<GameObject>(SlotCardPrefabPath);
-            if (slotCardPrefab == null || forceRebuild)
+            bool slotCardPrefabRebuilt = slotCardPrefab == null ||
+                forceRebuild ||
+                RequiresActionSlotCardPrefabUpgrade(slotCardPrefab);
+            if (slotCardPrefabRebuilt)
             {
                 slotCardPrefab = CreateActionSlotCardInfoPrefab();
             }
 
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
-            EnsureBattleSceneInstances(genericPrefab, slotCardPrefab);
+            EnsureBattleSceneInstances(
+                genericPrefab,
+                slotCardPrefab,
+                slotCardPrefabRebuilt
+            );
             Debug.Log(
                 "二级信息面板预设体已就绪：\n" +
                 GenericPrefabPath + "\n" +
@@ -183,6 +189,49 @@ public static class BattleSecondaryInfoPrefabGenerator
         {
             Debug.LogError("生成二级信息面板预设体失败：" + exception);
         }
+    }
+
+    static bool RequiresActionSlotCardPrefabUpgrade(GameObject prefab)
+    {
+        if (prefab == null)
+        {
+            return true;
+        }
+
+        BattleActionSlotCardInfoPanelHost host =
+            prefab.GetComponent<BattleActionSlotCardInfoPanelHost>();
+        BattleActionSlotCardInfoPanelView[] views =
+            prefab.GetComponentsInChildren<
+                BattleActionSlotCardInfoPanelView
+            >(true);
+        if (host == null || views.Length != 2)
+        {
+            return true;
+        }
+
+        for (int index = 0; index < views.Length; index++)
+        {
+            SerializedObject serializedView =
+                new SerializedObject(views[index]);
+            SerializedProperty artwork =
+                serializedView.FindProperty("artworkImage");
+            SerializedProperty cardPrefab =
+                serializedView.FindProperty("cardPreviewPrefab");
+            SerializedProperty closeButton =
+                serializedView.FindProperty("closeButton");
+            if (artwork == null ||
+                artwork.objectReferenceValue == null ||
+                cardPrefab == null ||
+                cardPrefab.objectReferenceValue == null ||
+                closeButton == null ||
+                closeButton.objectReferenceValue == null ||
+                views[index].transform.Find("InfoColumn") != null)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     static GameObject CreateGenericInfoPrefab()
@@ -294,6 +343,7 @@ public static class BattleSecondaryInfoPrefabGenerator
             "BattleActionSlotCardInfoPanel",
             out Canvas canvas
         );
+        canvas.sortingOrder = 32766;
         BattleActionSlotCardInfoPanelHost host =
             root.AddComponent<BattleActionSlotCardInfoPanelHost>();
 
@@ -342,8 +392,6 @@ public static class BattleSecondaryInfoPrefabGenerator
         GameObject panel = new GameObject(
             objectName,
             typeof(RectTransform),
-            typeof(Image),
-            typeof(Outline),
             typeof(CanvasGroup),
             typeof(BattleActionSlotCardInfoPanelView)
         );
@@ -357,40 +405,20 @@ public static class BattleSecondaryInfoPrefabGenerator
         panelRect.anchoredPosition = enemySide
             ? new Vector2(-24f, -24f)
             : new Vector2(24f, -24f);
-        panelRect.sizeDelta = new Vector2(640f, 360f);
+        panelRect.sizeDelta = new Vector2(520f, 767f);
 
-        Color accentColor = enemySide
-            ? new Color32(174, 87, 215, 255)
-            : new Color32(83, 183, 127, 255);
-        Image background = panel.GetComponent<Image>();
-        background.color = new Color32(17, 19, 27, 248);
-        background.raycastTarget = false;
-        Outline outline = panel.GetComponent<Outline>();
-        outline.effectColor = accentColor;
-        outline.effectDistance = new Vector2(2f, -2f);
         CanvasGroup canvasGroup = panel.GetComponent<CanvasGroup>();
-        canvasGroup.interactable = false;
-        canvasGroup.blocksRaycasts = false;
+        canvasGroup.interactable = true;
+        canvasGroup.blocksRaycasts = true;
 
-        Image accent = CreateImage(
-            panelRect,
-            "Accent",
-            accentColor,
-            new Vector2(0f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(0f, 0f),
-            new Vector2(0f, 7f)
-        );
         Image artwork = CreateImage(
             panelRect,
             "CardArtwork",
-            enemySide
-                ? new Color32(76, 47, 93, 255)
-                : new Color32(41, 78, 61, 255),
-            new Vector2(0f, 0f),
-            new Vector2(0.41f, 1f),
-            new Vector2(18f, 20f),
-            new Vector2(-8f, -24f)
+            Color.clear,
+            Vector2.zero,
+            Vector2.one,
+            Vector2.zero,
+            Vector2.zero
         );
         BattleCardUIView cardPreviewPrefab =
             cardUIPrefab.GetComponent<BattleCardUIView>();
@@ -401,135 +429,74 @@ public static class BattleSecondaryInfoPrefabGenerator
             );
         }
 
-        GameObject infoObject = new GameObject(
-            "InfoColumn",
-            typeof(RectTransform),
-            typeof(VerticalLayoutGroup)
-        );
-        RectTransform infoRect = infoObject.GetComponent<RectTransform>();
-        infoRect.SetParent(panelRect, false);
-        infoRect.anchorMin = new Vector2(0.43f, 0f);
-        infoRect.anchorMax = Vector2.one;
-        infoRect.offsetMin = new Vector2(0f, 18f);
-        infoRect.offsetMax = new Vector2(-18f, -18f);
-        VerticalLayoutGroup infoLayout =
-            infoObject.GetComponent<VerticalLayoutGroup>();
-        infoLayout.spacing = 5f;
-        infoLayout.childAlignment = TextAnchor.UpperLeft;
-        infoLayout.childControlWidth = true;
-        infoLayout.childControlHeight = true;
-        infoLayout.childForceExpandWidth = true;
-        infoLayout.childForceExpandHeight = false;
-
-        TMP_Text sideLabel = CreateLayoutText(
-            infoRect,
-            "SideLabel",
-            enemySide ? "敌方意图" : "我方行动",
-            18f,
-            accentColor,
-            FontStyles.Bold,
-            font,
-            24f
-        );
-        TMP_Text owner = CreateLayoutText(
-            infoRect,
-            "Owner",
-            enemySide ? "敌方角色" : "我方角色",
-            15f,
-            new Color32(173, 179, 194, 255),
-            FontStyles.Normal,
-            font,
-            22f
-        );
-        TMP_Text cardName = CreateLayoutText(
-            infoRect,
-            "CardName",
-            "行动卡牌名称",
-            27f,
-            new Color32(244, 239, 224, 255),
-            FontStyles.Bold,
-            font,
-            40f
-        );
-        TMP_Text point = CreateLayoutText(
-            infoRect,
-            "Point",
-            "点数  2-5",
-            22f,
-            new Color32(245, 151, 76, 255),
-            FontStyles.Bold,
-            font,
-            32f
-        );
-        TMP_Text typeAndCooldown = CreateLayoutText(
-            infoRect,
-            "TypeAndCooldown",
-            "类型  攻    基础 CD  1",
-            16f,
-            new Color32(202, 206, 216, 255),
-            FontStyles.Normal,
-            font,
-            25f
-        );
-        TMP_Text description = CreateLayoutText(
-            infoRect,
-            "Description",
-            "卡牌效果说明。运行时会显示槽位上卡牌的实际内容。",
-            17f,
-            new Color32(235, 237, 242, 255),
-            FontStyles.Normal,
-            font,
-            105f
-        );
-        LayoutElement descriptionLayout =
-            description.GetComponent<LayoutElement>();
-        descriptionLayout.flexibleHeight = 1f;
-        description.overflowMode = TextOverflowModes.Ellipsis;
-        TMP_Text state = CreateLayoutText(
-            infoRect,
-            "State",
-            "当前状态：可行动",
-            15f,
-            new Color32(177, 221, 190, 255),
-            FontStyles.Normal,
-            font,
-            23f
-        );
-        TMP_Text keyword = CreateLayoutText(
-            infoRect,
-            "Keyword",
-            "关键词：无",
-            14f,
-            new Color32(178, 184, 200, 255),
-            FontStyles.Normal,
-            font,
-            22f
-        );
+        Button closeButton = CreateCloseButton(panelRect, font, enemySide);
 
         BattleActionSlotCardInfoPanelView view =
             panel.GetComponent<BattleActionSlotCardInfoPanelView>();
         SerializedObject serializedView = new SerializedObject(view);
-        SetObjectReference(serializedView, "accentImage", accent);
         SetObjectReference(serializedView, "artworkImage", artwork);
         SetObjectReference(
             serializedView,
             "cardPreviewPrefab",
             cardPreviewPrefab
         );
-        SetObjectReference(serializedView, "sideLabelText", sideLabel);
-        SetObjectReference(serializedView, "ownerText", owner);
-        SetObjectReference(serializedView, "cardNameText", cardName);
-        SetObjectReference(serializedView, "pointText", point);
-        SetObjectReference(
-            serializedView,
-            "typeAndCooldownText",
-            typeAndCooldown
-        );
-        SetObjectReference(serializedView, "descriptionText", description);
-        SetObjectReference(serializedView, "stateText", state);
-        SetObjectReference(serializedView, "keywordText", keyword);
+        SetObjectReference(serializedView, "closeButton", closeButton);
         serializedView.ApplyModifiedPropertiesWithoutUndo();
         return view;
+    }
+
+    static Button CreateCloseButton(
+        RectTransform parent,
+        TMP_FontAsset font,
+        bool enemySide
+    )
+    {
+        GameObject buttonObject = new GameObject(
+            "CloseButton",
+            typeof(RectTransform),
+            typeof(Image),
+            typeof(Button)
+        );
+        RectTransform rect = buttonObject.GetComponent<RectTransform>();
+        rect.SetParent(parent, false);
+        rect.anchorMin = Vector2.one;
+        rect.anchorMax = Vector2.one;
+        rect.pivot = new Vector2(0.5f, 0.5f);
+        rect.anchoredPosition = new Vector2(-28f, -28f);
+        rect.sizeDelta = new Vector2(52f, 52f);
+
+        Image image = buttonObject.GetComponent<Image>();
+        image.color = enemySide
+            ? new Color32(126, 52, 158, 242)
+            : new Color32(38, 107, 70, 242);
+        image.raycastTarget = true;
+
+        Button button = buttonObject.GetComponent<Button>();
+        ColorBlock colors = button.colors;
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color32(232, 232, 232, 255);
+        colors.pressedColor = new Color32(190, 190, 190, 255);
+        colors.selectedColor = Color.white;
+        colors.disabledColor = new Color32(128, 128, 128, 160);
+        button.colors = colors;
+
+        TMP_Text label = CreateText(
+            rect,
+            "Label",
+            "×",
+            36f,
+            Color.white,
+            FontStyles.Bold,
+            font
+        );
+        RectTransform labelRect = label.rectTransform;
+        labelRect.anchorMin = Vector2.zero;
+        labelRect.anchorMax = Vector2.one;
+        labelRect.offsetMin = Vector2.zero;
+        labelRect.offsetMax = Vector2.zero;
+        label.alignment = TextAlignmentOptions.Center;
+        label.raycastTarget = false;
+        return button;
     }
 
     static GameObject CreateOverlayCanvasRoot(
@@ -675,7 +642,8 @@ public static class BattleSecondaryInfoPrefabGenerator
 
     static void EnsureBattleSceneInstances(
         GameObject genericPrefab,
-        GameObject slotCardPrefab
+        GameObject slotCardPrefab,
+        bool refreshSlotCardInstance
     )
     {
         if (genericPrefab == null || slotCardPrefab == null)
@@ -705,6 +673,16 @@ public static class BattleSecondaryInfoPrefabGenerator
             changed = true;
         }
 
+        if (refreshSlotCardInstance)
+        {
+            while (TryRemoveSceneComponentInstance<
+                BattleActionSlotCardInfoPanelHost
+            >(battleScene))
+            {
+                changed = true;
+            }
+        }
+
         if (!SceneContainsComponent<BattleActionSlotCardInfoPanelHost>(battleScene))
         {
             GameObject instanceObject = PrefabUtility.InstantiatePrefab(
@@ -730,6 +708,33 @@ public static class BattleSecondaryInfoPrefabGenerator
         {
             EditorSceneManager.CloseScene(battleScene, true);
         }
+    }
+
+    static bool TryRemoveSceneComponentInstance<T>(Scene scene)
+        where T : Component
+    {
+        GameObject[] roots = scene.GetRootGameObjects();
+        for (int index = 0; index < roots.Length; index++)
+        {
+            T component = roots[index].GetComponentInChildren<T>(true);
+            if (component == null)
+            {
+                continue;
+            }
+
+            GameObject instanceRoot =
+                PrefabUtility.GetNearestPrefabInstanceRoot(
+                    component.gameObject
+                );
+            UnityEngine.Object.DestroyImmediate(
+                instanceRoot != null
+                    ? instanceRoot
+                    : component.gameObject
+            );
+            return true;
+        }
+
+        return false;
     }
 
     static bool SceneContainsComponent<T>(Scene scene)

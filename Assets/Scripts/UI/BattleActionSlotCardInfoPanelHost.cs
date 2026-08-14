@@ -2,6 +2,15 @@ using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
 
+public enum BattleActionSlotCardInfoPointerEvent
+{
+    HoverEnter,
+    HoverExit,
+    ClickLock,
+    Refresh,
+    SourceInvalidated
+}
+
 public sealed class BattleActionSlotCardInfoHoverRequest
 {
     public readonly GameObject source;
@@ -9,7 +18,7 @@ public sealed class BattleActionSlotCardInfoHoverRequest
     public readonly CharacterData owner;
     public readonly CharacterData target;
     public readonly BattleCardState cardState;
-    public readonly bool isPointerInside;
+    public readonly BattleActionSlotCardInfoPointerEvent pointerEvent;
 
     public BattleActionSlotCardInfoHoverRequest(
         GameObject requestSource,
@@ -17,7 +26,7 @@ public sealed class BattleActionSlotCardInfoHoverRequest
         CharacterData cardOwner,
         CharacterData cardTarget,
         BattleCardState requestCardState,
-        bool pointerInside
+        BattleActionSlotCardInfoPointerEvent requestPointerEvent
     )
     {
         source = requestSource;
@@ -25,16 +34,17 @@ public sealed class BattleActionSlotCardInfoHoverRequest
         owner = cardOwner;
         target = cardTarget;
         cardState = requestCardState;
-        isPointerInside = pointerInside;
+        pointerEvent = requestPointerEvent;
     }
 }
 
-// 行动槽位卡牌详情宿主。
-// 为保持既有接线，入口和请求类型仍沿用 HandlePointer / HoverRequest 命名；
-// 当前实际语义为“点击槽位后按阵营分别锁定”，友方与敌方面板可以同时显示。
+// 行动槽位放大卡牌宿主。
+// 为保持既有接线，入口和请求类型仍沿用 HandlePointer / HoverRequest 命名。
+// 悬停请求临时覆盖当前侧的点击锁定；移出后恢复锁定内容或关闭。
 public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
 {
-    const int OverlaySortingOrder = 32767;
+    // 通用关键词二级面板使用 32767；这里低一层，确保关键词说明在卡面上方。
+    const int OverlaySortingOrder = 32766;
     static readonly Vector2 ReferenceResolution =
         new Vector2(1920f, 1080f);
 
@@ -47,17 +57,31 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
     [SerializeField] BattleActionSlotCardInfoPanelView allyPanelView;
     [SerializeField] BattleActionSlotCardInfoPanelView enemyPanelView;
 
+    sealed class SideDisplayState
+    {
+        public GameObject hoveredSource;
+        public BattleActionSlotCardInfoHoverRequest hoveredRequest;
+        public GameObject lockedSource;
+        public BattleActionSlotCardInfoHoverRequest lockedRequest;
+        public bool sourcePointerInside;
+        public bool panelPointerInside;
+        public bool hoverExitPending;
+
+        public bool Tracks(GameObject source)
+        {
+            return source != null &&
+                (hoveredSource == source || lockedSource == source);
+        }
+    }
+
     RectTransform hostRect;
-    GameObject allyActiveSource;
-    GameObject enemyActiveSource;
-    BattleActionSlotCardInfoHoverRequest allyActiveRequest;
-    BattleActionSlotCardInfoHoverRequest enemyActiveRequest;
+    readonly SideDisplayState allyState = new SideDisplayState();
+    readonly SideDisplayState enemyState = new SideDisplayState();
     int lastScreenWidth = -1;
     int lastScreenHeight = -1;
     Rect lastSafeArea;
 
     // 给所有行动槽位保留的唯一宿主调用接口。
-    // isPointerInside=true 表示点击选择或刷新当前槽位；false 表示来源失效。
     public static void HandlePointer(
         BattleActionSlotCardInfoHoverRequest request
     )
@@ -67,7 +91,10 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
             return;
         }
 
-        if (!request.isPointerInside)
+        if (request.pointerEvent ==
+            BattleActionSlotCardInfoPointerEvent.HoverExit ||
+            request.pointerEvent ==
+            BattleActionSlotCardInfoPointerEvent.SourceInvalidated)
         {
             instance?.ReceivePointerRequest(request);
             return;
@@ -82,8 +109,8 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
     {
         return instance != null &&
             source != null &&
-            (instance.allyActiveSource == source ||
-                instance.enemyActiveSource == source);
+            (instance.allyState.Tracks(source) ||
+                instance.enemyState.Tracks(source));
     }
 
     static BattleActionSlotCardInfoPanelHost GetOrCreateHost(
@@ -139,6 +166,14 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
 
         ResolvePrefabReferences();
         BuildFallbackPanels();
+        allyPanelView?.SetCloseHandler(() => CloseSide(false));
+        enemyPanelView?.SetCloseHandler(() => CloseSide(true));
+        allyPanelView?.SetPointerPresenceHandler(
+            inside => SetPanelPointerInside(false, inside)
+        );
+        enemyPanelView?.SetPointerPresenceHandler(
+            inside => SetPanelPointerInside(true, inside)
+        );
         HidePanels();
         KeepCanvasInFront();
 
@@ -150,15 +185,8 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
 
     void Update()
     {
-        if (allyActiveRequest != null && allyActiveSource == null)
-        {
-            CloseSide(false);
-        }
-
-        if (enemyActiveRequest != null && enemyActiveSource == null)
-        {
-            CloseSide(true);
-        }
+        ClearDestroyedSources(allyState, false);
+        ClearDestroyedSources(enemyState, true);
     }
 
     void LateUpdate()
@@ -168,6 +196,10 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
         {
             RefreshResponsiveLayout();
         }
+
+        // 等 EventSystem 派发完槽位 Exit 与面板 Enter，再决定是否真正关闭。
+        FlushPendingHoverExit(allyState, false);
+        FlushPendingHoverExit(enemyState, true);
     }
 
     void OnRectTransformDimensionsChange()
@@ -187,84 +219,236 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
         BattleActionSlotCardInfoHoverRequest request
     )
     {
-        if (!request.isPointerInside)
+        SideDisplayState state = request.isEnemySide
+            ? enemyState
+            : allyState;
+
+        switch (request.pointerEvent)
         {
-            if (allyActiveSource == request.source)
-            {
-                CloseSide(false);
-            }
-
-            if (enemyActiveSource == request.source)
-            {
-                CloseSide(true);
-            }
-
-            return;
+            case BattleActionSlotCardInfoPointerEvent.HoverEnter:
+                SetHoveredRequest(state, request);
+                break;
+            case BattleActionSlotCardInfoPointerEvent.HoverExit:
+                QueueHoveredExit(state, request.source);
+                break;
+            case BattleActionSlotCardInfoPointerEvent.ClickLock:
+                SetLockedRequest(state, request);
+                break;
+            case BattleActionSlotCardInfoPointerEvent.Refresh:
+                RefreshTrackedRequest(state, request);
+                break;
+            case BattleActionSlotCardInfoPointerEvent.SourceInvalidated:
+                ClearSource(state, request.source);
+                break;
         }
 
-        if (request.cardState == null)
-        {
-            if (GetActiveSource(request.isEnemySide) == request.source)
-            {
-                CloseSide(request.isEnemySide);
-            }
-
-            return;
-        }
-
-        if (request.isEnemySide)
-        {
-            enemyActiveSource = request.source;
-            enemyActiveRequest = request;
-        }
-        else
-        {
-            allyActiveSource = request.source;
-            allyActiveRequest = request;
-        }
-
-        ShowPanel(request);
+        RefreshSide(state, request.isEnemySide);
     }
 
-    void ShowPanel(BattleActionSlotCardInfoHoverRequest request)
+    static void SetHoveredRequest(
+        SideDisplayState state,
+        BattleActionSlotCardInfoHoverRequest request
+    )
     {
-        if (request == null || request.cardState == null)
+        if (request.cardState == null)
         {
             return;
         }
 
-        BattleActionSlotCardInfoPanelView targetView =
-            request.isEnemySide
-                ? enemyPanelView
-                : allyPanelView;
-        targetView?.ShowCard(
+        state.hoveredSource = request.source;
+        state.hoveredRequest = request;
+        state.sourcePointerInside = true;
+        state.hoverExitPending = false;
+    }
+
+    static void QueueHoveredExit(
+        SideDisplayState state,
+        GameObject source
+    )
+    {
+        if (state.hoveredSource != source)
+        {
+            return;
+        }
+
+        state.sourcePointerInside = false;
+        state.hoverExitPending = true;
+    }
+
+    static void ClearHoveredRequest(
+        SideDisplayState state,
+        GameObject source
+    )
+    {
+        if (state.hoveredSource != source)
+        {
+            return;
+        }
+
+        state.hoveredSource = null;
+        state.hoveredRequest = null;
+    }
+
+    static void SetLockedRequest(
+        SideDisplayState state,
+        BattleActionSlotCardInfoHoverRequest request
+    )
+    {
+        if (request.cardState == null)
+        {
+            return;
+        }
+
+        state.lockedSource = request.source;
+        state.lockedRequest = request;
+    }
+
+    static void RefreshTrackedRequest(
+        SideDisplayState state,
+        BattleActionSlotCardInfoHoverRequest request
+    )
+    {
+        if (state.hoveredSource == request.source)
+        {
+            if (request.cardState == null)
+            {
+                state.hoveredSource = null;
+                state.hoveredRequest = null;
+            }
+            else
+            {
+                state.hoveredRequest = request;
+            }
+        }
+
+        if (state.lockedSource == request.source)
+        {
+            if (request.cardState == null)
+            {
+                state.lockedSource = null;
+                state.lockedRequest = null;
+            }
+            else
+            {
+                state.lockedRequest = request;
+            }
+        }
+    }
+
+    static void ClearSource(SideDisplayState state, GameObject source)
+    {
+        bool clearedHoveredSource = state.hoveredSource == source;
+        ClearHoveredRequest(state, source);
+        if (clearedHoveredSource)
+        {
+            state.sourcePointerInside = false;
+            state.hoverExitPending = false;
+        }
+        if (state.lockedSource == source)
+        {
+            state.lockedSource = null;
+            state.lockedRequest = null;
+        }
+    }
+
+    void RefreshSide(SideDisplayState state, bool enemySide)
+    {
+        BattleActionSlotCardInfoHoverRequest request =
+            state.hoveredRequest ?? state.lockedRequest;
+        if (request == null || request.cardState == null)
+        {
+            state.panelPointerInside = false;
+            state.hoverExitPending = false;
+            GetPanelView(enemySide)?.Hide();
+            return;
+        }
+
+        GetPanelView(enemySide)?.ShowCard(
             request.owner,
             request.target,
             request.cardState,
-            request.isEnemySide
+            enemySide
         );
         KeepCanvasInFront();
         RefreshResponsiveLayout();
     }
 
-    GameObject GetActiveSource(bool enemySide)
+    BattleActionSlotCardInfoPanelView GetPanelView(bool enemySide)
     {
-        return enemySide ? enemyActiveSource : allyActiveSource;
+        return enemySide ? enemyPanelView : allyPanelView;
+    }
+
+    void ClearDestroyedSources(SideDisplayState state, bool enemySide)
+    {
+        bool changed = false;
+        if (state.hoveredRequest != null && state.hoveredSource == null)
+        {
+            state.hoveredRequest = null;
+            state.sourcePointerInside = false;
+            state.hoverExitPending = false;
+            changed = true;
+        }
+
+        if (state.lockedRequest != null && state.lockedSource == null)
+        {
+            state.lockedRequest = null;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            RefreshSide(state, enemySide);
+        }
     }
 
     void CloseSide(bool enemySide)
     {
-        if (enemySide)
+        SideDisplayState state = enemySide ? enemyState : allyState;
+        state.hoveredSource = null;
+        state.hoveredRequest = null;
+        state.lockedSource = null;
+        state.lockedRequest = null;
+        state.sourcePointerInside = false;
+        state.panelPointerInside = false;
+        state.hoverExitPending = false;
+        GetPanelView(enemySide)?.Hide();
+    }
+
+    void SetPanelPointerInside(bool enemySide, bool inside)
+    {
+        SideDisplayState state = enemySide ? enemyState : allyState;
+        state.panelPointerInside = inside;
+        if (inside)
         {
-            enemyPanelView?.Hide();
-            enemyActiveSource = null;
-            enemyActiveRequest = null;
+            state.hoverExitPending = false;
             return;
         }
 
-        allyPanelView?.Hide();
-        allyActiveSource = null;
-        allyActiveRequest = null;
+        if (!state.sourcePointerInside && state.hoveredRequest != null)
+        {
+            state.hoverExitPending = true;
+        }
+    }
+
+    void FlushPendingHoverExit(
+        SideDisplayState state,
+        bool enemySide
+    )
+    {
+        if (!state.hoverExitPending)
+        {
+            return;
+        }
+
+        state.hoverExitPending = false;
+        if (state.sourcePointerInside || state.panelPointerInside)
+        {
+            return;
+        }
+
+        GameObject exitedSource = state.hoveredSource;
+        ClearHoveredRequest(state, exitedSource);
+        RefreshSide(state, enemySide);
     }
 
     void HidePanels()
@@ -347,8 +531,6 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
 
         float rootWidth = hostRect.rect.width;
         float rootHeight = hostRect.rect.height;
-        float panelWidth = Mathf.Clamp(rootWidth * 0.43f, 280f, 640f);
-        float panelHeight = Mathf.Clamp(rootHeight * 0.34f, 220f, 360f);
         float margin = Mathf.Clamp(rootWidth * 0.0125f, 12f, 28f);
 
         Rect safeArea = Screen.safeArea;
@@ -359,6 +541,24 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
             (screenWidth - safeArea.xMax) / screenWidth * rootWidth;
         float topInset =
             (screenHeight - safeArea.yMax) / screenHeight * rootHeight;
+        float bottomInset = safeArea.yMin / screenHeight * rootHeight;
+
+        const float cardAspect = 780f / 1150f;
+        float availableHeight = Mathf.Max(
+            180f,
+            rootHeight - topInset - bottomInset - margin * 2f
+        );
+        float panelHeight = Mathf.Min(
+            Mathf.Clamp(rootHeight * 0.72f, 300f, 820f),
+            availableHeight
+        );
+        float panelWidth = panelHeight * cardAspect;
+        float maxPanelWidth = Mathf.Max(180f, rootWidth * 0.46f);
+        if (panelWidth > maxPanelWidth)
+        {
+            panelWidth = maxPanelWidth;
+            panelHeight = panelWidth / cardAspect;
+        }
 
         ConfigureSideRect(
             allyPanelRect,
