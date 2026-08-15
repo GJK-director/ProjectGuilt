@@ -518,20 +518,28 @@ MonoBehaviour:
   defaultOrbitAngle: 25
   framingPitchOffset: 1.5
   defaultOrbitRadius: 11.5
+  horizontalLimit: 0.8
   backgroundPanLimit: 0.01
   floorPanLimit: 1
-  verticalPanSensitivity: 0.003
   backgroundPanPitchOffset: -0.02
   floorPanPitchOffset: 2
-  minOrbitAngle: 15
-  maxOrbitAngle: 40
-  orbitSensitivity: 0.05
-  finalCameraPitch: 9
-  horizontalLimit: 0.8
-  horizontalSensitivity: 0.003
   minOrbitRadius: 8.5
   maxOrbitRadius: 12.5
+  finalOrbitAngle: 15
+  finalCameraPitch: 9
+  horizontalSensitivity: 0.003
+  verticalPanSensitivity: 0.003
+  orbitSensitivity: 0.05
+  cameraDragThreshold: 0.5
+  cameraDragFollowTime: 0.18
+  horizontalInertia: 0.35
+  horizontalInertiaDamping: 6
   zoomSensitivity: 0.08
+  zoomFollowTime: 0.15
+  enableIdleHorizontalSway: 1
+  idleSwayAmplitude: 0.03
+  idleSwayCycleDuration: 8
+  idleSwayBlendTime: 0.25
   invertHorizontal: 0
   invertVertical: 0
   invertZoom: 0
@@ -540,12 +548,17 @@ MonoBehaviour:
   currentOrbitAngle: 2
   currentPitchAngle: 1
   currentOrbitRadius: 11.5
+  targetOrbitRadius: 0
   secondStageProgress: 0
   secondStageStartOrbitAngle: 2
   secondStageOrbitRadius: 11.5
+  isInSecondStage: 0
+  isCameraDragging: 0
+  horizontalVelocity: 0
+  idleSwayOffset: 0
+  idleSwayWeight: 0
   orbitCenter: {x: 0, y: 0, z: 0}
   distanceToOrbitCenter: 11.5
-  isInSecondStage: 0
 --- !u!114 &115941478
 MonoBehaviour:
   m_ObjectHideFlags: 0

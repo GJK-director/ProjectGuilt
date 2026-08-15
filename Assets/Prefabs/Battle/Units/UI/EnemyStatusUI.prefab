@@ -736,6 +736,7 @@ GameObject:
   - component: {fileID: 1814196840147405943}
   - component: {fileID: 8271600376879068544}
   - component: {fileID: 4039887827911544594}
+  - component: {fileID: 2394098943732279408}
   m_Layer: 5
   m_Name: Slot_02
   m_TagString: Untagged
@@ -800,6 +801,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleActionSlotRelationHoverRelay
   controller: {fileID: 0}
   slotView: {fileID: 8271600376879068544}
+--- !u!114 &2394098943732279408
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5419803123063778651}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 199017c271774b82b4a46cee72ffe7da, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CameraInputBlocker
+  blockCameraDrag: 1
+  blockCameraZoom: 1
 --- !u!1 &5432990626123935828
 GameObject:
   m_ObjectHideFlags: 0
@@ -1109,6 +1124,7 @@ GameObject:
   - component: {fileID: 326322757304930175}
   - component: {fileID: 1035547175673991616}
   - component: {fileID: 5524476979976175318}
+  - component: {fileID: 8367868963040232253}
   m_Layer: 5
   m_Name: Slot_01
   m_TagString: Untagged
@@ -1173,6 +1189,20 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleActionSlotRelationHoverRelay
   controller: {fileID: 0}
   slotView: {fileID: 1035547175673991616}
+--- !u!114 &8367868963040232253
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6258011057011504806}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 199017c271774b82b4a46cee72ffe7da, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::CameraInputBlocker
+  blockCameraDrag: 1
+  blockCameraZoom: 1
 --- !u!1 &6287200655192025838
 GameObject:
   m_ObjectHideFlags: 0

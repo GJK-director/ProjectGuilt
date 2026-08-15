@@ -26,15 +26,10 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     [SerializeField] private float slashEffectShakeDuration = 0.12f;
     [SerializeField] private float slashEffectShakeAmplitude = 0.08f;
     [SerializeField] private float slashEffectFadeOutDuration = 0.08f;
+    [SerializeField] private float slashImpactDelay = 0.05f;
     [SerializeField] private float afterimageLifetime = 0.18f;
     [SerializeField, Range(0f, 1f)]
     private float afterimageStartAlpha = 0.35f;
-    [SerializeField] private float slashLungeDistance = 0.20f;
-    [SerializeField] private float slashLungeForwardDuration = 0.05f;
-    [SerializeField] private int slashAfterimageCount = 2;
-    [SerializeField] private float slashAfterimageLifetime = 0.10f;
-    [SerializeField, Range(0f, 1f)]
-    private float slashAfterimageStartAlpha = 0.28f;
     [SerializeField] private float hitRecoilDistance = 0.15f;
     [SerializeField] private float hitRecoilDuration = 0.06f;
     [SerializeField] private float hitShakeAmplitude = 0.04f;
@@ -315,32 +310,22 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         bool playAttackEffect = true
     )
     {
-        bool impactReached = false;
-        Action impactHandler = () =>
-        {
-            impactReached = true;
-            onImpact?.Invoke();
-        };
-        IEnumerator lunge = PlaySlashLunge(
-            directionSign,
-            () => impactReached
-        );
+        // Default Slash只定义姿态、特效与命中时序；角色/卡牌专属位移由更高层组合。
+        _ = directionSign;
+        float safeImpactDelay = Mathf.Max(0f, slashImpactDelay);
+        float impactElapsed = 0f;
+        bool impactTriggered = false;
         IEnumerator effect = playAttackEffect
-            ? PlaySlashEffect(impactHandler)
+            ? PlaySlashEffect()
             : null;
-        bool lungeRunning = true;
         bool effectRunning = effect != null;
 
-        while (lungeRunning || effectRunning)
+        while (!impactTriggered || effectRunning)
         {
-            // 先推进前刺，使同帧 Impact 暂停时身体已经抵达对应位置。
-            if (lungeRunning)
+            if (!isActiveAndEnabled)
             {
-                lungeRunning = lunge.MoveNext();
-                if (!lungeRunning && !playAttackEffect && !impactReached)
-                {
-                    impactHandler();
-                }
+                ClearSlashEffect();
+                yield break;
             }
 
             if (effectRunning)
@@ -348,12 +333,23 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
                 effectRunning = effect.MoveNext();
             }
 
-            if (lungeRunning || effectRunning)
+            if (!impactTriggered && !presentationPaused)
+            {
+                impactElapsed = Mathf.Min(
+                    safeImpactDelay,
+                    impactElapsed + Time.deltaTime
+                );
+                if (impactElapsed >= safeImpactDelay)
+                {
+                    InvokeImpactOnce(onImpact, ref impactTriggered);
+                }
+            }
+
+            if (!impactTriggered || effectRunning)
             {
                 yield return null;
             }
         }
-
     }
 
     public IEnumerator PlayHitReaction(float recoilDirectionSign)
@@ -804,117 +800,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
 
         impactTriggered = true;
         onImpact?.Invoke();
-    }
-
-    private IEnumerator PlaySlashLunge(
-        float directionSign,
-        Func<bool> hasImpactOccurred
-    )
-    {
-        CacheBodyVisualState();
-        if (!bodyBaseStateCached || bodyVisualRoot == null)
-        {
-            yield break;
-        }
-
-        float normalizedDirection = directionSign >= 0f ? 1f : -1f;
-        Vector3 maximumOffset = Vector3.right *
-            normalizedDirection * slashLungeDistance;
-
-        bodyMotionOffset = Vector3.zero;
-        ApplyBodyVisualOffset();
-        int slashAfterimageTotal = Mathf.Max(0, slashAfterimageCount);
-        int nextSlashAfterimageIndex = 0;
-        SpawnSlashAfterimagesThroughProgress(
-            0f,
-            maximumOffset,
-            slashAfterimageTotal,
-            ref nextSlashAfterimageIndex
-        );
-
-        if (slashLungeForwardDuration <= 0f)
-        {
-            bodyMotionOffset = maximumOffset;
-            ApplyBodyVisualOffset();
-        }
-        else
-        {
-            float elapsed = 0f;
-            while (elapsed < slashLungeForwardDuration)
-            {
-                if (!isActiveAndEnabled)
-                {
-                    ClearBodyVisualOffsets();
-                    yield break;
-                }
-
-                if (presentationPaused)
-                {
-                    yield return null;
-                    continue;
-                }
-
-                elapsed = Mathf.Min(
-                    slashLungeForwardDuration,
-                    elapsed + Time.deltaTime
-                );
-                float normalizedProgress = Mathf.Clamp01(
-                    elapsed / slashLungeForwardDuration
-                );
-                if (hasImpactOccurred == null || !hasImpactOccurred())
-                {
-                    SpawnSlashAfterimagesThroughProgress(
-                        normalizedProgress,
-                        maximumOffset,
-                        slashAfterimageTotal,
-                        ref nextSlashAfterimageIndex
-                    );
-                }
-                float easedT = BattlePresentationEasing.EaseOutQuad(
-                    normalizedProgress
-                );
-                bodyMotionOffset = Vector3.zero +
-                    (maximumOffset - Vector3.zero) * easedT;
-                ApplyBodyVisualOffset();
-                yield return null;
-            }
-        }
-
-        bodyMotionOffset = maximumOffset;
-        ApplyBodyVisualOffset();
-    }
-
-    private void SpawnSlashAfterimagesThroughProgress(
-        float normalizedProgress,
-        Vector3 maximumOffset,
-        int totalCount,
-        ref int nextIndex
-    )
-    {
-        if (totalCount <= 0)
-        {
-            return;
-        }
-
-        float currentProgress = Mathf.Clamp01(normalizedProgress);
-        while (nextIndex < totalCount)
-        {
-            float spawnProgress = (float)nextIndex / totalCount;
-            if (spawnProgress >= 1f || spawnProgress > currentProgress)
-            {
-                break;
-            }
-
-            // 按固定进度捕获世界位置，避免低帧率改变残影数量与分布。
-            bodyMotionOffset = maximumOffset *
-                BattlePresentationEasing.EaseOutQuad(spawnProgress);
-            ApplyBodyVisualOffset();
-            SpawnAfterimageInternal(
-                slashAfterimageLifetime,
-                slashAfterimageStartAlpha
-            );
-            nextIndex++;
-        }
     }
 
     private void CacheBodyVisualState()
