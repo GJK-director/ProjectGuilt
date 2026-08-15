@@ -49,6 +49,7 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
         new Vector2(1920f, 1080f);
 
     static BattleActionSlotCardInfoPanelHost instance;
+    static int suppressedClickLockSourceID;
 
     [Header("预设体引用（可直接修改子节点 UI）")]
     [SerializeField] Canvas overlayCanvas;
@@ -92,6 +93,13 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
         }
 
         if (request.pointerEvent ==
+            BattleActionSlotCardInfoPointerEvent.ClickLock &&
+            ConsumeSuppressedClickLock(request.source))
+        {
+            return;
+        }
+
+        if (request.pointerEvent ==
             BattleActionSlotCardInfoPointerEvent.HoverExit ||
             request.pointerEvent ==
             BattleActionSlotCardInfoPointerEvent.SourceInvalidated)
@@ -105,12 +113,49 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
         host?.ReceivePointerRequest(request);
     }
 
+    // 战斗空白区右键时同时关闭友方与敌方的临时/锁定卡面。
+    public static void CloseAllPanels()
+    {
+        suppressedClickLockSourceID = 0;
+        instance?.CloseBothSides();
+    }
+
+    // 敌方槽位完成行动后，槽位 View 仍会继续发送本次左键的锁定通知。
+    // 记录该来源并只忽略紧随其后的这一条通知，普通敌方槽位点击仍可锁定查看。
+    public static void CloseAllPanelsAndSuppressNextClickLock(
+        GameObject source
+    )
+    {
+        SuppressNextClickLock(source);
+        instance?.CloseBothSides();
+    }
+
+    public static void SuppressNextClickLock(GameObject source)
+    {
+        suppressedClickLockSourceID = source != null
+            ? source.GetInstanceID()
+            : 0;
+    }
+
     public static bool IsActiveSource(GameObject source)
     {
         return instance != null &&
             source != null &&
             (instance.allyState.Tracks(source) ||
                 instance.enemyState.Tracks(source));
+    }
+
+    static bool ConsumeSuppressedClickLock(GameObject source)
+    {
+        if (suppressedClickLockSourceID == 0)
+        {
+            return false;
+        }
+
+        bool shouldSuppress = source != null &&
+            source.GetInstanceID() == suppressedClickLockSourceID;
+        suppressedClickLockSourceID = 0;
+        return shouldSuppress;
     }
 
     static BattleActionSlotCardInfoPanelHost GetOrCreateHost(
@@ -414,6 +459,12 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
         GetPanelView(enemySide)?.Hide();
     }
 
+    void CloseBothSides()
+    {
+        CloseSide(false);
+        CloseSide(true);
+    }
+
     void SetPanelPointerInside(bool enemySide, bool inside)
     {
         SideDisplayState state = enemySide ? enemyState : allyState;
@@ -549,11 +600,11 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
             rootHeight - topInset - bottomInset - margin * 2f
         );
         float panelHeight = Mathf.Min(
-            Mathf.Clamp(rootHeight * 0.72f, 300f, 820f),
+            Mathf.Clamp(rootHeight * 0.5f, 260f, 560f),
             availableHeight
         );
         float panelWidth = panelHeight * cardAspect;
-        float maxPanelWidth = Mathf.Max(180f, rootWidth * 0.46f);
+        float maxPanelWidth = Mathf.Max(176f, rootWidth * 0.36f);
         if (panelWidth > maxPanelWidth)
         {
             panelWidth = maxPanelWidth;

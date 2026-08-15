@@ -22,6 +22,7 @@ public static class BattleSecondaryInfoPrefabGenerator
     const string FontPath = "Assets/Fonts/TMP_Font_CN_Runtime.asset";
     const string SessionKey =
         "ProjectGuilt.BattleSecondaryInfoPrefabGenerator.CardOnlyV2Checked";
+    static readonly Vector2 SlotCardPanelSize = new Vector2(366f, 540f);
 
     [InitializeOnLoadMethod]
     static void ScheduleMissingAssetCheck()
@@ -109,6 +110,16 @@ public static class BattleSecondaryInfoPrefabGenerator
                 "artworkImage",
                 "cardPreviewPrefab",
                 "closeButton"
+            );
+            RectTransform sideRect =
+                sideViews[index].transform as RectTransform;
+            Require(
+                sideRect != null &&
+                Vector2.Distance(
+                    sideRect.sizeDelta,
+                    SlotCardPanelSize
+                ) <= 0.01f,
+                "行动槽位技能面板预设体尺寸必须为 366×540。"
             );
         }
 
@@ -219,12 +230,19 @@ public static class BattleSecondaryInfoPrefabGenerator
                 serializedView.FindProperty("cardPreviewPrefab");
             SerializedProperty closeButton =
                 serializedView.FindProperty("closeButton");
+            RectTransform panelRect =
+                views[index].transform as RectTransform;
             if (artwork == null ||
                 artwork.objectReferenceValue == null ||
                 cardPrefab == null ||
                 cardPrefab.objectReferenceValue == null ||
                 closeButton == null ||
                 closeButton.objectReferenceValue == null ||
+                panelRect == null ||
+                Vector2.Distance(
+                    panelRect.sizeDelta,
+                    SlotCardPanelSize
+                ) > 0.01f ||
                 views[index].transform.Find("InfoColumn") != null)
             {
                 return true;
@@ -405,7 +423,7 @@ public static class BattleSecondaryInfoPrefabGenerator
         panelRect.anchoredPosition = enemySide
             ? new Vector2(-24f, -24f)
             : new Vector2(24f, -24f);
-        panelRect.sizeDelta = new Vector2(520f, 767f);
+        panelRect.sizeDelta = SlotCardPanelSize;
 
         CanvasGroup canvasGroup = panel.GetComponent<CanvasGroup>();
         canvasGroup.interactable = true;
