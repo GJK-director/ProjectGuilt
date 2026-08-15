@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Text;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 public class BattleSimpleUIController : MonoBehaviour
@@ -127,6 +129,8 @@ public class BattleSimpleUIController : MonoBehaviour
     private readonly BattleCardSelectionController cardSelectionController =
         new BattleCardSelectionController();
     private BattleCardInteractionCoordinator cardInteractionCoordinator;
+    private readonly List<RaycastResult> planningCancelRaycastResults =
+        new List<RaycastResult>();
 
     private readonly string[] normalTestHandCardIDs =
     {
@@ -180,6 +184,81 @@ public class BattleSimpleUIController : MonoBehaviour
         {
             AdvanceScenePresentedTurnCycle();
         }
+
+        HandleBlankAreaRightClick();
+    }
+
+    private void HandleBlankAreaRightClick()
+    {
+        Mouse mouse = Mouse.current;
+        if (mouse == null || !mouse.rightButton.wasPressedThisFrame)
+        {
+            return;
+        }
+
+        if (!IsBattleBlankArea(mouse.position.ReadValue()))
+        {
+            return;
+        }
+
+        // 只清理规划期临时 UI，不修改已经写入 Runtime 的行动安排。
+        ClearPlanningSelectionAndHideCards();
+        BattleActionSlotCardInfoPanelHost.CloseAllPanels();
+    }
+
+    private bool IsBattleBlankArea(Vector2 screenPosition)
+    {
+        EventSystem eventSystem = EventSystem.current;
+        if (eventSystem == null)
+        {
+            return true;
+        }
+
+        planningCancelRaycastResults.Clear();
+        PointerEventData pointerData = new PointerEventData(eventSystem)
+        {
+            position = screenPosition
+        };
+        eventSystem.RaycastAll(pointerData, planningCancelRaycastResults);
+
+        for (int index = 0;
+            index < planningCancelRaycastResults.Count;
+            index++)
+        {
+            GameObject hitObject =
+                planningCancelRaycastResults[index].gameObject;
+            if (IsPlanningInteractionUI(hitObject))
+            {
+                planningCancelRaycastResults.Clear();
+                return false;
+            }
+        }
+
+        planningCancelRaycastResults.Clear();
+        return true;
+    }
+
+    private static bool IsPlanningInteractionUI(GameObject hitObject)
+    {
+        Transform current = hitObject != null
+            ? hitObject.transform
+            : null;
+        while (current != null)
+        {
+            GameObject currentObject = current.gameObject;
+            if (currentObject.GetComponent<Selectable>() != null ||
+                currentObject.GetComponent<IPointerClickHandler>() != null ||
+                currentObject.GetComponent<IBeginDragHandler>() != null ||
+                currentObject.GetComponent<IDragHandler>() != null ||
+                currentObject.GetComponent<IScrollHandler>() != null)
+            {
+                return true;
+            }
+
+            current = current.parent;
+        }
+
+        return false;
     }
 
     void OnDestroy()
@@ -2840,6 +2919,21 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
+        BattleActionSlot clickedRuntimeSlot =
+            BattleActionSlotManager.GetSlot(
+                runtimeState.actionSlots,
+                clickedSlotView.BoundCharacter,
+                clickedSlotView.FormalSlotIndex
+            );
+        if (clickedRuntimeSlot == null ||
+            clickedRuntimeSlot.cardState == null)
+        {
+            ClearPlanningSelectionAndHideCards();
+            lastLog = "已关闭角色卡牌栏";
+            RefreshView();
+            return;
+        }
+
         BattleActionAssignmentResult result;
         bool cancelled = BattleCardAssignmentRouter.TryCancelSelectedSlot(
             runtimeState,
@@ -2893,10 +2987,17 @@ public class BattleSimpleUIController : MonoBehaviour
 
         if (!outcome.isSuccess)
         {
+            BattleActionSlotCardInfoPanelHost.SuppressNextClickLock(
+                targetSlotView.gameObject
+            );
             SetText(logText, lastLog);
             return;
         }
 
+        BattleActionSlotCardInfoPanelHost
+            .CloseAllPanelsAndSuppressNextClickLock(
+                targetSlotView.gameObject
+            );
         CompleteSuccessfulCardAssignment();
         RefreshView();
     }
