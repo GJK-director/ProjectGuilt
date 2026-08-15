@@ -6,8 +6,8 @@ using UnityEngine.Serialization;
 /// 战斗场景灰盒 Camera 控制器。
 ///
 /// 当前功能：
-/// 1. 鼠标右键左右拖动：Camera 横向移动
-/// 2. 鼠标右键上下拖动：先纵向平移，背景侧到达极限后再 Orbit + Pitch
+/// 1. 鼠标左键左右拖动：Camera 横向移动，松开后保留短暂惯性
+/// 2. 鼠标左键上下拖动：先纵向平移，背景侧到达极限后再 Orbit + Pitch
 /// 3. 鼠标滚轮：改变圆弧半径，实现 Zoom
 ///
 /// 设计原则：
@@ -116,6 +116,23 @@ public class GrayboxBattleCameraController : MonoBehaviour
     [SerializeField]
     private float horizontalSensitivity = 0.003f;
 
+    [Tooltip("松开鼠标时保留的水平拖拽速度比例")]
+    [SerializeField, Range(0f, 1f)]
+    private float horizontalInertia = 0.35f;
+
+    [Tooltip("水平惯性每秒衰减强度，数值越大停止越快")]
+    [SerializeField, Min(0f)]
+    private float horizontalInertiaDamping = 6f;
+
+    [Tooltip("从单击判定为 Camera 拖拽所需的最小鼠标位移（像素）")]
+    [FormerlySerializedAs("horizontalDragThreshold")]
+    [SerializeField, Min(0f)]
+    private float cameraDragThreshold = 0.5f;
+
+    [Tooltip("Camera 拖拽输入追上鼠标目标所需的时间；数值越大，移动越有重量感")]
+    [SerializeField, Min(0f)]
+    private float cameraDragFollowTime = 0.18f;
+
 
     // =========================================================
     // Zoom
@@ -134,6 +151,33 @@ public class GrayboxBattleCameraController : MonoBehaviour
     [Tooltip("鼠标滚轮缩放灵敏度")]
     [SerializeField]
     private float zoomSensitivity = 0.005f;
+
+    [Tooltip("Camera 当前缩放半径追上滚轮目标半径所需的时间")]
+    [SerializeField, Min(0f)]
+    private float zoomFollowTime = 0.15f;
+
+
+    // =========================================================
+    // Idle Horizontal Sway
+    // =========================================================
+
+    [Header("水平待机呼吸")]
+
+    [Tooltip("是否启用实验性的 Camera 水平待机呼吸")]
+    [SerializeField]
+    private bool enableIdleHorizontalSway = false;
+
+    [Tooltip("待机呼吸相对玩家水平位置的最大偏移")]
+    [SerializeField, Min(0f)]
+    private float idleSwayAmplitude = 0.03f;
+
+    [Tooltip("待机呼吸完成一整轮左右往复所需的秒数")]
+    [SerializeField, Min(0f)]
+    private float idleSwayCycleDuration = 8f;
+
+    [Tooltip("玩家操作与待机呼吸之间淡入淡出所需的时间")]
+    [SerializeField, Min(0f)]
+    private float idleSwayBlendTime = 0.25f;
 
 
     // =========================================================
@@ -173,6 +217,15 @@ public class GrayboxBattleCameraController : MonoBehaviour
     [SerializeField]
     private float currentOrbitRadius;
 
+    [SerializeField]
+    private float targetOrbitRadius;
+
+    [SerializeField]
+    private float idleSwayOffset;
+
+    [SerializeField, Range(0f, 1f)]
+    private float idleSwayWeight;
+
     [SerializeField, Range(0f, 1f)]
     private float secondStageProgress;
 
@@ -191,6 +244,28 @@ public class GrayboxBattleCameraController : MonoBehaviour
     [SerializeField]
     private bool isInSecondStage;
 
+    [FormerlySerializedAs("isHorizontalDragging")]
+    [SerializeField]
+    private bool isCameraDragging;
+
+    [SerializeField]
+    private float horizontalVelocity;
+
+    private Vector2 cameraDragStartPosition;
+    private Vector2 rawDragPosition;
+    private Vector2 smoothedDragPosition;
+    private Vector2 dragFollowVelocity;
+    private bool isCameraDragFollowing;
+    private float pendingHorizontalInertiaVelocity;
+    private float zoomFollowVelocity;
+    private float idleSwayElapsed;
+    private float idleSwayBlendVelocity;
+
+    private const float HorizontalVelocityStopThreshold = 0.001f;
+    private const float DragFollowStopThreshold = 0.01f;
+    private const float ZoomFollowStopThreshold = 0.0001f;
+    private const float IdleSwayWeightStopThreshold = 0.0001f;
+
 
     // =========================================================
     // Unity
@@ -206,6 +281,13 @@ public class GrayboxBattleCameraController : MonoBehaviour
 
         ResetToDefault();
     }
+
+    private void OnDisable()
+    {
+        ClearCameraDragState();
+        ClearIdleHorizontalSway();
+    }
+
     private void Update()
     {
         Mouse mouse = Mouse.current;
@@ -214,17 +296,14 @@ public class GrayboxBattleCameraController : MonoBehaviour
             return;
 
 
+        Vector2 delta = mouse.delta.ReadValue();
+
+
         // -----------------------------------------------------
-        // 右键拖动 Camera
+        // 左键统一控制水平与纵向 Camera 拖拽。
         // -----------------------------------------------------
 
-        if (mouse.rightButton.isPressed)
-        {
-            Vector2 delta = mouse.delta.ReadValue();
-
-            UpdateHorizontal(delta.x);
-            UpdateVertical(delta.y);
-        }
+        UpdateCameraDragInput(mouse, delta);
 
 
         // -----------------------------------------------------
@@ -235,6 +314,8 @@ public class GrayboxBattleCameraController : MonoBehaviour
         float scrollY = mouse.scroll.ReadValue().y;
 
         UpdateZoom(scrollY);
+
+        UpdateIdleHorizontalSway();
 
 
         // -----------------------------------------------------
@@ -256,20 +337,223 @@ public class GrayboxBattleCameraController : MonoBehaviour
     /// 不产生 Yaw，
     /// 所以 Camera 始终保持正面观看战斗舞台。
     /// </summary>
-    private void UpdateHorizontal(float mouseDeltaX)
+    private void UpdateCameraDragInput(
+        Mouse mouse,
+        Vector2 mouseDelta
+    )
+    {
+        if (mouse.leftButton.wasPressedThisFrame)
+        {
+            BeginCameraDrag(mouse.position.ReadValue());
+        }
+
+        if (mouse.leftButton.isPressed)
+        {
+            if (!isCameraDragging)
+            {
+                Vector2 dragDelta =
+                    mouse.position.ReadValue()
+                    - cameraDragStartPosition;
+                isCameraDragging = dragDelta.magnitude >= Mathf.Max(
+                    0f,
+                    cameraDragThreshold
+                );
+
+                if (isCameraDragging)
+                    isCameraDragFollowing = true;
+            }
+
+            if (isCameraDragging)
+            {
+                rawDragPosition += mouseDelta;
+                UpdateCameraDragFollow();
+            }
+
+            return;
+        }
+
+        if (isCameraDragging)
+        {
+            pendingHorizontalInertiaVelocity =
+                horizontalVelocity;
+            isCameraDragging = false;
+        }
+
+        if (isCameraDragFollowing)
+        {
+            if (UpdateCameraDragFollow())
+                CompleteCameraDragFollow();
+
+            return;
+        }
+
+        UpdateHorizontalInertia();
+    }
+
+    private void BeginCameraDrag(Vector2 mousePosition)
+    {
+        isCameraDragging = false;
+        isCameraDragFollowing = false;
+        horizontalVelocity = 0f;
+        pendingHorizontalInertiaVelocity = 0f;
+        cameraDragStartPosition = mousePosition;
+        rawDragPosition = Vector2.zero;
+        smoothedDragPosition = Vector2.zero;
+        dragFollowVelocity = Vector2.zero;
+    }
+
+    private bool UpdateCameraDragFollow()
+    {
+        float deltaTime = Time.unscaledDeltaTime;
+        Vector2 nextSmoothedPosition;
+        if (cameraDragFollowTime <= Mathf.Epsilon ||
+            deltaTime <= Mathf.Epsilon)
+        {
+            nextSmoothedPosition = rawDragPosition;
+            dragFollowVelocity = Vector2.zero;
+        }
+        else
+        {
+            nextSmoothedPosition = Vector2.SmoothDamp(
+                smoothedDragPosition,
+                rawDragPosition,
+                ref dragFollowVelocity,
+                cameraDragFollowTime,
+                Mathf.Infinity,
+                deltaTime
+            );
+        }
+
+        bool hasCaughtUp =
+            (rawDragPosition - nextSmoothedPosition).sqrMagnitude
+                <= DragFollowStopThreshold
+                * DragFollowStopThreshold &&
+            dragFollowVelocity.sqrMagnitude
+                <= DragFollowStopThreshold
+                * DragFollowStopThreshold;
+        if (hasCaughtUp)
+        {
+            nextSmoothedPosition = rawDragPosition;
+            dragFollowVelocity = Vector2.zero;
+        }
+
+        Vector2 processedDelta =
+            nextSmoothedPosition - smoothedDragPosition;
+        smoothedDragPosition = nextSmoothedPosition;
+
+        // X/Y 共用同一个 Follow 结果，再分别进入既有 Camera 逻辑。
+        UpdateHorizontalDrag(processedDelta.x);
+        UpdateVertical(processedDelta.y);
+
+        return hasCaughtUp;
+    }
+
+    private void CompleteCameraDragFollow()
+    {
+        isCameraDragFollowing = false;
+        rawDragPosition = Vector2.zero;
+        smoothedDragPosition = Vector2.zero;
+        dragFollowVelocity = Vector2.zero;
+
+        horizontalVelocity =
+            pendingHorizontalInertiaVelocity
+            * Mathf.Clamp01(horizontalInertia);
+        pendingHorizontalInertiaVelocity = 0f;
+    }
+
+    private void ClearCameraDragState()
+    {
+        isCameraDragging = false;
+        isCameraDragFollowing = false;
+        horizontalVelocity = 0f;
+        pendingHorizontalInertiaVelocity = 0f;
+        cameraDragStartPosition = Vector2.zero;
+        rawDragPosition = Vector2.zero;
+        smoothedDragPosition = Vector2.zero;
+        dragFollowVelocity = Vector2.zero;
+    }
+
+    private void UpdateHorizontalDrag(float mouseDeltaX)
     {
         float direction = invertHorizontal ? -1f : 1f;
-
-        currentX +=
-            mouseDeltaX
+        float previousX = currentX;
+        float requestedX = currentX
+            + mouseDeltaX
             * horizontalSensitivity
             * direction;
+        float safeLimit = Mathf.Abs(horizontalLimit);
 
         currentX = Mathf.Clamp(
-            currentX,
-            -horizontalLimit,
-            horizontalLimit
+            requestedX,
+            -safeLimit,
+            safeLimit
         );
+
+        if (!Mathf.Approximately(currentX, requestedX))
+        {
+            horizontalVelocity = 0f;
+            return;
+        }
+
+        float deltaTime = Time.unscaledDeltaTime;
+        float actualMovement = currentX - previousX;
+        if (Mathf.Abs(actualMovement) > Mathf.Epsilon &&
+            deltaTime > Mathf.Epsilon)
+        {
+            horizontalVelocity = actualMovement / deltaTime;
+            return;
+        }
+
+        DampHorizontalVelocity(deltaTime);
+    }
+
+    private void UpdateHorizontalInertia()
+    {
+        if (Mathf.Abs(horizontalVelocity)
+            <= HorizontalVelocityStopThreshold)
+        {
+            horizontalVelocity = 0f;
+            return;
+        }
+
+        float deltaTime = Time.unscaledDeltaTime;
+        if (deltaTime <= Mathf.Epsilon)
+            return;
+
+        float safeLimit = Mathf.Abs(horizontalLimit);
+        float requestedX = currentX
+            + horizontalVelocity * deltaTime;
+        currentX = Mathf.Clamp(
+            requestedX,
+            -safeLimit,
+            safeLimit
+        );
+
+        // 硬边界不保留朝外速度，避免越界、回弹或持续积累。
+        if (!Mathf.Approximately(currentX, requestedX))
+        {
+            horizontalVelocity = 0f;
+            return;
+        }
+
+        DampHorizontalVelocity(deltaTime);
+    }
+
+    private void DampHorizontalVelocity(float deltaTime)
+    {
+        float damping = Mathf.Max(0f, horizontalInertiaDamping);
+        if (damping <= Mathf.Epsilon)
+        {
+            horizontalVelocity = 0f;
+            return;
+        }
+
+        horizontalVelocity *= Mathf.Exp(-damping * deltaTime);
+        if (Mathf.Abs(horizontalVelocity)
+            <= HorizontalVelocityStopThreshold)
+        {
+            horizontalVelocity = 0f;
+        }
     }
 
 
@@ -583,16 +867,45 @@ public class GrayboxBattleCameraController : MonoBehaviour
     /// </summary>
     private void UpdateZoom(float scrollY)
     {
-        if (Mathf.Abs(scrollY) < 0.01f)
-            return;
+        if (Mathf.Abs(scrollY) >= 0.01f)
+        {
+            float direction = invertZoom ? -1f : 1f;
+            targetOrbitRadius -=
+                scrollY
+                * zoomSensitivity
+                * direction;
 
-        float direction = invertZoom ? -1f : 1f;
+            // Target 始终处于硬边界内，不积累隐藏的越界输入。
+            targetOrbitRadius = Mathf.Clamp(
+                targetOrbitRadius,
+                minOrbitRadius,
+                maxOrbitRadius
+            );
+        }
+
+        UpdateZoomFollow();
+    }
+
+    private void UpdateZoomFollow()
+    {
         float previousOrbitRadius = currentOrbitRadius;
-
-        currentOrbitRadius -=
-            scrollY
-            * zoomSensitivity
-            * direction;
+        float deltaTime = Time.unscaledDeltaTime;
+        if (zoomFollowTime <= Mathf.Epsilon)
+        {
+            currentOrbitRadius = targetOrbitRadius;
+            zoomFollowVelocity = 0f;
+        }
+        else if (deltaTime > Mathf.Epsilon)
+        {
+            currentOrbitRadius = Mathf.SmoothDamp(
+                currentOrbitRadius,
+                targetOrbitRadius,
+                ref zoomFollowVelocity,
+                zoomFollowTime,
+                Mathf.Infinity,
+                deltaTime
+            );
+        }
 
         currentOrbitRadius = Mathf.Clamp(
             currentOrbitRadius,
@@ -600,15 +913,105 @@ public class GrayboxBattleCameraController : MonoBehaviour
             maxOrbitRadius
         );
 
+        if (Mathf.Abs(currentOrbitRadius - targetOrbitRadius)
+            <= ZoomFollowStopThreshold)
+        {
+            currentOrbitRadius = targetOrbitRadius;
+            zoomFollowVelocity = 0f;
+        }
+
+        float actualRadiusDelta =
+            currentOrbitRadius - previousOrbitRadius;
+
         if (isInSecondStage)
         {
             secondStageOrbitRadius = Mathf.Max(
                 Mathf.Epsilon,
                 secondStageOrbitRadius
-                + currentOrbitRadius
-                - previousOrbitRadius
+                + actualRadiusDelta
             );
         }
+    }
+
+
+    // =========================================================
+    // Idle Horizontal Sway
+    // =========================================================
+
+    private void UpdateIdleHorizontalSway()
+    {
+        float deltaTime = Time.unscaledDeltaTime;
+        if (enableIdleHorizontalSway &&
+            idleSwayCycleDuration > Mathf.Epsilon &&
+            deltaTime > Mathf.Epsilon)
+        {
+            idleSwayElapsed = Mathf.Repeat(
+                idleSwayElapsed + deltaTime,
+                idleSwayCycleDuration
+            );
+        }
+
+        bool hasActiveHorizontalInput =
+            isCameraDragging ||
+            isCameraDragFollowing ||
+            Mathf.Abs(horizontalVelocity)
+                > HorizontalVelocityStopThreshold;
+        float targetWeight =
+            enableIdleHorizontalSway &&
+            !hasActiveHorizontalInput
+                ? 1f
+                : 0f;
+
+        if (idleSwayBlendTime <= Mathf.Epsilon)
+        {
+            idleSwayWeight = targetWeight;
+            idleSwayBlendVelocity = 0f;
+        }
+        else if (deltaTime > Mathf.Epsilon)
+        {
+            idleSwayWeight = Mathf.SmoothDamp(
+                idleSwayWeight,
+                targetWeight,
+                ref idleSwayBlendVelocity,
+                idleSwayBlendTime,
+                Mathf.Infinity,
+                deltaTime
+            );
+        }
+
+        idleSwayWeight = Mathf.Clamp01(idleSwayWeight);
+        if (Mathf.Abs(idleSwayWeight - targetWeight)
+            <= IdleSwayWeightStopThreshold)
+        {
+            idleSwayWeight = targetWeight;
+            idleSwayBlendVelocity = 0f;
+        }
+
+        if (!enableIdleHorizontalSway &&
+            idleSwayWeight <= IdleSwayWeightStopThreshold)
+        {
+            idleSwayOffset = 0f;
+            return;
+        }
+
+        float phase = idleSwayCycleDuration > Mathf.Epsilon
+            ? idleSwayElapsed
+                / idleSwayCycleDuration
+                * Mathf.PI
+                * 2f
+            : 0f;
+        idleSwayOffset =
+            Mathf.Sin(phase)
+            * idleSwayAmplitude
+            * idleSwayWeight;
+    }
+
+    private void ClearIdleHorizontalSway()
+    {
+        idleSwayOffset = 0f;
+        idleSwayWeight = 0f;
+        idleSwayElapsed = 0f;
+        idleSwayBlendVelocity = 0f;
     }
 
 
@@ -676,9 +1079,15 @@ public class GrayboxBattleCameraController : MonoBehaviour
 
         // Horizontal 继续让 Camera 与 Pivot 一起沿世界 X 平移；
         // Pivot 的 Y/Z 始终保持启动时记录的舞台空间基准。
+        float safeHorizontalLimit = Mathf.Abs(horizontalLimit);
+        float displayedX = Mathf.Clamp(
+            currentX + idleSwayOffset,
+            -safeHorizontalLimit,
+            safeHorizontalLimit
+        );
         orbitPivot.position =
             basePivotPosition
-            + Vector3.right * currentX;
+            + Vector3.right * displayedX;
 
         // 第二阶段始终直接使用 Inspector 绑定的真实 Pivot。
         orbitCenter = orbitPivot.position;
@@ -737,6 +1146,8 @@ public class GrayboxBattleCameraController : MonoBehaviour
     public void ResetToDefault()
     {
         currentX = 0f;
+        ClearCameraDragState();
+        ClearIdleHorizontalSway();
         currentVerticalPan = 0f;
 
         currentOrbitAngle =
@@ -747,6 +1158,8 @@ public class GrayboxBattleCameraController : MonoBehaviour
 
         currentOrbitRadius =
             defaultOrbitRadius;
+        targetOrbitRadius = currentOrbitRadius;
+        zoomFollowVelocity = 0f;
 
         secondStageStartOrbitAngle =
             defaultOrbitAngle;
