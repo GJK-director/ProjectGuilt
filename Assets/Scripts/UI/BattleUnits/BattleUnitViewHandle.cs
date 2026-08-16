@@ -18,6 +18,8 @@ public sealed class BattleUnitViewHandle
     public GameObject WorldRoot { get; }
     public SpriteRenderer WorldRenderer { get; }
     public BattleCharacterPresentationController PresentationController { get; }
+    public Vector3 InitialWorldPosition { get; }
+    public Quaternion InitialWorldRotation { get; }
     public Transform HeadUIAnchor { get; }
     public Transform FootUIAnchor { get; }
     public Transform CenterAnchor { get; }
@@ -55,6 +57,12 @@ public sealed class BattleUnitViewHandle
         WorldRoot = worldRoot;
         WorldRenderer = worldRenderer;
         PresentationController = presentationController;
+        InitialWorldPosition = worldRoot != null
+            ? worldRoot.transform.position
+            : Vector3.zero;
+        InitialWorldRotation = worldRoot != null
+            ? worldRoot.transform.rotation
+            : Quaternion.identity;
         HeadUIAnchor = headUIAnchor;
         FootUIAnchor = footUIAnchor;
         CenterAnchor = centerAnchor;

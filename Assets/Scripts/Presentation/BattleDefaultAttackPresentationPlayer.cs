@@ -5,6 +5,8 @@ using UnityEngine;
 // 协调普通攻击者与目标的局部表现，不读取或修改任何战斗规则数据。
 public sealed class BattleDefaultAttackPresentationPlayer : MonoBehaviour
 {
+    [SerializeField] private float preAttackHoldDuration = 0.12f;
+    [SerializeField] private float postImpactHoldDuration = 0.16f;
     [SerializeField] private float hitStopDuration = 0.08f;
     [SerializeField] private float minimumAttackPresentationDuration = 0.20f;
 
@@ -96,7 +98,32 @@ public sealed class BattleDefaultAttackPresentationPlayer : MonoBehaviour
 
     private IEnumerator RunDefaultAttackPresentation(int version)
     {
+        // Default Attack 的蓄势属于高层时序，不写入通用 Slash 动作。
+        if (attacker != null)
+        {
+            attacker.SetIdle();
+        }
+
+        if (target != null)
+        {
+            target.SetIdle();
+        }
+
+        float preAttackElapsed = 0f;
+        while (preAttackElapsed < Mathf.Max(0f, preAttackHoldDuration) &&
+            IsCurrentPlayback(version))
+        {
+            preAttackElapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (!IsCurrentPlayback(version))
+        {
+            yield break;
+        }
+
         float elapsed = 0f;
+        float postImpactElapsed = 0f;
         if (attacker != null)
         {
             attacker.SetSlash();
@@ -117,11 +144,18 @@ public sealed class BattleDefaultAttackPresentationPlayer : MonoBehaviour
                 ReachVisualImpact(version);
             }
 
+            if (visualImpactInvoked)
+            {
+                postImpactElapsed += Time.deltaTime;
+            }
+
             bool minimumDurationReached = elapsed >=
                 Mathf.Max(0f, minimumAttackPresentationDuration);
+            bool postImpactHoldReached = postImpactElapsed >=
+                Mathf.Max(0f, postImpactHoldDuration);
             if (visualImpactInvoked && slashFinished &&
                 hitReactionFinished && hitStopFinished &&
-                minimumDurationReached)
+                minimumDurationReached && postImpactHoldReached)
             {
                 break;
             }

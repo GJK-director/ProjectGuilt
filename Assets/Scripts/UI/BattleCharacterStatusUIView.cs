@@ -16,6 +16,18 @@ public class BattleCharacterStatusUIView : MonoBehaviour
     private Action<BattleActionSlotUIView> slotLeftClickHandler;
     private Action<BattleActionSlotUIView> slotRightClickHandler;
     private Action<BattleSelfActionDropZone> selfTargetClickHandler;
+    private GameObject headStatusGroup;
+    private bool warnedMissingHeadStatusGroup;
+
+    public void SetHeadStatusVisible(bool visible)
+    {
+        GameObject resolvedHeadStatusGroup = ResolveHeadStatusGroup();
+        if (resolvedHeadStatusGroup != null &&
+            resolvedHeadStatusGroup.activeSelf != visible)
+        {
+            resolvedHeadStatusGroup.SetActive(visible);
+        }
+    }
 
     public void SetSlotClickHandler(Action<BattleActionSlotUIView> handler)
     {
@@ -232,5 +244,36 @@ public class BattleCharacterStatusUIView : MonoBehaviour
                 isEnemy ? null : slotRightClickHandler
             );
         }
+    }
+
+    private GameObject ResolveHeadStatusGroup()
+    {
+        if (headStatusGroup != null)
+        {
+            return headStatusGroup;
+        }
+
+        Transform candidate = slot01View != null
+            ? slot01View.transform.parent
+            : null;
+        bool sharesHeadGroup = candidate != null &&
+            (slot02View == null || slot02View.transform.parent == candidate) &&
+            (speedText == null || speedText.transform.parent == candidate);
+        if (sharesHeadGroup)
+        {
+            // 三个既有引用共同确认HeadSlotGroup，不增加Prefab序列化接线。
+            headStatusGroup = candidate.gameObject;
+            return headStatusGroup;
+        }
+
+        if (!warnedMissingHeadStatusGroup)
+        {
+            warnedMissingHeadStatusGroup = true;
+            Debug.LogWarning(
+                "角色状态UI无法解析统一的HeadSlotGroup，已跳过阶段显隐。",
+                this
+            );
+        }
+        return null;
     }
 }

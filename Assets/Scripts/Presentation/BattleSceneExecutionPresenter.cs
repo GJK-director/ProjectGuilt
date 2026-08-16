@@ -40,7 +40,10 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     [SerializeField]
     private BattleDefaultAttackPresentationPlayer defaultAttackPresentationPlayer;
     [SerializeField] private bool verboseLogging = false;
+    [SerializeField] private float actionLeadInDuration = 0.20f;
     [SerializeField] private float actionBeginApproachDuration = 0.35f;
+    [SerializeField] private float clashReadyHoldDuration = 0.15f;
+    [SerializeField] private float nextActionGapDuration = 0.18f;
     [SerializeField] private float clashReadyGap = 2.8f;
 
     private ActionPresentationContext activeContext;
@@ -181,45 +184,22 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         float horizontalDistance = Mathf.Abs(horizontalDelta);
         float safeGap = Mathf.Max(0f, clashReadyGap);
 
-        if (horizontalDistance <= safeGap)
-        {
-            RestoreClashActorsToIdle(context);
-            LogApproachFallback(request, "双方已处于ClashReady距离内");
-            return false;
-        }
-
-        float directionSign = Mathf.Sign(horizontalDelta);
-        float midpointX = (sideAStart.x + sideBStart.x) * 0.5f;
         Vector3 sideATarget = sideAStart;
         Vector3 sideBTarget = sideBStart;
-        sideATarget.x = midpointX - directionSign * safeGap * 0.5f;
-        sideBTarget.x = midpointX + directionSign * safeGap * 0.5f;
-
-        context.SideAPresentation.SetSprint();
-        context.SideBPresentation.SetSprint();
-        LogApproachStarted(
-            request,
-            context,
-            sideAStart,
-            sideATarget,
-            sideBStart,
-            sideBTarget,
-            safeGap
-        );
-
-        if (actionBeginApproachDuration <= 0f)
+        bool shouldApproach = horizontalDistance > safeGap;
+        if (shouldApproach)
         {
-            sideARoot.position = sideATarget;
-            sideBRoot.position = sideBTarget;
-            RestoreClashActorsToIdle(context);
-            LogApproachCompleted(request.RequestId);
-            completion.TryComplete(request.RequestId);
-            return true;
+            float directionSign = Mathf.Sign(horizontalDelta);
+            float midpointX = (sideAStart.x + sideBStart.x) * 0.5f;
+            sideATarget.x = midpointX - directionSign * safeGap * 0.5f;
+            sideBTarget.x = midpointX + directionSign * safeGap * 0.5f;
         }
 
+        // ActionBegin 的阅读停顿、接敌和 ClashReady 停顿由同一请求协程持有。
+        RestoreClashActorsToIdle(context);
         activePresentationRequestId = request.RequestId;
         activePresentationCoroutine = StartCoroutine(
-            RunAttackVsAttackApproach(
+            RunAttackVsAttackActionBegin(
                 request.RequestId,
                 completion,
                 context,
@@ -228,13 +208,15 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 sideAStart,
                 sideBStart,
                 sideATarget,
-                sideBTarget
+                sideBTarget,
+                shouldApproach,
+                safeGap
             )
         );
         return true;
     }
 
-    private IEnumerator RunAttackVsAttackApproach(
+    private IEnumerator RunAttackVsAttackActionBegin(
         long requestId,
         BattlePresentationCompletion completion,
         ActionPresentationContext context,
@@ -243,11 +225,63 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         Vector3 sideAStart,
         Vector3 sideBStart,
         Vector3 sideATarget,
-        Vector3 sideBTarget
+        Vector3 sideBTarget,
+        bool shouldApproach,
+        float safeGap
     )
     {
+        float leadInElapsed = 0f;
+        while (leadInElapsed < Mathf.Max(0f, actionLeadInDuration))
+        {
+            if (!IsCurrentPresentationRequest(requestId))
+            {
+                yield break;
+            }
+
+            leadInElapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (!IsCurrentPresentationRequest(requestId))
+        {
+            yield break;
+        }
+
+        if (sideARoot == null || sideBRoot == null ||
+            context.SideAPresentation == null ||
+            context.SideBPresentation == null)
+        {
+            FinishApproachWithFallback(
+                requestId,
+                completion,
+                context,
+                "Lead-In后角色表现引用失效"
+            );
+            yield break;
+        }
+
+        if (shouldApproach)
+        {
+            context.SideAPresentation.SetSprint();
+            context.SideBPresentation.SetSprint();
+            LogApproachStarted(
+                requestId,
+                context,
+                sideAStart,
+                sideATarget,
+                sideBStart,
+                sideBTarget,
+                safeGap
+            );
+        }
+        else
+        {
+            LogApproachFallback(requestId, "双方已处于ClashReady距离内");
+        }
+
         float elapsed = 0f;
-        while (elapsed < actionBeginApproachDuration)
+        float safeApproachDuration = Mathf.Max(0f, actionBeginApproachDuration);
+        while (shouldApproach && elapsed < safeApproachDuration)
         {
             if (!IsCurrentPresentationRequest(requestId))
             {
@@ -269,7 +303,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
             elapsed += Time.deltaTime;
             float linearT = Mathf.Clamp01(
-                elapsed / actionBeginApproachDuration
+                elapsed / safeApproachDuration
             );
             float easedT = BattlePresentationEasing.EaseOutQuad(linearT);
             sideARoot.position = sideAStart +
@@ -291,6 +325,24 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         RestoreClashActorsToIdle(context);
+
+        float holdElapsed = 0f;
+        while (holdElapsed < Mathf.Max(0f, clashReadyHoldDuration))
+        {
+            if (!IsCurrentPresentationRequest(requestId))
+            {
+                yield break;
+            }
+
+            holdElapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (!IsCurrentPresentationRequest(requestId))
+        {
+            yield break;
+        }
+
         activePresentationCoroutine = null;
         activePresentationRequestId = 0L;
         LogApproachCompleted(requestId);
@@ -415,7 +467,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         RefreshRequestState(context, request);
         LogRequest(request, context);
 
-        if (!context.DefaultAttackStarted || context.DefaultAttackFinished)
+        if (!context.DefaultAttackStarted)
         {
             CompleteRequest(request, completion);
             activeContext = null;
@@ -562,6 +614,19 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             yield break;
         }
 
+        float gapElapsed = 0f;
+        while (gapElapsed < Mathf.Max(0f, nextActionGapDuration))
+        {
+            if (!IsCurrentPresentationRequest(requestId) ||
+                !IsOwnedDefaultAttackContext(context, executionItem))
+            {
+                yield break;
+            }
+
+            gapElapsed += Time.deltaTime;
+            yield return null;
+        }
+
         activePresentationCoroutine = null;
         activePresentationRequestId = 0L;
         completion.TryComplete(requestId);
@@ -697,7 +762,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     }
 
     private void LogApproachStarted(
-        BattlePresentationRequest request,
+        long requestId,
         ActionPresentationContext context,
         Vector3 sideAStart,
         Vector3 sideATarget,
@@ -712,7 +777,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         Debug.Log(
-            "[ScenePresenter] RequestId=" + request.RequestId +
+            "[ScenePresenter] RequestId=" + requestId +
             " / ActionBegin Approach Start" +
             " / SideA=" + GetRuntimeUnitID(context.SideAActor) +
             " StartX=" + sideAStart.x +

@@ -138,6 +138,37 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
         }
     }
 
+    public void SetPlanningCharacterUIVisible(bool visible)
+    {
+        for (int index = 0; index < generatedHandles.Count; index++)
+        {
+            generatedHandles[index]?.StatusView?.SetHeadStatusVisible(visible);
+        }
+    }
+
+    public void RestoreGeneratedUnitWorldPoses()
+    {
+        for (int index = 0; index < generatedHandles.Count; index++)
+        {
+            BattleUnitViewHandle handle = generatedHandles[index];
+            if (handle == null)
+            {
+                continue;
+            }
+
+            if (handle.WorldRoot != null)
+            {
+                // 使用每个Runtime Unit生成完成后的真实姿态，不依赖阵营或数量。
+                handle.WorldRoot.transform.SetPositionAndRotation(
+                    handle.InitialWorldPosition,
+                    handle.InitialWorldRotation
+                );
+            }
+
+            handle.PresentationController?.ResetToStableIdlePresentation();
+        }
+    }
+
     public BattleUnitViewHandle GetHandle(CharacterData runtimeUnit)
     {
         for (int index = 0; index < generatedHandles.Count; index++)

@@ -68,7 +68,6 @@ public class BattleSimpleUIController : MonoBehaviour
     [SerializeField] private Button selectPassiveGuardModeButton;
     [SerializeField] private Button confirmAssignSelectedActionButton;
     [SerializeField] private Button clearSelectionButton;
-    [SerializeField] private Button battleStartButton;
     [SerializeField] private Button createExecutionPlanButton;
     [SerializeField] private Button executePlanButton;
     [SerializeField] private Button endTurnButton;
@@ -180,12 +179,53 @@ public class BattleSimpleUIController : MonoBehaviour
 
     void Update()
     {
+        HandleBattleSpaceInput();
+
         if (isScenePresentedTurnCycleRunning)
         {
             AdvanceScenePresentedTurnCycle();
         }
 
         HandleBlankAreaRightClick();
+    }
+
+    private void HandleBattleSpaceInput()
+    {
+        Keyboard keyboard = Keyboard.current;
+        if (keyboard == null || !keyboard.spaceKey.wasPressedThisFrame)
+        {
+            return;
+        }
+
+        if (isScenePresentedTurnCycleRunning)
+        {
+            BattleExecutionRunner runner = lifecycleController != null
+                ? lifecycleController.ExecutionRunner
+                : null;
+            if (runner != null && runner.IsWaitingForInput)
+            {
+                if (lifecycleController.TryRequestManualRoll(
+                        out string failureMessage))
+                {
+                    lastLog = "已确认本次手动拼点";
+                }
+                else
+                {
+                    lastLog = failureMessage;
+                }
+            }
+
+            // 执行期间的Space只服务于Manual Roll，不启动或快进其他流程。
+            return;
+        }
+
+        if (runtimeState != null &&
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.Executing)
+        {
+            return;
+        }
+
+        TryStartCompleteTurnCycle();
     }
 
     private void HandleBlankAreaRightClick()
@@ -1354,11 +1394,6 @@ public class BattleSimpleUIController : MonoBehaviour
             clearSelectionButton.onClick.AddListener(OnClickClearSelection);
         }
 
-        if (battleStartButton != null)
-        {
-            battleStartButton.onClick.AddListener(OnClickBattleStart);
-        }
-
         if (createExecutionPlanButton != null)
         {
             createExecutionPlanButton.onClick.AddListener(OnClickCreateExecutionPlan);
@@ -1482,11 +1517,6 @@ public class BattleSimpleUIController : MonoBehaviour
         if (clearSelectionButton != null)
         {
             clearSelectionButton.onClick.RemoveListener(OnClickClearSelection);
-        }
-
-        if (battleStartButton != null)
-        {
-            battleStartButton.onClick.RemoveListener(OnClickBattleStart);
         }
 
         if (createExecutionPlanButton != null)
@@ -2155,19 +2185,7 @@ public class BattleSimpleUIController : MonoBehaviour
         terminalInteractionStateCleared = true;
     }
 
-    private void RefreshBattleStartButtonState()
-    {
-        if (battleStartButton == null)
-        {
-            return;
-        }
-
-        battleStartButton.interactable =
-            !isRunningCompleteTurnCycle &&
-            BattleAutomaticTurnCycle.CanStart(runtimeState);
-    }
-
-    private void OnClickBattleStart()
+    private void TryStartCompleteTurnCycle()
     {
         if (isRunningCompleteTurnCycle)
         {
@@ -2186,7 +2204,6 @@ public class BattleSimpleUIController : MonoBehaviour
         isRunningCompleteTurnCycle = true;
         ClearPlanningSelectionAndHideCards();
         actionRelationLineController?.ClearAll();
-        RefreshBattleStartButtonState();
 
         if (sceneExecutionPresenter != null)
         {
@@ -2270,7 +2287,7 @@ public class BattleSimpleUIController : MonoBehaviour
         BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
 
         BattleRollGateSettings settings = new BattleRollGateSettings(
-            BattleRollMode.Auto,
+            BattleRollMode.Manual,
             0f,
             0f
         );
@@ -2361,6 +2378,12 @@ public class BattleSimpleUIController : MonoBehaviour
         lastLog = result != null
             ? result.message
             : "完整回合收尾失败：结果为空";
+
+        if (result != null && result.advancedToNextTurn)
+        {
+            // Prepare已完成，先恢复世界姿态，再刷新下一轮规划UI与关系线。
+            unitViewSpawner?.RestoreGeneratedUnitWorldPoses();
+        }
 
         if (result != null &&
             (result.advancedToNextTurn || result.battleEnded))
@@ -2556,6 +2579,7 @@ public class BattleSimpleUIController : MonoBehaviour
                 out failureMessage
             ))
         {
+            unitViewSpawner?.RestoreGeneratedUnitWorldPoses();
             ClearPlanningSelectionAndHideCards();
             lastLog = "下一回合已准备，阶段：Prepare";
         }
@@ -2587,11 +2611,27 @@ public class BattleSimpleUIController : MonoBehaviour
         SetText(logText, lastLog);
         RefreshFixedStatusViews();
         RefreshCharacterStatusViews();
+        SynchronizeCharacterUIVisibilityWithLifecycle();
         RefreshActionSlotIntentViews();
         RefreshActionRelations();
         RefreshTestCardView();
         RefreshTestCardHandView();
-        RefreshBattleStartButtonState();
+    }
+
+    private void SynchronizeCharacterUIVisibilityWithLifecycle()
+    {
+        if (unitViewSpawner == null || !unitViewSpawner.IsSpawned)
+        {
+            return;
+        }
+
+        bool planningVisible = runtimeState != null &&
+            !runtimeState.IsBattleEnded &&
+            (runtimeState.LifecyclePhase == BattleLifecyclePhase.Prepare ||
+             runtimeState.LifecyclePhase == BattleLifecyclePhase.PlanReady);
+
+        // 整轮执行期间统一隐藏头顶规划UI，脚底状态UI始终保持显示。
+        unitViewSpawner.SetPlanningCharacterUIVisible(planningVisible);
     }
 
     private void RefreshFixedStatusViews()

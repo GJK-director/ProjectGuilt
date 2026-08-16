@@ -117,6 +117,16 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         presentationPaused = paused;
     }
 
+    public void ResetToStableIdlePresentation()
+    {
+        presentationPaused = false;
+        ClearBodyVisualOffsets();
+        ClearAfterimages();
+        ClearSlashEffect();
+        ClearPerfectGuardEffect();
+        SetIdle();
+    }
+
     public void FinishSlashPresentation()
     {
         SetIdle();
