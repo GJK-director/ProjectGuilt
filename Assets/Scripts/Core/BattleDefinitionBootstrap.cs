@@ -72,6 +72,14 @@ public static class BattleDefinitionBootstrap
 {
     public static BattleDefinitionBootstrapResult CreateRuntimeState(string encounterID)
     {
+        return CreateRuntimeState(encounterID, false);
+    }
+
+    public static BattleDefinitionBootstrapResult CreateRuntimeState(
+        string encounterID,
+        bool useSingleUnitDemo
+    )
+    {
         List<CardTestData> cards = CardDataLoader.LoadCardData();
         List<CharacterDefinitionData> characterDefinitions = CharacterDefinitionLoader.LoadDefinitions();
         List<EnemyDefinitionData> enemyDefinitions = EnemyDefinitionLoader.LoadDefinitions();
@@ -82,7 +90,8 @@ public static class BattleDefinitionBootstrap
             cards,
             characterDefinitions,
             enemyDefinitions,
-            encounterDefinitions
+            encounterDefinitions,
+            useSingleUnitDemo
         );
     }
 
@@ -92,6 +101,25 @@ public static class BattleDefinitionBootstrap
         List<CharacterDefinitionData> characterDefinitions,
         List<EnemyDefinitionData> enemyDefinitions,
         List<EncounterDefinitionData> encounterDefinitions
+    )
+    {
+        return CreateRuntimeStateFromDefinitions(
+            encounterID,
+            cards,
+            characterDefinitions,
+            enemyDefinitions,
+            encounterDefinitions,
+            false
+        );
+    }
+
+    public static BattleDefinitionBootstrapResult CreateRuntimeStateFromDefinitions(
+        string encounterID,
+        List<CardTestData> cards,
+        List<CharacterDefinitionData> characterDefinitions,
+        List<EnemyDefinitionData> enemyDefinitions,
+        List<EncounterDefinitionData> encounterDefinitions,
+        bool useSingleUnitDemo
     )
     {
         if (cards == null)
@@ -135,7 +163,12 @@ public static class BattleDefinitionBootstrap
         }
 
         CharacterDefinitionData allyADefinition = CharacterDefinitionLoader.FindByID(characterDefinitions, encounterDefinition.allyCharacterIDs[0]);
-        CharacterDefinitionData allyBDefinition = CharacterDefinitionLoader.FindByID(characterDefinitions, encounterDefinition.allyCharacterIDs[1]);
+        CharacterDefinitionData allyBDefinition = useSingleUnitDemo
+            ? null
+            : CharacterDefinitionLoader.FindByID(
+                characterDefinitions,
+                encounterDefinition.allyCharacterIDs[1]
+            );
         EnemyDefinitionData enemyDefinition = EnemyDefinitionLoader.FindByID(enemyDefinitions, encounterDefinition.enemyID);
 
         BattleUnitFactoryResult allyAResult = BattleUnitFactory.CreatePlayer(allyADefinition, cards);
@@ -145,9 +178,11 @@ public static class BattleDefinitionBootstrap
             return BattleDefinitionBootstrapResult.Failure(allyAResult.errorMessage);
         }
 
-        BattleUnitFactoryResult allyBResult = BattleUnitFactory.CreatePlayer(allyBDefinition, cards);
+        BattleUnitFactoryResult allyBResult = useSingleUnitDemo
+            ? null
+            : BattleUnitFactory.CreatePlayer(allyBDefinition, cards);
 
-        if (!allyBResult.isSuccess)
+        if (allyBResult != null && !allyBResult.isSuccess)
         {
             return BattleDefinitionBootstrapResult.Failure(allyBResult.errorMessage);
         }
@@ -159,14 +194,16 @@ public static class BattleDefinitionBootstrap
             return BattleDefinitionBootstrapResult.Failure(enemyResult.errorMessage);
         }
 
-        // 固定2+2第一版复用同一敌人定义，但创建独立运行时实例、卡牌和Buff状态。
-        BattleUnitFactoryResult enemy2Result = BattleUnitFactory.CreateEnemy(
-            enemyDefinition,
-            cards,
-            enemyDefinition.enemyID + "_02"
-        );
+        // 2+2兼容模式继续创建独立的第二敌人；1v1 Demo只保留第一实例。
+        BattleUnitFactoryResult enemy2Result = useSingleUnitDemo
+            ? null
+            : BattleUnitFactory.CreateEnemy(
+                enemyDefinition,
+                cards,
+                enemyDefinition.enemyID + "_02"
+            );
 
-        if (!enemy2Result.isSuccess)
+        if (enemy2Result != null && !enemy2Result.isSuccess)
         {
             return BattleDefinitionBootstrapResult.Failure(
                 enemy2Result.errorMessage
@@ -175,16 +212,23 @@ public static class BattleDefinitionBootstrap
 
         Dictionary<string, CharacterData> allyByID = new Dictionary<string, CharacterData>();
         allyByID.Add(allyADefinition.characterID, allyAResult.unit);
-        allyByID.Add(allyBDefinition.characterID, allyBResult.unit);
+        if (allyBDefinition != null && allyBResult != null)
+        {
+            allyByID.Add(allyBDefinition.characterID, allyBResult.unit);
+        }
 
         BattleRuntimeState runtimeState = new BattleRuntimeState();
         runtimeState.SetCharacters(
             allyAResult.unit,
-            allyBResult.unit,
+            allyBResult != null ? allyBResult.unit : null,
             enemyResult.unit,
-            enemy2Result.unit
+            enemy2Result != null ? enemy2Result.unit : null
         );
-        runtimeState.SetActionSlots(BattleActionSlotManager.CreatePartyActionSlots(allyAResult.unit, allyBResult.unit, 2));
+        runtimeState.SetActionSlots(BattleActionSlotManager.CreatePartyActionSlots(
+            allyAResult.unit,
+            allyBResult != null ? allyBResult.unit : null,
+            2
+        ));
 
         BattleDefinitionIntentQueueResult intentResult = CreateIntentQueueForTurn(
             runtimeState,
@@ -260,10 +304,11 @@ public static class BattleDefinitionBootstrap
         string errorMessage;
 
         if (runtimeState.enemyUnits == null ||
-            runtimeState.enemyUnits.Count < 2)
+            runtimeState.enemyUnits.Count < 1 ||
+            runtimeState.enemyUnits.Count > 2)
         {
             return BattleDefinitionIntentQueueResult.Failure(
-                "创建敌人意图失败：固定2+2战斗缺少两名正式敌人"
+                "创建敌人意图失败：正式敌人数量必须为1到2"
             );
         }
 

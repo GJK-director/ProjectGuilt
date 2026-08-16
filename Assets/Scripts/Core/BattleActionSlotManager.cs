@@ -78,8 +78,20 @@ public static class BattleActionSlotManager
     {
         List<BattleActionSlot> slots = new List<BattleActionSlot>();
 
-        slots.AddRange(CreateCharacterActionSlots(allyA, slotCountPerCharacter));
-        slots.AddRange(CreateCharacterActionSlots(allyB, slotCountPerCharacter));
+        if (allyA != null)
+        {
+            slots.AddRange(CreateCharacterActionSlots(
+                allyA,
+                slotCountPerCharacter
+            ));
+        }
+        if (allyB != null)
+        {
+            slots.AddRange(CreateCharacterActionSlots(
+                allyB,
+                slotCountPerCharacter
+            ));
+        }
 
         Debug.Log("成功创建队伍行动槽位，数量：" + slots.Count);
         return slots;

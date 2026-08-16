@@ -493,12 +493,8 @@ public sealed class BattleLifecycleController
                 : BattleResult.None;
         }
 
-        bool allyADead = runtimeState.allyA != null &&
-            runtimeState.allyA.IsDead();
-        bool allyBDead = runtimeState.allyB != null &&
-            runtimeState.allyB.IsDead();
         BattleResult result = BattleResult.None;
-        if (allyADead && allyBDead)
+        if (AreAllRegisteredUnitsDead(runtimeState.allyUnits))
         {
             result = BattleResult.Defeat;
         }

@@ -4,6 +4,7 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
+[DefaultExecutionOrder(300)]
 public sealed class BattleActionRelationLineController : MonoBehaviour
 {
     [Header("层级")]
@@ -25,20 +26,20 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     [SerializeField] private Color enemyColor = new Color(1f, 0.28f, 0.22f, 1f);
 
     [Header("普通关系曲线")]
-    [SerializeField] private float baseCurveHeight = 130f;
-    [SerializeField] private float distanceCurveFactor = 0.12f;
+    [SerializeField] private float baseCurveHeight = 150f;
+    [SerializeField] private float distanceCurveFactor = 0.16f;
     [SerializeField] private float minCurveHeight = 100f;
-    [SerializeField] private float maxCurveHeight = 320f;
+    [SerializeField] private float maxCurveHeight = 360f;
     [SerializeField] private float laneSpacing = 28f;
     [SerializeField, Min(0f)]
     [Tooltip("多条单向关系共享同一箭头终点时，沿曲线末端法线分开的间距。")]
     private float sharedArrowEndpointSpacing = 18f;
 
     [Header("线条尺寸")]
-    [SerializeField] private Vector2 segmentSize = new Vector2(12f, 4f);
-    [SerializeField] private Vector2 arrowSize = new Vector2(18f, 12f);
-    [SerializeField, Min(0f)] private float dashedGap = 8f;
-    [SerializeField, Min(0f)] private float solidOverlap = 1f;
+    [SerializeField] private Vector2 segmentSize = new Vector2(18f, 10f);
+    [SerializeField] private Vector2 arrowSize = new Vector2(24f, 18f);
+    [SerializeField, Min(0f)] private float dashedGap = 14f;
+    [SerializeField, Min(0f)] private float solidOverlap = 4f;
     [SerializeField, Min(1f)] private float underlayScale = 1.35f;
     [SerializeField, Min(0f)] private float previewArrowScale = 1f;
     [SerializeField, Min(0f)] private float clashArrowScale = 1f;
@@ -46,7 +47,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     [Header("拼点")]
     [SerializeField, Min(0f)]
     [Tooltip("只控制两支拼点箭头尖端之间的屏幕空间间隔；拼点与普通关系线共用曲线高度。")]
-    private float clashArrowGap = 10f;
+    private float clashArrowGap = 4f;
 
     [Header("卡牌目标预览")]
     [SerializeField] private float previewCurveHeight = 75f;
@@ -170,6 +171,12 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
                 UpdateCardTargetingPointer(pointerScreenPosition);
             }
         }
+    }
+
+    private void LateUpdate()
+    {
+        // World-Follow UI完成本帧定位后，只重画现有关系的几何。
+        RefreshActiveRelationGeometry();
     }
 
     public void BindRuntimeState(BattleRuntimeState state)
@@ -1458,6 +1465,115 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
 
         activeViews.Add(view);
         return true;
+    }
+
+    private void RefreshActiveRelationGeometry()
+    {
+        if (isShuttingDown || activeViews.Count == 0)
+        {
+            return;
+        }
+
+        for (int index = 0; index < activeViews.Count; index++)
+        {
+            BattleActionRelationUIView view = activeViews[index];
+            if (view == null)
+            {
+                continue;
+            }
+
+            BattleActionRelationDescriptor relation =
+                FindCachedRelation(view.RelationID);
+            if (relation == null)
+            {
+                continue;
+            }
+
+            RefreshRelationViewGeometry(view, relation);
+        }
+    }
+
+    private BattleActionRelationDescriptor FindCachedRelation(
+        string relationID
+    )
+    {
+        if (string.IsNullOrEmpty(relationID))
+        {
+            return null;
+        }
+
+        for (int index = 0; index < cachedRelations.Count; index++)
+        {
+            BattleActionRelationDescriptor relation = cachedRelations[index];
+            if (relation != null && relation.RelationID == relationID)
+            {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    private void RefreshRelationViewGeometry(
+        BattleActionRelationUIView view,
+        BattleActionRelationDescriptor relation
+    )
+    {
+        Vector2 source;
+        Vector2 target;
+        if (!TryGetSlotLocalPoint(relation.SourceSlotID, out source) ||
+            !TryGetSlotLocalPoint(relation.TargetSlotID, out target))
+        {
+            return;
+        }
+
+        bool highlighted = view.IsHighlighted;
+        if (relation.UsesMutualSolidVisual)
+        {
+            Vector2 playerStart = relation.SourceSide ==
+                    BattleActionRelationSide.Player
+                ? source
+                : target;
+            Vector2 enemyStart = relation.SourceSide ==
+                    BattleActionRelationSide.Enemy
+                ? source
+                : target;
+            ApplyRelationVisualSettings(view, clashArrowScale);
+            view.ShowClash(
+                relation,
+                playerStart,
+                enemyStart,
+                playerColor,
+                enemyColor,
+                highlighted,
+                baseCurveHeight,
+                distanceCurveFactor,
+                minCurveHeight,
+                maxCurveHeight,
+                laneSpacing,
+                clashArrowGap
+            );
+            return;
+        }
+
+        Color color = relation.SourceSide ==
+                BattleActionRelationSide.Player
+            ? playerColor
+            : enemyColor;
+        float arrowEndpointOffset = view.UnilateralArrowEndpointOffset;
+        ApplyRelationVisualSettings(view, 1f);
+        view.ShowUnilateral(
+            relation,
+            source,
+            target,
+            color,
+            highlighted,
+            baseCurveHeight,
+            distanceCurveFactor,
+            minCurveHeight,
+            maxCurveHeight,
+            laneSpacing,
+            arrowEndpointOffset
+        );
     }
 
     private BattleActionRelationUIView GetPooledView(RectTransform root)

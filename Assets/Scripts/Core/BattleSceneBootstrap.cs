@@ -5,6 +5,7 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
     [SerializeField] private string encounterID;
     [SerializeField] private BattleSimpleUIController battleUIController;
     [SerializeField] private bool useDebugTestInitialization = false;
+    [SerializeField] private bool useSingleUnitDemo = false;
 
     private bool hasStartedInitialization;
     private BattleDefinitionBootstrapResult activeBootstrapResult;
@@ -16,6 +17,7 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
 
     public bool HasStartedInitialization => hasStartedInitialization;
     public bool UseDebugTestInitialization => useDebugTestInitialization;
+    public bool UseSingleUnitDemo => useSingleUnitDemo;
     public string EncounterID => encounterID;
 
     private void Start()
@@ -64,7 +66,10 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
         }
 
         BattleDefinitionBootstrapResult bootstrapResult =
-            BattleDefinitionBootstrap.CreateRuntimeState(encounterID);
+            BattleDefinitionBootstrap.CreateRuntimeState(
+                encounterID,
+                useSingleUnitDemo
+            );
 
         if (bootstrapResult == null ||
             !bootstrapResult.isSuccess ||
@@ -97,13 +102,28 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
         BattleRuntimeState runtimeState = bootstrapResult.runtimeState;
         Debug.Log(
             "BattleScene正式初始化成功：encounterID=" + encounterID +
-            "，runtimeUnitIDs=[" +
-            runtimeState.allyA.runtimeUnitID + ", " +
-            runtimeState.allyB.runtimeUnitID + ", " +
-            runtimeState.enemy.runtimeUnitID + ", " +
-            runtimeState.enemy2.runtimeUnitID + "]",
+            "，singleUnitDemo=" + useSingleUnitDemo +
+            "，runtimeUnitIDs=[" + GetRuntimeUnitIDList(runtimeState) + "]",
             this
         );
         return true;
+    }
+
+    private static string GetRuntimeUnitIDList(BattleRuntimeState runtimeState)
+    {
+        if (runtimeState == null || runtimeState.battleUnits == null)
+        {
+            return string.Empty;
+        }
+
+        string[] runtimeUnitIDs = new string[runtimeState.battleUnits.Count];
+        for (int index = 0; index < runtimeState.battleUnits.Count; index++)
+        {
+            CharacterData unit = runtimeState.battleUnits[index];
+            runtimeUnitIDs[index] = unit != null
+                ? unit.runtimeUnitID
+                : "<null>";
+        }
+        return string.Join(", ", runtimeUnitIDs);
     }
 }

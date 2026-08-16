@@ -64,6 +64,8 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     private readonly List<ActiveAfterimage> activeAfterimages =
         new List<ActiveAfterimage>();
 
+    public SpriteRenderer CharacterSpriteRenderer => characterSprite;
+
     void Awake()
     {
         CacheBodyVisualState();

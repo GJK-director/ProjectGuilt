@@ -1,5 +1,6 @@
 using UnityEngine;
 
+[DefaultExecutionOrder(200)]
 public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
 {
     [Header("世界与Canvas")]
@@ -10,6 +11,7 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
     [SerializeField] private Transform headWorldAnchor;
     [SerializeField] private Transform footWorldAnchor;
     [SerializeField] private Transform centerWorldAnchor;
+    private SpriteRenderer visualBodyRenderer;
 
     [Header("UI目标")]
     [SerializeField] private RectTransform headSlotGroup;
@@ -58,6 +60,7 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
 
     private void LateUpdate()
     {
+        // Billboard已先完成本帧朝向，再用同帧Camera与角色状态更新UI位置。
         if (followEveryLateUpdate)
         {
             RefreshNow();
@@ -89,8 +92,8 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
         Vector3 headScreenPoint = default;
         Vector3 footScreenPoint = default;
         Vector3 centerScreenPoint = default;
-        bool hasHead = TryProjectAnchor(headWorldAnchor, out headScreenPoint);
-        bool hasFoot = TryProjectAnchor(footWorldAnchor, out footScreenPoint);
+        bool hasHead = TryProjectHead(out headScreenPoint);
+        bool hasFoot = TryProjectFoot(out footScreenPoint);
         bool hasCenter = TryProjectAnchor(centerWorldAnchor, out centerScreenPoint);
         bool anyAnchorBehind =
             (hasHead && headScreenPoint.z <= 0f) ||
@@ -161,6 +164,12 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
         RefreshNow();
     }
 
+    public void SetVisualFootSource(SpriteRenderer renderer)
+    {
+        visualBodyRenderer = renderer;
+        RefreshNow();
+    }
+
     public void SetWorldAnchors(
         Transform headAnchor,
         Transform footAnchor,
@@ -178,6 +187,7 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
         headWorldAnchor = null;
         footWorldAnchor = null;
         centerWorldAnchor = null;
+        visualBodyRenderer = null;
     }
 
     internal void ConfigureUIRootsForTesting(
@@ -255,6 +265,88 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
             return false;
         }
         screenPoint = worldCamera.WorldToScreenPoint(worldAnchor.position);
+        return true;
+    }
+
+    private bool TryProjectFoot(out Vector3 screenPoint)
+    {
+        screenPoint = default;
+        if (!TryGetFootProjectionWorldPoint(out Vector3 worldPoint))
+        {
+            return false;
+        }
+
+        screenPoint = worldCamera.WorldToScreenPoint(worldPoint);
+        return true;
+    }
+
+    private bool TryProjectHead(out Vector3 screenPoint)
+    {
+        screenPoint = default;
+        if (!TryGetHeadProjectionWorldPoint(out Vector3 worldPoint))
+        {
+            return false;
+        }
+
+        screenPoint = worldCamera.WorldToScreenPoint(worldPoint);
+        return true;
+    }
+
+    private bool TryGetHeadProjectionWorldPoint(out Vector3 worldPoint)
+    {
+        worldPoint = default;
+        if (visualBodyRenderer != null &&
+            visualBodyRenderer.sprite != null)
+        {
+            Sprite sprite = visualBodyRenderer.sprite;
+            Vector3 spriteLocalHead = new Vector3(
+                sprite.bounds.center.x,
+                sprite.bounds.max.y,
+                sprite.bounds.center.z
+            );
+
+            // 当前Bridge只验证真实视觉头顶投影，不代表最终表现层架构。
+            worldPoint = visualBodyRenderer.transform.TransformPoint(
+                spriteLocalHead
+            );
+            return true;
+        }
+
+        if (headWorldAnchor == null)
+        {
+            return false;
+        }
+
+        worldPoint = headWorldAnchor.position;
+        return true;
+    }
+
+    private bool TryGetFootProjectionWorldPoint(out Vector3 worldPoint)
+    {
+        worldPoint = default;
+        if (visualBodyRenderer != null &&
+            visualBodyRenderer.sprite != null)
+        {
+            Sprite sprite = visualBodyRenderer.sprite;
+            Vector3 spriteLocalFoot = new Vector3(
+                sprite.bounds.center.x,
+                sprite.bounds.min.y,
+                sprite.bounds.center.z
+            );
+
+            // 当前Bridge只验证真实视觉脚底投影，不代表最终表现层架构。
+            worldPoint = visualBodyRenderer.transform.TransformPoint(
+                spriteLocalFoot
+            );
+            return true;
+        }
+
+        if (footWorldAnchor == null)
+        {
+            return false;
+        }
+
+        worldPoint = footWorldAnchor.position;
         return true;
     }
 

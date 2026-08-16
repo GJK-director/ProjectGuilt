@@ -454,32 +454,43 @@ public class BattleSimpleUIController : MonoBehaviour
         CharacterData enemy = initializedRuntimeState.enemy;
         CharacterData enemy2 = initializedRuntimeState.enemy2;
 
-        if (allyA == null || allyB == null || enemy == null || enemy2 == null)
+        if (allyA == null || enemy == null)
         {
-            errorMessage = "BattleScene初始化失败：固定2+2角色引用不完整";
+            errorMessage = "BattleScene初始化失败：第一名友方或敌方为空";
             return false;
         }
 
-        if (!HasExactUnitReferences(
+        if (!HasExpectedUnitReferences(
                 initializedRuntimeState.allyUnits,
                 allyA,
                 allyB))
         {
-            errorMessage = "BattleScene初始化失败：allyUnits必须恰好包含allyA和allyB";
+            errorMessage = "BattleScene初始化失败：allyUnits与友方引用不匹配";
             return false;
         }
 
-        if (!HasExactUnitReferences(
+        if (!HasExpectedUnitReferences(
                 initializedRuntimeState.enemyUnits,
                 enemy,
                 enemy2))
         {
-            errorMessage = "BattleScene初始化失败：enemyUnits必须恰好包含enemy和enemy2";
+            errorMessage = "BattleScene初始化失败：enemyUnits与敌方引用不匹配";
             return false;
         }
 
-        CharacterData[] units = { allyA, allyB, enemy, enemy2 };
-        if (!HasFourDistinctBattleUnits(
+        List<CharacterData> expectedUnits = new List<CharacterData> { allyA };
+        if (allyB != null)
+        {
+            expectedUnits.Add(allyB);
+        }
+        expectedUnits.Add(enemy);
+        if (enemy2 != null)
+        {
+            expectedUnits.Add(enemy2);
+        }
+
+        CharacterData[] units = expectedUnits.ToArray();
+        if (!HasExpectedBattleUnits(
                 initializedRuntimeState.battleUnits,
                 units,
                 out errorMessage) ||
@@ -563,12 +574,17 @@ public class BattleSimpleUIController : MonoBehaviour
             !TryRequireCard(allyA, "def_001", out references.allyADefense, out errorMessage) ||
             !TryRequireCard(allyA, "dodge_001", out references.allyADodge, out errorMessage) ||
             !TryRequireCard(allyA, "sin_ability_001", out references.allyAAbility, out errorMessage) ||
-            !TryRequireCard(allyA, ClashSinTestCardID, out references.allyASinAttack, out errorMessage) ||
-            !TryRequireCard(allyB, "atk_001", out references.allyBAttack, out errorMessage) ||
-            !TryRequireCard(allyB, "def_001", out references.allyBDefense, out errorMessage) ||
-            !TryRequireCard(allyB, "dodge_001", out references.allyBDodge, out errorMessage) ||
-            !TryRequireCard(allyB, "sin_ability_001", out references.allyBAbility, out errorMessage) ||
-            !TryRequireCard(allyB, ClashSinTestCardID, out references.allyBSinAttack, out errorMessage))
+            !TryRequireCard(allyA, ClashSinTestCardID, out references.allyASinAttack, out errorMessage))
+        {
+            return false;
+        }
+
+        if (allyB != null &&
+            (!TryRequireCard(allyB, "atk_001", out references.allyBAttack, out errorMessage) ||
+             !TryRequireCard(allyB, "def_001", out references.allyBDefense, out errorMessage) ||
+             !TryRequireCard(allyB, "dodge_001", out references.allyBDodge, out errorMessage) ||
+             !TryRequireCard(allyB, "sin_ability_001", out references.allyBAbility, out errorMessage) ||
+             !TryRequireCard(allyB, ClashSinTestCardID, out references.allyBSinAttack, out errorMessage)))
         {
             return false;
         }
@@ -582,56 +598,66 @@ public class BattleSimpleUIController : MonoBehaviour
             initializedRuntimeState.intentQueue,
             enemy
         ) ?? FindOwnedCardByID(enemy, "enemy_atk_001");
-        references.enemy02Attack = FindIntentCardForEnemy(
-            initializedRuntimeState.intentQueue,
-            enemy2
-        ) ?? FindOwnedCardByID(enemy2, "enemy_atk_001");
+        if (enemy2 != null)
+        {
+            references.enemy02Attack = FindIntentCardForEnemy(
+                initializedRuntimeState.intentQueue,
+                enemy2
+            ) ?? FindOwnedCardByID(enemy2, "enemy_atk_001");
+        }
 
         if (!ValidateEnemyCardReference(
                 enemy,
                 references.enemyAttack,
-                out errorMessage) ||
-            !ValidateEnemyCardReference(
-                enemy2,
-                references.enemy02Attack,
                 out errorMessage))
         {
             return false;
         }
 
-        if (object.ReferenceEquals(
+        if (enemy2 != null &&
+            (!ValidateEnemyCardReference(
+                enemy2,
+                references.enemy02Attack,
+                out errorMessage) ||
+             object.ReferenceEquals(
                 references.enemyAttack,
-                references.enemy02Attack))
+                references.enemy02Attack)))
         {
-            errorMessage = "BattleScene兼容卡牌绑定失败：两名敌人共享同一BattleCardState";
+            if (string.IsNullOrEmpty(errorMessage))
+            {
+                errorMessage =
+                    "BattleScene兼容卡牌绑定失败：两名敌人共享同一BattleCardState";
+            }
             return false;
         }
 
         return true;
     }
 
-    private static bool HasExactUnitReferences(
+    private static bool HasExpectedUnitReferences(
         List<CharacterData> units,
         CharacterData first,
         CharacterData second
     )
     {
+        int expectedCount = second != null ? 2 : 1;
         return units != null &&
-            units.Count == 2 &&
+            units.Count == expectedCount &&
             object.ReferenceEquals(units[0], first) &&
-            object.ReferenceEquals(units[1], second);
+            (second == null || object.ReferenceEquals(units[1], second));
     }
 
-    private static bool HasFourDistinctBattleUnits(
+    private static bool HasExpectedBattleUnits(
         List<CharacterData> battleUnits,
         CharacterData[] expectedUnits,
         out string errorMessage
     )
     {
         errorMessage = string.Empty;
-        if (battleUnits == null || battleUnits.Count != 4)
+        if (battleUnits == null || expectedUnits == null ||
+            battleUnits.Count != expectedUnits.Length)
         {
-            errorMessage = "BattleScene初始化失败：battleUnits必须恰好为4个";
+            errorMessage = "BattleScene初始化失败：battleUnits数量与角色引用不匹配";
             return false;
         }
 
@@ -690,16 +716,19 @@ public class BattleSimpleUIController : MonoBehaviour
     )
     {
         errorMessage = string.Empty;
-        if (actionSlots == null || actionSlots.Count != 4)
+        int expectedSlotCount = allyB != null ? 4 : 2;
+        if (actionSlots == null || actionSlots.Count != expectedSlotCount)
         {
-            errorMessage = "BattleScene初始化失败：初始友方行动槽必须恰好为4个";
+            errorMessage =
+                "BattleScene初始化失败：初始友方行动槽数量必须为" +
+                expectedSlotCount;
             return false;
         }
 
         bool allyA1 = false;
         bool allyA2 = false;
-        bool allyB1 = false;
-        bool allyB2 = false;
+        bool allyB1 = allyB == null;
+        bool allyB2 = allyB == null;
 
         for (int index = 0; index < actionSlots.Count; index++)
         {
@@ -720,7 +749,8 @@ public class BattleSimpleUIController : MonoBehaviour
                     return false;
                 }
             }
-            else if (object.ReferenceEquals(slot.owner, allyB))
+            else if (allyB != null &&
+                object.ReferenceEquals(slot.owner, allyB))
             {
                 if (slot.slotIndex == 1 && !allyB1) allyB1 = true;
                 else if (slot.slotIndex == 2 && !allyB2) allyB2 = true;
@@ -1136,28 +1166,34 @@ public class BattleSimpleUIController : MonoBehaviour
         // 动态生成成功后，现有控制器继续复用原StatusView交互和刷新流程。
         BattleUnitViewHandle ally01Handle =
             unitViewSpawner.GetHandle(ally01);
-        BattleUnitViewHandle ally02Handle =
-            unitViewSpawner.GetHandle(ally02);
+        BattleUnitViewHandle ally02Handle = ally02 != null
+            ? unitViewSpawner.GetHandle(ally02)
+            : null;
         BattleUnitViewHandle enemy01Handle =
             unitViewSpawner.GetHandle(enemy01);
-        BattleUnitViewHandle enemy02Handle =
-            unitViewSpawner.GetHandle(enemy02);
+        BattleUnitViewHandle enemy02Handle = enemy02 != null
+            ? unitViewSpawner.GetHandle(enemy02)
+            : null;
 
         if (!HasValidStatusView(ally01Handle) ||
-            !HasValidStatusView(ally02Handle) ||
             !HasValidStatusView(enemy01Handle) ||
-            !HasValidStatusView(enemy02Handle))
+            !HasValidOptionalStatusView(ally02, ally02Handle) ||
+            !HasValidOptionalStatusView(enemy02, enemy02Handle))
         {
-            lastLog = "运行时角色表现初始化失败：四个动态Handle或StatusView不完整";
+            lastLog = "运行时角色表现初始化失败：必需或已登记角色的Handle/StatusView不完整";
             Debug.LogError(lastLog, this);
             unitViewSpawner.ClearGeneratedViews();
             return false;
         }
 
         ally01StatusView = ally01Handle.StatusView;
-        ally02StatusView = ally02Handle.StatusView;
+        ally02StatusView = ally02Handle != null
+            ? ally02Handle.StatusView
+            : null;
         enemy01StatusView = enemy01Handle.StatusView;
-        enemy02StatusView = enemy02Handle.StatusView;
+        enemy02StatusView = enemy02Handle != null
+            ? enemy02Handle.StatusView
+            : null;
         runtimeUnitViewsReady = true;
         warnedRuntimeUnitViewsUnavailable = false;
         return true;
@@ -1166,6 +1202,16 @@ public class BattleSimpleUIController : MonoBehaviour
     private static bool HasValidStatusView(BattleUnitViewHandle handle)
     {
         return handle != null && handle.StatusView != null;
+    }
+
+    private static bool HasValidOptionalStatusView(
+        CharacterData runtimeUnit,
+        BattleUnitViewHandle handle
+    )
+    {
+        return runtimeUnit == null
+            ? handle == null
+            : HasValidStatusView(handle);
     }
 
     private void OnRuntimeUnitViewsCleared()

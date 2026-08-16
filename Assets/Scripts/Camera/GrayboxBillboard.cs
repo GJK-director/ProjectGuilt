@@ -5,6 +5,7 @@
 /// 让二维物体始终与目标摄像机保持相同朝向。
 /// 只修改 Rotation，不修改 Position。
 /// </summary>
+[DefaultExecutionOrder(100)]
 public class GrayboxBillboard : MonoBehaviour
 {
     [Header("目标摄像机")]
@@ -15,6 +16,7 @@ public class GrayboxBillboard : MonoBehaviour
 
     private void LateUpdate()
     {
+        // 本帧先完成角色视觉朝向，随后World-Follow UI再投影最终状态。
         // 如果 Inspector 没有手动指定，就尝试寻找 Main Camera
         if (targetCamera == null)
         {

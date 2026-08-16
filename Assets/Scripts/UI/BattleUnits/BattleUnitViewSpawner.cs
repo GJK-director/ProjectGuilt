@@ -4,7 +4,8 @@ using UnityEngine;
 
 public sealed class BattleUnitViewSpawner : MonoBehaviour
 {
-    private const int FixedUnitCountPerCamp = 2;
+    private const int MinimumUnitCountPerCamp = 1;
+    private const int MaximumUnitCountPerCamp = 2;
 
     private sealed class WorldVisualReferences
     {
@@ -73,25 +74,15 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
             return false;
         }
 
-        CharacterData[] allies =
-        {
-            runtimeState.allyUnits[0],
-            runtimeState.allyUnits[1]
-        };
-        CharacterData[] enemies =
-        {
-            runtimeState.enemyUnits[0],
-            runtimeState.enemyUnits[1]
-        };
         Transform[] allySpawns = { allySpawn01, allySpawn02 };
         Transform[] enemySpawns = { enemySpawn01, enemySpawn02 };
 
         relationLineController.BindRuntimeState(runtimeState);
 
-        for (int index = 0; index < FixedUnitCountPerCamp; index++)
+        for (int index = 0; index < runtimeState.allyUnits.Count; index++)
         {
             if (!TrySpawnUnit(
-                allies[index],
+                runtimeState.allyUnits[index],
                 BattleUnitCamp.Ally,
                 allyWorldPrefab,
                 allyStatusUIPrefab,
@@ -107,10 +98,10 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
             }
         }
 
-        for (int index = 0; index < FixedUnitCountPerCamp; index++)
+        for (int index = 0; index < runtimeState.enemyUnits.Count; index++)
         {
             if (!TrySpawnUnit(
-                enemies[index],
+                runtimeState.enemyUnits[index],
                 BattleUnitCamp.Enemy,
                 enemyWorldPrefab,
                 enemyStatusUIPrefab,
@@ -239,20 +230,18 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
             errorMessage = "BattleRuntimeState为空";
             return false;
         }
-        if (runtimeState.allyUnits == null ||
-            runtimeState.allyUnits.Count < FixedUnitCountPerCamp)
+        if (!HasSupportedUnitCount(runtimeState.allyUnits))
         {
-            errorMessage = "友方运行时单位少于2";
+            errorMessage = "友方运行时单位数量必须为1到2";
             return false;
         }
-        if (runtimeState.enemyUnits == null ||
-            runtimeState.enemyUnits.Count < FixedUnitCountPerCamp)
+        if (!HasSupportedUnitCount(runtimeState.enemyUnits))
         {
-            errorMessage = "敌方运行时单位少于2";
+            errorMessage = "敌方运行时单位数量必须为1到2";
             return false;
         }
         if (!ValidateRuntimeUnits(runtimeState, out errorMessage) ||
-            !ValidateSceneReferences(out errorMessage) ||
+            !ValidateSceneReferences(runtimeState, out errorMessage) ||
             !ValidateWorldPrefab(allyWorldPrefab, "友方", out errorMessage) ||
             !ValidateWorldPrefab(enemyWorldPrefab, "敌方", out errorMessage) ||
             !ValidateStatusPrefab(allyStatusUIPrefab, "友方", out errorMessage) ||
@@ -271,15 +260,11 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
         errorMessage = string.Empty;
         HashSet<CharacterData> references = new HashSet<CharacterData>();
         HashSet<string> runtimeIDs = new HashSet<string>(StringComparer.Ordinal);
-        CharacterData[] units =
-        {
-            runtimeState.allyUnits[0],
-            runtimeState.allyUnits[1],
-            runtimeState.enemyUnits[0],
-            runtimeState.enemyUnits[1]
-        };
+        List<CharacterData> units = new List<CharacterData>();
+        units.AddRange(runtimeState.allyUnits);
+        units.AddRange(runtimeState.enemyUnits);
 
-        for (int index = 0; index < units.Length; index++)
+        for (int index = 0; index < units.Count; index++)
         {
             CharacterData unit = units[index];
             if (unit == null)
@@ -303,7 +288,7 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
         }
 
         for (int allyIndex = 0;
-            allyIndex < FixedUnitCountPerCamp;
+            allyIndex < runtimeState.allyUnits.Count;
             allyIndex++)
         {
             for (int slotIndex = 1; slotIndex <= 2; slotIndex++)
@@ -322,16 +307,22 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
         return true;
     }
 
-    private bool ValidateSceneReferences(out string errorMessage)
+    private bool ValidateSceneReferences(
+        BattleRuntimeState runtimeState,
+        out string errorMessage
+    )
     {
         errorMessage = string.Empty;
         if (allyWorldPrefab == null || enemyWorldPrefab == null)
             errorMessage = "世界Prefab为空";
         else if (allyStatusUIPrefab == null || enemyStatusUIPrefab == null)
             errorMessage = "状态UI Prefab为空";
-        else if (allySpawn01 == null || allySpawn02 == null ||
-            enemySpawn01 == null || enemySpawn02 == null)
-            errorMessage = "一个或多个SpawnPoint为空";
+        else if (allySpawn01 == null || enemySpawn01 == null)
+            errorMessage = "第一组SpawnPoint为空";
+        else if (runtimeState.allyUnits.Count > 1 && allySpawn02 == null)
+            errorMessage = "第二名友方存在但AllySpawn_02为空";
+        else if (runtimeState.enemyUnits.Count > 1 && enemySpawn02 == null)
+            errorMessage = "第二名敌方存在但EnemySpawn_02为空";
         else if (generatedAlliesRoot == null || generatedEnemiesRoot == null)
             errorMessage = "Generated Root为空";
         else if (worldFollowUIRoot == null)
@@ -344,6 +335,13 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
             errorMessage = "关系线Controller为空";
 
         return string.IsNullOrEmpty(errorMessage);
+    }
+
+    private static bool HasSupportedUnitCount(List<CharacterData> units)
+    {
+        return units != null &&
+            units.Count >= MinimumUnitCountPerCamp &&
+            units.Count <= MaximumUnitCountPerCamp;
     }
 
     private bool ValidateWorldPrefab(
@@ -442,6 +440,18 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
         // Prefab中的Sprite是当前默认外观。这里不写sprite、不改Scale，
         // 只对敌方应用阵营朝向，因此同阵营两名单位可以安全共用模板。
         ApplyCampVisualSettings(worldVisual.renderer, camp);
+        if (camp == BattleUnitCamp.Ally && worldName == "Ally_01")
+        {
+            // 临时诊断仅观察第一名友方的锚点与可见脚底投影差异。
+            BattleWorldFollowProjectionDiagnostic diagnostic =
+                worldRoot.AddComponent<
+                    BattleWorldFollowProjectionDiagnostic>();
+            diagnostic.Bind(
+                worldCamera,
+                worldVisual.footAnchor,
+                worldVisual.renderer
+            );
+        }
         BattleCharacterPresentationController presentationController =
             worldRoot.GetComponent<BattleCharacterPresentationController>();
 
@@ -471,6 +481,7 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
             worldVisual.footAnchor,
             worldVisual.centerAnchor
         );
+        follower.SetVisualFootSource(worldVisual.renderer);
 
         List<BattleActionSlotUIView> slots =
             new List<BattleActionSlotUIView>();
@@ -547,6 +558,15 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
         {
             errorMessage = objectKind + "为空。";
             return false;
+        }
+
+        BattleCharacterPresentationController presentationController =
+            root.GetComponent<BattleCharacterPresentationController>();
+        if (presentationController != null)
+        {
+            // 特效层增加后，层级中的第一个SpriteRenderer不一定是角色主体。
+            references.renderer =
+                presentationController.CharacterSpriteRenderer;
         }
 
         // 仅在初始化和预检时遍历一次，并包含Inactive子节点。
