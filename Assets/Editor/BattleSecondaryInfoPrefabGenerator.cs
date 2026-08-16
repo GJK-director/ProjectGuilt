@@ -23,6 +23,7 @@ public static class BattleSecondaryInfoPrefabGenerator
     const string SessionKey =
         "ProjectGuilt.BattleSecondaryInfoPrefabGenerator.CardOnlyV2Checked";
     static readonly Vector2 SlotCardPanelSize = new Vector2(366f, 540f);
+    const float SlotCardPanelGap = 80f;
 
     [InitializeOnLoadMethod]
     static void ScheduleMissingAssetCheck()
@@ -415,14 +416,14 @@ public static class BattleSecondaryInfoPrefabGenerator
         );
         panelRect = panel.GetComponent<RectTransform>();
         panelRect.SetParent(parent, false);
-        panelRect.anchorMin = enemySide
-            ? new Vector2(1f, 1f)
-            : new Vector2(0f, 1f);
+        panelRect.anchorMin = new Vector2(0.5f, 1f);
         panelRect.anchorMax = panelRect.anchorMin;
-        panelRect.pivot = panelRect.anchorMin;
+        panelRect.pivot = enemySide
+            ? new Vector2(0f, 1f)
+            : new Vector2(1f, 1f);
         panelRect.anchoredPosition = enemySide
-            ? new Vector2(-24f, -24f)
-            : new Vector2(24f, -24f);
+            ? new Vector2(SlotCardPanelGap * 0.5f, -24f)
+            : new Vector2(-SlotCardPanelGap * 0.5f, -24f);
         panelRect.sizeDelta = SlotCardPanelSize;
 
         CanvasGroup canvasGroup = panel.GetComponent<CanvasGroup>();

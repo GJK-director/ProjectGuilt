@@ -45,6 +45,7 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
 {
     // 通用关键词二级面板使用 32767；这里低一层，确保关键词说明在卡面上方。
     const int OverlaySortingOrder = 32766;
+    const float ReferencePanelGap = 80f;
     static readonly Vector2 ReferenceResolution =
         new Vector2(1920f, 1080f);
 
@@ -593,6 +594,13 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
         float topInset =
             (screenHeight - safeArea.yMax) / screenHeight * rootHeight;
         float bottomInset = safeArea.yMin / screenHeight * rootHeight;
+        float safeCenterOffsetX =
+            (leftInset - rightInset) * 0.5f;
+        float centerGap = Mathf.Clamp(
+            rootWidth * (ReferencePanelGap / ReferenceResolution.x),
+            32f,
+            ReferencePanelGap
+        );
 
         const float cardAspect = 780f / 1150f;
         float availableHeight = Mathf.Max(
@@ -613,17 +621,23 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
 
         ConfigureSideRect(
             allyPanelRect,
-            new Vector2(0f, 1f),
-            new Vector2(0f, 1f),
-            new Vector2(leftInset + margin, -topInset - margin),
+            new Vector2(0.5f, 1f),
+            new Vector2(1f, 1f),
+            new Vector2(
+                safeCenterOffsetX - centerGap * 0.5f,
+                -topInset - margin
+            ),
             panelWidth,
             panelHeight
         );
         ConfigureSideRect(
             enemyPanelRect,
-            new Vector2(1f, 1f),
-            new Vector2(1f, 1f),
-            new Vector2(-rightInset - margin, -topInset - margin),
+            new Vector2(0.5f, 1f),
+            new Vector2(0f, 1f),
+            new Vector2(
+                safeCenterOffsetX + centerGap * 0.5f,
+                -topInset - margin
+            ),
             panelWidth,
             panelHeight
         );

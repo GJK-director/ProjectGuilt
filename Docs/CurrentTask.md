@@ -10811,3 +10811,30 @@ Project Guilt/UI/重新生成行动槽位卡牌详情预设体
 
 - `ProjectGuilt.sln` 完整编译通过，0 警告、0 错误。
 - `git diff --check` 通过。
+
+## 九十八、行动槽位技能面板改为中央对称显示
+
+行动槽位技能面板不再分别固定在安全区左上角和右上角。
+
+当前布局规则：
+
+- 友方面板显示在屏幕安全区水平中心线左侧。
+- 敌方面板显示在屏幕安全区水平中心线右侧。
+- 左右面板尺寸保持一致，并以中心线对称排列。
+- 1920×1080 参考分辨率下，两面板间距为 80 参考单位。
+- 面板顶部位置、`366×540` 参考尺寸、50% 屏高缩放和安全区适配规则保持不变。
+- 非对称安全区下会以安全区中心重新对齐，不会偏向屏幕物理中心。
+
+已同步更新：
+
+- `BattleActionSlotCardInfoPanelHost` 的运行时响应式定位。
+- `BattleSecondaryInfoPrefabGenerator` 的默认生成布局。
+- `Assets/Prefabs/BattleActionSlotCardInfoPanel.prefab`。
+- `BattleScene` 中的预设体实例。
+
+验证记录：
+
+- Unity 6000.3.7f1 成功重新生成行动槽位卡牌详情预设体。
+- 预设体中友方面板为中心锚点 `x=-40`，敌方面板为中心锚点 `x=40`。
+- Unity 预设体与 `BattleScene` 实例校验通过。
+- `ProjectGuilt.sln` 完整编译通过，0 警告、0 错误。
