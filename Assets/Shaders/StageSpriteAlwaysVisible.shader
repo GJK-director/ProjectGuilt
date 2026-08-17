@@ -4,6 +4,7 @@ Shader "ProjectGuilt/Stage Sprite Always Visible"
     {
         [PerRendererData] _MainTex ("Sprite Texture", 2D) = "white" {}
         _Color ("Tint", Color) = (1, 1, 1, 1)
+        [HideInInspector] _RendererColor ("RendererColor", Color) = (1, 1, 1, 1)
     }
 
     SubShader
@@ -30,14 +31,16 @@ Shader "ProjectGuilt/Stage Sprite Always Visible"
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
+            #pragma multi_compile_instancing
 
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/2D/Include/Core2D.hlsl"
 
             struct Attributes
             {
                 float4 positionOS : POSITION;
                 float2 uv : TEXCOORD0;
                 half4 color : COLOR;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings
@@ -54,14 +57,21 @@ Shader "ProjectGuilt/Stage Sprite Always Visible"
                 half4 _Color;
             CBUFFER_END
 
+            half4 _RendererColor;
+
             Varyings Vert(Attributes input)
             {
+                UNITY_SETUP_INSTANCE_ID(input);
+                SetUpSpriteInstanceProperties();
+
                 Varyings output;
                 output.positionHCS = TransformObjectToHClip(
                     input.positionOS.xyz
                 );
                 output.uv = input.uv;
-                output.color = input.color * _Color;
+                // SpriteRenderer.color通过URP每Renderer数据参与最终RGBA。
+                output.color = input.color * _Color *
+                    _RendererColor * unity_SpriteColor;
                 return output;
             }
 
