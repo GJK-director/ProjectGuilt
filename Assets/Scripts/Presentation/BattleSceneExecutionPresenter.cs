@@ -39,12 +39,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     [SerializeField] private BattleUnitViewSpawner unitViewSpawner;
     [SerializeField]
     private BattleDefaultAttackPresentationPlayer defaultAttackPresentationPlayer;
+    [SerializeField]
+    private BattleAttackVsAttackPresentationPlayer attackVsAttackPresentationPlayer;
     [SerializeField] private bool verboseLogging = false;
-    [SerializeField] private float actionLeadInDuration = 0.20f;
-    [SerializeField] private float actionBeginApproachDuration = 0.35f;
-    [SerializeField] private float clashReadyHoldDuration = 0.15f;
-    [SerializeField] private float nextActionGapDuration = 0.18f;
-    [SerializeField] private float clashReadyGap = 2.8f;
 
     private ActionPresentationContext activeContext;
     private Coroutine activePresentationCoroutine;
@@ -53,12 +50,14 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     void Awake()
     {
         ResolveDefaultAttackPresentationPlayer();
+        ResolveAttackVsAttackPresentationPlayer();
     }
 
     public void Initialize(BattleUnitViewSpawner spawner)
     {
         unitViewSpawner = spawner;
         ResolveDefaultAttackPresentationPlayer();
+        ResolveAttackVsAttackPresentationPlayer();
     }
 
     public void Present(
@@ -109,6 +108,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             }
             activePresentationCoroutine = null;
             activePresentationRequestId = 0L;
+            attackVsAttackPresentationPlayer?.CancelAndReset();
             RestoreClashActorsToIdle(activeContext);
         }
 
@@ -119,9 +119,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         {
             activeContext.Cancelled = true;
             if (activeContext.DefaultAttackStarted &&
-                defaultAttackPresentationPlayer != null)
+                attackVsAttackPresentationPlayer != null)
             {
-                defaultAttackPresentationPlayer.CancelAndReset();
+                attackVsAttackPresentationPlayer.CancelAndReset();
             }
             activeContext = null;
         }
@@ -170,180 +170,59 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ActionPresentationContext context
     )
     {
-        if (!HasCompleteClashPresentationMapping(context))
+        if (!HasCompleteClashPresentationMapping(context) ||
+            attackVsAttackPresentationPlayer == null ||
+            !attackVsAttackPresentationPlayer.isActiveAndEnabled)
         {
             LogApproachFallback(request, "角色表现映射不完整");
             return false;
         }
 
-        Transform sideARoot = context.SideAHandle.WorldRoot.transform;
-        Transform sideBRoot = context.SideBHandle.WorldRoot.transform;
-        Vector3 sideAStart = sideARoot.position;
-        Vector3 sideBStart = sideBRoot.position;
-        float horizontalDelta = sideBStart.x - sideAStart.x;
-        float horizontalDistance = Mathf.Abs(horizontalDelta);
-        float safeGap = Mathf.Max(0f, clashReadyGap);
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        activePresentationRequestId = requestId;
+        LogApproachStarted(requestId, context);
+        bool started = attackVsAttackPresentationPlayer
+            .TryPlayClashReadyApproach(
+                context.SideAPresentation,
+                context.SideAHandle.WorldRoot.transform,
+                context.SideBPresentation,
+                context.SideBHandle.WorldRoot.transform,
+                () => CompleteAttackVsAttackApproach(
+                    context,
+                    executionItem,
+                    requestId,
+                    completion
+                )
+            );
 
-        Vector3 sideATarget = sideAStart;
-        Vector3 sideBTarget = sideBStart;
-        bool shouldApproach = horizontalDistance > safeGap;
-        if (shouldApproach)
+        if (started)
         {
-            float directionSign = Mathf.Sign(horizontalDelta);
-            float midpointX = (sideAStart.x + sideBStart.x) * 0.5f;
-            sideATarget.x = midpointX - directionSign * safeGap * 0.5f;
-            sideBTarget.x = midpointX + directionSign * safeGap * 0.5f;
+            return true;
         }
 
-        // ActionBegin 的阅读停顿、接敌和 ClashReady 停顿由同一请求协程持有。
-        RestoreClashActorsToIdle(context);
-        activePresentationRequestId = request.RequestId;
-        activePresentationCoroutine = StartCoroutine(
-            RunAttackVsAttackActionBegin(
-                request.RequestId,
-                completion,
-                context,
-                sideARoot,
-                sideBRoot,
-                sideAStart,
-                sideBStart,
-                sideATarget,
-                sideBTarget,
-                shouldApproach,
-                safeGap
-            )
-        );
-        return true;
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        LogApproachFallback(requestId, "共享AttackVsAttack Player启动失败");
+        return false;
     }
 
-    private IEnumerator RunAttackVsAttackActionBegin(
-        long requestId,
-        BattlePresentationCompletion completion,
+    private void CompleteAttackVsAttackApproach(
         ActionPresentationContext context,
-        Transform sideARoot,
-        Transform sideBRoot,
-        Vector3 sideAStart,
-        Vector3 sideBStart,
-        Vector3 sideATarget,
-        Vector3 sideBTarget,
-        bool shouldApproach,
-        float safeGap
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
     )
     {
-        float leadInElapsed = 0f;
-        while (leadInElapsed < Mathf.Max(0f, actionLeadInDuration))
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem))
         {
-            if (!IsCurrentPresentationRequest(requestId))
-            {
-                yield break;
-            }
-
-            leadInElapsed += Time.deltaTime;
-            yield return null;
+            return;
         }
 
-        if (!IsCurrentPresentationRequest(requestId))
-        {
-            yield break;
-        }
-
-        if (sideARoot == null || sideBRoot == null ||
-            context.SideAPresentation == null ||
-            context.SideBPresentation == null)
-        {
-            FinishApproachWithFallback(
-                requestId,
-                completion,
-                context,
-                "Lead-In后角色表现引用失效"
-            );
-            yield break;
-        }
-
-        if (shouldApproach)
-        {
-            context.SideAPresentation.SetSprint();
-            context.SideBPresentation.SetSprint();
-            LogApproachStarted(
-                requestId,
-                context,
-                sideAStart,
-                sideATarget,
-                sideBStart,
-                sideBTarget,
-                safeGap
-            );
-        }
-        else
-        {
-            LogApproachFallback(requestId, "双方已处于ClashReady距离内");
-        }
-
-        float elapsed = 0f;
-        float safeApproachDuration = Mathf.Max(0f, actionBeginApproachDuration);
-        while (shouldApproach && elapsed < safeApproachDuration)
-        {
-            if (!IsCurrentPresentationRequest(requestId))
-            {
-                yield break;
-            }
-
-            if (sideARoot == null || sideBRoot == null ||
-                context.SideAPresentation == null ||
-                context.SideBPresentation == null)
-            {
-                FinishApproachWithFallback(
-                    requestId,
-                    completion,
-                    context,
-                    "移动期间角色表现引用失效"
-                );
-                yield break;
-            }
-
-            elapsed += Time.deltaTime;
-            float linearT = Mathf.Clamp01(
-                elapsed / safeApproachDuration
-            );
-            float easedT = BattlePresentationEasing.EaseOutQuad(linearT);
-            sideARoot.position = sideAStart +
-                (sideATarget - sideAStart) * easedT;
-            sideBRoot.position = sideBStart +
-                (sideBTarget - sideBStart) * easedT;
-            yield return null;
-        }
-
-        if (!IsCurrentPresentationRequest(requestId))
-        {
-            yield break;
-        }
-
-        if (sideARoot != null && sideBRoot != null)
-        {
-            sideARoot.position = sideATarget;
-            sideBRoot.position = sideBTarget;
-        }
-
-        RestoreClashActorsToIdle(context);
-
-        float holdElapsed = 0f;
-        while (holdElapsed < Mathf.Max(0f, clashReadyHoldDuration))
-        {
-            if (!IsCurrentPresentationRequest(requestId))
-            {
-                yield break;
-            }
-
-            holdElapsed += Time.deltaTime;
-            yield return null;
-        }
-
-        if (!IsCurrentPresentationRequest(requestId))
-        {
-            yield break;
-        }
-
-        activePresentationCoroutine = null;
         activePresentationRequestId = 0L;
         LogApproachCompleted(requestId);
         completion.TryComplete(requestId);
@@ -369,25 +248,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             activeContext != null &&
             activeContext.LastRequestId == requestId &&
             !activeContext.Cancelled;
-    }
-
-    private void FinishApproachWithFallback(
-        long requestId,
-        BattlePresentationCompletion completion,
-        ActionPresentationContext context,
-        string reason
-    )
-    {
-        if (!IsCurrentPresentationRequest(requestId))
-        {
-            return;
-        }
-
-        RestoreClashActorsToIdle(context);
-        activePresentationCoroutine = null;
-        activePresentationRequestId = 0L;
-        LogApproachFallback(requestId, reason);
-        completion.TryComplete(requestId);
     }
 
     private static void RestoreClashActorsToIdle(
@@ -502,8 +362,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.CurrentTargetHandle != null &&
             context.CurrentAttackerPresentation != null &&
             context.CurrentTargetPresentation != null &&
-            defaultAttackPresentationPlayer != null &&
-            defaultAttackPresentationPlayer.isActiveAndEnabled;
+            attackVsAttackPresentationPlayer != null &&
+            attackVsAttackPresentationPlayer.isActiveAndEnabled;
     }
 
     private bool TryStartDefaultAttackImpact(
@@ -525,18 +385,19 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         context.DefaultAttackImpactRequestId = requestId;
         activePresentationRequestId = requestId;
 
-        bool started = defaultAttackPresentationPlayer.TryPlayDefaultAttack(
-            context.CurrentAttackerPresentation,
-            context.CurrentTargetPresentation,
-            directionSign,
-            () => CompleteDefaultAttackImpact(
-                context,
-                executionItem,
-                requestId,
-                completion
-            ),
-            () => MarkDefaultAttackFinished(context, executionItem)
-        );
+        bool started = attackVsAttackPresentationPlayer
+            .TryPlayResolvedWinnerAttack(
+                context.CurrentAttackerPresentation,
+                context.CurrentTargetPresentation,
+                directionSign,
+                () => CompleteDefaultAttackImpact(
+                    context,
+                    executionItem,
+                    requestId,
+                    completion
+                ),
+                () => MarkDefaultAttackFinished(context, executionItem)
+            );
 
         if (started)
         {
@@ -597,9 +458,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             IsOwnedDefaultAttackContext(context, executionItem) &&
             !context.DefaultAttackFinished)
         {
-            if (defaultAttackPresentationPlayer == null ||
-                (!defaultAttackPresentationPlayer.IsRunning &&
-                    !defaultAttackPresentationPlayer.IsFinished))
+            if (attackVsAttackPresentationPlayer == null ||
+                (!attackVsAttackPresentationPlayer.IsRunning &&
+                    !attackVsAttackPresentationPlayer.IsFinished))
             {
                 context.DefaultAttackFinished = true;
                 break;
@@ -612,19 +473,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             !IsOwnedDefaultAttackContext(context, executionItem))
         {
             yield break;
-        }
-
-        float gapElapsed = 0f;
-        while (gapElapsed < Mathf.Max(0f, nextActionGapDuration))
-        {
-            if (!IsCurrentPresentationRequest(requestId) ||
-                !IsOwnedDefaultAttackContext(context, executionItem))
-            {
-                yield break;
-            }
-
-            gapElapsed += Time.deltaTime;
-            yield return null;
         }
 
         activePresentationCoroutine = null;
@@ -676,6 +524,24 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         {
             defaultAttackPresentationPlayer =
                 GetComponent<BattleDefaultAttackPresentationPlayer>();
+        }
+    }
+
+    private void ResolveAttackVsAttackPresentationPlayer()
+    {
+        if (attackVsAttackPresentationPlayer == null)
+        {
+            attackVsAttackPresentationPlayer =
+                GetComponent<BattleAttackVsAttackPresentationPlayer>();
+        }
+
+        if (attackVsAttackPresentationPlayer == null)
+        {
+            Debug.LogError(
+                "BattleSceneExecutionPresenter缺少持久化的" +
+                "BattleAttackVsAttackPresentationPlayer。",
+                this
+            );
         }
     }
 
@@ -763,12 +629,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
     private void LogApproachStarted(
         long requestId,
-        ActionPresentationContext context,
-        Vector3 sideAStart,
-        Vector3 sideATarget,
-        Vector3 sideBStart,
-        Vector3 sideBTarget,
-        float safeGap
+        ActionPresentationContext context
     )
     {
         if (!verboseLogging)
@@ -778,15 +639,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         Debug.Log(
             "[ScenePresenter] RequestId=" + requestId +
-            " / ActionBegin Approach Start" +
+            " / ActionBegin Shared Approach Start" +
             " / SideA=" + GetRuntimeUnitID(context.SideAActor) +
-            " StartX=" + sideAStart.x +
-            " TargetX=" + sideATarget.x +
             " / SideB=" + GetRuntimeUnitID(context.SideBActor) +
-            " StartX=" + sideBStart.x +
-            " TargetX=" + sideBTarget.x +
-            " / Duration=" + actionBeginApproachDuration +
-            " / Gap=" + safeGap,
+            " / Duration=" + attackVsAttackPresentationPlayer.SprintDuration +
+            " / Gap=" + attackVsAttackPresentationPlayer.ClashReadyGap,
             this
         );
     }

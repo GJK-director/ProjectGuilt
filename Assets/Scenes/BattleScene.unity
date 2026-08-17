@@ -938,6 +938,7 @@ GameObject:
   m_Component:
   - component: {fileID: 283409991}
   - component: {fileID: 283409990}
+  - component: {fileID: 283409992}
   m_Layer: 0
   m_Name: BattleSceneBootstrap
   m_TagString: Untagged
@@ -976,6 +977,18 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &283409992
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 283409989}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 1a3b7d72bce64794933316f2614a4dbf, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleSceneDevelopmentHotkeys
 --- !u!1 &293728785
 GameObject:
   m_ObjectHideFlags: 0
@@ -1172,8 +1185,8 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
+  m_SortingLayerID: 1078264445
+  m_SortingLayer: 1
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_Sprite: {fileID: 21300000, guid: 8382b0a52703abb4abf70b5a40330878, type: 3}
@@ -2140,7 +2153,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 9dfc825aed78fcd4ba02077103263b40, type: 2}
+  - {fileID: 2100000, guid: d1b94ec64d5a40f1bfbd89c0bb463bd2, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -2159,9 +2172,9 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingLayerID: 255606177
+  m_SortingLayer: 2
+  m_SortingOrder: 40
   m_MaskInteraction: 0
   m_Sprite: {fileID: 21300000, guid: 8257d98dbc03efb4da797cd161b9c1ac, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -2279,7 +2292,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 9dfc825aed78fcd4ba02077103263b40, type: 2}
+  - {fileID: 2100000, guid: d1b94ec64d5a40f1bfbd89c0bb463bd2, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -2298,9 +2311,9 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingLayerID: 255606177
+  m_SortingLayer: 2
+  m_SortingOrder: -20
   m_MaskInteraction: 0
   m_Sprite: {fileID: 21300000, guid: 4f2b68f6e24ece641bbdbfb113336f46, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -3194,6 +3207,7 @@ GameObject:
   - component: {fileID: 833021970}
   - component: {fileID: 833021969}
   - component: {fileID: 833021971}
+  - component: {fileID: 833021972}
   m_Layer: 0
   m_Name: BattleSceneExecutionPresenter
   m_TagString: Untagged
@@ -3215,12 +3229,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleSceneExecutionPresenter
   unitViewSpawner: {fileID: 0}
   defaultAttackPresentationPlayer: {fileID: 0}
+  attackVsAttackPresentationPlayer: {fileID: 833021972}
   verboseLogging: 1
-  actionLeadInDuration: 0.2
-  actionBeginApproachDuration: 0.35
-  clashReadyHoldDuration: 0.15
-  nextActionGapDuration: 0.18
-  clashReadyGap: 2.8
 --- !u!4 &833021970
 Transform:
   m_ObjectHideFlags: 0
@@ -3253,6 +3263,23 @@ MonoBehaviour:
   postImpactHoldDuration: 0.16
   hitStopDuration: 0.08
   minimumAttackPresentationDuration: 0.2
+--- !u!114 &833021972
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 833021968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2b8f53e9a0d4f4786d1e2b93a4c7f10, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsAttackPresentationPlayer
+  dualClashReadyGap: 2.2
+  sprintDuration: 0.35
+  afterimageSpawnInterval: 0.08
+  slashHoldDuration: 0.5
+  hitStopDuration: 0.08
 --- !u!1 &906990934
 GameObject:
   m_ObjectHideFlags: 0
@@ -4669,7 +4696,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 9dfc825aed78fcd4ba02077103263b40, type: 2}
+  - {fileID: 2100000, guid: d1b94ec64d5a40f1bfbd89c0bb463bd2, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -4688,8 +4715,8 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
+  m_SortingLayerID: 255606177
+  m_SortingLayer: 2
   m_SortingOrder: 0
   m_MaskInteraction: 0
   m_Sprite: {fileID: 21300000, guid: b49b9740e57c2284183a09c1ad01d20f, type: 3}
@@ -5852,7 +5879,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 9dfc825aed78fcd4ba02077103263b40, type: 2}
+  - {fileID: 2100000, guid: d1b94ec64d5a40f1bfbd89c0bb463bd2, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -5871,9 +5898,9 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingLayerID: 255606177
+  m_SortingLayer: 2
+  m_SortingOrder: 40
   m_MaskInteraction: 0
   m_Sprite: {fileID: 21300000, guid: 4f2b68f6e24ece641bbdbfb113336f46, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -5996,7 +6023,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 9dfc825aed78fcd4ba02077103263b40, type: 2}
+  - {fileID: 2100000, guid: d1b94ec64d5a40f1bfbd89c0bb463bd2, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -6015,9 +6042,9 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingLayerID: 255606177
+  m_SortingLayer: 2
+  m_SortingOrder: 20
   m_MaskInteraction: 0
   m_Sprite: {fileID: 21300000, guid: 6488ed9166bd82047ad79b9d6c922259, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -6102,7 +6129,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 9dfc825aed78fcd4ba02077103263b40, type: 2}
+  - {fileID: 2100000, guid: d1b94ec64d5a40f1bfbd89c0bb463bd2, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -6121,9 +6148,9 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingLayerID: 255606177
+  m_SortingLayer: 2
+  m_SortingOrder: 20
   m_MaskInteraction: 0
   m_Sprite: {fileID: 21300000, guid: 5df25eae912414e4094bb6b855bfe819, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
@@ -6243,7 +6270,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 9dfc825aed78fcd4ba02077103263b40, type: 2}
+  - {fileID: 2100000, guid: d1b94ec64d5a40f1bfbd89c0bb463bd2, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -6262,9 +6289,9 @@ SpriteRenderer:
   m_AutoUVMaxAngle: 89
   m_LightmapParameters: {fileID: 0}
   m_GlobalIlluminationMeshLod: 0
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
+  m_SortingLayerID: 255606177
+  m_SortingLayer: 2
+  m_SortingOrder: -20
   m_MaskInteraction: 0
   m_Sprite: {fileID: 21300000, guid: 8257d98dbc03efb4da797cd161b9c1ac, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
