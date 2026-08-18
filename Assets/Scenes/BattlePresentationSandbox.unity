@@ -119,26 +119,16 @@ NavMeshSettings:
     debug:
       m_Flags: 0
   m_NavMeshData: {fileID: 0}
---- !u!1 &385498944 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 1904981624478188162, guid: db59d04877340b74b99edede28b013d6, type: 3}
-  m_PrefabInstance: {fileID: 900000002}
-  m_PrefabAsset: {fileID: 0}
---- !u!4 &385498945 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 7146915303802864935, guid: db59d04877340b74b99edede28b013d6, type: 3}
-  m_PrefabInstance: {fileID: 900000002}
-  m_PrefabAsset: {fileID: 0}
 --- !u!114 &385498946 stripped
 MonoBehaviour:
   m_CorrespondingSourceObject: {fileID: 8524253091779039915, guid: db59d04877340b74b99edede28b013d6, type: 3}
   m_PrefabInstance: {fileID: 900000002}
   m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 385498944}
+  m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: fca67d063733d874489e2f94bc6a9e54, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleCharacterPresentationController
 --- !u!1 &504989608
 GameObject:
@@ -287,6 +277,7 @@ GameObject:
   m_Component:
   - component: {fileID: 546880344}
   - component: {fileID: 546880343}
+  - component: {fileID: 546880345}
   m_Layer: 0
   m_Name: BattlePresentationSandboxController
   m_TagString: Untagged
@@ -308,8 +299,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattlePresentationSandboxController
   character: {fileID: 1435928652}
   defender: {fileID: 385498946}
+  attackVsAttackPresentationPlayer: {fileID: 546880345}
+  clashEngagementProfile: {fileID: 11400000, guid: b9f30c692f87489f94c2b784d6e5ed65, type: 2}
+  characterTestSpeed: 10
+  defenderTestSpeed: 1
   engagementGap: 2.3
-  dualClashReadyGap: 3.5
   sprintDistance: 2
   sprintDuration: 0.35
   slashHoldDuration: 0.5
@@ -317,6 +311,19 @@ MonoBehaviour:
   hitStopDuration: 0.08
   clashRecoilDistance: 1.2
   clashRecoilDuration: 0.05
+--- !u!114 &546880345
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 546880342}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c2b8f53e9a0d4f4786d1e2b93a4c7f10, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsAttackPresentationPlayer
+  presentationProfile: {fileID: 11400000, guid: 307590eb91f941ddb9929a2a6541dd5e, type: 2}
 --- !u!4 &546880344
 Transform:
   m_ObjectHideFlags: 0
@@ -332,27 +339,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1 &1435928651 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: 6478388234597724174, guid: 83654e2e3bcdb6b4e9b49ef905dde0cd, type: 3}
-  m_PrefabInstance: {fileID: 900000001}
-  m_PrefabAsset: {fileID: 0}
---- !u!114 &1435928652 stripped
-MonoBehaviour:
-  m_CorrespondingSourceObject: {fileID: 905814505359435800, guid: 83654e2e3bcdb6b4e9b49ef905dde0cd, type: 3}
-  m_PrefabInstance: {fileID: 900000001}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1435928651}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fca67d063733d874489e2f94bc6a9e54, type: 3}
-  m_Name:
-  m_EditorClassIdentifier: Assembly-CSharp::BattleCharacterPresentationController
---- !u!4 &1435928653 stripped
-Transform:
-  m_CorrespondingSourceObject: {fileID: 8322905608939587015, guid: 83654e2e3bcdb6b4e9b49ef905dde0cd, type: 3}
-  m_PrefabInstance: {fileID: 900000001}
-  m_PrefabAsset: {fileID: 0}
 --- !u!1001 &900000001
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -411,6 +397,17 @@ PrefabInstance:
     m_AddedGameObjects: []
     m_AddedComponents: []
   m_SourcePrefab: {fileID: 100100000, guid: db59d04877340b74b99edede28b013d6, type: 3}
+--- !u!114 &1435928652 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 905814505359435800, guid: 83654e2e3bcdb6b4e9b49ef905dde0cd, type: 3}
+  m_PrefabInstance: {fileID: 900000001}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: fca67d063733d874489e2f94bc6a9e54, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleCharacterPresentationController
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

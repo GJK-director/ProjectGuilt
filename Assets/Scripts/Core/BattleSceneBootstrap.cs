@@ -4,6 +4,7 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
 {
     [SerializeField] private string encounterID;
     [SerializeField] private BattleSimpleUIController battleUIController;
+    [SerializeField] private BattleFormalPresentationTestHarness formalPresentationTestHarness;
     [SerializeField] private bool useDebugTestInitialization = false;
     [SerializeField] private bool useSingleUnitDemo = false;
 
@@ -81,6 +82,20 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
             string errorMessage =
                 "BattleScene正式初始化失败：encounterID=" + encounterID +
                 "，原因：" + bootstrapError;
+            Debug.LogError(errorMessage, this);
+            battleUIController.ShowInitializationFailure(errorMessage);
+            return false;
+        }
+
+        // 正式RuntimeState先由Definition创建，开发场景数据再在UI首次读取前注入。
+        if (formalPresentationTestHarness != null &&
+            !formalPresentationTestHarness.TryPrepareScenario(
+                bootstrapResult.runtimeState,
+                out string testScenarioFailure))
+        {
+            string errorMessage =
+                "BattleScene正式初始化失败：Presentation测试场景准备失败，" +
+                "原因：" + testScenarioFailure;
             Debug.LogError(errorMessage, this);
             battleUIController.ShowInitializationFailure(errorMessage);
             return false;

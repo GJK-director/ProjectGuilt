@@ -18,6 +18,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public BattleUnitViewHandle SideBHandle;
         public BattleCharacterPresentationController SideAPresentation;
         public BattleCharacterPresentationController SideBPresentation;
+        public BattleClashEngagementResult ClashEngagement;
 
         public CharacterData CurrentAttacker;
         public CharacterData CurrentTarget;
@@ -41,6 +42,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     private BattleDefaultAttackPresentationPlayer defaultAttackPresentationPlayer;
     [SerializeField]
     private BattleAttackVsAttackPresentationPlayer attackVsAttackPresentationPlayer;
+    [SerializeField]
+    private BattleClashEngagementProfile clashEngagementProfile;
     [SerializeField] private bool verboseLogging = false;
 
     private ActionPresentationContext activeContext;
@@ -170,6 +173,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ActionPresentationContext context
     )
     {
+        if (clashEngagementProfile == null)
+        {
+            LogApproachFallback(request, "接敌Profile未配置");
+            return false;
+        }
+
         if (!HasCompleteClashPresentationMapping(context) ||
             attackVsAttackPresentationPlayer == null ||
             !attackVsAttackPresentationPlayer.isActiveAndEnabled)
@@ -180,6 +189,13 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         long requestId = request.RequestId;
         BattleExecutionItem executionItem = request.ExecutionItem;
+        context.ClashEngagement = BattleClashEngagementResolver.Resolve(
+            clashEngagementProfile,
+            context.SideAPresentation.PresentationKey,
+            context.SideBPresentation.PresentationKey,
+            GetPresentationSpeed(context.SideAActor),
+            GetPresentationSpeed(context.SideBActor)
+        );
         activePresentationRequestId = requestId;
         LogApproachStarted(requestId, context);
         bool started = attackVsAttackPresentationPlayer
@@ -188,6 +204,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 context.SideAHandle.WorldRoot.transform,
                 context.SideBPresentation,
                 context.SideBHandle.WorldRoot.transform,
+                context.ClashEngagement,
                 () => CompleteAttackVsAttackApproach(
                     context,
                     executionItem,
@@ -279,7 +296,89 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         RefreshRequestState(context, request);
         RefreshClashActors(context);
         LogRequest(request, context);
-        CompleteRequest(request, completion);
+
+        if (!ShouldPlayAttackTieResult(request))
+        {
+            CompleteRequest(request, completion);
+            return;
+        }
+
+        if (!TryStartAttackTieResult(request, completion, context))
+        {
+            CompleteRequest(request, completion);
+        }
+    }
+
+    private static bool ShouldPlayAttackTieResult(
+        BattlePresentationRequest request
+    )
+    {
+        BattleClashSession session = request.ClashSession;
+        return session != null &&
+            session.ClashType == BattleClashType.AttackVsAttack &&
+            !session.IsFinalized &&
+            session.AttemptResult == BattleClashAttemptResult.AttackTie &&
+            session.RequiresAnotherRoll;
+    }
+
+    private bool TryStartAttackTieResult(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (!HasCompleteClashPresentationMapping(context) ||
+            context.ClashEngagement == null ||
+            attackVsAttackPresentationPlayer == null ||
+            !attackVsAttackPresentationPlayer.isActiveAndEnabled)
+        {
+            return false;
+        }
+
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        activePresentationRequestId = requestId;
+        bool started = attackVsAttackPresentationPlayer.TryPlayTieResult(
+            context.SideAPresentation,
+            context.SideAHandle.WorldRoot.transform,
+            context.SideBPresentation,
+            context.SideBHandle.WorldRoot.transform,
+            context.ClashEngagement,
+            () => CompleteAttackTieResult(
+                context,
+                executionItem,
+                requestId,
+                completion
+            )
+        );
+        if (started)
+        {
+            return true;
+        }
+
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        return false;
+    }
+
+    private void CompleteAttackTieResult(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem))
+        {
+            return;
+        }
+
+        activePresentationRequestId = 0L;
+        completion.TryComplete(requestId);
     }
 
     private void HandleImpact(
@@ -643,7 +742,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             " / SideA=" + GetRuntimeUnitID(context.SideAActor) +
             " / SideB=" + GetRuntimeUnitID(context.SideBActor) +
             " / Duration=" + attackVsAttackPresentationPlayer.SprintDuration +
-            " / Gap=" + attackVsAttackPresentationPlayer.ClashReadyGap,
+            " / Gap=" + context.ClashEngagement.FinalGap +
+            " / Speed=" + context.ClashEngagement.SideASpeed +
+            "/" + context.ClashEngagement.SideBSpeed +
+            " / Share=" + context.ClashEngagement.SideAMovementShare +
+            "/" + context.ClashEngagement.SideBMovementShare,
             this
         );
     }
@@ -746,6 +849,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         return actor != null && !string.IsNullOrEmpty(actor.runtimeUnitID)
             ? actor.runtimeUnitID
             : "<null>";
+    }
+
+    private static int GetPresentationSpeed(CharacterData actor)
+    {
+        return actor != null ? actor.GetCurrentSpeed() : 0;
     }
 
     private static bool IsMapped(

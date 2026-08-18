@@ -7,39 +7,32 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
 {
     [SerializeField] private BattleCharacterPresentationController character;
     [SerializeField] private BattleCharacterPresentationController defender;
+    [SerializeField]
+    private BattleAttackVsAttackPresentationPlayer attackVsAttackPresentationPlayer;
+    [SerializeField] private BattleClashEngagementProfile clashEngagementProfile;
+    [SerializeField, Min(0f)] private float characterTestSpeed = 5f;
+    [SerializeField, Min(0f)] private float defenderTestSpeed = 5f;
     [SerializeField] private float engagementGap = 1.0f;
-    [SerializeField] private float dualClashReadyGap = 2.8f;
     [SerializeField] private float sprintDistance = 2f;
     [SerializeField] private float sprintDuration = 0.35f;
     [SerializeField] private float slashHoldDuration = 0.2f;
     [SerializeField] private float afterimageSpawnInterval = 0.08f;
     [SerializeField] private float hitStopDuration = 0.08f;
-    [SerializeField] private float clashRecoilDistance = 0.40f;
-    [SerializeField] private float clashRecoilDuration = 0.08f;
 
     private Coroutine dynamicTestCoroutine;
     private Coroutine hitStopCoroutine;
     private Coroutine dualHitStopCoroutine;
     private Coroutine loserHitCoroutine;
-    private Coroutine characterTieSlashCoroutine;
-    private Coroutine defenderTieSlashCoroutine;
-    private Coroutine tieClashRecoilCoroutine;
     private Coroutine parryRecoilCoroutine;
     private Coroutine perfectGuardEffectCoroutine;
     private Coroutine partialGuardRecoilCoroutine;
     private bool waitingForManualRoll;
     private bool attackImpactHandled;
-    private bool characterTieImpactReached;
-    private bool defenderTieImpactReached;
-    private bool tieCollisionHandled;
-    private bool characterTieSlashCompleted;
-    private bool defenderTieSlashCompleted;
-    private bool tieClashRecoilCompleted;
     private bool perfectGuardImpactHandled;
     private bool partialGuardImpactHandled;
-    private float currentTieDirectionSign = 1f;
     private bool hasWarnedMissingDefender;
     private bool hasWarnedMissingAttackPair;
+    private bool hasWarnedMissingSharedAttackPlayer;
     private bool hasWarnedMissingTiePair;
     private bool hasWarnedMissingGuardPair;
     private Vector3 characterResetPosition;
@@ -136,24 +129,6 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             loserHitCoroutine = null;
         }
 
-        if (characterTieSlashCoroutine != null)
-        {
-            StopCoroutine(characterTieSlashCoroutine);
-            characterTieSlashCoroutine = null;
-        }
-
-        if (defenderTieSlashCoroutine != null)
-        {
-            StopCoroutine(defenderTieSlashCoroutine);
-            defenderTieSlashCoroutine = null;
-        }
-
-        if (tieClashRecoilCoroutine != null)
-        {
-            StopCoroutine(tieClashRecoilCoroutine);
-            tieClashRecoilCoroutine = null;
-        }
-
         if (parryRecoilCoroutine != null)
         {
             StopCoroutine(parryRecoilCoroutine);
@@ -184,12 +159,13 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             dynamicTestCoroutine = null;
         }
 
+        // Sandbox停用时同步取消共享Player，避免留下暂停、特效或回调等待。
+        attackVsAttackPresentationPlayer?.CancelAndReset();
+
         waitingForManualRoll = false;
         attackImpactHandled = false;
         perfectGuardImpactHandled = false;
         partialGuardImpactHandled = false;
-        ResetTieRoundState();
-
         if (character != null)
         {
             character.SetPresentationPaused(false);
@@ -590,6 +566,20 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         }
 
         hasWarnedMissingAttackPair = false;
+        if (attackVsAttackPresentationPlayer == null ||
+            !attackVsAttackPresentationPlayer.isActiveAndEnabled)
+        {
+            if (!hasWarnedMissingSharedAttackPlayer)
+            {
+                Debug.LogWarning(
+                    "BattlePresentationSandboxController：按键8/9需要绑定并启用共享AttackVsAttack Player。"
+                );
+                hasWarnedMissingSharedAttackPlayer = true;
+            }
+            return;
+        }
+
+        hasWarnedMissingSharedAttackPlayer = false;
         if (dynamicTestCoroutine != null)
         {
             return;
@@ -616,12 +606,25 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         }
 
         hasWarnedMissingTiePair = false;
+        if (attackVsAttackPresentationPlayer == null ||
+            !attackVsAttackPresentationPlayer.isActiveAndEnabled)
+        {
+            if (!hasWarnedMissingSharedAttackPlayer)
+            {
+                Debug.LogWarning(
+                    "BattlePresentationSandboxController：按键0需要绑定并启用共享AttackVsAttack Player。"
+                );
+                hasWarnedMissingSharedAttackPlayer = true;
+            }
+            return;
+        }
+
+        hasWarnedMissingSharedAttackPlayer = false;
         if (dynamicTestCoroutine != null)
         {
             return;
         }
 
-        ResetTieRoundState();
         dynamicTestCoroutine = StartCoroutine(RunAttackTieLoopTest());
     }
 
@@ -709,6 +712,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             return;
         }
 
+        attackVsAttackPresentationPlayer?.CancelAndReset();
         character.transform.position = characterResetPosition;
         character.ClearAfterimages();
         character.SetIdle();
@@ -772,130 +776,6 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         }
 
         character.transform.position = targetPosition;
-    }
-
-    private IEnumerator RunDualSprintMovement(
-        Vector3 characterStartPosition,
-        Vector3 characterTargetPosition,
-        Vector3 defenderStartPosition,
-        Vector3 defenderTargetPosition
-    )
-    {
-        if (character == null || defender == null)
-        {
-            yield break;
-        }
-
-        if (sprintDuration <= 0f)
-        {
-            character.transform.position = characterTargetPosition;
-            defender.transform.position = defenderTargetPosition;
-            yield break;
-        }
-
-        float elapsed = 0f;
-        float afterimageElapsed = 0f;
-        bool spawnRepeatedAfterimages = afterimageSpawnInterval > 0f;
-        bool characterMoves =
-            (characterTargetPosition - characterStartPosition).sqrMagnitude >
-            Mathf.Epsilon;
-        bool defenderMoves =
-            (defenderTargetPosition - defenderStartPosition).sqrMagnitude >
-            Mathf.Epsilon;
-
-        if (characterMoves)
-        {
-            character.SpawnAfterimage();
-        }
-        if (defenderMoves)
-        {
-            defender.SpawnAfterimage();
-        }
-
-        while (elapsed < sprintDuration)
-        {
-            if (character == null || defender == null)
-            {
-                yield break;
-            }
-
-            elapsed += Time.deltaTime;
-            float linearT = Mathf.Clamp01(elapsed / sprintDuration);
-            float easedT = BattlePresentationEasing.EaseOutQuad(linearT);
-            character.transform.position = characterStartPosition +
-                (characterTargetPosition - characterStartPosition) * easedT;
-            defender.transform.position = defenderStartPosition +
-                (defenderTargetPosition - defenderStartPosition) * easedT;
-
-            if (spawnRepeatedAfterimages &&
-                (characterMoves || defenderMoves))
-            {
-                afterimageElapsed += Time.deltaTime;
-                if (afterimageElapsed >= afterimageSpawnInterval &&
-                    elapsed < sprintDuration)
-                {
-                    if (characterMoves)
-                    {
-                        character.SpawnAfterimage();
-                    }
-                    if (defenderMoves)
-                    {
-                        defender.SpawnAfterimage();
-                    }
-                    afterimageElapsed = 0f;
-                }
-            }
-
-            yield return null;
-        }
-
-        if (character == null || defender == null)
-        {
-            yield break;
-        }
-
-        character.transform.position = characterTargetPosition;
-        defender.transform.position = defenderTargetPosition;
-    }
-
-    private IEnumerator RunDualApproachToClashReady()
-    {
-        if (character == null || defender == null)
-        {
-            yield break;
-        }
-
-        Vector3 characterStartPosition = character.transform.position;
-        Vector3 defenderStartPosition = defender.transform.position;
-        float horizontalDelta =
-            defenderStartPosition.x - characterStartPosition.x;
-        float directionSign = GetHorizontalDirectionSign(horizontalDelta);
-        float safeDualClashReadyGap = Mathf.Max(0f, dualClashReadyGap);
-        float horizontalDistance = Mathf.Abs(horizontalDelta);
-
-        character.SetSprint();
-        defender.SetSprint();
-
-        if (horizontalDistance <= safeDualClashReadyGap)
-        {
-            yield break;
-        }
-
-        float midX =
-            (characterStartPosition.x + defenderStartPosition.x) * 0.5f;
-        Vector3 characterTargetPosition = characterStartPosition;
-        Vector3 defenderTargetPosition = defenderStartPosition;
-        characterTargetPosition.x = midX -
-            directionSign * safeDualClashReadyGap * 0.5f;
-        defenderTargetPosition.x = midX +
-            directionSign * safeDualClashReadyGap * 0.5f;
-
-        yield return RunDualSprintMovement(
-            characterStartPosition,
-            characterTargetPosition,
-            defenderStartPosition,
-            defenderTargetPosition
-        );
     }
 
     private IEnumerator WaitForManualRollAndSlash()
@@ -1004,28 +884,73 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
 
     private IEnumerator RunAttackVsAttackTest(bool defenderWins)
     {
-        if (character == null || defender == null)
+        if (character == null || defender == null ||
+            attackVsAttackPresentationPlayer == null)
         {
-            FinishAttackTest(character, defender);
+            FinishSharedAttackVsAttackTest();
             yield break;
         }
 
         float horizontalDelta =
             defender.transform.position.x - character.transform.position.x;
         float directionSign = GetHorizontalDirectionSign(horizontalDelta);
+        BattleClashEngagementResult engagement =
+            BattleClashEngagementResolver.Resolve(
+                clashEngagementProfile,
+                character.PresentationKey,
+                defender.PresentationKey,
+                characterTestSpeed,
+                defenderTestSpeed
+            );
+        if (engagement == null)
+        {
+            Debug.LogWarning(
+                "BattlePresentationSandboxController：按键8/9无法解析Clash Engagement。"
+            );
+            FinishSharedAttackVsAttackTest();
+            yield break;
+        }
 
-        yield return RunDualApproachToClashReady();
+        bool approachFinished = false;
+        bool approachStarted = attackVsAttackPresentationPlayer
+            .TryPlayClashReadyApproach(
+                character,
+                character.transform,
+                defender,
+                defender.transform,
+                engagement,
+                () => approachFinished = true
+            );
+        if (!approachStarted)
+        {
+            Debug.LogWarning(
+                "BattlePresentationSandboxController：共享AttackVsAttack Approach启动失败。"
+            );
+            FinishSharedAttackVsAttackTest();
+            yield break;
+        }
+
+        while (!approachFinished)
+        {
+            if (attackVsAttackPresentationPlayer == null)
+            {
+                FinishSharedAttackVsAttackTest();
+                yield break;
+            }
+
+            yield return null;
+        }
 
         if (character == null || defender == null)
         {
-            FinishAttackTest(character, defender);
+            FinishSharedAttackVsAttackTest();
             yield break;
         }
 
         yield return WaitForManualRoll();
         if (character == null || defender == null)
         {
-            FinishAttackTest(character, defender);
+            FinishSharedAttackVsAttackTest();
             yield break;
         }
 
@@ -1039,42 +964,132 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             ? -directionSign
             : directionSign;
 
-        yield return RunWinnerAttackPresentation(
-            winner,
-            loser,
-            attackDirectionSign
-        );
+        bool resolvedAttackFinished = false;
+        bool resolvedAttackStarted = attackVsAttackPresentationPlayer
+            .TryPlayResolvedWinnerAttack(
+                winner,
+                loser,
+                attackDirectionSign,
+                () => attackImpactHandled = true,
+                () => resolvedAttackFinished = true
+            );
+        if (!resolvedAttackStarted)
+        {
+            Debug.LogWarning(
+                "BattlePresentationSandboxController：共享AttackVsAttack胜者攻击启动失败。"
+            );
+            FinishSharedAttackVsAttackTest();
+            yield break;
+        }
+
+        while (!resolvedAttackFinished)
+        {
+            if (attackVsAttackPresentationPlayer == null)
+            {
+                FinishSharedAttackVsAttackTest();
+                yield break;
+            }
+
+            yield return null;
+        }
+
+        FinishSharedAttackVsAttackTest();
+    }
+
+    private void FinishSharedAttackVsAttackTest()
+    {
+        // Player负责视觉复位；Sandbox只释放测试输入状态与互斥锁。
+        waitingForManualRoll = false;
+        attackImpactHandled = false;
+        dynamicTestCoroutine = null;
     }
 
     private IEnumerator RunAttackTieLoopTest()
     {
-        if (character == null || defender == null)
+        if (character == null || defender == null ||
+            attackVsAttackPresentationPlayer == null)
         {
             FinishTieLoopAfterAbort();
             yield break;
         }
 
-        yield return RunDualApproachToClashReady();
+        BattleClashEngagementResult engagement =
+            BattleClashEngagementResolver.Resolve(
+                clashEngagementProfile,
+                character.PresentationKey,
+                defender.PresentationKey,
+                characterTestSpeed,
+                defenderTestSpeed
+            );
+        if (engagement == null)
+        {
+            FinishTieLoopAfterAbort();
+            yield break;
+        }
+
+        bool approachFinished = false;
+        bool approachStarted = attackVsAttackPresentationPlayer
+            .TryPlayClashReadyApproach(
+                character,
+                character.transform,
+                defender,
+                defender.transform,
+                engagement,
+                () => approachFinished = true
+            );
+        if (!approachStarted)
+        {
+            FinishTieLoopAfterAbort();
+            yield break;
+        }
+
+        while (!approachFinished)
+        {
+            if (character == null || defender == null ||
+                attackVsAttackPresentationPlayer == null)
+            {
+                FinishTieLoopAfterAbort();
+                yield break;
+            }
+
+            yield return null;
+        }
 
         while (character != null && defender != null)
         {
             yield return WaitForManualRollForPair();
-            if (character == null || defender == null)
+            if (character == null || defender == null ||
+                attackVsAttackPresentationPlayer == null)
             {
                 break;
             }
 
-            float horizontalDelta =
-                defender.transform.position.x - character.transform.position.x;
-            float directionSign = GetHorizontalDirectionSign(horizontalDelta);
-            yield return RunTieSlashRound(directionSign);
-
-            if (character == null || defender == null)
+            bool tieFinished = false;
+            bool tieStarted = attackVsAttackPresentationPlayer
+                .TryPlayTieResult(
+                    character,
+                    character.transform,
+                    defender,
+                    defender.transform,
+                    engagement,
+                    () => tieFinished = true
+                );
+            if (!tieStarted)
             {
                 break;
             }
 
-            yield return RunDualApproachToClashReady();
+            while (!tieFinished)
+            {
+                if (character == null || defender == null ||
+                    attackVsAttackPresentationPlayer == null)
+                {
+                    FinishTieLoopAfterAbort();
+                    yield break;
+                }
+
+                yield return null;
+            }
         }
 
         FinishTieLoopAfterAbort();
@@ -1095,178 +1110,6 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         }
     }
 
-    private IEnumerator RunTieSlashRound(float directionSign)
-    {
-        ResetTieRoundState();
-        currentTieDirectionSign = directionSign;
-        character.SetSlash();
-        defender.SetSlash();
-
-        float slashStartedAt = Time.time;
-        characterTieSlashCoroutine = StartCoroutine(
-            RunTieSlashPresentation(character, directionSign, true)
-        );
-        defenderTieSlashCoroutine = StartCoroutine(
-            RunTieSlashPresentation(defender, -directionSign, false)
-        );
-
-        while (!characterTieSlashCompleted ||
-            !defenderTieSlashCompleted ||
-            !tieClashRecoilCompleted)
-        {
-            if (character == null || defender == null)
-            {
-                yield break;
-            }
-
-            yield return null;
-        }
-
-        characterTieSlashCoroutine = null;
-        defenderTieSlashCoroutine = null;
-        tieClashRecoilCoroutine = null;
-
-        float remainingSlashHold = slashHoldDuration -
-            (Time.time - slashStartedAt);
-        while (remainingSlashHold > 0f)
-        {
-            if (character == null || defender == null)
-            {
-                yield break;
-            }
-
-            remainingSlashHold -= Time.deltaTime;
-            yield return null;
-        }
-
-        // 同一调用栈内完成双方Slash收尾并切回Sprint，避免出现单方中间帧。
-        character.ClearSlashEffect();
-        defender.ClearSlashEffect();
-        character.FinishSlashPresentation();
-        defender.FinishSlashPresentation();
-        character.SetSprint();
-        defender.SetSprint();
-    }
-
-    private IEnumerator RunTieSlashPresentation(
-        BattleCharacterPresentationController actor,
-        float attackDirectionSign,
-        bool isCharacter
-    )
-    {
-        if (actor != null)
-        {
-            yield return actor.PlaySlashPresentation(
-                attackDirectionSign,
-                () => MarkTieImpactReached(isCharacter)
-            );
-        }
-
-        if (isCharacter)
-        {
-            characterTieSlashCompleted = true;
-        }
-        else
-        {
-            defenderTieSlashCompleted = true;
-        }
-    }
-
-    private void MarkTieImpactReached(bool isCharacter)
-    {
-        if (isCharacter)
-        {
-            characterTieImpactReached = true;
-        }
-        else
-        {
-            defenderTieImpactReached = true;
-        }
-
-        if (tieCollisionHandled ||
-            !characterTieImpactReached ||
-            !defenderTieImpactReached)
-        {
-            return;
-        }
-
-        tieCollisionHandled = true;
-        if (character == null || defender == null)
-        {
-            return;
-        }
-
-        // Tie不暂停Slash表现；双方到达Impact后立即并行弹开根节点。
-        tieClashRecoilCoroutine = StartCoroutine(
-            RunTieClashRecoil(currentTieDirectionSign)
-        );
-    }
-
-    private IEnumerator RunTieClashRecoil(float directionSign)
-    {
-        yield return RunDualClashRecoil(directionSign);
-        tieClashRecoilCompleted = true;
-    }
-
-    private IEnumerator RunDualClashRecoil(float directionSign)
-    {
-        if (character == null || defender == null)
-        {
-            yield break;
-        }
-
-        Vector3 characterStartPosition = character.transform.position;
-        Vector3 defenderStartPosition = defender.transform.position;
-        float safeRecoilDistance = Mathf.Max(0f, clashRecoilDistance);
-        Vector3 characterTargetPosition = characterStartPosition -
-            Vector3.right * directionSign * safeRecoilDistance;
-        Vector3 defenderTargetPosition = defenderStartPosition +
-            Vector3.right * directionSign * safeRecoilDistance;
-
-        if (clashRecoilDuration <= 0f)
-        {
-            character.transform.position = characterTargetPosition;
-            defender.transform.position = defenderTargetPosition;
-            yield break;
-        }
-
-        float elapsed = 0f;
-        while (elapsed < clashRecoilDuration)
-        {
-            if (character == null || defender == null)
-            {
-                yield break;
-            }
-
-            elapsed += Time.deltaTime;
-            float linearT = Mathf.Clamp01(elapsed / clashRecoilDuration);
-            float easedT = BattlePresentationEasing.EaseOutQuad(linearT);
-            character.transform.position = characterStartPosition +
-                (characterTargetPosition - characterStartPosition) * easedT;
-            defender.transform.position = defenderStartPosition +
-                (defenderTargetPosition - defenderStartPosition) * easedT;
-            yield return null;
-        }
-
-        if (character == null || defender == null)
-        {
-            yield break;
-        }
-
-        character.transform.position = characterTargetPosition;
-        defender.transform.position = defenderTargetPosition;
-    }
-
-    private void ResetTieRoundState()
-    {
-        characterTieImpactReached = false;
-        defenderTieImpactReached = false;
-        tieCollisionHandled = false;
-        characterTieSlashCompleted = false;
-        defenderTieSlashCompleted = false;
-        tieClashRecoilCompleted = false;
-    }
-
     private void FinishTieLoopAfterAbort()
     {
         if (dualHitStopCoroutine != null)
@@ -1275,23 +1118,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             dualHitStopCoroutine = null;
         }
 
-        if (characterTieSlashCoroutine != null)
-        {
-            StopCoroutine(characterTieSlashCoroutine);
-            characterTieSlashCoroutine = null;
-        }
-
-        if (defenderTieSlashCoroutine != null)
-        {
-            StopCoroutine(defenderTieSlashCoroutine);
-            defenderTieSlashCoroutine = null;
-        }
-
-        if (tieClashRecoilCoroutine != null)
-        {
-            StopCoroutine(tieClashRecoilCoroutine);
-            tieClashRecoilCoroutine = null;
-        }
+        attackVsAttackPresentationPlayer?.CancelAndReset();
 
         if (character != null)
         {
@@ -1312,7 +1139,6 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         }
 
         waitingForManualRoll = false;
-        ResetTieRoundState();
         dynamicTestCoroutine = null;
     }
 

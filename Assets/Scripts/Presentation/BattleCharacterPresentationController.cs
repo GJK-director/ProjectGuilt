@@ -12,6 +12,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         public Coroutine fadeCoroutine;
     }
 
+    [SerializeField] private string presentationKey;
     [SerializeField] private SpriteRenderer characterSprite;
     [SerializeField] private Transform bodyVisualRoot;
     [SerializeField] private Sprite idleSprite;
@@ -64,6 +65,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     private readonly List<ActiveAfterimage> activeAfterimages =
         new List<ActiveAfterimage>();
 
+    public string PresentationKey => presentationKey ?? string.Empty;
     public SpriteRenderer CharacterSpriteRenderer => characterSprite;
 
     void Awake()
