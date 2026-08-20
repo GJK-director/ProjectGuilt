@@ -1001,9 +1001,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 3d78fe29911843aaab0fd225c1ec010c, type: 3}
-  m_Name:
+  m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleFormalPresentationTestHarness
-  scenario: 0
+  scenario: 3
 --- !u!1 &293728785
 GameObject:
   m_ObjectHideFlags: 0
@@ -3223,6 +3223,7 @@ GameObject:
   - component: {fileID: 833021969}
   - component: {fileID: 833021971}
   - component: {fileID: 833021972}
+  - component: {fileID: 833021973}
   m_Layer: 0
   m_Name: BattleSceneExecutionPresenter
   m_TagString: Untagged
@@ -3245,6 +3246,7 @@ MonoBehaviour:
   unitViewSpawner: {fileID: 0}
   defaultAttackPresentationPlayer: {fileID: 0}
   attackVsAttackPresentationPlayer: {fileID: 833021972}
+  attackVsGuardPresentationPlayer: {fileID: 833021973}
   clashEngagementProfile: {fileID: 11400000, guid: b9f30c692f87489f94c2b784d6e5ed65, type: 2}
   verboseLogging: 1
 --- !u!4 &833021970
@@ -3292,6 +3294,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsAttackPresentationPlayer
   presentationProfile: {fileID: 11400000, guid: 307590eb91f941ddb9929a2a6541dd5e, type: 2}
+--- !u!114 &833021973
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 833021968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ff2c512a5375409dbc968626e78e860f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsGuardPresentationPlayer
+  presentationProfile: {fileID: 11400000, guid: 3e7f0ac0a07f45988bb686e371a01415, type: 2}
 --- !u!1 &906990934
 GameObject:
   m_ObjectHideFlags: 0

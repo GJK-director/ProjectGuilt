@@ -20,6 +20,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     [SerializeField] private Sprite slashSprite;
     [SerializeField] private Sprite hitSprite;
     [SerializeField] private Sprite guardSprite;
+    [SerializeField] private Sprite dodgeSprite;
     [SerializeField] private SpriteRenderer perfectGuardEffect;
     [SerializeField] private SpriteRenderer slashBackEffect;
     [SerializeField] private SpriteRenderer slashFrontEffect;
@@ -48,10 +49,15 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     [SerializeField] private float guardHoldDuration = 0.10f;
     [SerializeField] private float perfectGuardEffectHoldDuration = 0.06f;
     [SerializeField] private float perfectGuardEffectFadeOutDuration = 0.10f;
+    [SerializeField] private float dodgeHorizontalDistance = 0.20f;
+    [SerializeField] private float dodgeDuration = 0.18f;
 
     private Vector3 bodyBaseLocalPosition;
     private Vector3 bodyMotionOffset;
     private Vector3 bodyShakeOffset;
+    private Vector3 dodgeMotionOffset;
+    private Coroutine dodgeMotionCoroutine;
+    private Action dodgeMotionFinishedCallback;
     private bool bodyBaseStateCached;
     private Vector3 slashBackOriginalLocalPosition;
     private Vector3 slashFrontOriginalLocalPosition;
@@ -114,6 +120,11 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         SetPose(guardSprite);
     }
 
+    public void SetDodge()
+    {
+        SetPose(dodgeSprite);
+    }
+
     public void SetPresentationPaused(bool paused)
     {
         presentationPaused = paused;
@@ -171,8 +182,45 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
 
     public void ClearBodyVisualOffsets()
     {
+        CancelDodgeMotion();
         bodyMotionOffset = Vector3.zero;
         bodyShakeOffset = Vector3.zero;
+        dodgeMotionOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+    }
+
+    public bool PlayDodgeMotion(
+        float firstDirectionSign,
+        Action finishedCallback = null
+    )
+    {
+        FinishDodgePresentation();
+        CacheBodyVisualState();
+        if (!isActiveAndEnabled || !bodyBaseStateCached || bodyVisualRoot == null)
+        {
+            return false;
+        }
+
+        float safeDistance = Mathf.Max(0f, dodgeHorizontalDistance);
+        float safeDuration = Mathf.Max(0f, dodgeDuration);
+        dodgeMotionFinishedCallback = finishedCallback;
+        if (safeDistance <= 0f || safeDuration <= 0f)
+        {
+            CompleteDodgeMotion();
+            return true;
+        }
+
+        float normalizedDirection = firstDirectionSign >= 0f ? 1f : -1f;
+        dodgeMotionCoroutine = StartCoroutine(
+            RunDodgeMotion(normalizedDirection, safeDistance, safeDuration)
+        );
+        return true;
+    }
+
+    public void FinishDodgePresentation()
+    {
+        CancelDodgeMotion();
+        dodgeMotionOffset = Vector3.zero;
         ApplyBodyVisualOffset();
     }
 
@@ -816,6 +864,74 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         onImpact?.Invoke();
     }
 
+    private IEnumerator RunDodgeMotion(
+        float normalizedDirection,
+        float distance,
+        float duration
+    )
+    {
+        float segmentDuration = duration / 3f;
+        Vector3 firstSide = Vector3.right * normalizedDirection * distance;
+        Vector3 oppositeSide = -firstSide;
+
+        // Dodge只占用局部视觉偏移，不移动角色WorldRoot或UI Anchor。
+        yield return RunDodgeMotionSegment(Vector3.zero, firstSide, segmentDuration);
+        yield return RunDodgeMotionSegment(firstSide, oppositeSide, segmentDuration);
+        yield return RunDodgeMotionSegment(oppositeSide, Vector3.zero, segmentDuration);
+        CompleteDodgeMotion();
+    }
+
+    private IEnumerator RunDodgeMotionSegment(
+        Vector3 startOffset,
+        Vector3 targetOffset,
+        float duration
+    )
+    {
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            if (presentationPaused)
+            {
+                yield return null;
+                continue;
+            }
+
+            elapsed = Mathf.Min(duration, elapsed + Time.deltaTime);
+            float easedT = BattlePresentationEasing.EaseOutQuad(
+                elapsed / duration
+            );
+            dodgeMotionOffset = startOffset +
+                (targetOffset - startOffset) * easedT;
+            ApplyBodyVisualOffset();
+            yield return null;
+        }
+
+        dodgeMotionOffset = targetOffset;
+        ApplyBodyVisualOffset();
+    }
+
+    private void CompleteDodgeMotion()
+    {
+        dodgeMotionCoroutine = null;
+        dodgeMotionOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+
+        Action callback = dodgeMotionFinishedCallback;
+        dodgeMotionFinishedCallback = null;
+        callback?.Invoke();
+    }
+
+    private void CancelDodgeMotion()
+    {
+        if (dodgeMotionCoroutine != null)
+        {
+            StopCoroutine(dodgeMotionCoroutine);
+            dodgeMotionCoroutine = null;
+        }
+
+        dodgeMotionFinishedCallback = null;
+    }
+
     private void CacheBodyVisualState()
     {
         if (bodyBaseStateCached || bodyVisualRoot == null)
@@ -835,7 +951,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         }
 
         bodyVisualRoot.localPosition = bodyBaseLocalPosition +
-            bodyMotionOffset + bodyShakeOffset;
+            bodyMotionOffset + bodyShakeOffset + dodgeMotionOffset;
     }
 
     private void CacheSlashEffectState()

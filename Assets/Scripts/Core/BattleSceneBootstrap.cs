@@ -101,10 +101,17 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
             return false;
         }
 
+        bool allowPreparedActionSlots =
+            formalPresentationTestHarness != null &&
+            formalPresentationTestHarness.HasPreparedScenarioFor(
+                bootstrapResult.runtimeState
+            );
+
         // BootstrapResult由场景入口持有，Controller只消费其中的RuntimeState。
         activeBootstrapResult = bootstrapResult;
         if (!battleUIController.InitializeFromRuntimeState(
-                bootstrapResult.runtimeState))
+                bootstrapResult.runtimeState,
+                allowPreparedActionSlots))
         {
             Debug.LogError(
                 "BattleScene正式初始化失败：Controller拒绝RuntimeState，" +

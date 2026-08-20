@@ -28,6 +28,19 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public BattleCharacterPresentationController CurrentTargetPresentation;
         public int ImpactIndex = -1;
 
+        public CharacterData DefenseAttacker;
+        public CharacterData DefenseDefender;
+        public BattleUnitViewHandle DefenseAttackerHandle;
+        public BattleUnitViewHandle DefenseDefenderHandle;
+        public BattleCharacterPresentationController DefenseAttackerPresentation;
+        public BattleCharacterPresentationController DefenseDefenderPresentation;
+        public BattleGuardPresentationResult GuardPresentationResult;
+        public bool HasGuardPresentationResult;
+        public bool GuardPresentationStarted;
+        public bool GuardImpactReached;
+        public bool GuardTailFinished;
+        public long GuardImpactRequestId;
+
         public bool DefaultAttackStarted;
         public bool DefaultAttackImpactReached;
         public bool DefaultAttackFinished;
@@ -43,6 +56,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     [SerializeField]
     private BattleAttackVsAttackPresentationPlayer attackVsAttackPresentationPlayer;
     [SerializeField]
+    private BattleAttackVsGuardPresentationPlayer attackVsGuardPresentationPlayer;
+    [SerializeField]
     private BattleClashEngagementProfile clashEngagementProfile;
     [SerializeField] private bool verboseLogging = false;
 
@@ -54,6 +69,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     {
         ResolveDefaultAttackPresentationPlayer();
         ResolveAttackVsAttackPresentationPlayer();
+        ValidateAttackVsGuardPresentationPlayer();
     }
 
     public void Initialize(BattleUnitViewSpawner spawner)
@@ -61,6 +77,28 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         unitViewSpawner = spawner;
         ResolveDefaultAttackPresentationPlayer();
         ResolveAttackVsAttackPresentationPlayer();
+        ValidateAttackVsGuardPresentationPlayer();
+    }
+
+    void OnDisable()
+    {
+        if (activePresentationCoroutine != null)
+        {
+            StopCoroutine(activePresentationCoroutine);
+        }
+
+        activePresentationCoroutine = null;
+        activePresentationRequestId = 0L;
+        if (activeContext != null)
+        {
+            activeContext.Cancelled = true;
+        }
+
+        attackVsAttackPresentationPlayer?.CancelAndReset();
+        attackVsGuardPresentationPlayer?.CancelAndReset();
+        RestoreClashActorsToIdle(activeContext);
+        BattleActionRollPanelHost.HideImmediate();
+        activeContext = null;
     }
 
     public void Present(
@@ -112,6 +150,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             activePresentationCoroutine = null;
             activePresentationRequestId = 0L;
             attackVsAttackPresentationPlayer?.CancelAndReset();
+            attackVsGuardPresentationPlayer?.CancelAndReset();
             RestoreClashActorsToIdle(activeContext);
         }
 
@@ -126,6 +165,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 attackVsAttackPresentationPlayer != null)
             {
                 attackVsAttackPresentationPlayer.CancelAndReset();
+            }
+            if (activeContext.GuardPresentationStarted &&
+                attackVsGuardPresentationPlayer != null)
+            {
+                attackVsGuardPresentationPlayer.CancelAndReset();
             }
             activeContext = null;
         }
@@ -142,20 +186,33 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         activeContext = CreateContext(request);
         LogRequest(request, activeContext);
 
-        if (!ShouldPlayAttackVsAttackApproach(request))
+        if (ShouldPlayAttackVsAttackApproach(request))
         {
-            CompleteRequest(request, completion);
+            if (!TryStartAttackVsAttackApproach(
+                    request,
+                    completion,
+                    activeContext
+                ))
+            {
+                CompleteRequest(request, completion);
+            }
             return;
         }
 
-        if (!TryStartAttackVsAttackApproach(
-                request,
-                completion,
-                activeContext
-            ))
+        if (ShouldPlayDefenseVsAttackApproach(request))
         {
-            CompleteRequest(request, completion);
+            if (!TryStartDefenseVsAttackApproach(
+                    request,
+                    completion,
+                    activeContext
+                ))
+            {
+                CompleteRequest(request, completion);
+            }
+            return;
         }
+
+        CompleteRequest(request, completion);
     }
 
     private bool ShouldPlayAttackVsAttackApproach(
@@ -260,6 +317,149 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.SideBPresentation != null;
     }
 
+    private static bool ShouldPlayDefenseVsAttackApproach(
+        BattlePresentationRequest request
+    )
+    {
+        return request.ExecutionItem != null &&
+            request.ExecutionItem.executionType ==
+                BattleExecutionItemType.RespondedEnemyIntent &&
+            request.ClashSession != null &&
+            request.ClashSession.ClashType == BattleClashType.DefenseVsAttack;
+    }
+
+    private bool TryStartDefenseVsAttackApproach(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (clashEngagementProfile == null)
+        {
+            LogApproachFallback(request, "接敌Profile未配置");
+            return false;
+        }
+
+        if (!TryResolveDefensePresentationActors(context) ||
+            attackVsGuardPresentationPlayer == null ||
+            !attackVsGuardPresentationPlayer.isActiveAndEnabled)
+        {
+            LogApproachFallback(request, "Defense角色表现映射不完整");
+            return false;
+        }
+
+        // 同一次Defense Clash只在ActionBegin读取正式速度并解析一次接敌结果。
+        context.ClashEngagement = BattleClashEngagementResolver.Resolve(
+            clashEngagementProfile,
+            context.DefenseDefenderPresentation.PresentationKey,
+            context.DefenseAttackerPresentation.PresentationKey,
+            GetPresentationSpeed(context.DefenseDefender),
+            GetPresentationSpeed(context.DefenseAttacker)
+        );
+
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        activePresentationRequestId = requestId;
+        bool started = attackVsGuardPresentationPlayer
+            .TryPlayClashReadyApproach(
+                context.DefenseDefenderPresentation,
+                context.DefenseDefenderHandle.WorldRoot.transform,
+                context.DefenseAttackerPresentation,
+                context.DefenseAttackerHandle.WorldRoot.transform,
+                context.ClashEngagement,
+                () => CompleteDefenseVsAttackApproach(
+                    context,
+                    executionItem,
+                    requestId,
+                    completion
+                )
+            );
+
+        if (started)
+        {
+            return true;
+        }
+
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        LogApproachFallback(requestId, "共享AttackVsGuard Player启动失败");
+        return false;
+    }
+
+    private void CompleteDefenseVsAttackApproach(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem))
+        {
+            return;
+        }
+
+        activePresentationRequestId = 0L;
+        completion.TryComplete(requestId);
+    }
+
+    private static bool TryResolveDefensePresentationActors(
+        ActionPresentationContext context
+    )
+    {
+        BattleClashSession session = context != null
+            ? context.ClashSession
+            : null;
+        if (session == null ||
+            session.ClashType != BattleClashType.DefenseVsAttack ||
+            session.SideA == null || session.SideB == null ||
+            session.SideA.cardState == null ||
+            session.SideB.cardState == null ||
+            session.SideA.cardState.cardData == null ||
+            session.SideB.cardState.cardData == null)
+        {
+            return false;
+        }
+
+        string sideAType = session.SideA.cardState.cardData.cardType;
+        string sideBType = session.SideB.cardState.cardData.cardType;
+        if (sideAType == CardType.Defense && sideBType == CardType.Attack)
+        {
+            context.DefenseDefender = context.SideAActor;
+            context.DefenseDefenderHandle = context.SideAHandle;
+            context.DefenseDefenderPresentation = context.SideAPresentation;
+            context.DefenseAttacker = context.SideBActor;
+            context.DefenseAttackerHandle = context.SideBHandle;
+            context.DefenseAttackerPresentation = context.SideBPresentation;
+        }
+        else if (sideAType == CardType.Attack &&
+            sideBType == CardType.Defense)
+        {
+            context.DefenseAttacker = context.SideAActor;
+            context.DefenseAttackerHandle = context.SideAHandle;
+            context.DefenseAttackerPresentation = context.SideAPresentation;
+            context.DefenseDefender = context.SideBActor;
+            context.DefenseDefenderHandle = context.SideBHandle;
+            context.DefenseDefenderPresentation = context.SideBPresentation;
+        }
+        else
+        {
+            return false;
+        }
+
+        return context.DefenseAttacker != null &&
+            context.DefenseDefender != null &&
+            context.DefenseAttackerHandle != null &&
+            context.DefenseDefenderHandle != null &&
+            context.DefenseAttackerHandle.WorldRoot != null &&
+            context.DefenseDefenderHandle.WorldRoot != null &&
+            context.DefenseAttackerPresentation != null &&
+            context.DefenseDefenderPresentation != null;
+    }
+
     private bool IsCurrentPresentationRequest(long requestId)
     {
         return requestId != 0L &&
@@ -300,6 +500,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         LogRequest(request, context);
         BattleActionRollPanelHost.ShowForRoll(request);
 
+        if (TryCacheGuardPresentationResult(request, context))
+        {
+            CompleteRequest(request, completion);
+            return;
+        }
+
         if (!ShouldPlayAttackTieResult(request))
         {
             CompleteRequest(request, completion);
@@ -322,6 +528,39 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             !session.IsFinalized &&
             session.AttemptResult == BattleClashAttemptResult.AttackTie &&
             session.RequiresAnotherRoll;
+    }
+
+    private static bool TryCacheGuardPresentationResult(
+        BattlePresentationRequest request,
+        ActionPresentationContext context
+    )
+    {
+        BattleClashSession session = request.ClashSession;
+        if (context == null || session == null ||
+            session.ClashType != BattleClashType.DefenseVsAttack ||
+            !session.IsFinalized)
+        {
+            return false;
+        }
+
+        if (session.FinalResult == BattleClashFinalResult.DefenseFullBlock)
+        {
+            context.GuardPresentationResult =
+                BattleGuardPresentationResult.FullBlock;
+        }
+        else if (session.FinalResult ==
+            BattleClashFinalResult.DefenseReducedDamage)
+        {
+            context.GuardPresentationResult =
+                BattleGuardPresentationResult.ReducedDamage;
+        }
+        else
+        {
+            return false;
+        }
+
+        context.HasGuardPresentationResult = true;
+        return true;
     }
 
     private bool TryStartAttackTieResult(
@@ -408,6 +647,15 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         );
 
         LogRequest(request, context);
+        if (ShouldPlayDefenseGuardImpact(request, context))
+        {
+            if (!TryStartDefenseGuardImpact(request, completion, context))
+            {
+                CompleteRequest(request, completion);
+            }
+            return;
+        }
+
         if (!ShouldPlayDefaultAttackImpact(request, context))
         {
             CompleteRequest(request, completion);
@@ -429,6 +677,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         RefreshRequestState(context, request);
         LogRequest(request, context);
 
+        if (context.GuardPresentationStarted)
+        {
+            HandleDefenseActionComplete(request, completion, context);
+            return;
+        }
+
         if (!context.DefaultAttackStarted)
         {
             BattleActionRollPanelHost.HideImmediate();
@@ -445,6 +699,181 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 context
             )
         );
+    }
+
+    private bool ShouldPlayDefenseGuardImpact(
+        BattlePresentationRequest request,
+        ActionPresentationContext context
+    )
+    {
+        if (request.ExecutionItem == null ||
+            request.ExecutionItem.executionType !=
+                BattleExecutionItemType.RespondedEnemyIntent ||
+            request.ClashSession == null ||
+            request.ClashSession.ClashType !=
+                BattleClashType.DefenseVsAttack ||
+            request.Impact == null || request.ImpactIndex != 0 ||
+            context == null || !context.HasGuardPresentationResult ||
+            !TryResolveDefensePresentationActors(context) ||
+            attackVsGuardPresentationPlayer == null ||
+            !attackVsGuardPresentationPlayer.isActiveAndEnabled)
+        {
+            return false;
+        }
+
+        return object.ReferenceEquals(
+                context.CurrentAttacker,
+                context.DefenseAttacker) &&
+            object.ReferenceEquals(
+                context.CurrentTarget,
+                context.DefenseDefender);
+    }
+
+    private bool TryStartDefenseGuardImpact(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        float directionSign = GetAttackDirectionSign(
+            context.DefenseAttackerHandle,
+            context.DefenseDefenderHandle
+        );
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+
+        context.GuardPresentationStarted = true;
+        context.GuardImpactReached = false;
+        context.GuardTailFinished = false;
+        context.GuardImpactRequestId = requestId;
+        activePresentationRequestId = requestId;
+
+        bool started = attackVsGuardPresentationPlayer.TryPlayGuardImpact(
+            context.DefenseAttackerPresentation,
+            context.DefenseDefenderPresentation,
+            directionSign,
+            context.GuardPresentationResult,
+            () => CompleteDefenseGuardImpact(
+                context,
+                executionItem,
+                requestId,
+                completion
+            ),
+            () => MarkDefenseGuardTailFinished(context, executionItem)
+        );
+
+        if (started)
+        {
+            return true;
+        }
+
+        context.GuardPresentationStarted = false;
+        context.GuardImpactRequestId = 0L;
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        return false;
+    }
+
+    private void CompleteDefenseGuardImpact(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsOwnedGuardPresentationContext(context, executionItem) ||
+            context.GuardImpactReached ||
+            context.GuardImpactRequestId != requestId ||
+            activePresentationRequestId != requestId)
+        {
+            return;
+        }
+
+        // 视觉接触点只完成Impact请求，真实Hit/Damage仍由Runner随后提交。
+        context.GuardImpactReached = true;
+        activePresentationRequestId = 0L;
+        completion.TryComplete(requestId);
+    }
+
+    private void MarkDefenseGuardTailFinished(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem
+    )
+    {
+        if (IsOwnedGuardPresentationContext(context, executionItem))
+        {
+            context.GuardTailFinished = true;
+        }
+    }
+
+    private void HandleDefenseActionComplete(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (context.GuardTailFinished)
+        {
+            BattleActionRollPanelHost.HideImmediate();
+            CompleteRequest(request, completion);
+            activeContext = null;
+            return;
+        }
+
+        activePresentationRequestId = request.RequestId;
+        activePresentationCoroutine = StartCoroutine(
+            WaitForDefenseGuardTail(request, completion, context)
+        );
+    }
+
+    private IEnumerator WaitForDefenseGuardTail(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        while (IsCurrentPresentationRequest(requestId) &&
+            IsOwnedGuardPresentationContext(context, executionItem) &&
+            !context.GuardTailFinished)
+        {
+            if (attackVsGuardPresentationPlayer == null ||
+                (!attackVsGuardPresentationPlayer.IsRunning &&
+                    !attackVsGuardPresentationPlayer.IsFinished))
+            {
+                context.GuardTailFinished = true;
+                break;
+            }
+
+            yield return null;
+        }
+
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !IsOwnedGuardPresentationContext(context, executionItem))
+        {
+            yield break;
+        }
+
+        activePresentationCoroutine = null;
+        activePresentationRequestId = 0L;
+        BattleActionRollPanelHost.HideImmediate();
+        completion.TryComplete(requestId);
+        activeContext = null;
+    }
+
+    private bool IsOwnedGuardPresentationContext(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem
+    )
+    {
+        return context != null &&
+            object.ReferenceEquals(activeContext, context) &&
+            object.ReferenceEquals(context.ExecutionItem, executionItem) &&
+            context.GuardPresentationStarted &&
+            !context.Cancelled;
     }
 
     private bool ShouldPlayDefaultAttackImpact(
@@ -644,6 +1073,18 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             Debug.LogError(
                 "BattleSceneExecutionPresenter缺少持久化的" +
                 "BattleAttackVsAttackPresentationPlayer。",
+                this
+            );
+        }
+    }
+
+    private void ValidateAttackVsGuardPresentationPlayer()
+    {
+        if (attackVsGuardPresentationPlayer == null)
+        {
+            Debug.LogError(
+                "BattleSceneExecutionPresenter缺少持久化的" +
+                "BattleAttackVsGuardPresentationPlayer。",
                 this
             );
         }

@@ -5,7 +5,9 @@ using UnityEngine;
 public enum BattleFormalPresentationTestScenario
 {
     None,
-    AttackTie
+    AttackTie,
+    AttackVsGuardFullBlock,
+    AttackVsGuardReducedDamage
 }
 
 // 正式BattleScene的开发测试输入入口；只准备规则数据，不驱动执行或表现。
@@ -14,6 +16,18 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
     private const string AllyCardID = "[TEST]_FORMAL_TIE_ALLY_ATTACK";
     private const string EnemyCardID = "[TEST]_FORMAL_TIE_ENEMY_ATTACK";
     private const string IntentID = "[TEST]_FORMAL_TIE_ENEMY_INTENT";
+    private const string FullDefenseCardID =
+        "[TEST]_FORMAL_GUARD_FULL_DEFENSE";
+    private const string FullAttackCardID =
+        "[TEST]_FORMAL_GUARD_FULL_ATTACK";
+    private const string FullIntentID =
+        "[TEST]_FORMAL_GUARD_FULL_INTENT";
+    private const string ReducedDefenseCardID =
+        "[TEST]_FORMAL_GUARD_REDUCED_DEFENSE";
+    private const string ReducedAttackCardID =
+        "[TEST]_FORMAL_GUARD_REDUCED_ATTACK";
+    private const string ReducedIntentID =
+        "[TEST]_FORMAL_GUARD_REDUCED_INTENT";
     private const int TestSlotIndex = 1;
 
     [SerializeField]
@@ -25,6 +39,13 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
     private bool hasLoggedReleaseSkip;
 
     public BattleFormalPresentationTestScenario Scenario => scenario;
+
+    // 只有Harness已成功完成同一个RuntimeState的全部注入与校验，UI才可读取预安排槽位。
+    public bool HasPreparedScenarioFor(BattleRuntimeState runtimeState)
+    {
+        return hasPreparedScenario &&
+            ReferenceEquals(preparedRuntimeState, runtimeState);
+    }
 
     public bool TryPrepareScenario(
         BattleRuntimeState runtimeState,
@@ -56,6 +77,18 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         {
             case BattleFormalPresentationTestScenario.AttackTie:
                 return TryPrepareAttackTie(runtimeState, out failureMessage);
+            case BattleFormalPresentationTestScenario.AttackVsGuardFullBlock:
+                return TryPrepareAttackVsGuard(
+                    runtimeState,
+                    true,
+                    out failureMessage
+                );
+            case BattleFormalPresentationTestScenario.AttackVsGuardReducedDamage:
+                return TryPrepareAttackVsGuard(
+                    runtimeState,
+                    false,
+                    out failureMessage
+                );
             default:
                 return Fail(
                     "不支持的测试场景：" + scenario,
@@ -302,6 +335,282 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         return true;
     }
 
+    private bool TryPrepareAttackVsGuard(
+        BattleRuntimeState runtimeState,
+        bool expectFullBlock,
+        out string failureMessage
+    )
+    {
+        CharacterData ally;
+        CharacterData enemy;
+        BattleActionSlot allySlot;
+        if (!TryValidateAttackVsGuardPrerequisites(
+                runtimeState,
+                expectFullBlock,
+                out ally,
+                out enemy,
+                out allySlot,
+                out failureMessage))
+        {
+            return false;
+        }
+
+        int defensePoint = expectFullBlock ? 6 : 2;
+        int attackPoint = 5;
+        string defenseCardID = expectFullBlock
+            ? FullDefenseCardID
+            : ReducedDefenseCardID;
+        string attackCardID = expectFullBlock
+            ? FullAttackCardID
+            : ReducedAttackCardID;
+        string intentID = expectFullBlock
+            ? FullIntentID
+            : ReducedIntentID;
+        string scenarioName = expectFullBlock
+            ? "AttackVsGuardFullBlock"
+            : "AttackVsGuardReducedDamage";
+
+        List<BattleEnemyIntent> originalIntentQueue = runtimeState.intentQueue;
+        BattleCardState defenseCard = null;
+        BattleCardState attackCard = null;
+
+        try
+        {
+            defenseCard = BattleCardManager.CreateBattleCard(
+                ally,
+                CreateTestDefenseCard(
+                    defenseCardID,
+                    expectFullBlock
+                        ? "[TEST] Full Defense"
+                        : "[TEST] Reduced Defense",
+                    defensePoint
+                ),
+                defenseCardID + "_INSTANCE"
+            );
+            attackCard = BattleCardManager.CreateBattleCard(
+                enemy,
+                CreateTestAttackCard(
+                    attackCardID,
+                    expectFullBlock
+                        ? "[TEST] Full Attack"
+                        : "[TEST] Reduced Attack",
+                    attackPoint
+                ),
+                attackCardID + "_INSTANCE"
+            );
+
+            if (!IsOwnedCard(defenseCard, ally) ||
+                !IsOwnedCard(attackCard, enemy))
+            {
+                RollbackAttackVsGuard(
+                    runtimeState,
+                    originalIntentQueue,
+                    allySlot,
+                    ally,
+                    defenseCard,
+                    enemy,
+                    attackCard
+                );
+                return Fail(
+                    "Runtime Guard测试卡创建或Owner绑定失败。",
+                    out failureMessage
+                );
+            }
+
+            BattleEnemyIntent testIntent = new BattleEnemyIntent(
+                intentID,
+                enemy,
+                attackCard,
+                ally,
+                TestSlotIndex,
+                1,
+                1
+            );
+            runtimeState.SetIntentQueue(
+                new List<BattleEnemyIntent> { testIntent }
+            );
+
+            BattleActionAssignmentResult assignmentResult;
+            bool assigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+                runtimeState,
+                ally,
+                TestSlotIndex,
+                defenseCard,
+                testIntent,
+                out assignmentResult
+            );
+
+            if (!assigned || !IsValidAttackVsGuardRelation(
+                    allySlot,
+                    ally,
+                    defenseCard,
+                    enemy,
+                    attackCard,
+                    testIntent,
+                    assignmentResult))
+            {
+                string assignmentMessage = assignmentResult != null
+                    ? assignmentResult.message
+                    : "无安排结果";
+                RollbackAttackVsGuard(
+                    runtimeState,
+                    originalIntentQueue,
+                    allySlot,
+                    ally,
+                    defenseCard,
+                    enemy,
+                    attackCard
+                );
+                return Fail(
+                    "未能建立正式Defense RespondedEnemyIntent关系：" +
+                    assignmentMessage,
+                    out failureMessage
+                );
+            }
+
+            hasPreparedScenario = true;
+            preparedRuntimeState = runtimeState;
+            Debug.Log(
+                "[FormalPresentationTest] " + scenarioName +
+                " scenario prepared. Ally Slot1 Defense=" + defensePoint +
+                "，Enemy Intent1 Attack=" + attackPoint +
+                "，Expected=" +
+                (expectFullBlock
+                    ? "DefenseFullBlock"
+                    : "DefenseReducedDamage(RemainingAttackPoint=3)"),
+                this
+            );
+            return true;
+        }
+        catch (Exception exception)
+        {
+            RollbackAttackVsGuard(
+                runtimeState,
+                originalIntentQueue,
+                allySlot,
+                ally,
+                defenseCard,
+                enemy,
+                attackCard
+            );
+            return Fail(
+                "准备" + scenarioName + "场景时发生异常，已回滚：" +
+                exception.Message,
+                out failureMessage
+            );
+        }
+    }
+
+    private bool TryValidateAttackVsGuardPrerequisites(
+        BattleRuntimeState runtimeState,
+        bool expectFullBlock,
+        out CharacterData ally,
+        out CharacterData enemy,
+        out BattleActionSlot allySlot,
+        out string failureMessage
+    )
+    {
+        ally = runtimeState != null ? runtimeState.allyA : null;
+        enemy = runtimeState != null ? runtimeState.enemy : null;
+        allySlot = null;
+        string scenarioName = expectFullBlock
+            ? "AttackVsGuardFullBlock"
+            : "AttackVsGuardReducedDamage";
+
+        if (runtimeState == null)
+        {
+            return Fail("BattleRuntimeState为空。", out failureMessage);
+        }
+
+        if (runtimeState.LifecyclePhase != BattleLifecyclePhase.Prepare ||
+            runtimeState.currentExecutionPlan != null)
+        {
+            return Fail(
+                scenarioName +
+                "只能在Prepare且尚未创建ExecutionPlan时准备。当前Phase=" +
+                runtimeState.LifecyclePhase +
+                "，ExecutionPlan为空=" +
+                (runtimeState.currentExecutionPlan == null),
+                out failureMessage
+            );
+        }
+
+        if (ally == null || enemy == null || ally.IsDead() || enemy.IsDead())
+        {
+            return Fail(
+                "缺少存活的Ally A或Enemy。Ally=" + (ally != null) +
+                "，Enemy=" + (enemy != null),
+                out failureMessage
+            );
+        }
+
+        allySlot = BattleActionSlotManager.GetSlot(
+            runtimeState.actionSlots,
+            ally,
+            TestSlotIndex
+        );
+        if (allySlot == null)
+        {
+            return Fail("找不到Ally A Slot1。", out failureMessage);
+        }
+
+        if (!AreAllActionSlotsEmpty(runtimeState.actionSlots))
+        {
+            return Fail(
+                scenarioName +
+                "准备前要求当前正式行动槽位全部为空，拒绝覆盖已有安排。",
+                out failureMessage
+            );
+        }
+
+        int defenderDefense = GetRoundedModifier(ally, "DefensePoint");
+        int attackerAttack = GetRoundedModifier(enemy, "AttackPoint");
+        int defenderCard = GetRoundedModifier(ally, "CardPoint");
+        int attackerCard = GetRoundedModifier(enemy, "CardPoint");
+        int defenderClash = GetRoundedModifier(ally, "ClashPoint");
+        int attackerClash = GetRoundedModifier(enemy, "ClashPoint");
+        int defenderNextClash = ally.GetBuffStack("NextClashPointUp");
+        int attackerNextClash = enemy.GetBuffStack("NextClashPointUp");
+        int defenderNextCard = ally.GetBuffStack("NextCardPointUp");
+        int attackerNextCard = enemy.GetBuffStack("NextCardPointUp");
+        int damageMultiplier = Mathf.RoundToInt(
+            100f +
+            enemy.GetBuffPercentModifier("DamageDealt") +
+            ally.GetBuffPercentModifier("DamageTaken")
+        );
+
+        bool pointModifiersMatch =
+            defenderDefense == 0 && attackerAttack == 0 &&
+            defenderCard == 0 && attackerCard == 0 &&
+            defenderClash == 0 && attackerClash == 0 &&
+            defenderNextClash == 0 && attackerNextClash == 0 &&
+            defenderNextCard == 0 && attackerNextCard == 0;
+        bool damageCanRemainPositive = expectFullBlock ||
+            damageMultiplier > 0;
+
+        if (!pointModifiersMatch || !damageCanRemainPositive)
+        {
+            return Fail(
+                scenarioName +
+                "前置点数不成立。期望 Defender Defense/Card/Clash=0/0/0，" +
+                "Attacker Attack/Card/Clash=0/0/0，双方" +
+                "NextClashPointUp/NextCardPointUp=0，Reduced伤害倍率>0；实际 " +
+                "Defender=" + defenderDefense + "/" + defenderCard + "/" +
+                defenderClash + "，Attacker=" + attackerAttack + "/" +
+                attackerCard + "/" + attackerClash + "，Next Defender=" +
+                defenderNextClash + "/" + defenderNextCard +
+                "，Next Attacker=" + attackerNextClash + "/" +
+                attackerNextCard + "，DamageMultiplier=" +
+                damageMultiplier + "% 。测试卡无ResourceRule，因此" +
+                "Resource Point Modifier固定为0。",
+                out failureMessage
+            );
+        }
+
+        failureMessage = string.Empty;
+        return true;
+    }
+
     private static CardTestData CreateTestAttackCard(
         string cardID,
         string cardName,
@@ -321,6 +630,28 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             cooldown = 0,
             maxUseCount = 0,
             damageFormula = "PointAsDamage"
+        };
+    }
+
+    private static CardTestData CreateTestDefenseCard(
+        string cardID,
+        string cardName,
+        int fixedPoint
+    )
+    {
+        return new CardTestData
+        {
+            cardID = cardID,
+            cardName = cardName,
+            cardType = CardType.Defense,
+            isSinCard = false,
+            consumeOnUse = false,
+            isClashable = true,
+            minPoint = fixedPoint,
+            maxPoint = fixedPoint,
+            cooldown = 0,
+            maxUseCount = 0,
+            defenseFormula = "PointAsDefense"
         };
     }
 
@@ -353,6 +684,47 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             intent.enemySlotIndex == 1 &&
             ReferenceEquals(intent.enemy, enemy) &&
             ReferenceEquals(intent.enemyCardState, enemyCard) &&
+            ReferenceEquals(intent.originalTargetCharacter, ally) &&
+            intent.originalTargetSlotIndex == TestSlotIndex &&
+            intent.isResponded &&
+            ReferenceEquals(intent.actualTargetCharacter, ally) &&
+            intent.actualTargetSlotIndex == TestSlotIndex;
+    }
+
+    private static bool IsValidAttackVsGuardRelation(
+        BattleActionSlot allySlot,
+        CharacterData ally,
+        BattleCardState defenseCard,
+        CharacterData enemy,
+        BattleCardState attackCard,
+        BattleEnemyIntent intent,
+        BattleActionAssignmentResult assignmentResult
+    )
+    {
+        return defenseCard != null && defenseCard.cardData != null &&
+            defenseCard.cardData.cardType == CardType.Defense &&
+            attackCard != null && attackCard.cardData != null &&
+            attackCard.cardData.cardType == CardType.Attack &&
+            allySlot != null && assignmentResult != null &&
+            assignmentResult.isSuccess &&
+            !assignmentResult.wasAutoDowngraded &&
+            assignmentResult.placementType ==
+                BattleActionPlacementType.ExactEnemyIntent &&
+            assignmentResult.effectiveSlotType ==
+                BattleActionSlotType.RespondToEnemyIntent &&
+            ReferenceEquals(allySlot.owner, ally) &&
+            ReferenceEquals(allySlot.actor, ally) &&
+            ReferenceEquals(allySlot.cardState, defenseCard) &&
+            allySlot.slotIndex == TestSlotIndex &&
+            allySlot.slotType == BattleActionSlotType.RespondToEnemyIntent &&
+            allySlot.placementType ==
+                BattleActionPlacementType.ExactEnemyIntent &&
+            ReferenceEquals(allySlot.requestedEnemyIntent, intent) &&
+            ReferenceEquals(allySlot.enemyIntent, intent) &&
+            ReferenceEquals(allySlot.target, enemy) &&
+            intent.intentOrder == 1 && intent.enemySlotIndex == 1 &&
+            ReferenceEquals(intent.enemy, enemy) &&
+            ReferenceEquals(intent.enemyCardState, attackCard) &&
             ReferenceEquals(intent.originalTargetCharacter, ally) &&
             intent.originalTargetSlotIndex == TestSlotIndex &&
             intent.isResponded &&
@@ -415,6 +787,30 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
 
         RemoveTestCard(ally, allyCard);
         RemoveTestCard(enemy, enemyCard);
+    }
+
+    private static void RollbackAttackVsGuard(
+        BattleRuntimeState runtimeState,
+        List<BattleEnemyIntent> originalIntentQueue,
+        BattleActionSlot allySlot,
+        CharacterData ally,
+        BattleCardState defenseCard,
+        CharacterData enemy,
+        BattleCardState attackCard
+    )
+    {
+        if (allySlot != null)
+        {
+            allySlot.Clear();
+        }
+
+        if (runtimeState != null)
+        {
+            runtimeState.SetIntentQueue(originalIntentQueue);
+        }
+
+        RemoveTestCard(ally, defenseCard);
+        RemoveTestCard(enemy, attackCard);
     }
 
     private static void RemoveTestCard(CharacterData owner, BattleCardState card)

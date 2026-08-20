@@ -9,6 +9,8 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
     [SerializeField] private BattleCharacterPresentationController defender;
     [SerializeField]
     private BattleAttackVsAttackPresentationPlayer attackVsAttackPresentationPlayer;
+    [SerializeField]
+    private BattleAttackVsGuardPresentationPlayer attackVsGuardPresentationPlayer;
     [SerializeField] private BattleClashEngagementProfile clashEngagementProfile;
     [SerializeField, Min(0f)] private float characterTestSpeed = 5f;
     [SerializeField, Min(0f)] private float defenderTestSpeed = 5f;
@@ -23,18 +25,14 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
     private Coroutine hitStopCoroutine;
     private Coroutine dualHitStopCoroutine;
     private Coroutine loserHitCoroutine;
-    private Coroutine parryRecoilCoroutine;
-    private Coroutine perfectGuardEffectCoroutine;
-    private Coroutine partialGuardRecoilCoroutine;
     private bool waitingForManualRoll;
     private bool attackImpactHandled;
-    private bool perfectGuardImpactHandled;
-    private bool partialGuardImpactHandled;
     private bool hasWarnedMissingDefender;
     private bool hasWarnedMissingAttackPair;
     private bool hasWarnedMissingSharedAttackPlayer;
     private bool hasWarnedMissingTiePair;
     private bool hasWarnedMissingGuardPair;
+    private bool hasWarnedMissingSharedGuardPlayer;
     private Vector3 characterResetPosition;
     private bool hasCharacterResetPosition;
 
@@ -109,6 +107,10 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         {
             StartPartialGuardTest();
         }
+        else if (keyboard.kKey.wasPressedThisFrame)
+        {
+            StartDodgeMotionTest();
+        }
         else if (keyboard.rKey.wasPressedThisFrame)
         {
             ResetCharacterToTestStart();
@@ -129,24 +131,6 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             loserHitCoroutine = null;
         }
 
-        if (parryRecoilCoroutine != null)
-        {
-            StopCoroutine(parryRecoilCoroutine);
-            parryRecoilCoroutine = null;
-        }
-
-        if (perfectGuardEffectCoroutine != null)
-        {
-            StopCoroutine(perfectGuardEffectCoroutine);
-            perfectGuardEffectCoroutine = null;
-        }
-
-        if (partialGuardRecoilCoroutine != null)
-        {
-            StopCoroutine(partialGuardRecoilCoroutine);
-            partialGuardRecoilCoroutine = null;
-        }
-
         if (hitStopCoroutine != null)
         {
             StopCoroutine(hitStopCoroutine);
@@ -161,14 +145,14 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
 
         // Sandbox停用时同步取消共享Player，避免留下暂停、特效或回调等待。
         attackVsAttackPresentationPlayer?.CancelAndReset();
+        attackVsGuardPresentationPlayer?.CancelAndReset();
 
         waitingForManualRoll = false;
         attackImpactHandled = false;
-        perfectGuardImpactHandled = false;
-        partialGuardImpactHandled = false;
         if (character != null)
         {
             character.SetPresentationPaused(false);
+            character.FinishDodgePresentation();
             character.ClearBodyVisualOffsets();
             character.ClearAfterimages();
             character.ClearSlashEffect();
@@ -206,6 +190,42 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         dynamicTestCoroutine = StartCoroutine(RunHitReactionTest());
     }
 
+    private void StartDodgeMotionTest()
+    {
+        if (character == null || dynamicTestCoroutine != null)
+        {
+            return;
+        }
+
+        dynamicTestCoroutine = StartCoroutine(RunDodgeMotionTest());
+    }
+
+    private IEnumerator RunDodgeMotionTest()
+    {
+        character.SetDodge();
+        bool finished = false;
+        bool started = character.PlayDodgeMotion(1f, () => finished = true);
+        if (!started)
+        {
+            character.SetIdle();
+            dynamicTestCoroutine = null;
+            yield break;
+        }
+
+        // Sandbox只组合Pose与可复用Local Motion，不直接操作VisualRoot。
+        while (!finished && character != null && character.isActiveAndEnabled)
+        {
+            yield return null;
+        }
+
+        if (character != null && character.isActiveAndEnabled)
+        {
+            character.SetIdle();
+        }
+
+        dynamicTestCoroutine = null;
+    }
+
     private void SetGuardPoseForInspection()
     {
         BattleCharacterPresentationController guardCharacter =
@@ -218,161 +238,16 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
 
     private void StartPerfectGuardTest()
     {
-        if (character == null || defender == null)
-        {
-            if (!hasWarnedMissingGuardPair)
-            {
-                Debug.LogWarning(
-                    "BattlePresentationSandboxController：按键H/J需要同时绑定Character和Defender。"
-                );
-                hasWarnedMissingGuardPair = true;
-            }
-            return;
-        }
-
-        hasWarnedMissingGuardPair = false;
-        if (dynamicTestCoroutine != null)
-        {
-            return;
-        }
-
-        perfectGuardImpactHandled = false;
-        dynamicTestCoroutine = StartCoroutine(RunPerfectGuardTest());
-    }
-
-    private IEnumerator RunPerfectGuardTest()
-    {
-        if (character == null || defender == null)
-        {
-            FinishPerfectGuardTest();
-            yield break;
-        }
-
-        PrepareGuardResultTest();
-        defender.SetGuard();
-        float attackDirectionSign = GetHorizontalDirectionSign(
-            defender.transform.position.x - character.transform.position.x
-        );
-        character.SetSlash();
-        yield return character.PlaySlashPresentation(
-            attackDirectionSign,
-            () => BeginPerfectGuardImpact(attackDirectionSign),
-            playAttackEffect: false
-        );
-
-        if (!perfectGuardImpactHandled)
-        {
-            BeginPerfectGuardImpact(attackDirectionSign);
-        }
-
-        while (parryRecoilCoroutine != null ||
-            perfectGuardEffectCoroutine != null ||
-            dualHitStopCoroutine != null)
-        {
-            if (character == null || defender == null)
-            {
-                break;
-            }
-
-            yield return null;
-        }
-
-        FinishPerfectGuardTest();
-    }
-
-    private void BeginPerfectGuardImpact(float attackDirectionSign)
-    {
-        if (perfectGuardImpactHandled)
-        {
-            return;
-        }
-
-        perfectGuardImpactHandled = true;
-        if (character == null || defender == null)
-        {
-            return;
-        }
-
-        defender.SetGuard();
-        perfectGuardEffectCoroutine = StartCoroutine(
-            RunPerfectGuardEffect()
-        );
-        parryRecoilCoroutine = StartCoroutine(
-            RunParryRecoil(attackDirectionSign)
-        );
-
-        if (hitStopDuration <= 0f || dualHitStopCoroutine != null)
-        {
-            return;
-        }
-
-        character.SetPresentationPaused(true);
-        defender.SetPresentationPaused(true);
-        dualHitStopCoroutine = StartCoroutine(
-            RunDualHitStop(character, defender)
-        );
-    }
-
-    private IEnumerator RunParryRecoil(float attackDirectionSign)
-    {
-        if (character != null)
-        {
-            yield return character.PlayParryRecoil(attackDirectionSign);
-        }
-
-        parryRecoilCoroutine = null;
-    }
-
-    private IEnumerator RunPerfectGuardEffect()
-    {
-        if (defender != null)
-        {
-            yield return defender.PlayPerfectGuardEffect();
-        }
-
-        perfectGuardEffectCoroutine = null;
-    }
-
-    private void FinishPerfectGuardTest()
-    {
-        if (dualHitStopCoroutine != null)
-        {
-            StopCoroutine(dualHitStopCoroutine);
-            dualHitStopCoroutine = null;
-        }
-
-        if (parryRecoilCoroutine != null)
-        {
-            StopCoroutine(parryRecoilCoroutine);
-            parryRecoilCoroutine = null;
-        }
-
-        if (perfectGuardEffectCoroutine != null)
-        {
-            StopCoroutine(perfectGuardEffectCoroutine);
-            perfectGuardEffectCoroutine = null;
-        }
-
-        if (character != null)
-        {
-            character.SetPresentationPaused(false);
-            character.ClearSlashEffect();
-            character.FinishSlashPresentation();
-        }
-
-        if (defender != null)
-        {
-            defender.SetPresentationPaused(false);
-            defender.ClearPerfectGuardEffect();
-            defender.FinishGuardPresentation();
-        }
-
-        perfectGuardImpactHandled = false;
-        dynamicTestCoroutine = null;
+        StartSharedGuardTest(BattleGuardPresentationResult.FullBlock);
     }
 
     private void StartPartialGuardTest()
     {
+        StartSharedGuardTest(BattleGuardPresentationResult.ReducedDamage);
+    }
+
+    private void StartSharedGuardTest(BattleGuardPresentationResult result)
+    {
         if (character == null || defender == null)
         {
             if (!hasWarnedMissingGuardPair)
@@ -386,139 +261,56 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         }
 
         hasWarnedMissingGuardPair = false;
-        if (dynamicTestCoroutine != null)
+        if (attackVsGuardPresentationPlayer == null)
+        {
+            if (!hasWarnedMissingSharedGuardPlayer)
+            {
+                Debug.LogWarning(
+                    "BattlePresentationSandboxController：按键H/J缺少共享AttackVsGuard Player。"
+                );
+                hasWarnedMissingSharedGuardPlayer = true;
+            }
+            return;
+        }
+
+        hasWarnedMissingSharedGuardPlayer = false;
+        if (dynamicTestCoroutine != null ||
+            attackVsGuardPresentationPlayer.IsRunning)
         {
             return;
         }
 
-        partialGuardImpactHandled = false;
-        dynamicTestCoroutine = StartCoroutine(RunPartialGuardTest());
+        dynamicTestCoroutine = StartCoroutine(RunSharedGuardTest(result));
     }
 
-    private IEnumerator RunPartialGuardTest()
+    private IEnumerator RunSharedGuardTest(BattleGuardPresentationResult result)
     {
-        if (character == null || defender == null)
-        {
-            FinishPartialGuardTest();
-            yield break;
-        }
-
-        PrepareGuardResultTest();
-        defender.SetGuard();
         float attackDirectionSign = GetHorizontalDirectionSign(
             defender.transform.position.x - character.transform.position.x
         );
-        character.SetSlash();
-        yield return character.PlaySlashPresentation(
+        bool finished = false;
+        bool started = attackVsGuardPresentationPlayer.TryPlayGuardImpact(
+            character,
+            defender,
             attackDirectionSign,
-            () => BeginPartialGuardImpact(attackDirectionSign),
-            playAttackEffect: true
+            result,
+            null,
+            () => finished = true
         );
-
-        if (!partialGuardImpactHandled)
+        if (!started)
         {
-            BeginPartialGuardImpact(attackDirectionSign);
+            dynamicTestCoroutine = null;
+            yield break;
         }
 
-        while (partialGuardRecoilCoroutine != null ||
-            dualHitStopCoroutine != null)
+        // Sandbox只维持测试互斥锁，具体Guard时序完全由共享Player拥有。
+        while (!finished && attackVsGuardPresentationPlayer != null &&
+            attackVsGuardPresentationPlayer.IsRunning)
         {
-            if (character == null || defender == null)
-            {
-                break;
-            }
-
             yield return null;
         }
 
-        FinishPartialGuardTest();
-    }
-
-    private void BeginPartialGuardImpact(float attackDirectionSign)
-    {
-        if (partialGuardImpactHandled)
-        {
-            return;
-        }
-
-        partialGuardImpactHandled = true;
-        if (character == null || defender == null)
-        {
-            return;
-        }
-
-        defender.SetGuard();
-        partialGuardRecoilCoroutine = StartCoroutine(
-            RunPartialGuardRecoil(attackDirectionSign)
-        );
-
-        if (hitStopDuration <= 0f || dualHitStopCoroutine != null)
-        {
-            return;
-        }
-
-        character.SetPresentationPaused(true);
-        defender.SetPresentationPaused(true);
-        dualHitStopCoroutine = StartCoroutine(
-            RunDualHitStop(character, defender)
-        );
-    }
-
-    private IEnumerator RunPartialGuardRecoil(float recoilDirectionSign)
-    {
-        if (defender != null)
-        {
-            yield return defender.PlayGuardRecoil(
-                recoilDirectionSign
-            );
-        }
-
-        partialGuardRecoilCoroutine = null;
-    }
-
-    private void FinishPartialGuardTest()
-    {
-        if (dualHitStopCoroutine != null)
-        {
-            StopCoroutine(dualHitStopCoroutine);
-            dualHitStopCoroutine = null;
-        }
-
-        if (partialGuardRecoilCoroutine != null)
-        {
-            StopCoroutine(partialGuardRecoilCoroutine);
-            partialGuardRecoilCoroutine = null;
-        }
-
-        if (character != null)
-        {
-            character.SetPresentationPaused(false);
-            character.ClearSlashEffect();
-            character.FinishSlashPresentation();
-        }
-
-        if (defender != null)
-        {
-            defender.SetPresentationPaused(false);
-            defender.ClearPerfectGuardEffect();
-            defender.FinishGuardPresentation();
-        }
-
-        partialGuardImpactHandled = false;
         dynamicTestCoroutine = null;
-    }
-
-    private void PrepareGuardResultTest()
-    {
-        character.SetPresentationPaused(false);
-        character.ClearSlashEffect();
-        character.ClearPerfectGuardEffect();
-        character.ClearBodyVisualOffsets();
-
-        defender.SetPresentationPaused(false);
-        defender.ClearSlashEffect();
-        defender.ClearPerfectGuardEffect();
-        defender.ClearBodyVisualOffsets();
     }
 
     private IEnumerator RunHitReactionTest()
@@ -714,6 +506,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
 
         attackVsAttackPresentationPlayer?.CancelAndReset();
         character.transform.position = characterResetPosition;
+        character.FinishDodgePresentation();
         character.ClearAfterimages();
         character.SetIdle();
     }

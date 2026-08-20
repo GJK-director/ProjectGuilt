@@ -332,6 +332,15 @@ public class BattleSimpleUIController : MonoBehaviour
         BattleRuntimeState initializedRuntimeState
     )
     {
+        return InitializeFromRuntimeState(initializedRuntimeState, false);
+    }
+
+    // 预安排槽位只允许由已完成自身校验的正式测试Harness显式放行。
+    internal bool InitializeFromRuntimeState(
+        BattleRuntimeState initializedRuntimeState,
+        bool allowPreparedActionSlots
+    )
+    {
         if (!TryBeginInitialization("正式RuntimeState"))
         {
             return false;
@@ -344,6 +353,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
             if (!ValidateRuntimeStateForInitialization(
                     initializedRuntimeState,
+                    allowPreparedActionSlots,
                     out errorMessage) ||
                 !TryResolveLegacyCardReferences(
                     initializedRuntimeState,
@@ -481,6 +491,19 @@ public class BattleSimpleUIController : MonoBehaviour
         out string errorMessage
     )
     {
+        return ValidateRuntimeStateForInitialization(
+            initializedRuntimeState,
+            false,
+            out errorMessage
+        );
+    }
+
+    private static bool ValidateRuntimeStateForInitialization(
+        BattleRuntimeState initializedRuntimeState,
+        bool allowPreparedActionSlots,
+        out string errorMessage
+    )
+    {
         errorMessage = string.Empty;
 
         if (initializedRuntimeState == null)
@@ -539,6 +562,7 @@ public class BattleSimpleUIController : MonoBehaviour
                 initializedRuntimeState.actionSlots,
                 allyA,
                 allyB,
+                allowPreparedActionSlots,
                 out errorMessage))
         {
             return false;
@@ -752,6 +776,7 @@ public class BattleSimpleUIController : MonoBehaviour
         List<BattleActionSlot> actionSlots,
         CharacterData allyA,
         CharacterData allyB,
+        bool allowPreparedActionSlots,
         out string errorMessage
     )
     {
@@ -773,9 +798,20 @@ public class BattleSimpleUIController : MonoBehaviour
         for (int index = 0; index < actionSlots.Count; index++)
         {
             BattleActionSlot slot = actionSlots[index];
-            if (slot == null || !slot.IsEmpty() || slot.actor != null)
+            if (slot == null)
             {
-                errorMessage = "BattleScene初始化失败：初始行动槽为空引用或已经被安排";
+                errorMessage = "BattleScene初始化失败：初始行动槽包含空引用";
+                return false;
+            }
+
+            bool isEmpty = slot.IsEmpty();
+            if ((!allowPreparedActionSlots && !isEmpty) ||
+                (isEmpty && slot.actor != null) ||
+                (!isEmpty && slot.actor == null))
+            {
+                errorMessage = allowPreparedActionSlots
+                    ? "BattleScene初始化失败：预安排槽位的卡牌与actor状态不一致"
+                    : "BattleScene初始化失败：初始行动槽已经被安排";
                 return false;
             }
 

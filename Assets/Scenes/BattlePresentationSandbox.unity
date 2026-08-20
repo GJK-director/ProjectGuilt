@@ -278,6 +278,7 @@ GameObject:
   - component: {fileID: 546880344}
   - component: {fileID: 546880343}
   - component: {fileID: 546880345}
+  - component: {fileID: 546880346}
   m_Layer: 0
   m_Name: BattlePresentationSandboxController
   m_TagString: Untagged
@@ -300,6 +301,7 @@ MonoBehaviour:
   character: {fileID: 1435928652}
   defender: {fileID: 385498946}
   attackVsAttackPresentationPlayer: {fileID: 546880345}
+  attackVsGuardPresentationPlayer: {fileID: 546880346}
   clashEngagementProfile: {fileID: 11400000, guid: b9f30c692f87489f94c2b784d6e5ed65, type: 2}
   characterTestSpeed: 10
   defenderTestSpeed: 1
@@ -324,6 +326,19 @@ MonoBehaviour:
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsAttackPresentationPlayer
   presentationProfile: {fileID: 11400000, guid: 307590eb91f941ddb9929a2a6541dd5e, type: 2}
+--- !u!114 &546880346
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 546880342}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ff2c512a5375409dbc968626e78e860f, type: 3}
+  m_Name:
+  m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsGuardPresentationPlayer
+  presentationProfile: {fileID: 11400000, guid: 3e7f0ac0a07f45988bb686e371a01415, type: 2}
 --- !u!4 &546880344
 Transform:
   m_ObjectHideFlags: 0
