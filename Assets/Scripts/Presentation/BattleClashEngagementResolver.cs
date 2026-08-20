@@ -3,6 +3,28 @@ using UnityEngine;
 // 只计算接敌间距和双方位移份额，不读取战斗规则或移动场景对象。
 public static class BattleClashEngagementResolver
 {
+    private const float HorizontalDistanceTolerance = 0.0001f;
+
+    // 当前WorldRoot间距是是否重新接敌的唯一空间权威。
+    public static bool RequiresApproach(
+        Vector3 sideAPosition,
+        Vector3 sideBPosition,
+        BattleClashEngagementResult engagementResult
+    )
+    {
+        if (engagementResult == null)
+        {
+            return false;
+        }
+
+        float currentHorizontalDistance = Mathf.Abs(
+            sideBPosition.x - sideAPosition.x
+        );
+        float safeFinalGap = Mathf.Max(0f, engagementResult.FinalGap);
+        return currentHorizontalDistance >
+            safeFinalGap + HorizontalDistanceTolerance;
+    }
+
     public static BattleClashEngagementResult Resolve(
         BattleClashEngagementProfile profile,
         string sideAPresentationKey,

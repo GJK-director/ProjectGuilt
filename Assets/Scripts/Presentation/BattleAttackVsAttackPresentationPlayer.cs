@@ -29,6 +29,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
     private Transform secondWorldRoot;
     private BattleCharacterPresentationController winner;
     private BattleCharacterPresentationController loser;
+    private Transform loserWorldRoot;
     private Action onVisualImpact;
     private Action onFinished;
     private Coroutine playbackCoroutine;
@@ -65,7 +66,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         Action finishedFallback = onFinished;
         playbackVersion++;
         StopOwnedCoroutines();
-        ResetCurrentActors();
+        ResetCurrentActorsToStableIdle();
         ClearPlaybackReferences();
         IsRunning = false;
         IsFinished = true;
@@ -94,6 +95,18 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             return false;
         }
 
+        if (!BattleClashEngagementResolver.RequiresApproach(
+                sideAWorldRoot.position,
+                sideBWorldRoot.position,
+                engagementResult
+            ))
+        {
+            // 已满足FinalGap时不创建Coroutine，也不覆盖上一动作的最终Pose。
+            IsFinished = true;
+            finishedCallback?.Invoke();
+            return true;
+        }
+
         playbackStage = PlaybackStage.ClashReadyApproach;
         firstActor = sideA;
         secondActor = sideB;
@@ -114,6 +127,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
     public bool TryPlayResolvedWinnerAttack(
         BattleCharacterPresentationController winnerController,
         BattleCharacterPresentationController loserController,
+        Transform loserRoot,
         float directionSign,
         Action visualImpactCallback,
         Action finishedCallback
@@ -126,7 +140,8 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             return false;
         }
 
-        if (IsRunning || winnerController == null || loserController == null)
+        if (IsRunning || winnerController == null || loserController == null ||
+            loserRoot == null)
         {
             return false;
         }
@@ -134,6 +149,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         playbackStage = PlaybackStage.ResolvedWinnerAttack;
         winner = winnerController;
         loser = loserController;
+        loserWorldRoot = loserRoot;
         attackDirectionSign = directionSign >= 0f ? 1f : -1f;
         onVisualImpact = visualImpactCallback;
         onFinished = finishedCallback;
@@ -191,7 +207,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
     {
         playbackVersion++;
         StopOwnedCoroutines();
-        ResetCurrentActors();
+        ResetCurrentActorsToStableIdle();
         ClearPlaybackReferences();
         IsRunning = false;
         IsFinished = false;
@@ -214,11 +230,17 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             yield break;
         }
 
-        firstActor.SetSprint();
-        secondActor.SetSprint();
-
         Vector3 firstStart = firstWorldRoot.position;
         Vector3 secondStart = secondWorldRoot.position;
+        if (!BattleClashEngagementResolver.RequiresApproach(
+                firstStart,
+                secondStart,
+                clashEngagementResult
+            ))
+        {
+            yield break;
+        }
+
         float horizontalDelta = secondStart.x - firstStart.x;
         float directionSign = Mathf.Abs(horizontalDelta) > 0.0001f
             ? Mathf.Sign(horizontalDelta)
@@ -226,10 +248,8 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         float safeGap = Mathf.Max(0f, clashEngagementResult.FinalGap);
         float horizontalDistance = Mathf.Abs(horizontalDelta);
 
-        if (horizontalDistance <= safeGap)
-        {
-            yield break;
-        }
+        firstActor.SetSprint();
+        secondActor.SetSprint();
 
         float closeDistance = horizontalDistance - safeGap;
         Vector3 firstTarget = firstStart;
@@ -339,7 +359,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         {
             if (!HasValidApproachActors())
             {
-                ResetCurrentActors();
+                ResetCurrentActorsToStableIdle();
                 FinishTieResult(version);
                 yield break;
             }
@@ -347,7 +367,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             if (firstTieSlashCompleted && secondTieSlashCompleted &&
                 !tieCollisionReached)
             {
-                ResetCurrentActors();
+                ResetCurrentActorsToStableIdle();
                 FinishTieResult(version);
                 yield break;
             }
@@ -380,8 +400,6 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         secondActor.ClearSlashEffect();
         firstActor.FinishSlashPresentation();
         secondActor.FinishSlashPresentation();
-        firstActor.SetSprint();
-        secondActor.SetSprint();
 
         yield return RunApproachMovement(version);
         if (IsCurrentPlayback(version))
@@ -571,6 +589,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         if (loser != null)
         {
             yield return loser.PlaySustainedHitReaction(
+                loserWorldRoot,
                 attackDirectionSign
             );
         }
@@ -626,7 +645,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         }
 
         StopSecondaryCoroutines();
-        ResetResolvedActors();
+        CleanupResolvedActorsPreservingPose();
         Action callback = onFinished;
         ClearPlaybackReferences();
         IsRunning = false;
@@ -648,11 +667,12 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         callback?.Invoke();
     }
 
-    private void ResetCurrentActors()
+    private void ResetCurrentActorsToStableIdle()
     {
         if (playbackStage == PlaybackStage.ResolvedWinnerAttack)
         {
-            ResetResolvedActors();
+            winner?.ResetToStableIdlePresentation();
+            loser?.ResetToStableIdlePresentation();
             return;
         }
 
@@ -660,12 +680,12 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         secondActor?.ResetToStableIdlePresentation();
     }
 
-    private void ResetResolvedActors()
+    private void CleanupResolvedActorsPreservingPose()
     {
         SetResolvedActorsPaused(false);
         winner?.ClearSlashEffect();
 
-        // Winner与Loser同步收尾，避免渲染出单方先恢复的中间帧。
+        // 正常完成只清局部瞬时状态，Winner/Loser保留Slash与Hit最终Pose。
         winner?.FinishSlashPresentation();
         loser?.FinishHitReaction();
     }
@@ -734,6 +754,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         secondWorldRoot = null;
         winner = null;
         loser = null;
+        loserWorldRoot = null;
         onVisualImpact = null;
         onFinished = null;
         playbackCoroutine = null;

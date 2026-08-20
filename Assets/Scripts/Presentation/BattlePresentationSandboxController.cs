@@ -162,11 +162,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
 
         if (defender != null)
         {
-            defender.SetPresentationPaused(false);
-            defender.ClearAfterimages();
-            defender.ClearSlashEffect();
-            defender.ClearPerfectGuardEffect();
-            defender.FinishGuardPresentation();
+            defender.ResetToStableIdlePresentation();
         }
     }
 
@@ -218,11 +214,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             yield return null;
         }
 
-        if (character != null && character.isActiveAndEnabled)
-        {
-            character.SetIdle();
-        }
-
+        // 正常完成只清除Local Motion，保留最后明确设置的Dodge Pose。
         dynamicTestCoroutine = null;
     }
 
@@ -315,7 +307,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
 
     private IEnumerator RunHitReactionTest()
     {
-        yield return character.PlayHitReaction(-1f);
+        yield return character.PlayHitReaction(character.transform, -1f);
         dynamicTestCoroutine = null;
     }
 
@@ -762,6 +754,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             .TryPlayResolvedWinnerAttack(
                 winner,
                 loser,
+                loser.transform,
                 attackDirectionSign,
                 () => attackImpactHandled = true,
                 () => resolvedAttackFinished = true
@@ -1018,6 +1011,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         if (loser != null)
         {
             yield return loser.PlaySustainedHitReaction(
+                loser.transform,
                 recoilDirectionSign
             );
         }

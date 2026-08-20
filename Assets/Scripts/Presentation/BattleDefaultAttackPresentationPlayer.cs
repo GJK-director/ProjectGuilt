@@ -15,6 +15,7 @@ public sealed class BattleDefaultAttackPresentationPlayer : MonoBehaviour
 
     private BattleCharacterPresentationController attacker;
     private BattleCharacterPresentationController target;
+    private Transform targetWorldRoot;
     private Action onVisualImpact;
     private Action onFinished;
     private Coroutine presentationCoroutine;
@@ -43,7 +44,7 @@ public sealed class BattleDefaultAttackPresentationPlayer : MonoBehaviour
         StopOwnedCoroutines();
         onVisualImpact = null;
         onFinished = null;
-        ResetCurrentActors();
+        ResetCurrentActorsToStableIdle();
         ClearPlaybackReferences();
         IsRunning = false;
         IsFinished = true;
@@ -54,18 +55,21 @@ public sealed class BattleDefaultAttackPresentationPlayer : MonoBehaviour
     public bool TryPlayDefaultAttack(
         BattleCharacterPresentationController attackController,
         BattleCharacterPresentationController targetController,
+        Transform targetRoot,
         float directionSign,
         Action visualImpactCallback,
         Action finishedCallback
     )
     {
-        if (IsRunning || attackController == null || targetController == null)
+        if (IsRunning || attackController == null || targetController == null ||
+            targetRoot == null)
         {
             return false;
         }
 
         attacker = attackController;
         target = targetController;
+        targetWorldRoot = targetRoot;
         attackDirectionSign = directionSign >= 0f ? 1f : -1f;
         onVisualImpact = visualImpactCallback;
         onFinished = finishedCallback;
@@ -90,7 +94,7 @@ public sealed class BattleDefaultAttackPresentationPlayer : MonoBehaviour
         StopOwnedCoroutines();
         onVisualImpact = null;
         onFinished = null;
-        ResetCurrentActors();
+        ResetCurrentActorsToStableIdle();
         ClearPlaybackReferences();
         IsRunning = false;
         IsFinished = false;
@@ -229,6 +233,7 @@ public sealed class BattleDefaultAttackPresentationPlayer : MonoBehaviour
         if (target != null)
         {
             yield return target.PlaySustainedHitReaction(
+                targetWorldRoot,
                 attackDirectionSign
             );
         }
@@ -268,7 +273,7 @@ public sealed class BattleDefaultAttackPresentationPlayer : MonoBehaviour
             return;
         }
 
-        ResetCurrentActors();
+        CleanupCurrentActorsPreservingPose();
         Action callback = onFinished;
         onVisualImpact = null;
         onFinished = null;
@@ -278,7 +283,7 @@ public sealed class BattleDefaultAttackPresentationPlayer : MonoBehaviour
         callback?.Invoke();
     }
 
-    private void ResetCurrentActors()
+    private void CleanupCurrentActorsPreservingPose()
     {
         SetCurrentActorsPaused(false);
 
@@ -292,6 +297,12 @@ public sealed class BattleDefaultAttackPresentationPlayer : MonoBehaviour
         {
             target.FinishHitReaction();
         }
+    }
+
+    private void ResetCurrentActorsToStableIdle()
+    {
+        attacker?.ResetToStableIdlePresentation();
+        target?.ResetToStableIdlePresentation();
     }
 
     private void SetCurrentActorsPaused(bool paused)
@@ -342,6 +353,7 @@ public sealed class BattleDefaultAttackPresentationPlayer : MonoBehaviour
         hitStopCoroutine = null;
         attacker = null;
         target = null;
+        targetWorldRoot = null;
     }
 
     private bool IsCurrentPlayback(int version)

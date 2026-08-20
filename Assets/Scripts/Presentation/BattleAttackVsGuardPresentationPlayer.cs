@@ -66,6 +66,18 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
             return false;
         }
 
+        if (!BattleClashEngagementResolver.RequiresApproach(
+                defenseWorldRoot.position,
+                attackWorldRoot.position,
+                engagementResult
+            ))
+        {
+            // 已满足FinalGap时直接完成ActionBegin，保留双方当前Pose。
+            IsFinished = true;
+            completion?.Invoke();
+            return true;
+        }
+
         playbackVersion++;
         playbackStage = PlaybackStage.ClashReadyApproach;
         approachSideA = defenseSide;
@@ -118,7 +130,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
     {
         playbackVersion++;
         StopOwnedCoroutines();
-        ResetGuardActors();
+        ResetGuardActorsToStableIdle();
         ClearPlaybackReferences();
         IsRunning = false;
         IsFinished = false;
@@ -141,11 +153,17 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
             yield break;
         }
 
-        approachSideA.SetSprint();
-        approachSideB.SetSprint();
-
         Vector3 sideAStart = approachSideAWorldRoot.position;
         Vector3 sideBStart = approachSideBWorldRoot.position;
+        if (!BattleClashEngagementResolver.RequiresApproach(
+                sideAStart,
+                sideBStart,
+                clashEngagementResult
+            ))
+        {
+            yield break;
+        }
+
         float horizontalDelta = sideBStart.x - sideAStart.x;
         float directionSign = Mathf.Abs(horizontalDelta) > 0.0001f
             ? Mathf.Sign(horizontalDelta)
@@ -153,10 +171,8 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         float safeGap = Mathf.Max(0f, clashEngagementResult.FinalGap);
         float horizontalDistance = Mathf.Abs(horizontalDelta);
 
-        if (horizontalDistance <= safeGap)
-        {
-            yield break;
-        }
+        approachSideA.SetSprint();
+        approachSideB.SetSprint();
 
         float closeDistance = horizontalDistance - safeGap;
         Vector3 sideATarget = sideAStart;
@@ -363,7 +379,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         }
 
         StopSecondaryCoroutines();
-        ResetGuardActors();
+        CleanupGuardActorsPreservingPose();
         Action callback = onFinished;
         ClearPlaybackReferences();
         IsRunning = false;
@@ -399,7 +415,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         defender.ClearBodyVisualOffsets();
     }
 
-    private void ResetGuardActors()
+    private void ResetGuardActorsToStableIdle()
     {
         if (playbackStage == PlaybackStage.ClashReadyApproach)
         {
@@ -408,6 +424,13 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
             return;
         }
 
+        attacker?.ResetToStableIdlePresentation();
+        defender?.ResetToStableIdlePresentation();
+    }
+
+    private void CleanupGuardActorsPreservingPose()
+    {
+        // 正常完成只清瞬时反馈，攻击方Slash与防守方Guard Pose继续保留。
         if (attacker != null)
         {
             attacker.SetPresentationPaused(false);

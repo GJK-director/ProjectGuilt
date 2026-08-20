@@ -480,12 +480,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         if (context.SideAPresentation != null)
         {
-            context.SideAPresentation.SetIdle();
+            context.SideAPresentation.ResetToStableIdlePresentation();
         }
 
         if (context.SideBPresentation != null)
         {
-            context.SideBPresentation.SetIdle();
+            context.SideBPresentation.ResetToStableIdlePresentation();
         }
     }
 
@@ -894,6 +894,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.CurrentTargetHandle != null &&
             context.CurrentAttackerPresentation != null &&
             context.CurrentTargetPresentation != null &&
+            context.CurrentTargetHandle.WorldRoot != null &&
             attackVsAttackPresentationPlayer != null &&
             attackVsAttackPresentationPlayer.isActiveAndEnabled;
     }
@@ -921,6 +922,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             .TryPlayResolvedWinnerAttack(
                 context.CurrentAttackerPresentation,
                 context.CurrentTargetPresentation,
+                context.CurrentTargetHandle.WorldRoot.transform,
                 directionSign,
                 () => CompleteDefaultAttackImpact(
                     context,

@@ -142,7 +142,9 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
 
     public void FinishSlashPresentation()
     {
-        SetIdle();
+        // 正常收尾只清瞬时状态，最后明确设置的Slash Pose继续保留。
+        presentationPaused = false;
+        ClearSlashEffect();
         bodyMotionOffset = Vector3.zero;
         bodyShakeOffset = Vector3.zero;
         ApplyBodyVisualOffset();
@@ -150,7 +152,8 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
 
     public void FinishHitReaction()
     {
-        SetIdle();
+        // 回到Body局部中心不等于恢复Idle，Hit Pose由后续生命周期决定。
+        presentationPaused = false;
         bodyMotionOffset = Vector3.zero;
         bodyShakeOffset = Vector3.zero;
         ApplyBodyVisualOffset();
@@ -158,7 +161,9 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
 
     public void FinishGuardPresentation()
     {
-        SetIdle();
+        // Guard正常结束后关闭瞬时反馈，但保留最后的Guard Pose。
+        presentationPaused = false;
+        ClearPerfectGuardEffect();
         bodyMotionOffset = Vector3.zero;
         bodyShakeOffset = Vector3.zero;
         ApplyBodyVisualOffset();
@@ -414,14 +419,28 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         }
     }
 
-    public IEnumerator PlayHitReaction(float recoilDirectionSign)
+    public IEnumerator PlayHitReaction(
+        Transform worldRoot,
+        float recoilDirectionSign
+    )
     {
-        yield return PlayHitReactionInternal(recoilDirectionSign, true);
+        yield return PlayHitReactionInternal(
+            worldRoot,
+            recoilDirectionSign,
+            true
+        );
     }
 
-    public IEnumerator PlaySustainedHitReaction(float recoilDirectionSign)
+    public IEnumerator PlaySustainedHitReaction(
+        Transform worldRoot,
+        float recoilDirectionSign
+    )
     {
-        yield return PlayHitReactionInternal(recoilDirectionSign, false);
+        yield return PlayHitReactionInternal(
+            worldRoot,
+            recoilDirectionSign,
+            false
+        );
     }
 
     public IEnumerator PlayParryRecoil(float attackDirectionSign)
@@ -628,6 +647,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     }
 
     private IEnumerator PlayHitReactionInternal(
+        Transform worldRoot,
         float recoilDirectionSign,
         bool finishAutomatically
     )
@@ -637,8 +657,19 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         bodyShakeOffset = Vector3.zero;
         ApplyBodyVisualOffset();
 
+        if (worldRoot == null)
+        {
+            if (finishAutomatically)
+            {
+                FinishHitReaction();
+            }
+
+            yield break;
+        }
+
         float normalizedDirection = recoilDirectionSign >= 0f ? 1f : -1f;
-        Vector3 maximumRecoilOffset = Vector3.right *
+        float recoilStartX = worldRoot.position.x;
+        float recoilTargetX = recoilStartX +
             normalizedDirection * hitRecoilDistance;
         float recoilDuration = Mathf.Max(0f, hitRecoilDuration);
         float shakeDuration = Mathf.Max(0f, hitShakeDuration);
@@ -651,7 +682,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
 
         if (recoilDuration <= 0f)
         {
-            bodyMotionOffset = maximumRecoilOffset;
+            SetWorldRootPositionX(worldRoot, recoilTargetX);
         }
 
         if (shakeDuration <= 0f)
@@ -687,12 +718,14 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
                 float recoilT = BattlePresentationEasing.EaseOutQuad(
                     recoilElapsed / recoilDuration
                 );
-                bodyMotionOffset = Vector3.zero +
-                    (maximumRecoilOffset - Vector3.zero) * recoilT;
+                SetWorldRootPositionX(
+                    worldRoot,
+                    Mathf.Lerp(recoilStartX, recoilTargetX, recoilT)
+                );
             }
             else
             {
-                bodyMotionOffset = maximumRecoilOffset;
+                SetWorldRootPositionX(worldRoot, recoilTargetX);
             }
 
             if (shakeElapsed < shakeDuration)
@@ -721,13 +754,27 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
             yield return null;
         }
 
-        bodyMotionOffset = maximumRecoilOffset;
+        // 受击后退属于真实战斗空间结果；局部通道只保留短暂抖动。
+        SetWorldRootPositionX(worldRoot, recoilTargetX);
+        bodyMotionOffset = Vector3.zero;
         bodyShakeOffset = Vector3.zero;
         ApplyBodyVisualOffset();
         if (finishAutomatically)
         {
             FinishHitReaction();
         }
+    }
+
+    private static void SetWorldRootPositionX(Transform worldRoot, float x)
+    {
+        if (worldRoot == null)
+        {
+            return;
+        }
+
+        Vector3 position = worldRoot.position;
+        position.x = x;
+        worldRoot.position = position;
     }
 
     public void SpawnAfterimage()
