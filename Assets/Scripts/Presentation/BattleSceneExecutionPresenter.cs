@@ -120,6 +120,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 activeContext.ExecutionItem,
                 request.ExecutionItem))
         {
+            BattleActionRollPanelHost.HideImmediate();
             activeContext.Cancelled = true;
             if (activeContext.DefaultAttackStarted &&
                 attackVsAttackPresentationPlayer != null)
@@ -137,6 +138,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         BattlePresentationCompletion completion
     )
     {
+        BattleActionRollPanelHost.HideImmediate();
         activeContext = CreateContext(request);
         LogRequest(request, activeContext);
 
@@ -296,6 +298,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         RefreshRequestState(context, request);
         RefreshClashActors(context);
         LogRequest(request, context);
+        BattleActionRollPanelHost.ShowForRoll(request);
 
         if (!ShouldPlayAttackTieResult(request))
         {
@@ -428,6 +431,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         if (!context.DefaultAttackStarted)
         {
+            BattleActionRollPanelHost.HideImmediate();
             CompleteRequest(request, completion);
             activeContext = null;
             return;
@@ -576,6 +580,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         activePresentationCoroutine = null;
         activePresentationRequestId = 0L;
+        BattleActionRollPanelHost.HideImmediate();
         completion.TryComplete(requestId);
         activeContext = null;
     }

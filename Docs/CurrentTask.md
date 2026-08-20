@@ -10838,3 +10838,45 @@ Project Guilt/UI/重新生成行动槽位卡牌详情预设体
 - 预设体中友方面板为中心锚点 `x=-40`，敌方面板为中心锚点 `x=40`。
 - Unity 预设体与 `BattleScene` 实例校验通过。
 - `ProjectGuilt.sln` 完整编译通过，0 警告、0 错误。
+
+## 九十九、执行阶段行动卡牌与 Roll 点面板
+
+### 一、显示时机与生命周期
+
+攻击牌进入 `AttackVsAttack` 拼点后，每次空格完成 Roll 时，正式场景 Presenter 会在 `RollResult` 节点显示行动 Roll 面板：
+
+- 首次显示使用不受战斗时间缩放影响的淡入效果。
+- 平点重投只刷新区间和实际点数，不重复播放淡入。
+- 面板保持到胜者攻击动画、受击和动作收尾全部结束。
+- `ActionComplete` 收尾完成后立即关闭；取消表现、无攻击收尾或开始下一行动时也会清理残留面板。
+
+面板只读取 `BattleClashSession` 的卡牌、快照和 Roll 结果，不重新随机，也不修改战斗结算规则。
+
+### 二、面板内容与点数来源
+
+面板按参考战斗布局同时显示双方：
+
+- 左侧为玩家本次实际行动卡，右侧为敌方本次实际行动卡。
+- 卡牌直接实例化并绑定现有 `BattleCardUI.prefab`，保留正式卡牌样式。
+- `x~y` 使用本次拼点快照的有效范围，并计入资源、卡牌点数、拼点和攻击点数修正，保证实际 `n` 属于显示范围。
+- `n` 直接使用本次 `SideAPoint / SideBPoint`，不在 UI 层生成随机数。
+
+左右内容位于安全区上方四分位并镜像排列，避开顶部中央顺序标记和场景中央角色；同时响应 `Screen.safeArea`。
+
+### 三、预设体与可替换资源
+
+执行面板由 `BattleActionRollPanelHost` 在首次 Roll 时从 `Resources/UI/BattleActionRollPanel` 动态实例化。
+
+`BattleActionRollPanelPrefabGenerator` 会在编辑器首次导入时补齐缺失预设体，也可从菜单 `Project Guilt/UI/重新生成行动 Roll 点面板预设体` 显式重建。默认复用现有八角行动框和中文 TMP 字体，并为每侧公开以下 Prefab 序列化资源：
+
+- Roll 外框图片。
+- 区间底图图片。
+- 区间字体。
+- 实际点数字体。
+
+### 四、改动边界与验证
+
+- 未修改行动安排、随机数生成、拼点胜负、伤害或卡牌消耗规则。
+- `ProjectGuilt.sln` 完整编译通过，0 警告、0 错误。
+- `BattleActionRollPanelPrefabGenerator.ValidatePrefab()` 会校验宿主、双方 View、正式卡牌预设体、字体和 Roll 图片引用。
+- `git diff --check` 通过。
