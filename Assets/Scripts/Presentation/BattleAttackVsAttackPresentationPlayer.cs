@@ -21,6 +21,9 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
     public float SprintDuration => presentationProfile != null
         ? presentationProfile.SprintDuration
         : 0f;
+    public float AfterimageSpawnInterval => presentationProfile != null
+        ? presentationProfile.AfterimageSpawnInterval
+        : 0f;
 
     private PlaybackStage playbackStage;
     private BattleCharacterPresentationController firstActor;

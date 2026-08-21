@@ -5,6 +5,8 @@ using UnityEngine;
 // 三种Clash共享的接敌位移能力；不拥有规则结果或后续动作时序。
 public static class BattleClashReadyApproachMotion
 {
+    private const float HorizontalDistanceTolerance = 0.0001f;
+
     public static IEnumerator Play(
         BattleCharacterPresentationController sideA,
         Transform sideAWorldRoot,
@@ -116,6 +118,103 @@ public static class BattleClashReadyApproachMotion
             // 接敌只改变X，最终精确吸附到双方共享FinalGap。
             sideAWorldRoot.position = sideATarget;
             sideBWorldRoot.position = sideBTarget;
+        }
+    }
+
+    public static IEnumerator PlaySingleActorApproach(
+        BattleCharacterPresentationController movingActor,
+        Transform movingWorldRoot,
+        BattleCharacterPresentationController stationaryActor,
+        Transform stationaryWorldRoot,
+        float finalGap,
+        float sprintDuration,
+        float afterimageSpawnInterval,
+        Func<bool> shouldContinue
+    )
+    {
+        if (!HasValidActors(
+                movingActor,
+                movingWorldRoot,
+                stationaryActor,
+                stationaryWorldRoot
+            ) || !CanContinue(shouldContinue))
+        {
+            yield break;
+        }
+
+        Vector3 movingStart = movingWorldRoot.position;
+        Vector3 stationaryStart = stationaryWorldRoot.position;
+        float horizontalDelta = stationaryStart.x - movingStart.x;
+        float horizontalDistance = Mathf.Abs(horizontalDelta);
+        float safeFinalGap = Mathf.Max(0f, finalGap);
+        if (horizontalDistance <= safeFinalGap + HorizontalDistanceTolerance)
+        {
+            yield break;
+        }
+
+        float directionSign = Mathf.Abs(horizontalDelta) >
+                HorizontalDistanceTolerance
+            ? Mathf.Sign(horizontalDelta)
+            : 1f;
+        Vector3 movingTarget = movingStart;
+        movingTarget.x = stationaryStart.x - directionSign * safeFinalGap;
+
+        // LongRange Cash-out只授予近战方WorldRoot移动权，远程方保持原Pose与位置。
+        movingActor.SetSprint();
+
+        float safeDuration = Mathf.Max(0f, sprintDuration);
+        if (safeDuration <= 0f)
+        {
+            movingWorldRoot.position = movingTarget;
+            yield break;
+        }
+
+        movingActor.SpawnAfterimage();
+
+        float elapsed = 0f;
+        float afterimageElapsed = 0f;
+        float safeAfterimageInterval = Mathf.Max(0f, afterimageSpawnInterval);
+        bool spawnRepeatedAfterimages = safeAfterimageInterval > 0f;
+        while (elapsed < safeDuration && CanContinue(shouldContinue))
+        {
+            if (!HasValidActors(
+                    movingActor,
+                    movingWorldRoot,
+                    stationaryActor,
+                    stationaryWorldRoot
+                ))
+            {
+                yield break;
+            }
+
+            elapsed += Time.deltaTime;
+            float linearT = Mathf.Clamp01(elapsed / safeDuration);
+            float easedT = BattlePresentationEasing.EaseOutQuad(linearT);
+            movingWorldRoot.position = movingStart +
+                (movingTarget - movingStart) * easedT;
+
+            if (spawnRepeatedAfterimages)
+            {
+                afterimageElapsed += Time.deltaTime;
+                if (afterimageElapsed >= safeAfterimageInterval &&
+                    elapsed < safeDuration)
+                {
+                    movingActor.SpawnAfterimage();
+                    afterimageElapsed = 0f;
+                }
+            }
+
+            yield return null;
+        }
+
+        if (CanContinue(shouldContinue) && HasValidActors(
+                movingActor,
+                movingWorldRoot,
+                stationaryActor,
+                stationaryWorldRoot
+            ))
+        {
+            movingWorldRoot.position = movingTarget;
         }
     }
 

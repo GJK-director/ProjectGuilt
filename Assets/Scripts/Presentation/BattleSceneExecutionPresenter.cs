@@ -1272,7 +1272,28 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         context.DefaultAttackImpactRequestId = requestId;
         activePresentationRequestId = requestId;
 
-        if (context.ClashEngagement != null)
+        if (context.ClashEngagement != null &&
+            context.LongRangeShotAvailable &&
+            BattleClashEngagementResolver.RequiresApproach(
+                context.LongRangeMeleeHandle.WorldRoot.transform.position,
+                context.LongRangeShooterHandle.WorldRoot.transform.position,
+                context.ClashEngagement
+            ))
+        {
+            activePresentationCoroutine = StartCoroutine(
+                RunLongRangeMeleeSingleActorApproach(
+                    context,
+                    executionItem,
+                    requestId,
+                    completion
+                )
+            );
+            return true;
+        }
+
+        // NoBullet路径保持既有双边Cash-out，本轮只修有Bullet的Shooter Lose。
+        if (context.ClashEngagement != null &&
+            !context.LongRangeShotAvailable)
         {
             bool approachStarted = attackVsAttackPresentationPlayer
                 .TryPlayClashReadyApproach(
@@ -1306,6 +1327,42 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         ResetFailedLongRangeMeleeCashOut(context, requestId);
         return false;
+    }
+
+    private IEnumerator RunLongRangeMeleeSingleActorApproach(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        yield return BattleClashReadyApproachMotion.PlaySingleActorApproach(
+            context.LongRangeMeleePresentation,
+            context.LongRangeMeleeHandle.WorldRoot.transform,
+            context.LongRangeShooterPresentation,
+            context.LongRangeShooterHandle.WorldRoot.transform,
+            context.ClashEngagement.FinalGap,
+            attackVsAttackPresentationPlayer.SprintDuration,
+            attackVsAttackPresentationPlayer.AfterimageSpawnInterval,
+            () => IsCurrentPresentationRequest(requestId) &&
+                object.ReferenceEquals(activeContext, context) &&
+                object.ReferenceEquals(context.ExecutionItem, executionItem)
+        );
+
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem))
+        {
+            yield break;
+        }
+
+        activePresentationCoroutine = null;
+        ContinueLongRangeMeleeCashOut(
+            context,
+            executionItem,
+            requestId,
+            completion
+        );
     }
 
     private void ContinueLongRangeMeleeCashOut(
