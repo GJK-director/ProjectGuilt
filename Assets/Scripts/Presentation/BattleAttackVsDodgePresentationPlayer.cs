@@ -14,7 +14,6 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
     private enum PlaybackStage
     {
         None,
-        ClashReadyApproach,
         DodgeResult
     }
 
@@ -25,12 +24,6 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
     public bool IsFinished { get; private set; }
 
     private PlaybackStage playbackStage;
-    private BattleCharacterPresentationController approachSideA;
-    private BattleCharacterPresentationController approachSideB;
-    private Transform approachSideAWorldRoot;
-    private Transform approachSideBWorldRoot;
-    private BattleClashEngagementResult clashEngagementResult;
-
     private BattleCharacterPresentationController attacker;
     private BattleCharacterPresentationController defender;
     private BattleDodgePresentationResult presentationResult;
@@ -54,45 +47,25 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
     }
 
     public bool TryPlayClashReadyApproach(
-        BattleCharacterPresentationController sideA,
-        Transform sideAWorldRoot,
-        BattleCharacterPresentationController sideB,
-        Transform sideBWorldRoot,
+        BattleCharacterPresentationController dodgeSide,
+        Transform dodgeWorldRoot,
+        BattleCharacterPresentationController attackSide,
+        Transform attackWorldRoot,
         BattleClashEngagementResult engagementResult,
         Action completion
     )
     {
-        if (!CanStartPlayback() || sideA == null || sideB == null ||
-            sideAWorldRoot == null || sideBWorldRoot == null ||
+        if (!CanStartPlayback() || dodgeSide == null || attackSide == null ||
+            dodgeWorldRoot == null || attackWorldRoot == null ||
             engagementResult == null)
         {
             return false;
         }
 
-        if (!BattleClashEngagementResolver.RequiresApproach(
-                sideAWorldRoot.position,
-                sideBWorldRoot.position,
-                engagementResult
-            ))
-        {
-            IsFinished = true;
-            completion?.Invoke();
-            return true;
-        }
-
-        playbackVersion++;
-        playbackStage = PlaybackStage.ClashReadyApproach;
-        approachSideA = sideA;
-        approachSideB = sideB;
-        approachSideAWorldRoot = sideAWorldRoot;
-        approachSideBWorldRoot = sideBWorldRoot;
-        clashEngagementResult = engagementResult;
-        onActionTailFinished = completion;
-        IsRunning = true;
-        IsFinished = false;
-        playbackCoroutine = StartCoroutine(
-            RunClashReadyApproach(playbackVersion)
-        );
+        // Dodge保留当前Pose；Attack只进入Sprint拼点等待Pose。
+        attackSide.SetSprint();
+        IsFinished = true;
+        completion?.Invoke();
         return true;
     }
 
@@ -162,25 +135,6 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         ClearPlaybackReferences();
         IsRunning = false;
         IsFinished = false;
-    }
-
-    private IEnumerator RunClashReadyApproach(int version)
-    {
-        yield return BattleClashReadyApproachMotion.Play(
-            approachSideA,
-            approachSideAWorldRoot,
-            approachSideB,
-            approachSideBWorldRoot,
-            clashEngagementResult,
-            presentationProfile.SprintDuration,
-            presentationProfile.AfterimageSpawnInterval,
-            () => IsCurrentPlayback(version)
-        );
-
-        if (IsCurrentPlayback(version))
-        {
-            FinishApproach(version);
-        }
     }
 
     private IEnumerator RunDodgeResult(int version)
@@ -283,20 +237,6 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         }
     }
 
-    private void FinishApproach(int version)
-    {
-        if (!IsCurrentPlayback(version))
-        {
-            return;
-        }
-
-        Action callback = onActionTailFinished;
-        ClearPlaybackReferences();
-        IsRunning = false;
-        IsFinished = true;
-        callback?.Invoke();
-    }
-
     private void FinishDodgeResult(int version)
     {
         if (!IsCurrentPlayback(version))
@@ -348,13 +288,6 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
 
     private void ResetActorsToStableIdle()
     {
-        if (playbackStage == PlaybackStage.ClashReadyApproach)
-        {
-            approachSideA?.ResetToStableIdlePresentation();
-            approachSideB?.ResetToStableIdlePresentation();
-            return;
-        }
-
         attacker?.ResetToStableIdlePresentation();
         defender?.ResetToStableIdlePresentation();
     }
@@ -378,11 +311,6 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
     private void ClearPlaybackReferences()
     {
         playbackStage = PlaybackStage.None;
-        approachSideA = null;
-        approachSideB = null;
-        approachSideAWorldRoot = null;
-        approachSideBWorldRoot = null;
-        clashEngagementResult = null;
         attacker = null;
         defender = null;
         onRollResultReady = null;

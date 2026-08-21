@@ -579,6 +579,11 @@ public static class BattleExecutionPlanExecutor
             return handledBeforeResolver && preResolveResult;
         }
 
+        if (PrepareLongRangeResponseAttempt(item))
+        {
+            return ExecuteUnavailableResourceResponseSynchronously(item);
+        }
+
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             item.actionSlot,
             item.enemyIntent
@@ -615,6 +620,22 @@ public static class BattleExecutionPlanExecutor
                 failureMessage = "Pausable RespondedEnemyIntent前置检查未能完成当前Item";
             }
             return preResolveResult;
+        }
+
+        if (PrepareLongRangeResponseAttempt(item))
+        {
+            if (!RestoreUnavailableResponseOriginalTarget(item))
+            {
+                failureMessage =
+                    "Pausable NoBullet响应失败：无法恢复敌人原始目标";
+                return false;
+            }
+
+            if (TryCompleteEnemyItemBecauseActualTargetDead(item))
+            {
+                itemCompleted = true;
+            }
+            return true;
         }
 
         BattleResolveResult beginFailure = BattleResolver.TryBeginRespondedClash(
@@ -728,9 +749,22 @@ public static class BattleExecutionPlanExecutor
         BattleClashSession session
     )
     {
-        if (item == null || runtimeState == null || actionSlot == null ||
-            session == null ||
-            !session.IsFinalized)
+        if (item == null || runtimeState == null || actionSlot == null)
+        {
+            return null;
+        }
+
+        if (item.responseAttemptState ==
+            BattleResponseAttemptState.UnavailableResource)
+        {
+            return BattleResolver.BuildUnrespondedEnemyIntentResolutionPlan(
+                item,
+                actionSlot,
+                item.enemyIntent
+            );
+        }
+
+        if (session == null || !session.IsFinalized)
         {
             return null;
         }
@@ -788,7 +822,22 @@ public static class BattleExecutionPlanExecutor
         if (!plan.IsActionCompleted)
         {
             bool completed;
-            if (item.executionType ==
+            if (item.responseAttemptState ==
+                BattleResponseAttemptState.UnavailableResource)
+            {
+                item.actionSlot.MarkUsed();
+                item.MarkExecuted(
+                    BattleExecutionItemOutcomeReason
+                        .ResponseUnavailableFallbackToUnresponded
+                );
+                Debug.Log(
+                    item.order +
+                    ". NoBullet响应尝试已结束：行动槽位已提交，" +
+                    "LongRange卡牌未进入成功使用路径"
+                );
+                completed = true;
+            }
+            else if (item.executionType ==
                 BattleExecutionItemType.RespondedEnemyIntent)
             {
                 completed = CompleteRespondedEnemyIntentResult(
@@ -822,6 +871,80 @@ public static class BattleExecutionPlanExecutor
         }
 
         return item.isCompleted;
+    }
+
+    static bool PrepareLongRangeResponseAttempt(BattleExecutionItem item)
+    {
+        if (item == null ||
+            !BattleResolver.TryCaptureLongRangeResponseResourceSnapshot(
+                item.actionSlot,
+                item.enemyIntent,
+                out BattleClashResourceSnapshot resourceSnapshot
+            ))
+        {
+            return false;
+        }
+
+        bool unavailable = resourceSnapshot == null ||
+            !resourceSnapshot.normalVersionEnabled;
+        item.SetResponseAttempt(
+            unavailable
+                ? BattleResponseAttemptState.UnavailableResource
+                : BattleResponseAttemptState.Valid,
+            resourceSnapshot
+        );
+        return unavailable;
+    }
+
+    static bool ExecuteUnavailableResourceResponseSynchronously(
+        BattleExecutionItem item
+    )
+    {
+        if (!RestoreUnavailableResponseOriginalTarget(item))
+        {
+            return false;
+        }
+        if (TryCompleteEnemyItemBecauseActualTargetDead(item))
+        {
+            return true;
+        }
+
+        BattleResolveResult result = BattleResolver.ResolveUnrespondedEnemyIntent(
+            item.enemyIntent
+        );
+        LogResolveResult(
+            item.order,
+            "NoBullet响应回落 UnrespondedEnemyIntent 结算结果",
+            result
+        );
+        if (TryMarkResolveFailure(item, result, false))
+        {
+            return false;
+        }
+
+        item.actionSlot.MarkUsed();
+        item.MarkExecuted(
+            BattleExecutionItemOutcomeReason
+                .ResponseUnavailableFallbackToUnresponded
+        );
+        return true;
+    }
+
+    static bool RestoreUnavailableResponseOriginalTarget(
+        BattleExecutionItem item
+    )
+    {
+        if (item == null || item.enemyIntent == null ||
+            item.enemyIntent.originalTargetCharacter == null)
+        {
+            return false;
+        }
+
+        item.enemyIntent.SetActualTarget(
+            item.enemyIntent.originalTargetCharacter,
+            item.enemyIntent.originalTargetSlotIndex
+        );
+        return true;
     }
 
     static bool TryPrepareRespondedEnemyIntent(

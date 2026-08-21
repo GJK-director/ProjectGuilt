@@ -43,6 +43,14 @@ public enum BattleExecutionItemOutcomeReason
     TieLimitReached
 }
 
+// 响应尝试由Execution层判定，Presenter只能读取该结果，不能重新查询资源。
+public enum BattleResponseAttemptState
+{
+    None,
+    Valid,
+    UnavailableResource
+}
+
 // BattleExecutionItem = 战斗执行项
 // Item = 项目 / 条目，表示执行计划中的一小步。
 public class BattleExecutionItem
@@ -71,6 +79,9 @@ public class BattleExecutionItem
     // BattleActionSlot = 战斗行动槽位，记录玩家把哪张卡放进哪个槽位，以及是否响应敌人意图。
     // 如果这一项是 UnrespondedEnemyIntent，无人响应敌人意图时可能没有 actionSlot。
     public BattleActionSlot actionSlot;
+
+    public BattleResponseAttemptState responseAttemptState { get; private set; }
+    public BattleClashResourceSnapshot responseAttemptResourceSnapshot { get; private set; }
 
     // passiveGuardCandidates = 被动守备候选槽位
     // 由 PlanManager 为 UnrespondedEnemyIntent 保存指定守备与被动守备槽位引用，不复制槽位。
@@ -127,6 +138,17 @@ public class BattleExecutionItem
         status = BattleExecutionItemStatus.Pending;
         outcomeReason = BattleExecutionItemOutcomeReason.None;
         isCompleted = false;
+        responseAttemptState = BattleResponseAttemptState.None;
+        responseAttemptResourceSnapshot = null;
+    }
+
+    public void SetResponseAttempt(
+        BattleResponseAttemptState attemptState,
+        BattleClashResourceSnapshot resourceSnapshot
+    )
+    {
+        responseAttemptState = attemptState;
+        responseAttemptResourceSnapshot = resourceSnapshot;
     }
 
     public void MarkExecuted(BattleExecutionItemOutcomeReason reason = BattleExecutionItemOutcomeReason.None)

@@ -26,6 +26,7 @@ enum BattlePresentationContinuation
 {
     None,
     AfterActionBegin,
+    AfterUnavailableResponseActionBegin,
     AfterRollResult,
     AfterImpact,
     AfterActionComplete
@@ -300,13 +301,30 @@ public sealed class BattleExecutionRunner
             return FinishCurrentItem(out failureMessage);
         }
 
-        if (actionSlot == null || session == null)
+        if (actionSlot == null)
         {
-            return Fail("Pausable Clash启动失败：行动槽位或Session为空", out failureMessage);
+            return Fail("Pausable执行启动失败：行动槽位为空", out failureMessage);
         }
 
         CurrentActionSlot = actionSlot;
         CurrentClashSession = session;
+        if (CurrentItem.responseAttemptState ==
+            BattleResponseAttemptState.UnavailableResource)
+        {
+            return BeginPresentation(
+                BattlePresentationCue.ActionBegin,
+                BattlePresentationContinuation
+                    .AfterUnavailableResponseActionBegin,
+                null,
+                "ResponseUnavailableResource"
+            );
+        }
+
+        if (session == null)
+        {
+            return Fail("Pausable Clash启动失败：Session为空", out failureMessage);
+        }
+
         return BeginPresentation(
             BattlePresentationCue.ActionBegin,
             BattlePresentationContinuation.AfterActionBegin,
@@ -466,6 +484,28 @@ public sealed class BattleExecutionRunner
         if (continuation == BattlePresentationContinuation.AfterActionBegin)
         {
             EnterReadyPause();
+            return true;
+        }
+
+        if (continuation ==
+            BattlePresentationContinuation.AfterUnavailableResponseActionBegin)
+        {
+            CurrentResolutionPlan = BattleExecutionPlanExecutor
+                .BuildPausableEnemyIntentResolutionPlan(
+                    CurrentItem,
+                    lifecycleController.RuntimeState,
+                    CurrentActionSlot,
+                    null
+                );
+            if (CurrentResolutionPlan == null)
+            {
+                return Fail(
+                    "NoBullet ActionBegin完成后无法建立敌方ResolutionPlan",
+                    out failureMessage
+                );
+            }
+
+            Phase = BattleExecutionRunnerPhase.ResolutionPending;
             return true;
         }
 

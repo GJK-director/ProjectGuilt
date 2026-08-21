@@ -237,7 +237,18 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     {
         BattleActionRollPanelHost.HideImmediate();
         activeContext = CreateContext(request);
+        bool unavailableLongRangeResponse =
+            TryResolveUnavailableLongRangeResponse(activeContext);
         LogRequest(request, activeContext);
+
+        if (unavailableLongRangeResponse)
+        {
+            PrepareLongRangeEngagement(activeContext);
+            activeContext.LongRangeShooterPresentation?.SetAim();
+            activeContext.LongRangeMeleePresentation?.SetSprint();
+            CompleteRequest(request, completion);
+            return;
+        }
 
         if (TryResolveLongRangeShootVsMelee(activeContext))
         {
@@ -250,9 +261,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                         activeContext.LongRangeShooterPresentation,
                         true
                     );
+                activeContext.LongRangeMeleePresentation?.SetSprint();
             }
 
-            // LongRange初始拼点永远原地进入Roll Gate，不调用Melee Approach。
             CompleteRequest(request, completion);
             return;
         }
@@ -399,6 +410,51 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 context.LongRangeShooterSide,
                 session.SideB) &&
                 session.FinalResult == BattleClashFinalResult.SideBWin;
+        return true;
+    }
+
+    private bool TryResolveUnavailableLongRangeResponse(
+        ActionPresentationContext context
+    )
+    {
+        BattleExecutionItem item = context != null
+            ? context.ExecutionItem
+            : null;
+        BattleActionSlot actionSlot = item != null ? item.actionSlot : null;
+        BattleEnemyIntent enemyIntent = item != null ? item.enemyIntent : null;
+        if (item == null ||
+            item.responseAttemptState !=
+                BattleResponseAttemptState.UnavailableResource ||
+            actionSlot == null || actionSlot.cardState == null ||
+            !actionSlot.cardState.IsLongRangeShoot() ||
+            enemyIntent == null || enemyIntent.enemyCardState == null ||
+            !enemyIntent.enemyCardState.IsMeleeAttack())
+        {
+            return false;
+        }
+
+        context.LongRangeShooterSide = null;
+        context.LongRangeMeleeSide = null;
+        context.LongRangeShooter = actionSlot.actor;
+        context.LongRangeMeleeActor = enemyIntent.enemy;
+        ResolvePresentation(
+            context.LongRangeShooter,
+            out context.LongRangeShooterHandle,
+            out context.LongRangeShooterPresentation
+        );
+        ResolvePresentation(
+            context.LongRangeMeleeActor,
+            out context.LongRangeMeleeHandle,
+            out context.LongRangeMeleePresentation
+        );
+        context.SideAActor = context.LongRangeShooter;
+        context.SideAHandle = context.LongRangeShooterHandle;
+        context.SideAPresentation = context.LongRangeShooterPresentation;
+        context.SideBActor = context.LongRangeMeleeActor;
+        context.SideBHandle = context.LongRangeMeleeHandle;
+        context.SideBPresentation = context.LongRangeMeleePresentation;
+        context.LongRangeShotAvailable = false;
+        context.LongRangeShooterWon = false;
         return true;
     }
 
@@ -1084,7 +1140,30 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             out context.CurrentTargetPresentation
         );
 
+        bool unavailableLongRangeResponse =
+            TryResolveUnavailableLongRangeResponse(context);
         LogRequest(request, context);
+        if (unavailableLongRangeResponse)
+        {
+            if (!HasCompleteLongRangePresentationMapping(context) ||
+                !object.ReferenceEquals(
+                    context.CurrentAttacker,
+                    context.LongRangeMeleeActor) ||
+                !object.ReferenceEquals(
+                    context.CurrentTarget,
+                    context.LongRangeShooter) ||
+                !TryStartLongRangeMeleeCashOut(
+                    request,
+                    completion,
+                    context,
+                    true
+                ))
+            {
+                CompleteRequest(request, completion);
+            }
+            return;
+        }
+
         if (IsAnyLongRangeAttackVsAttack(request))
         {
             HandleLongRangeImpact(request, completion, context);
@@ -1254,7 +1333,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     private bool TryStartLongRangeMeleeCashOut(
         BattlePresentationRequest request,
         BattlePresentationCompletion completion,
-        ActionPresentationContext context
+        ActionPresentationContext context,
+        bool forceSingleActorApproach = false
     )
     {
         if (attackVsAttackPresentationPlayer == null ||
@@ -1273,7 +1353,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         activePresentationRequestId = requestId;
 
         if (context.ClashEngagement != null &&
-            context.LongRangeShotAvailable &&
+            (context.LongRangeShotAvailable || forceSingleActorApproach) &&
             BattleClashEngagementResolver.RequiresApproach(
                 context.LongRangeMeleeHandle.WorldRoot.transform.position,
                 context.LongRangeShooterHandle.WorldRoot.transform.position,
@@ -1293,10 +1373,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         // NoBullet路径保持既有双边Cash-out，本轮只修有Bullet的Shooter Lose。
         if (context.ClashEngagement != null &&
-            !context.LongRangeShotAvailable)
+            !context.LongRangeShotAvailable &&
+            !forceSingleActorApproach)
         {
             bool approachStarted = attackVsAttackPresentationPlayer
-                .TryPlayClashReadyApproach(
+                .TryPlayResolvedReengagementApproach(
                     context.LongRangeMeleePresentation,
                     context.LongRangeMeleeHandle.WorldRoot.transform,
                     context.LongRangeShooterPresentation,

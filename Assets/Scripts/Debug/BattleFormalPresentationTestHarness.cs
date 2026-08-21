@@ -332,13 +332,6 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             meleeMinPoint = 4;
             meleeMaxPoint = 6;
         }
-        else if (!hasBullet)
-        {
-            shooterMinPoint = 7;
-            shooterMaxPoint = 7;
-            meleeMinPoint = 5;
-            meleeMaxPoint = 5;
-        }
 
         int tieSeed = 0;
         int firstShooterPoint = 0;
@@ -501,6 +494,9 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                         firstShooterPoint + ":" + firstMeleePoint +
                         "，Roll2=" + secondShooterPoint + ":" +
                         secondMeleePoint
+                    : string.Empty) +
+                (!hasBullet
+                    ? "，Expected=NoClashAutoUnrespondedCashOut"
                     : string.Empty),
                 this
             );

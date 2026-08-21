@@ -1,4 +1,4 @@
-// Phase 3.4：Finalized Clash 的延迟提交计划。只保存规则数据，不包含任何表现层信息。
+// 延迟提交计划：保存Clash或无响应攻击的规则结果，不包含任何表现层信息。
 using System.Collections.Generic;
 
 public enum BattleResolutionPlanState
@@ -13,6 +13,12 @@ public enum BattleImpactState
     Pending,
     Committed,
     Skipped
+}
+
+public enum BattleResolutionPlanKind
+{
+    RespondedClash,
+    UnrespondedEnemyAttack
 }
 
 public sealed class BattleImpact
@@ -57,6 +63,7 @@ public sealed class BattleImpact
 
 public sealed class BattleResolutionPlan
 {
+    public BattleResolutionPlanKind planKind;
     public BattleExecutionItem executionItem;
     public BattleActionSlot actionSlot;
     public BattleEnemyIntent enemyIntent;
@@ -72,6 +79,9 @@ public sealed class BattleResolutionPlan
     public CharacterData attacker;
     public CharacterData target;
     public BattleCardState sourceCardState;
+    public int unrespondedEnemyPoint;
+    public BattleClashPointSnapshot unrespondedPointSnapshot;
+    public BattleClashResourceSnapshot unrespondedResourceSnapshot;
 
     // Defense 的一次性 Guard 只消费本次计算实际看到的层数。
     public int guardUpStackToConsume;
@@ -94,6 +104,9 @@ public sealed class BattleResolutionPlan
         this.actionSlot = actionSlot;
         this.enemyIntent = enemyIntent;
         this.clashSession = clashSession;
+        planKind = clashSession != null
+            ? BattleResolutionPlanKind.RespondedClash
+            : BattleResolutionPlanKind.UnrespondedEnemyAttack;
         State = BattleResolutionPlanState.Pending;
     }
 

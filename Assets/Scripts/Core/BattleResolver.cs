@@ -549,6 +549,45 @@ public static class BattleResolver
         );
     }
 
+    // LongRange响应Melee时，在ClashSession创建前锁定本次执行的资源状态。
+    internal static bool TryCaptureLongRangeResponseResourceSnapshot(
+        BattleActionSlot actionSlot,
+        BattleEnemyIntent enemyIntent,
+        out BattleClashResourceSnapshot resourceSnapshot
+    )
+    {
+        resourceSnapshot = null;
+        if (actionSlot == null || actionSlot.actor == null ||
+            actionSlot.cardState == null ||
+            !actionSlot.cardState.IsLongRangeShoot() ||
+            enemyIntent == null || enemyIntent.enemy == null ||
+            enemyIntent.enemyCardState == null ||
+            !enemyIntent.enemyCardState.IsMeleeAttack() ||
+            enemyIntent.actualTargetCharacter == null ||
+            IsInvalidPointRange(
+                actionSlot.cardState.cardData.minPoint,
+                actionSlot.cardState.cardData.maxPoint
+            ) ||
+            IsInvalidPointRange(
+                enemyIntent.enemyCardState.cardData.minPoint,
+                enemyIntent.enemyCardState.cardData.maxPoint
+            ) ||
+            !BattleCardManager.CanUseCard(
+                actionSlot.actor,
+                enemyIntent.enemy,
+                actionSlot.cardState
+            ))
+        {
+            return false;
+        }
+
+        resourceSnapshot = CaptureResourceSnapshot(
+            actionSlot.actor,
+            actionSlot.cardState
+        );
+        return true;
+    }
+
     // 同步入口也走同一套Plan提交路径，避免Pausable与旧API形成两套结算规则。
     internal static BattleResolveResult FinalizeRespondedClash(
         BattleActionSlot actionSlot,
@@ -887,6 +926,13 @@ public static class BattleResolver
             return true;
         }
 
+        if (plan.planKind == BattleResolutionPlanKind.UnrespondedEnemyAttack)
+        {
+            plan.State = BattleResolutionPlanState.Activated;
+            ActivateUnrespondedEnemyAttackResolution(plan);
+            return true;
+        }
+
         BattleClashSession session = plan.clashSession;
         if (session == null || !session.IsFinalized)
         {
@@ -914,6 +960,30 @@ public static class BattleResolver
         }
 
         return true;
+    }
+
+    static void ActivateUnrespondedEnemyAttackResolution(
+        BattleResolutionPlan plan
+    )
+    {
+        ConsumeSuccessfulPointCardBuffs(
+            plan.attacker,
+            plan.unrespondedPointSnapshot
+        );
+        PayDefaultResourceCostOnSuccessfulUse(
+            plan.attacker,
+            plan.unrespondedResourceSnapshot
+        );
+        TriggerBattleEvent(
+            BattleTiming.Resolved,
+            plan.attacker,
+            plan.target,
+            plan.sourceCardState,
+            plan.unrespondedEnemyPoint,
+            0,
+            false,
+            false
+        );
     }
 
     static void ActivateAttackResolution(BattleResolutionPlan plan)
@@ -1090,16 +1160,31 @@ public static class BattleResolver
             playerCardUseDisposition = plan.playerCardUseDisposition,
             hasDamage = totalDamage > 0,
             damage = totalDamage,
-            damagedCharacter = damagedCharacter,
+            damagedCharacter = plan.planKind ==
+                    BattleResolutionPlanKind.UnrespondedEnemyAttack
+                ? plan.target
+                : damagedCharacter,
             resultType = plan.resultType,
-            playerPoint = session.SideAPoint,
-            enemyPoint = session.SideBPoint,
-            clashAttemptCount = session.ClashType == BattleClashType.DefenseVsAttack
-                ? 0
-                : session.AttemptIndex,
-            isTieLimitReached = session.FinalResult == BattleClashFinalResult.TieLimit,
             triggeredEventChain = plan.triggeredEventChain
         };
+        if (plan.planKind == BattleResolutionPlanKind.UnrespondedEnemyAttack)
+        {
+            result.playerPoint = 0;
+            result.enemyPoint = plan.unrespondedEnemyPoint;
+            result.clashAttemptCount = 0;
+            result.isTieLimitReached = false;
+        }
+        else
+        {
+            result.playerPoint = session.SideAPoint;
+            result.enemyPoint = session.SideBPoint;
+            result.clashAttemptCount =
+                session.ClashType == BattleClashType.DefenseVsAttack
+                    ? 0
+                    : session.AttemptIndex;
+            result.isTieLimitReached =
+                session.FinalResult == BattleClashFinalResult.TieLimit;
+        }
         result.message = BuildResolutionMessage(plan, result);
 
         plan.CompletedResult = result;
@@ -1114,6 +1199,27 @@ public static class BattleResolver
     )
     {
         BattleClashSession session = plan.clashSession;
+        if (plan.planKind == BattleResolutionPlanKind.UnrespondedEnemyAttack)
+        {
+            BattleEnemyIntent enemyIntent = plan.enemyIntent;
+            CardTestData enemyCard = plan.sourceCardState != null
+                ? plan.sourceCardState.cardData
+                : null;
+            return "ResolveUnrespondedEnemyIntent 完成：敌人意图" +
+                (enemyIntent != null ? enemyIntent.intentOrder : 0) +
+                " 使用 " +
+                (enemyCard != null ? enemyCard.cardName : "未知卡牌") +
+                " 命中 " +
+                (plan.target != null ? plan.target.characterName : "未知目标") +
+                " 槽位" +
+                (enemyIntent != null ? enemyIntent.actualTargetSlotIndex : 0) +
+                "，敌人攻击点数 " +
+                result.enemyPoint +
+                "，造成伤害 " +
+                result.damage +
+                "。已触发 Resolved / Hit，并按实际伤害触发 AfterDamage / AfterKill";
+        }
+
         if (result.resultType == "TieLimit")
         {
             return "ResolveRespondedEnemyIntent 连续拼点 " +
@@ -1237,57 +1343,68 @@ public static class BattleResolver
         BattleEnemyIntent enemyIntent
     )
     {
+        BattleResolutionPlan plan = BuildUnrespondedEnemyIntentResolutionPlan(
+            null,
+            null,
+            enemyIntent
+        );
+        if (plan == null)
+        {
+            return CreateInvalidResolveResult(
+                "ResolveUnrespondedEnemyIntent 失败：无法建立ResolutionPlan"
+            );
+        }
+
+        return CommitResolutionSynchronously(plan);
+    }
+
+    // 无响应攻击与Pausable路径共用同一份Calculate结果，伤害只在Impact提交时发生。
+    internal static BattleResolutionPlan BuildUnrespondedEnemyIntentResolutionPlan(
+        BattleExecutionItem executionItem,
+        BattleActionSlot responseActionSlot,
+        BattleEnemyIntent enemyIntent
+    )
+    {
         if (enemyIntent == null)
         {
-            return CreateInvalidResolveResult("ResolveUnrespondedEnemyIntent 失败：敌人意图为空");
+            return null;
         }
 
         if (enemyIntent.enemy == null)
         {
-            return CreateInvalidResolveResult("ResolveUnrespondedEnemyIntent 失败：敌人为空");
+            return null;
         }
 
         if (enemyIntent.enemyCardState == null)
         {
-            return CreateInvalidResolveResult("ResolveUnrespondedEnemyIntent 失败：敌人卡牌状态为空");
+            return null;
         }
 
         if (enemyIntent.enemyCardState.cardData == null)
         {
-            return CreateInvalidResolveResult("ResolveUnrespondedEnemyIntent 失败：敌人卡牌数据为空");
+            return null;
         }
 
         if (enemyIntent.actualTargetCharacter == null)
         {
-            return CreateInvalidResolveResult("ResolveUnrespondedEnemyIntent 失败：实际目标角色为空");
+            return null;
         }
 
         if (enemyIntent.actualTargetSlotIndex <= 0)
         {
-            return CreateInvalidResolveResult(
-                "ResolveUnrespondedEnemyIntent 失败：实际目标槽位异常：" +
-                enemyIntent.actualTargetSlotIndex
-            );
+            return null;
         }
 
         CardTestData enemyCard = enemyIntent.enemyCardState.cardData;
 
         if (enemyCard.cardType != CardType.Attack)
         {
-            return CreateUnsupportedResolveResult(
-                "ResolveUnrespondedEnemyIntent 暂不支持非攻击敌人卡牌：" +
-                enemyCard.cardType
-            );
+            return null;
         }
 
         if (IsInvalidPointRange(enemyCard.minPoint, enemyCard.maxPoint))
         {
-            return CreateInvalidResolveResult(
-                "ResolveUnrespondedEnemyIntent 失败：敌人卡牌点数范围异常：" +
-                enemyCard.minPoint +
-                "-" +
-                enemyCard.maxPoint
-            );
+            return null;
         }
 
         CharacterData enemyUnit = enemyIntent.enemy;
@@ -1307,53 +1424,34 @@ public static class BattleResolver
             enemyResourceSnapshot.selectedMaxPoint,
             enemyResourceSnapshot.pointModifierFromResource
         );
-        int damageScaled = BattleCalculator.GetFinalDamageScaled(
+
+        BattleResolutionPlan plan = new BattleResolutionPlan(
+            executionItem,
+            responseActionSlot,
+            enemyIntent,
+            null
+        );
+        plan.resultType = "UnrespondedEnemyAttack";
+        plan.enemyCardUsed = true;
+        plan.triggeredEventChain = true;
+        plan.attacker = enemyUnit;
+        plan.target = target;
+        plan.sourceCardState = enemyIntent.enemyCardState;
+        plan.unrespondedEnemyPoint = enemyAttackPoint;
+        plan.unrespondedPointSnapshot = enemyPointBuffSnapshot;
+        plan.unrespondedResourceSnapshot = enemyResourceSnapshot;
+        plan.impacts.Add(new BattleImpact(
+            0,
             enemyUnit,
             target,
-            enemyCard,
-            enemyAttackPoint
-        );
-        int finalHpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
-
-        ConsumeSuccessfulPointCardBuffs(enemyUnit, enemyPointBuffSnapshot);
-        PayDefaultResourceCostOnSuccessfulUse(enemyUnit, enemyResourceSnapshot);
-
-        TriggerBattleEvent(BattleTiming.Resolved, enemyUnit, target, enemyIntent.enemyCardState, enemyAttackPoint, 0, false, false);
-        TriggerBattleEvent(BattleTiming.Hit, enemyUnit, target, enemyIntent.enemyCardState, enemyAttackPoint, finalHpDamage, true, false);
-        ApplyDamageAndTriggerEvents(enemyUnit, target, enemyIntent.enemyCardState, finalHpDamage, enemyAttackPoint);
-
-        BattleResolveResult result = new BattleResolveResult();
-        result.isSuccess = true;
-        result.shouldCompleteItem = true;
-        result.playerCardUsed = false;
-        result.enemyCardUsed = true;
-        result.hasDamage = finalHpDamage > 0;
-        result.damage = finalHpDamage;
-        result.damagedCharacter = target;
-        result.resultType = "UnrespondedEnemyAttack";
-        result.playerPoint = 0;
-        result.enemyPoint = enemyAttackPoint;
-        result.clashAttemptCount = 0;
-        result.isTieLimitReached = false;
-        result.triggeredEventChain = true;
-        result.message =
-            "ResolveUnrespondedEnemyIntent 完成：敌人意图" +
-            enemyIntent.intentOrder +
-            " 使用 " +
-            enemyCard.cardName +
-            " 命中 " +
-            target.characterName +
-            " 槽位" +
-            enemyIntent.actualTargetSlotIndex +
-            "，敌人攻击点数 " +
-            enemyAttackPoint +
-            "，造成伤害 " +
-            finalHpDamage +
-            "。已触发 Resolved / Hit，并按实际伤害触发 AfterDamage / AfterKill";
-
-        Debug.Log(result.message);
-
-        return result;
+            enemyIntent.enemyCardState,
+            enemyAttackPoint,
+            enemyAttackPoint,
+            ClashResult.None,
+            true,
+            true
+        ));
+        return plan;
     }
 
 

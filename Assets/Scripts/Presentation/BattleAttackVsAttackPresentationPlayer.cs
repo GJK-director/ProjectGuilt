@@ -8,7 +8,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
     private enum PlaybackStage
     {
         None,
-        ClashReadyApproach,
+        ResolvedReengagementApproach,
         AttackTieResult,
         ResolvedWinnerAttack
     }
@@ -98,32 +98,64 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             return false;
         }
 
+        // ClashReady只切换拼点等待Pose，不拥有WorldRoot接敌位移。
+        sideA.SetSprint();
+        sideB.SetSprint();
+        IsFinished = true;
+        finishedCallback?.Invoke();
+        return true;
+    }
+
+    // 仅供结果阶段需要真实接敌的路径使用，不属于ClashReady。
+    public bool TryPlayResolvedReengagementApproach(
+        BattleCharacterPresentationController sideA,
+        Transform sideAWorldRoot,
+        BattleCharacterPresentationController sideB,
+        Transform sideBWorldRoot,
+        BattleClashEngagementResult engagementResult,
+        Action finishedCallback
+    )
+    {
+        if (!ValidatePresentationProfile(
+                nameof(TryPlayResolvedReengagementApproach)
+            ))
+        {
+            return false;
+        }
+
+        if (IsRunning || sideA == null || sideB == null ||
+            sideAWorldRoot == null || sideBWorldRoot == null ||
+            engagementResult == null)
+        {
+            return false;
+        }
+
         if (!BattleClashEngagementResolver.RequiresApproach(
                 sideAWorldRoot.position,
                 sideBWorldRoot.position,
                 engagementResult
             ))
         {
-            // 已满足FinalGap时不创建Coroutine，也不覆盖上一动作的最终Pose。
             IsFinished = true;
             finishedCallback?.Invoke();
             return true;
         }
 
-        playbackStage = PlaybackStage.ClashReadyApproach;
+        playbackStage = PlaybackStage.ResolvedReengagementApproach;
         firstActor = sideA;
         secondActor = sideB;
         firstWorldRoot = sideAWorldRoot;
         secondWorldRoot = sideBWorldRoot;
         clashEngagementResult = engagementResult;
         onFinished = finishedCallback;
-        visualImpactInvoked = false;
         IsRunning = true;
         IsFinished = false;
         playbackVersion++;
 
         int version = playbackVersion;
-        playbackCoroutine = StartCoroutine(RunClashReadyApproach(version));
+        playbackCoroutine = StartCoroutine(
+            RunResolvedReengagementApproach(version)
+        );
         return true;
     }
 
@@ -216,16 +248,6 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         IsFinished = false;
     }
 
-    private IEnumerator RunClashReadyApproach(int version)
-    {
-        yield return RunApproachMovement(version);
-
-        if (IsCurrentPlayback(version))
-        {
-            FinishApproach(version);
-        }
-    }
-
     private IEnumerator RunApproachMovement(int version)
     {
         yield return BattleClashReadyApproachMotion.Play(
@@ -238,6 +260,16 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             presentationProfile.AfterimageSpawnInterval,
             () => IsCurrentPlayback(version)
         );
+    }
+
+    private IEnumerator RunResolvedReengagementApproach(int version)
+    {
+        yield return RunApproachMovement(version);
+
+        if (IsCurrentPlayback(version))
+        {
+            FinishResolvedReengagementApproach(version);
+        }
     }
 
     private IEnumerator RunTieResult(int version)
@@ -544,20 +576,6 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         dualHitStopCoroutine = null;
     }
 
-    private void FinishApproach(int version)
-    {
-        if (!IsCurrentPlayback(version))
-        {
-            return;
-        }
-
-        Action callback = onFinished;
-        ClearPlaybackReferences();
-        IsRunning = false;
-        IsFinished = true;
-        callback?.Invoke();
-    }
-
     private void FinishResolvedAttack(int version)
     {
         if (!IsCurrentPlayback(version))
@@ -567,6 +585,20 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
 
         StopSecondaryCoroutines();
         CleanupResolvedActorsPreservingPose();
+        Action callback = onFinished;
+        ClearPlaybackReferences();
+        IsRunning = false;
+        IsFinished = true;
+        callback?.Invoke();
+    }
+
+    private void FinishResolvedReengagementApproach(int version)
+    {
+        if (!IsCurrentPlayback(version))
+        {
+            return;
+        }
+
         Action callback = onFinished;
         ClearPlaybackReferences();
         IsRunning = false;

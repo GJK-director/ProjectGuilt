@@ -1018,7 +1018,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3d78fe29911843aaab0fd225c1ec010c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleFormalPresentationTestHarness
-  scenario: 6
+  scenario: 9
 --- !u!1 &293728785
 GameObject:
   m_ObjectHideFlags: 0
