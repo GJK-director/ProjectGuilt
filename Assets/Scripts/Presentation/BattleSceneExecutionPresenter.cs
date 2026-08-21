@@ -61,6 +61,21 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public bool DefaultAttackFinished;
         public long DefaultAttackImpactRequestId;
 
+        public BattleClashSideState LongRangeShooterSide;
+        public BattleClashSideState LongRangeMeleeSide;
+        public CharacterData LongRangeShooter;
+        public CharacterData LongRangeMeleeActor;
+        public BattleUnitViewHandle LongRangeShooterHandle;
+        public BattleUnitViewHandle LongRangeMeleeHandle;
+        public BattleCharacterPresentationController LongRangeShooterPresentation;
+        public BattleCharacterPresentationController LongRangeMeleePresentation;
+        public bool LongRangeShotAvailable;
+        public bool LongRangeShooterWon;
+        public bool LongRangeShotImpactStarted;
+        public bool LongRangeShotImpactReached;
+        public bool LongRangeShotImpactFinished;
+        public long LongRangeShotImpactRequestId;
+
         public long LastRequestId;
         public bool Cancelled;
     }
@@ -75,6 +90,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     [SerializeField]
     private BattleAttackVsDodgePresentationPlayer attackVsDodgePresentationPlayer;
     [SerializeField]
+    private BattleLongRangeShootVsAttackPresentationPlayer
+        longRangeShootVsAttackPresentationPlayer;
+    [SerializeField]
     private BattleClashEngagementProfile clashEngagementProfile;
     [SerializeField] private bool verboseLogging = false;
 
@@ -88,6 +106,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ResolveAttackVsAttackPresentationPlayer();
         ValidateAttackVsGuardPresentationPlayer();
         ValidateAttackVsDodgePresentationPlayer();
+        ResolveLongRangeShootVsAttackPresentationPlayer();
     }
 
     public void Initialize(BattleUnitViewSpawner spawner)
@@ -97,6 +116,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ResolveAttackVsAttackPresentationPlayer();
         ValidateAttackVsGuardPresentationPlayer();
         ValidateAttackVsDodgePresentationPlayer();
+        ResolveLongRangeShootVsAttackPresentationPlayer();
     }
 
     void OnDisable()
@@ -116,6 +136,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         attackVsAttackPresentationPlayer?.CancelAndReset();
         attackVsGuardPresentationPlayer?.CancelAndReset();
         attackVsDodgePresentationPlayer?.CancelAndReset();
+        longRangeShootVsAttackPresentationPlayer?.CancelAndReset();
         RestoreClashActorsToIdle(activeContext);
         BattleActionRollPanelHost.HideImmediate();
         activeContext = null;
@@ -172,6 +193,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             attackVsAttackPresentationPlayer?.CancelAndReset();
             attackVsGuardPresentationPlayer?.CancelAndReset();
             attackVsDodgePresentationPlayer?.CancelAndReset();
+            longRangeShootVsAttackPresentationPlayer?.CancelAndReset();
             RestoreClashActorsToIdle(activeContext);
         }
 
@@ -197,6 +219,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             {
                 attackVsDodgePresentationPlayer.CancelAndReset();
             }
+            if (activeContext.LongRangeShotImpactStarted &&
+                longRangeShootVsAttackPresentationPlayer != null)
+            {
+                longRangeShootVsAttackPresentationPlayer.CancelAndReset();
+            }
             activeContext = null;
         }
 
@@ -211,6 +238,35 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         BattleActionRollPanelHost.HideImmediate();
         activeContext = CreateContext(request);
         LogRequest(request, activeContext);
+
+        if (TryResolveLongRangeShootVsMelee(activeContext))
+        {
+            PrepareLongRangeEngagement(activeContext);
+            if (activeContext.LongRangeShotAvailable &&
+                longRangeShootVsAttackPresentationPlayer != null)
+            {
+                longRangeShootVsAttackPresentationPlayer
+                    .TryApplyActionBeginAim(
+                        activeContext.LongRangeShooterPresentation,
+                        true
+                    );
+            }
+
+            // LongRange初始拼点永远原地进入Roll Gate，不调用Melee Approach。
+            CompleteRequest(request, completion);
+            return;
+        }
+
+        if (IsAnyLongRangeAttackVsAttack(request))
+        {
+            Debug.LogWarning(
+                "[ScenePresenter] 暂不支持LongRangeShoot vs LongRangeShoot表现，" +
+                "本次仅安全完成表现请求。",
+                this
+            );
+            CompleteRequest(request, completion);
+            return;
+        }
 
         if (ShouldPlayAttackVsAttackApproach(request))
         {
@@ -263,6 +319,195 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 BattleExecutionItemType.RespondedEnemyIntent &&
             request.ClashSession != null &&
             request.ClashSession.ClashType == BattleClashType.AttackVsAttack;
+    }
+
+    private static bool IsAnyLongRangeAttackVsAttack(
+        BattlePresentationRequest request
+    )
+    {
+        BattleClashSession session = request != null
+            ? request.ClashSession
+            : null;
+        if (session == null ||
+            session.ClashType != BattleClashType.AttackVsAttack ||
+            session.SideA == null || session.SideB == null)
+        {
+            return false;
+        }
+
+        return session.SideA.cardState != null &&
+                session.SideA.cardState.IsLongRangeShoot() ||
+            session.SideB.cardState != null &&
+                session.SideB.cardState.IsLongRangeShoot();
+    }
+
+    private bool TryResolveLongRangeShootVsMelee(
+        ActionPresentationContext context
+    )
+    {
+        BattleClashSession session = context != null
+            ? context.ClashSession
+            : null;
+        if (session == null ||
+            session.ClashType != BattleClashType.AttackVsAttack ||
+            session.SideA == null || session.SideB == null ||
+            session.SideA.cardState == null ||
+            session.SideB.cardState == null)
+        {
+            return false;
+        }
+
+        if (session.SideA.cardState.IsLongRangeShoot() &&
+            session.SideB.cardState.IsMeleeAttack())
+        {
+            context.LongRangeShooterSide = session.SideA;
+            context.LongRangeMeleeSide = session.SideB;
+            context.LongRangeShooter = context.SideAActor;
+            context.LongRangeMeleeActor = context.SideBActor;
+            context.LongRangeShooterHandle = context.SideAHandle;
+            context.LongRangeMeleeHandle = context.SideBHandle;
+            context.LongRangeShooterPresentation = context.SideAPresentation;
+            context.LongRangeMeleePresentation = context.SideBPresentation;
+        }
+        else if (session.SideB.cardState.IsLongRangeShoot() &&
+            session.SideA.cardState.IsMeleeAttack())
+        {
+            context.LongRangeShooterSide = session.SideB;
+            context.LongRangeMeleeSide = session.SideA;
+            context.LongRangeShooter = context.SideBActor;
+            context.LongRangeMeleeActor = context.SideAActor;
+            context.LongRangeShooterHandle = context.SideBHandle;
+            context.LongRangeMeleeHandle = context.SideAHandle;
+            context.LongRangeShooterPresentation = context.SideBPresentation;
+            context.LongRangeMeleePresentation = context.SideAPresentation;
+        }
+        else
+        {
+            return false;
+        }
+
+        BattleClashResourceSnapshot resourceSnapshot =
+            context.LongRangeShooterSide.resourceSnapshot;
+        context.LongRangeShotAvailable = resourceSnapshot != null &&
+            resourceSnapshot.normalVersionEnabled;
+        context.LongRangeShooterWon =
+            object.ReferenceEquals(
+                context.LongRangeShooterSide,
+                session.SideA) &&
+                session.FinalResult == BattleClashFinalResult.SideAWin ||
+            object.ReferenceEquals(
+                context.LongRangeShooterSide,
+                session.SideB) &&
+                session.FinalResult == BattleClashFinalResult.SideBWin;
+        return true;
+    }
+
+    private bool HasCompleteLongRangePresentationMapping(
+        ActionPresentationContext context
+    )
+    {
+        return context != null &&
+            context.LongRangeShooterHandle != null &&
+            context.LongRangeMeleeHandle != null &&
+            context.LongRangeShooterHandle.WorldRoot != null &&
+            context.LongRangeMeleeHandle.WorldRoot != null &&
+            context.LongRangeShooterPresentation != null &&
+            context.LongRangeMeleePresentation != null;
+    }
+
+    private void PrepareLongRangeEngagement(ActionPresentationContext context)
+    {
+        if (context == null || context.ClashEngagement != null ||
+            clashEngagementProfile == null ||
+            !HasCompleteLongRangePresentationMapping(context))
+        {
+            return;
+        }
+
+        // Cash-out时按Melee/Shooter顺序复用同一份Pair-relative移动份额。
+        context.ClashEngagement = BattleClashEngagementResolver.Resolve(
+            clashEngagementProfile,
+            context.LongRangeMeleePresentation.PresentationKey,
+            context.LongRangeShooterPresentation.PresentationKey,
+            GetPresentationSpeed(context.LongRangeMeleeActor),
+            GetPresentationSpeed(context.LongRangeShooter)
+        );
+    }
+
+    private void HandleLongRangeRollResult(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (!TryResolveLongRangeShootVsMelee(context))
+        {
+            CompleteRequest(request, completion);
+            return;
+        }
+
+        BattleClashSession session = request.ClashSession;
+        bool hasTerminalWinner = session != null && session.IsFinalized &&
+            (session.FinalResult == BattleClashFinalResult.SideAWin ||
+                session.FinalResult == BattleClashFinalResult.SideBWin);
+        if (!hasTerminalWinner || !context.LongRangeShotAvailable)
+        {
+            // Tie保持Aim并重新进入Manual Roll；无Bullet连Aim/Shoot/Flash都不触发。
+            CompleteRequest(request, completion);
+            return;
+        }
+
+        if (!HasCompleteLongRangePresentationMapping(context) ||
+            longRangeShootVsAttackPresentationPlayer == null ||
+            !longRangeShootVsAttackPresentationPlayer.isActiveAndEnabled)
+        {
+            CompleteRequest(request, completion);
+            return;
+        }
+
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        activePresentationRequestId = requestId;
+        bool started = longRangeShootVsAttackPresentationPlayer
+            .TryPlayTerminalClash(
+                context.LongRangeShooterPresentation,
+                context.LongRangeMeleePresentation,
+                !context.LongRangeShooterWon,
+                () => CompleteLongRangeTerminalClash(
+                    context,
+                    executionItem,
+                    requestId,
+                    completion
+                )
+            );
+        if (started)
+        {
+            return;
+        }
+
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        CompleteRequest(request, completion);
+    }
+
+    private void CompleteLongRangeTerminalClash(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem))
+        {
+            return;
+        }
+
+        activePresentationRequestId = 0L;
+        completion.TryComplete(requestId);
     }
 
     private bool TryStartAttackVsAttackApproach(
@@ -678,6 +923,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         LogRequest(request, context);
         BattleActionRollPanelHost.ShowForRoll(request);
 
+        if (IsAnyLongRangeAttackVsAttack(request))
+        {
+            HandleLongRangeRollResult(request, completion, context);
+            return;
+        }
+
         if (ShouldPlayDodgeRollResult(request))
         {
             if (!TryStartDodgeRollResult(request, completion, context))
@@ -834,6 +1085,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         );
 
         LogRequest(request, context);
+        if (IsAnyLongRangeAttackVsAttack(request))
+        {
+            HandleLongRangeImpact(request, completion, context);
+            return;
+        }
+
         if (ShouldPlayDodgeFailedImpact(request, context))
         {
             if (!TryStartDodgeFailedImpact(request, completion, context))
@@ -867,6 +1124,265 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
     }
 
+    private void HandleLongRangeImpact(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (!TryResolveLongRangeShootVsMelee(context) ||
+            !HasCompleteLongRangePresentationMapping(context))
+        {
+            CompleteRequest(request, completion);
+            return;
+        }
+
+        if (context.LongRangeShooterWon)
+        {
+            if (!context.LongRangeShotAvailable ||
+                !object.ReferenceEquals(
+                    context.CurrentAttacker,
+                    context.LongRangeShooter) ||
+                !object.ReferenceEquals(
+                    context.CurrentTarget,
+                    context.LongRangeMeleeActor) ||
+                !TryStartLongRangeShotImpact(
+                    request,
+                    completion,
+                    context
+                ))
+            {
+                CompleteRequest(request, completion);
+            }
+            return;
+        }
+
+        if (!object.ReferenceEquals(
+                context.CurrentAttacker,
+                context.LongRangeMeleeActor) ||
+            !object.ReferenceEquals(
+                context.CurrentTarget,
+                context.LongRangeShooter) ||
+            !TryStartLongRangeMeleeCashOut(request, completion, context))
+        {
+            CompleteRequest(request, completion);
+        }
+    }
+
+    private bool TryStartLongRangeShotImpact(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (longRangeShootVsAttackPresentationPlayer == null ||
+            !longRangeShootVsAttackPresentationPlayer.isActiveAndEnabled)
+        {
+            return false;
+        }
+
+        float directionSign = GetAttackDirectionSign(
+            context.LongRangeShooterHandle,
+            context.LongRangeMeleeHandle
+        );
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        context.LongRangeShotImpactStarted = true;
+        context.LongRangeShotImpactReached = false;
+        context.LongRangeShotImpactFinished = false;
+        context.LongRangeShotImpactRequestId = requestId;
+        activePresentationRequestId = requestId;
+
+        bool started = longRangeShootVsAttackPresentationPlayer.TryPlayShotHit(
+            context.LongRangeShooterPresentation,
+            context.LongRangeMeleePresentation,
+            context.LongRangeMeleeHandle.WorldRoot.transform,
+            directionSign,
+            () => CompleteLongRangeShotImpact(
+                context,
+                executionItem,
+                requestId,
+                completion
+            ),
+            () => MarkLongRangeShotImpactFinished(context, executionItem)
+        );
+        if (started)
+        {
+            return true;
+        }
+
+        context.LongRangeShotImpactStarted = false;
+        context.LongRangeShotImpactRequestId = 0L;
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        return false;
+    }
+
+    private void CompleteLongRangeShotImpact(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsOwnedLongRangeShotImpact(context, executionItem) ||
+            context.LongRangeShotImpactReached ||
+            context.LongRangeShotImpactRequestId != requestId ||
+            activePresentationRequestId != requestId)
+        {
+            return;
+        }
+
+        context.LongRangeShotImpactReached = true;
+        activePresentationRequestId = 0L;
+        completion.TryComplete(requestId);
+    }
+
+    private void MarkLongRangeShotImpactFinished(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem
+    )
+    {
+        if (IsOwnedLongRangeShotImpact(context, executionItem))
+        {
+            context.LongRangeShotImpactFinished = true;
+        }
+    }
+
+    private bool TryStartLongRangeMeleeCashOut(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (attackVsAttackPresentationPlayer == null ||
+            !attackVsAttackPresentationPlayer.isActiveAndEnabled)
+        {
+            return false;
+        }
+
+        PrepareLongRangeEngagement(context);
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        context.DefaultAttackStarted = true;
+        context.DefaultAttackImpactReached = false;
+        context.DefaultAttackFinished = false;
+        context.DefaultAttackImpactRequestId = requestId;
+        activePresentationRequestId = requestId;
+
+        if (context.ClashEngagement != null)
+        {
+            bool approachStarted = attackVsAttackPresentationPlayer
+                .TryPlayClashReadyApproach(
+                    context.LongRangeMeleePresentation,
+                    context.LongRangeMeleeHandle.WorldRoot.transform,
+                    context.LongRangeShooterPresentation,
+                    context.LongRangeShooterHandle.WorldRoot.transform,
+                    context.ClashEngagement,
+                    () => ContinueLongRangeMeleeCashOut(
+                        context,
+                        executionItem,
+                        requestId,
+                        completion
+                    )
+                );
+            if (approachStarted)
+            {
+                return true;
+            }
+        }
+
+        if (TryStartLongRangeMeleeResolvedAttack(
+                context,
+                executionItem,
+                requestId,
+                completion
+            ))
+        {
+            return true;
+        }
+
+        ResetFailedLongRangeMeleeCashOut(context, requestId);
+        return false;
+    }
+
+    private void ContinueLongRangeMeleeCashOut(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem))
+        {
+            return;
+        }
+
+        if (TryStartLongRangeMeleeResolvedAttack(
+                context,
+                executionItem,
+                requestId,
+                completion
+            ))
+        {
+            return;
+        }
+
+        ResetFailedLongRangeMeleeCashOut(context, requestId);
+        completion.TryComplete(requestId);
+    }
+
+    private bool TryStartLongRangeMeleeResolvedAttack(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem) ||
+            attackVsAttackPresentationPlayer == null)
+        {
+            return false;
+        }
+
+        float directionSign = GetAttackDirectionSign(
+            context.LongRangeMeleeHandle,
+            context.LongRangeShooterHandle
+        );
+        return attackVsAttackPresentationPlayer.TryPlayResolvedWinnerAttack(
+            context.LongRangeMeleePresentation,
+            context.LongRangeShooterPresentation,
+            context.LongRangeShooterHandle.WorldRoot.transform,
+            directionSign,
+            () => CompleteDefaultAttackImpact(
+                context,
+                executionItem,
+                requestId,
+                completion
+            ),
+            () => MarkDefaultAttackFinished(context, executionItem)
+        );
+    }
+
+    private void ResetFailedLongRangeMeleeCashOut(
+        ActionPresentationContext context,
+        long requestId
+    )
+    {
+        context.DefaultAttackStarted = false;
+        context.DefaultAttackImpactRequestId = 0L;
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+    }
+
     private void HandleActionComplete(
         BattlePresentationRequest request,
         BattlePresentationCompletion completion
@@ -885,6 +1401,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (context.GuardPresentationStarted)
         {
             HandleDefenseActionComplete(request, completion, context);
+            return;
+        }
+
+        if (context.LongRangeShotImpactStarted)
+        {
+            HandleLongRangeActionComplete(request, completion, context);
             return;
         }
 
@@ -924,6 +1446,74 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         activePresentationCoroutine = StartCoroutine(
             WaitForDodgeTail(request, completion, context)
         );
+    }
+
+    private void HandleLongRangeActionComplete(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (context.LongRangeShotImpactFinished)
+        {
+            BattleActionRollPanelHost.HideImmediate();
+            CompleteRequest(request, completion);
+            activeContext = null;
+            return;
+        }
+
+        activePresentationRequestId = request.RequestId;
+        activePresentationCoroutine = StartCoroutine(
+            WaitForLongRangeShotImpactTail(request, completion, context)
+        );
+    }
+
+    private IEnumerator WaitForLongRangeShotImpactTail(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        while (IsCurrentPresentationRequest(requestId) &&
+            IsOwnedLongRangeShotImpact(context, executionItem) &&
+            !context.LongRangeShotImpactFinished)
+        {
+            if (longRangeShootVsAttackPresentationPlayer == null ||
+                (!longRangeShootVsAttackPresentationPlayer.IsRunning &&
+                    !longRangeShootVsAttackPresentationPlayer.IsFinished))
+            {
+                context.LongRangeShotImpactFinished = true;
+                break;
+            }
+
+            yield return null;
+        }
+
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !IsOwnedLongRangeShotImpact(context, executionItem))
+        {
+            yield break;
+        }
+
+        activePresentationCoroutine = null;
+        activePresentationRequestId = 0L;
+        BattleActionRollPanelHost.HideImmediate();
+        completion.TryComplete(requestId);
+        activeContext = null;
+    }
+
+    private bool IsOwnedLongRangeShotImpact(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem
+    )
+    {
+        return context != null &&
+            object.ReferenceEquals(activeContext, context) &&
+            object.ReferenceEquals(context.ExecutionItem, executionItem) &&
+            context.LongRangeShotImpactStarted &&
+            !context.Cancelled;
     }
 
     private IEnumerator WaitForDodgeTail(
@@ -1590,6 +2180,22 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 "BattleAttackVsDodgePresentationPlayer。",
                 this
             );
+        }
+    }
+
+    private void ResolveLongRangeShootVsAttackPresentationPlayer()
+    {
+        if (longRangeShootVsAttackPresentationPlayer == null)
+        {
+            longRangeShootVsAttackPresentationPlayer =
+                GetComponent<BattleLongRangeShootVsAttackPresentationPlayer>();
+        }
+
+        // Player没有场景配置参数，可安全作为Presenter的运行时专用能力补齐。
+        if (longRangeShootVsAttackPresentationPlayer == null)
+        {
+            longRangeShootVsAttackPresentationPlayer = gameObject.AddComponent<
+                BattleLongRangeShootVsAttackPresentationPlayer>();
         }
     }
 

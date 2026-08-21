@@ -20,6 +20,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
     [SerializeField] private float slashHoldDuration = 0.2f;
     [SerializeField] private float afterimageSpawnInterval = 0.08f;
     [SerializeField] private float hitStopDuration = 0.08f;
+    [SerializeField, Min(0f)] private float shootAimHoldDuration = 0.2f;
 
     private Coroutine dynamicTestCoroutine;
     private Coroutine hitStopCoroutine;
@@ -113,7 +114,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         }
         else if (keyboard.qKey.wasPressedThisFrame)
         {
-            StartShootPrimitiveTest();
+            StartBasicShootSequenceTest();
         }
         else if (keyboard.rKey.wasPressedThisFrame)
         {
@@ -200,17 +201,56 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         dynamicTestCoroutine = StartCoroutine(RunDodgeMotionTest());
     }
 
-    private void StartShootPrimitiveTest()
+    private void StartBasicShootSequenceTest()
     {
         if (character == null || dynamicTestCoroutine != null)
         {
             return;
         }
 
+        dynamicTestCoroutine = StartCoroutine(RunBasicShootSequenceTest());
+    }
+
+    private IEnumerator RunBasicShootSequenceTest()
+    {
+        character.SetAim();
+        float remainingAimHold = Mathf.Max(0f, shootAimHoldDuration);
+        while (remainingAimHold > 0f)
+        {
+            if (character == null || !character.isActiveAndEnabled)
+            {
+                dynamicTestCoroutine = null;
+                yield break;
+            }
+
+            remainingAimHold -= Time.deltaTime;
+            yield return null;
+        }
+
+        if (character == null || !character.isActiveAndEnabled)
+        {
+            dynamicTestCoroutine = null;
+            yield break;
+        }
+
         character.SetShoot();
-        character.PlayMuzzleFlash(
-            () => Debug.Log("[ShootSandbox] Shoot + MuzzleFlash Complete")
-        );
+        bool flashFinished = false;
+        character.PlayMuzzleFlash(() => flashFinished = true);
+
+        // Flash自身拥有时序和关闭逻辑；Sandbox只等待正式完成回调。
+        while (!flashFinished)
+        {
+            if (character == null || !character.isActiveAndEnabled)
+            {
+                dynamicTestCoroutine = null;
+                yield break;
+            }
+
+            yield return null;
+        }
+
+        Debug.Log("[ShootSandbox] Aim -> Shoot + MuzzleFlash Complete");
+        dynamicTestCoroutine = null;
     }
 
     private IEnumerator RunDodgeMotionTest()

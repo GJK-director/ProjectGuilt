@@ -18,6 +18,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     [SerializeField] private Sprite idleSprite;
     [SerializeField] private Sprite sprintSprite;
     [SerializeField] private Sprite slashSprite;
+    [SerializeField] private Sprite aimSprite;
     [SerializeField] private Sprite shootSprite;
     [SerializeField] private Sprite hitSprite;
     [SerializeField] private Sprite guardSprite;
@@ -117,6 +118,11 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     public void SetSlash()
     {
         SetPose(slashSprite);
+    }
+
+    public void SetAim()
+    {
+        SetPose(aimSprite);
     }
 
     public void SetShoot()

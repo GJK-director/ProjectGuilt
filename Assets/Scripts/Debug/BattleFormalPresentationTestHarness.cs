@@ -9,7 +9,11 @@ public enum BattleFormalPresentationTestScenario
     AttackVsGuardFullBlock,
     AttackVsGuardReducedDamage,
     AttackVsDodgeContinuousSuccessSuccess,
-    AttackVsDodgeContinuousSuccessFailed
+    AttackVsDodgeContinuousSuccessFailed,
+    LongRangeShootVsAttackShooterWin,
+    LongRangeShootVsAttackShooterLose,
+    LongRangeShootVsAttackTieThenShooterWin,
+    LongRangeShootVsAttackNoBullet
 }
 
 // 正式BattleScene的开发测试输入入口；只准备规则数据，不驱动执行或表现。
@@ -50,6 +54,12 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         "[TEST]_FORMAL_CONTINUOUS_DODGE_SUCCESS_FAILED_INTENT_1";
     private const string ContinuousSuccessFailedIntentTwoID =
         "[TEST]_FORMAL_CONTINUOUS_DODGE_SUCCESS_FAILED_INTENT_2";
+    private const string LongRangeShooterCardID =
+        "[TEST]_FORMAL_LONG_RANGE_SHOOTER";
+    private const string LongRangeMeleeCardID =
+        "[TEST]_FORMAL_LONG_RANGE_MELEE";
+    private const string LongRangeIntentID =
+        "[TEST]_FORMAL_LONG_RANGE_INTENT";
     private const int TestSlotIndex = 1;
 
     [SerializeField]
@@ -121,6 +131,15 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                 return TryPrepareContinuousDodge(
                     runtimeState,
                     false,
+                    out failureMessage
+                );
+            case BattleFormalPresentationTestScenario.LongRangeShootVsAttackShooterWin:
+            case BattleFormalPresentationTestScenario.LongRangeShootVsAttackShooterLose:
+            case BattleFormalPresentationTestScenario.LongRangeShootVsAttackTieThenShooterWin:
+            case BattleFormalPresentationTestScenario.LongRangeShootVsAttackNoBullet:
+                return TryPrepareLongRangeShootVsAttack(
+                    runtimeState,
+                    scenario,
                     out failureMessage
                 );
             default:
@@ -272,6 +291,290 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                 out failureMessage
             );
         }
+    }
+
+    private bool TryPrepareLongRangeShootVsAttack(
+        BattleRuntimeState runtimeState,
+        BattleFormalPresentationTestScenario testScenario,
+        out string failureMessage
+    )
+    {
+        CharacterData ally;
+        CharacterData enemy;
+        BattleActionSlot allySlot;
+        if (!TryValidateLongRangePrerequisites(
+                runtimeState,
+                out ally,
+                out enemy,
+                out allySlot,
+                out failureMessage))
+        {
+            return false;
+        }
+
+        bool shooterWins = testScenario ==
+            BattleFormalPresentationTestScenario
+                .LongRangeShootVsAttackShooterWin;
+        bool tieThenShooterWins = testScenario ==
+            BattleFormalPresentationTestScenario
+                .LongRangeShootVsAttackTieThenShooterWin;
+        bool hasBullet = testScenario !=
+            BattleFormalPresentationTestScenario
+                .LongRangeShootVsAttackNoBullet;
+        int shooterMinPoint = shooterWins ? 7 : 4;
+        int shooterMaxPoint = shooterMinPoint;
+        int meleeMinPoint = shooterWins ? 4 : 7;
+        int meleeMaxPoint = meleeMinPoint;
+        if (tieThenShooterWins)
+        {
+            shooterMinPoint = 4;
+            shooterMaxPoint = 6;
+            meleeMinPoint = 4;
+            meleeMaxPoint = 6;
+        }
+        else if (!hasBullet)
+        {
+            shooterMinPoint = 7;
+            shooterMaxPoint = 7;
+            meleeMinPoint = 5;
+            meleeMaxPoint = 5;
+        }
+
+        int tieSeed = 0;
+        int firstShooterPoint = 0;
+        int firstMeleePoint = 0;
+        int secondShooterPoint = 0;
+        int secondMeleePoint = 0;
+        if (tieThenShooterWins && !TryFindTieThenShooterWinSeed(
+                shooterMinPoint,
+                shooterMaxPoint,
+                meleeMinPoint,
+                meleeMaxPoint,
+                out tieSeed,
+                out firstShooterPoint,
+                out firstMeleePoint,
+                out secondShooterPoint,
+                out secondMeleePoint))
+        {
+            return Fail(
+                "无法为LongRange Tie→Win找到稳定Roll seed。",
+                out failureMessage
+            );
+        }
+
+        List<BattleEnemyIntent> originalIntentQueue = runtimeState.intentQueue;
+        List<BuffData> originalAllyBuffs = ally.buffs != null
+            ? new List<BuffData>(ally.buffs)
+            : new List<BuffData>();
+        BattleCardState shooterCard = null;
+        BattleCardState meleeCard = null;
+
+        try
+        {
+            ConfigureLongRangeTestBuffs(ally, hasBullet ? 1 : 0);
+            if (!HasNeutralLongRangePointModifiers(ally, enemy))
+            {
+                RollbackLongRangeShootVsAttack(
+                    runtimeState,
+                    originalIntentQueue,
+                    allySlot,
+                    ally,
+                    originalAllyBuffs,
+                    shooterCard,
+                    enemy,
+                    meleeCard
+                );
+                return Fail(
+                    "LongRange测试清理Strength后仍存在点数修正，拒绝伪造Roll结果。",
+                    out failureMessage
+                );
+            }
+
+            shooterCard = BattleCardManager.CreateBattleCard(
+                ally,
+                CreateLongRangeTestAttackCard(
+                    LongRangeShooterCardID,
+                    "[TEST] Long Range Shoot",
+                    shooterMinPoint,
+                    shooterMaxPoint
+                ),
+                LongRangeShooterCardID + "_INSTANCE"
+            );
+            meleeCard = BattleCardManager.CreateBattleCard(
+                enemy,
+                CreateTestAttackCardRange(
+                    LongRangeMeleeCardID,
+                    "[TEST] Melee Attack",
+                    meleeMinPoint,
+                    meleeMaxPoint
+                ),
+                LongRangeMeleeCardID + "_INSTANCE"
+            );
+
+            if (!IsOwnedCard(shooterCard, ally) ||
+                !IsOwnedCard(meleeCard, enemy))
+            {
+                RollbackLongRangeShootVsAttack(
+                    runtimeState,
+                    originalIntentQueue,
+                    allySlot,
+                    ally,
+                    originalAllyBuffs,
+                    shooterCard,
+                    enemy,
+                    meleeCard
+                );
+                return Fail(
+                    "Runtime LongRange测试卡创建或Owner绑定失败。",
+                    out failureMessage
+                );
+            }
+
+            BattleEnemyIntent testIntent = new BattleEnemyIntent(
+                LongRangeIntentID,
+                enemy,
+                meleeCard,
+                ally,
+                TestSlotIndex,
+                1,
+                1
+            );
+            runtimeState.SetIntentQueue(
+                new List<BattleEnemyIntent> { testIntent }
+            );
+
+            BattleActionAssignmentResult assignmentResult;
+            bool assigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+                runtimeState,
+                ally,
+                TestSlotIndex,
+                shooterCard,
+                testIntent,
+                out assignmentResult
+            );
+            if (!assigned || !IsValidAttackTieRelation(
+                    allySlot,
+                    ally,
+                    shooterCard,
+                    enemy,
+                    meleeCard,
+                    testIntent,
+                    assignmentResult))
+            {
+                string assignmentMessage = assignmentResult != null
+                    ? assignmentResult.message
+                    : "无安排结果";
+                RollbackLongRangeShootVsAttack(
+                    runtimeState,
+                    originalIntentQueue,
+                    allySlot,
+                    ally,
+                    originalAllyBuffs,
+                    shooterCard,
+                    enemy,
+                    meleeCard
+                );
+                return Fail(
+                    "未能建立LongRange RespondedEnemyIntent关系：" +
+                    assignmentMessage,
+                    out failureMessage
+                );
+            }
+
+            if (tieThenShooterWins)
+            {
+                // Harness只固定随机序列；两次结果仍由正式RollNextAttempt产生。
+                UnityEngine.Random.InitState(tieSeed);
+            }
+
+            hasPreparedScenario = true;
+            preparedRuntimeState = runtimeState;
+            Debug.Log(
+                "[FormalPresentationTest] " + testScenario +
+                " scenario prepared. Bullet=" +
+                ally.GetBuffStack("Bullet") +
+                "，ShooterRange=" + shooterMinPoint + "~" +
+                shooterMaxPoint + "，MeleeRange=" + meleeMinPoint + "~" +
+                meleeMaxPoint +
+                (tieThenShooterWins
+                    ? "，Seed=" + tieSeed + "，Roll1=" +
+                        firstShooterPoint + ":" + firstMeleePoint +
+                        "，Roll2=" + secondShooterPoint + ":" +
+                        secondMeleePoint
+                    : string.Empty),
+                this
+            );
+            return true;
+        }
+        catch (Exception exception)
+        {
+            RollbackLongRangeShootVsAttack(
+                runtimeState,
+                originalIntentQueue,
+                allySlot,
+                ally,
+                originalAllyBuffs,
+                shooterCard,
+                enemy,
+                meleeCard
+            );
+            return Fail(
+                "准备" + testScenario + "场景时发生异常，已回滚：" +
+                exception.Message,
+                out failureMessage
+            );
+        }
+    }
+
+    private bool TryValidateLongRangePrerequisites(
+        BattleRuntimeState runtimeState,
+        out CharacterData ally,
+        out CharacterData enemy,
+        out BattleActionSlot allySlot,
+        out string failureMessage
+    )
+    {
+        ally = runtimeState != null ? runtimeState.allyA : null;
+        enemy = runtimeState != null ? runtimeState.enemy : null;
+        allySlot = null;
+
+        if (runtimeState == null)
+        {
+            return Fail("BattleRuntimeState为空。", out failureMessage);
+        }
+
+        if (runtimeState.LifecyclePhase != BattleLifecyclePhase.Prepare ||
+            runtimeState.currentExecutionPlan != null)
+        {
+            return Fail(
+                "LongRange场景只能在Prepare且尚未创建ExecutionPlan时准备。",
+                out failureMessage
+            );
+        }
+
+        if (ally == null || enemy == null || ally.IsDead() || enemy.IsDead())
+        {
+            return Fail(
+                "LongRange场景缺少存活的Ally A或Enemy。",
+                out failureMessage
+            );
+        }
+
+        allySlot = BattleActionSlotManager.GetSlot(
+            runtimeState.actionSlots,
+            ally,
+            TestSlotIndex
+        );
+        if (allySlot == null || !AreAllActionSlotsEmpty(runtimeState.actionSlots))
+        {
+            return Fail(
+                "LongRange场景要求Ally A Slot1存在且全部正式槽位为空。",
+                out failureMessage
+            );
+        }
+
+        failureMessage = string.Empty;
+        return true;
     }
 
     private bool TryValidateAttackTiePrerequisites(
@@ -1228,6 +1531,157 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         };
     }
 
+    private static CardTestData CreateTestAttackCardRange(
+        string cardID,
+        string cardName,
+        int minPoint,
+        int maxPoint
+    )
+    {
+        CardTestData card = CreateTestAttackCard(
+            cardID,
+            cardName,
+            minPoint
+        );
+        card.minPoint = minPoint;
+        card.maxPoint = maxPoint;
+        card.attackDeliveryMode = AttackDeliveryMode.Melee;
+        return card;
+    }
+
+    private static CardTestData CreateLongRangeTestAttackCard(
+        string cardID,
+        string cardName,
+        int minPoint,
+        int maxPoint
+    )
+    {
+        CardTestData card = CreateTestAttackCardRange(
+            cardID,
+            cardName,
+            minPoint,
+            maxPoint
+        );
+        card.attackDeliveryMode = AttackDeliveryMode.LongRangeShoot;
+        card.resourceRule = new CardResourceRuleData
+        {
+            resourceType = "BuffStack",
+            resourceID = "Bullet",
+            requiredStackForNormalVersion = 1,
+            fallbackMinPoint = 0,
+            fallbackMaxPoint = 0,
+            pointPerStack = 0,
+            consumeAmountOnSuccess = 1
+        };
+        return card;
+    }
+
+    private static void ConfigureLongRangeTestBuffs(
+        CharacterData shooter,
+        int bulletStack
+    )
+    {
+        if (shooter == null || shooter.buffs == null)
+        {
+            return;
+        }
+
+        for (int index = shooter.buffs.Count - 1; index >= 0; index--)
+        {
+            BuffData buff = shooter.buffs[index];
+            if (buff != null &&
+                (buff.buffID == "Bullet" || buff.buffID == "Strength"))
+            {
+                shooter.buffs.RemoveAt(index);
+            }
+        }
+
+        if (bulletStack > 0)
+        {
+            shooter.AddBuff("Bullet", bulletStack, -1);
+        }
+    }
+
+    private static bool HasNeutralLongRangePointModifiers(
+        CharacterData shooter,
+        CharacterData meleeActor
+    )
+    {
+        if (shooter == null || meleeActor == null)
+        {
+            return false;
+        }
+
+        return GetRoundedModifier(shooter, "AttackPoint") == 0 &&
+            GetRoundedModifier(shooter, "ClashPoint") == 0 &&
+            GetRoundedModifier(shooter, "CardPoint") == 0 &&
+            GetRoundedModifier(meleeActor, "AttackPoint") == 0 &&
+            GetRoundedModifier(meleeActor, "ClashPoint") == 0 &&
+            GetRoundedModifier(meleeActor, "CardPoint") == 0 &&
+            shooter.GetBuffStack("NextClashPointUp") == 0 &&
+            shooter.GetBuffStack("NextCardPointUp") == 0 &&
+            meleeActor.GetBuffStack("NextClashPointUp") == 0 &&
+            meleeActor.GetBuffStack("NextCardPointUp") == 0;
+    }
+
+    private static bool TryFindTieThenShooterWinSeed(
+        int shooterMinPoint,
+        int shooterMaxPoint,
+        int meleeMinPoint,
+        int meleeMaxPoint,
+        out int seed,
+        out int firstShooterPoint,
+        out int firstMeleePoint,
+        out int secondShooterPoint,
+        out int secondMeleePoint
+    )
+    {
+        UnityEngine.Random.State originalState = UnityEngine.Random.state;
+        try
+        {
+            for (int candidate = 1; candidate <= 10000; candidate++)
+            {
+                UnityEngine.Random.InitState(candidate);
+                int shooterOne = UnityEngine.Random.Range(
+                    shooterMinPoint,
+                    shooterMaxPoint + 1
+                );
+                int meleeOne = UnityEngine.Random.Range(
+                    meleeMinPoint,
+                    meleeMaxPoint + 1
+                );
+                int shooterTwo = UnityEngine.Random.Range(
+                    shooterMinPoint,
+                    shooterMaxPoint + 1
+                );
+                int meleeTwo = UnityEngine.Random.Range(
+                    meleeMinPoint,
+                    meleeMaxPoint + 1
+                );
+                if (shooterOne == meleeOne && shooterTwo > meleeTwo)
+                {
+                    seed = candidate;
+                    firstShooterPoint = shooterOne;
+                    firstMeleePoint = meleeOne;
+                    secondShooterPoint = shooterTwo;
+                    secondMeleePoint = meleeTwo;
+                    return true;
+                }
+            }
+        }
+        finally
+        {
+            UnityEngine.Random.state = originalState;
+        }
+
+        seed = 0;
+        firstShooterPoint = 0;
+        firstMeleePoint = 0;
+        secondShooterPoint = 0;
+        secondMeleePoint = 0;
+        return false;
+    }
+
     private static CardTestData CreateTestDefenseCard(
         string cardID,
         string cardName,
@@ -1403,6 +1857,39 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
 
         RemoveTestCard(ally, allyCard);
         RemoveTestCard(enemy, enemyCard);
+    }
+
+    private static void RollbackLongRangeShootVsAttack(
+        BattleRuntimeState runtimeState,
+        List<BattleEnemyIntent> originalIntentQueue,
+        BattleActionSlot allySlot,
+        CharacterData ally,
+        List<BuffData> originalAllyBuffs,
+        BattleCardState shooterCard,
+        CharacterData enemy,
+        BattleCardState meleeCard
+    )
+    {
+        if (allySlot != null)
+        {
+            allySlot.Clear();
+        }
+
+        if (runtimeState != null)
+        {
+            runtimeState.SetIntentQueue(originalIntentQueue);
+        }
+
+        RemoveTestCard(ally, shooterCard);
+        RemoveTestCard(enemy, meleeCard);
+        if (ally != null && ally.buffs != null)
+        {
+            ally.buffs.Clear();
+            if (originalAllyBuffs != null)
+            {
+                ally.buffs.AddRange(originalAllyBuffs);
+            }
+        }
     }
 
     private static void RollbackAttackVsGuard(
