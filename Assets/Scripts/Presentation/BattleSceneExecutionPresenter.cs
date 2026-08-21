@@ -41,6 +41,21 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public bool GuardTailFinished;
         public long GuardImpactRequestId;
 
+        public CharacterData DodgeAttacker;
+        public CharacterData DodgeDefender;
+        public BattleUnitViewHandle DodgeAttackerHandle;
+        public BattleUnitViewHandle DodgeDefenderHandle;
+        public BattleCharacterPresentationController DodgeAttackerPresentation;
+        public BattleCharacterPresentationController DodgeDefenderPresentation;
+        public BattleDodgePresentationResult DodgePresentationResult;
+        public bool DodgeRollStarted;
+        public bool DodgeRollResultReady;
+        public bool DodgeTailFinished;
+        public bool DodgeImpactStarted;
+        public bool DodgeImpactFinished;
+        public long DodgeRollRequestId;
+        public long DodgeImpactRequestId;
+
         public bool DefaultAttackStarted;
         public bool DefaultAttackImpactReached;
         public bool DefaultAttackFinished;
@@ -58,6 +73,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     [SerializeField]
     private BattleAttackVsGuardPresentationPlayer attackVsGuardPresentationPlayer;
     [SerializeField]
+    private BattleAttackVsDodgePresentationPlayer attackVsDodgePresentationPlayer;
+    [SerializeField]
     private BattleClashEngagementProfile clashEngagementProfile;
     [SerializeField] private bool verboseLogging = false;
 
@@ -70,6 +87,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ResolveDefaultAttackPresentationPlayer();
         ResolveAttackVsAttackPresentationPlayer();
         ValidateAttackVsGuardPresentationPlayer();
+        ValidateAttackVsDodgePresentationPlayer();
     }
 
     public void Initialize(BattleUnitViewSpawner spawner)
@@ -78,6 +96,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ResolveDefaultAttackPresentationPlayer();
         ResolveAttackVsAttackPresentationPlayer();
         ValidateAttackVsGuardPresentationPlayer();
+        ValidateAttackVsDodgePresentationPlayer();
     }
 
     void OnDisable()
@@ -96,6 +115,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         attackVsAttackPresentationPlayer?.CancelAndReset();
         attackVsGuardPresentationPlayer?.CancelAndReset();
+        attackVsDodgePresentationPlayer?.CancelAndReset();
         RestoreClashActorsToIdle(activeContext);
         BattleActionRollPanelHost.HideImmediate();
         activeContext = null;
@@ -151,6 +171,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             activePresentationRequestId = 0L;
             attackVsAttackPresentationPlayer?.CancelAndReset();
             attackVsGuardPresentationPlayer?.CancelAndReset();
+            attackVsDodgePresentationPlayer?.CancelAndReset();
             RestoreClashActorsToIdle(activeContext);
         }
 
@@ -170,6 +191,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 attackVsGuardPresentationPlayer != null)
             {
                 attackVsGuardPresentationPlayer.CancelAndReset();
+            }
+            if (activeContext.DodgeRollStarted &&
+                attackVsDodgePresentationPlayer != null)
+            {
+                attackVsDodgePresentationPlayer.CancelAndReset();
             }
             activeContext = null;
         }
@@ -202,6 +228,19 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (ShouldPlayDefenseVsAttackApproach(request))
         {
             if (!TryStartDefenseVsAttackApproach(
+                    request,
+                    completion,
+                    activeContext
+                ))
+            {
+                CompleteRequest(request, completion);
+            }
+            return;
+        }
+
+        if (ShouldPlayDodgeVsAttackApproach(request))
+        {
+            if (!TryStartDodgeVsAttackApproach(
                     request,
                     completion,
                     activeContext
@@ -406,6 +445,91 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         completion.TryComplete(requestId);
     }
 
+    private static bool ShouldPlayDodgeVsAttackApproach(
+        BattlePresentationRequest request
+    )
+    {
+        return request.ExecutionItem != null &&
+            request.ClashSession != null &&
+            request.ClashSession.ClashType == BattleClashType.DodgeVsAttack;
+    }
+
+    private bool TryStartDodgeVsAttackApproach(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (clashEngagementProfile == null)
+        {
+            LogApproachFallback(request, "接敌Profile未配置");
+            return false;
+        }
+
+        if (!TryResolveDodgePresentationActors(context) ||
+            attackVsDodgePresentationPlayer == null ||
+            !attackVsDodgePresentationPlayer.isActiveAndEnabled)
+        {
+            LogApproachFallback(request, "Dodge角色表现映射不完整");
+            return false;
+        }
+
+        context.ClashEngagement = BattleClashEngagementResolver.Resolve(
+            clashEngagementProfile,
+            context.DodgeDefenderPresentation.PresentationKey,
+            context.DodgeAttackerPresentation.PresentationKey,
+            GetPresentationSpeed(context.DodgeDefender),
+            GetPresentationSpeed(context.DodgeAttacker)
+        );
+
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        activePresentationRequestId = requestId;
+        bool started = attackVsDodgePresentationPlayer
+            .TryPlayClashReadyApproach(
+                context.DodgeDefenderPresentation,
+                context.DodgeDefenderHandle.WorldRoot.transform,
+                context.DodgeAttackerPresentation,
+                context.DodgeAttackerHandle.WorldRoot.transform,
+                context.ClashEngagement,
+                () => CompleteDodgeVsAttackApproach(
+                    context,
+                    executionItem,
+                    requestId,
+                    completion
+                )
+            );
+        if (started)
+        {
+            return true;
+        }
+
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        LogApproachFallback(requestId, "共享AttackVsDodge Player启动失败");
+        return false;
+    }
+
+    private void CompleteDodgeVsAttackApproach(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem))
+        {
+            return;
+        }
+
+        activePresentationRequestId = 0L;
+        completion.TryComplete(requestId);
+    }
+
     private static bool TryResolveDefensePresentationActors(
         ActionPresentationContext context
     )
@@ -460,6 +584,60 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.DefenseDefenderPresentation != null;
     }
 
+    private static bool TryResolveDodgePresentationActors(
+        ActionPresentationContext context
+    )
+    {
+        BattleClashSession session = context != null
+            ? context.ClashSession
+            : null;
+        if (session == null ||
+            session.ClashType != BattleClashType.DodgeVsAttack ||
+            session.SideA == null || session.SideB == null ||
+            session.SideA.cardState == null ||
+            session.SideB.cardState == null ||
+            session.SideA.cardState.cardData == null ||
+            session.SideB.cardState.cardData == null)
+        {
+            return false;
+        }
+
+        string sideAType = session.SideA.cardState.cardData.cardType;
+        string sideBType = session.SideB.cardState.cardData.cardType;
+        if (sideAType == CardType.Dodge && sideBType == CardType.Attack)
+        {
+            context.DodgeDefender = context.SideAActor;
+            context.DodgeDefenderHandle = context.SideAHandle;
+            context.DodgeDefenderPresentation = context.SideAPresentation;
+            context.DodgeAttacker = context.SideBActor;
+            context.DodgeAttackerHandle = context.SideBHandle;
+            context.DodgeAttackerPresentation = context.SideBPresentation;
+        }
+        else if (sideAType == CardType.Attack &&
+            sideBType == CardType.Dodge)
+        {
+            context.DodgeAttacker = context.SideAActor;
+            context.DodgeAttackerHandle = context.SideAHandle;
+            context.DodgeAttackerPresentation = context.SideAPresentation;
+            context.DodgeDefender = context.SideBActor;
+            context.DodgeDefenderHandle = context.SideBHandle;
+            context.DodgeDefenderPresentation = context.SideBPresentation;
+        }
+        else
+        {
+            return false;
+        }
+
+        return context.DodgeAttacker != null &&
+            context.DodgeDefender != null &&
+            context.DodgeAttackerHandle != null &&
+            context.DodgeDefenderHandle != null &&
+            context.DodgeAttackerHandle.WorldRoot != null &&
+            context.DodgeDefenderHandle.WorldRoot != null &&
+            context.DodgeAttackerPresentation != null &&
+            context.DodgeDefenderPresentation != null;
+    }
+
     private bool IsCurrentPresentationRequest(long requestId)
     {
         return requestId != 0L &&
@@ -499,6 +677,15 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         RefreshClashActors(context);
         LogRequest(request, context);
         BattleActionRollPanelHost.ShowForRoll(request);
+
+        if (ShouldPlayDodgeRollResult(request))
+        {
+            if (!TryStartDodgeRollResult(request, completion, context))
+            {
+                CompleteRequest(request, completion);
+            }
+            return;
+        }
 
         if (TryCacheGuardPresentationResult(request, context))
         {
@@ -647,6 +834,18 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         );
 
         LogRequest(request, context);
+        if (ShouldPlayDodgeFailedImpact(request, context))
+        {
+            if (!TryStartDodgeFailedImpact(request, completion, context))
+            {
+                attackVsDodgePresentationPlayer?.CancelAndReset();
+                context.DodgeRollStarted = false;
+                context.DodgeTailFinished = true;
+                CompleteRequest(request, completion);
+            }
+            return;
+        }
+
         if (ShouldPlayDefenseGuardImpact(request, context))
         {
             if (!TryStartDefenseGuardImpact(request, completion, context))
@@ -677,6 +876,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         RefreshRequestState(context, request);
         LogRequest(request, context);
 
+        if (context.DodgeRollStarted)
+        {
+            HandleDodgeActionComplete(request, completion, context);
+            return;
+        }
+
         if (context.GuardPresentationStarted)
         {
             HandleDefenseActionComplete(request, completion, context);
@@ -701,14 +906,80 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         );
     }
 
+    private void HandleDodgeActionComplete(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (context.DodgeTailFinished)
+        {
+            BattleActionRollPanelHost.HideImmediate();
+            CompleteRequest(request, completion);
+            activeContext = null;
+            return;
+        }
+
+        activePresentationRequestId = request.RequestId;
+        activePresentationCoroutine = StartCoroutine(
+            WaitForDodgeTail(request, completion, context)
+        );
+    }
+
+    private IEnumerator WaitForDodgeTail(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        while (IsCurrentPresentationRequest(requestId) &&
+            IsOwnedDodgePresentationContext(context, executionItem) &&
+            !context.DodgeTailFinished)
+        {
+            if (attackVsDodgePresentationPlayer == null ||
+                (!attackVsDodgePresentationPlayer.IsRunning &&
+                    !attackVsDodgePresentationPlayer.IsFinished))
+            {
+                context.DodgeTailFinished = true;
+                break;
+            }
+
+            yield return null;
+        }
+
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !IsOwnedDodgePresentationContext(context, executionItem))
+        {
+            yield break;
+        }
+
+        activePresentationCoroutine = null;
+        activePresentationRequestId = 0L;
+        BattleActionRollPanelHost.HideImmediate();
+        completion.TryComplete(requestId);
+        activeContext = null;
+    }
+
+    private bool IsOwnedDodgePresentationContext(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem
+    )
+    {
+        return context != null &&
+            object.ReferenceEquals(activeContext, context) &&
+            object.ReferenceEquals(context.ExecutionItem, executionItem) &&
+            context.DodgeRollStarted &&
+            !context.Cancelled;
+    }
+
     private bool ShouldPlayDefenseGuardImpact(
         BattlePresentationRequest request,
         ActionPresentationContext context
     )
     {
         if (request.ExecutionItem == null ||
-            request.ExecutionItem.executionType !=
-                BattleExecutionItemType.RespondedEnemyIntent ||
             request.ClashSession == null ||
             request.ClashSession.ClashType !=
                 BattleClashType.DefenseVsAttack ||
@@ -805,6 +1076,224 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (IsOwnedGuardPresentationContext(context, executionItem))
         {
             context.GuardTailFinished = true;
+        }
+    }
+
+    private bool ShouldPlayDodgeFailedImpact(
+        BattlePresentationRequest request,
+        ActionPresentationContext context
+    )
+    {
+        if (request.ExecutionItem == null ||
+            !IsSupportedDodgePresentationExecution(request) ||
+            request.ClashSession == null ||
+            request.ClashSession.ClashType != BattleClashType.DodgeVsAttack ||
+            request.ClashSession.FinalResult !=
+                BattleClashFinalResult.DodgeFailed ||
+            request.Impact == null || request.ImpactIndex != 0 ||
+            context == null || !context.DodgeRollStarted ||
+            !context.DodgeRollResultReady ||
+            !TryResolveDodgePresentationActors(context) ||
+            attackVsDodgePresentationPlayer == null ||
+            !attackVsDodgePresentationPlayer.isActiveAndEnabled)
+        {
+            return false;
+        }
+
+        return object.ReferenceEquals(
+                context.CurrentAttacker,
+                context.DodgeAttacker) &&
+            object.ReferenceEquals(
+                context.CurrentTarget,
+                context.DodgeDefender);
+    }
+
+    private static bool IsSupportedDodgePresentationExecution(
+        BattlePresentationRequest request
+    )
+    {
+        if (request == null || request.ExecutionItem == null)
+        {
+            return false;
+        }
+
+        if (request.ExecutionItem.executionType ==
+            BattleExecutionItemType.RespondedEnemyIntent)
+        {
+            return true;
+        }
+
+        return request.ExecutionItem.executionType ==
+                BattleExecutionItemType.UnrespondedEnemyIntent &&
+            request.ClashSession != null &&
+            request.ClashSession.IsContinuousDodgeContinuation;
+    }
+
+    private bool TryStartDodgeFailedImpact(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        float directionSign = GetAttackDirectionSign(
+            context.DodgeAttackerHandle,
+            context.DodgeDefenderHandle
+        );
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        context.DodgeImpactStarted = true;
+        context.DodgeImpactFinished = false;
+        context.DodgeImpactRequestId = requestId;
+        activePresentationRequestId = requestId;
+
+        bool started = attackVsDodgePresentationPlayer
+            .TryPlayDodgeFailedImpact(
+                context.DodgeDefenderPresentation,
+                context.DodgeDefenderHandle.WorldRoot.transform,
+                directionSign,
+                () => CompleteDodgeFailedImpact(
+                    context,
+                    executionItem,
+                    requestId,
+                    completion
+                )
+            );
+        if (started)
+        {
+            return true;
+        }
+
+        context.DodgeImpactStarted = false;
+        context.DodgeImpactRequestId = 0L;
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        return false;
+    }
+
+    private void CompleteDodgeFailedImpact(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsOwnedDodgePresentationContext(context, executionItem) ||
+            !context.DodgeImpactStarted || context.DodgeImpactFinished ||
+            context.DodgeImpactRequestId != requestId ||
+            activePresentationRequestId != requestId)
+        {
+            return;
+        }
+
+        // Hit表现完成后只释放Impact；伤害仍由Runner下一步提交。
+        context.DodgeImpactFinished = true;
+        activePresentationRequestId = 0L;
+        completion.TryComplete(requestId);
+    }
+
+    private static bool ShouldPlayDodgeRollResult(
+        BattlePresentationRequest request
+    )
+    {
+        BattleClashSession session = request.ClashSession;
+        return session != null &&
+            session.ClashType == BattleClashType.DodgeVsAttack &&
+            session.IsFinalized &&
+            (session.FinalResult == BattleClashFinalResult.DodgeSuccess ||
+                session.FinalResult == BattleClashFinalResult.DodgeFailed);
+    }
+
+    private bool TryStartDodgeRollResult(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (!TryResolveDodgePresentationActors(context) ||
+            attackVsDodgePresentationPlayer == null ||
+            !attackVsDodgePresentationPlayer.isActiveAndEnabled)
+        {
+            return false;
+        }
+
+        BattleClashFinalResult finalResult = request.ClashSession.FinalResult;
+        context.DodgePresentationResult = finalResult ==
+                BattleClashFinalResult.DodgeSuccess
+            ? BattleDodgePresentationResult.DodgeSuccess
+            : BattleDodgePresentationResult.DodgeFailed;
+
+        float directionSign = GetAttackDirectionSign(
+            context.DodgeAttackerHandle,
+            context.DodgeDefenderHandle
+        );
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        context.DodgeRollStarted = true;
+        context.DodgeRollResultReady = false;
+        context.DodgeTailFinished = false;
+        context.DodgeImpactStarted = false;
+        context.DodgeImpactFinished = false;
+        context.DodgeRollRequestId = requestId;
+        activePresentationRequestId = requestId;
+
+        bool started = attackVsDodgePresentationPlayer
+            .TryPlayDodgeRollResult(
+                context.DodgeAttackerPresentation,
+                context.DodgeDefenderPresentation,
+                directionSign,
+                context.DodgePresentationResult,
+                () => CompleteDodgeRollResult(
+                    context,
+                    executionItem,
+                    requestId,
+                    completion
+                ),
+                () => MarkDodgeTailFinished(context, executionItem)
+            );
+        if (started)
+        {
+            return true;
+        }
+
+        context.DodgeRollStarted = false;
+        context.DodgeRollRequestId = 0L;
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        return false;
+    }
+
+    private void CompleteDodgeRollResult(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsOwnedDodgePresentationContext(context, executionItem) ||
+            context.DodgeRollResultReady ||
+            context.DodgeRollRequestId != requestId ||
+            activePresentationRequestId != requestId)
+        {
+            return;
+        }
+
+        context.DodgeRollResultReady = true;
+        activePresentationRequestId = 0L;
+        completion.TryComplete(requestId);
+    }
+
+    private void MarkDodgeTailFinished(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem
+    )
+    {
+        if (IsOwnedDodgePresentationContext(context, executionItem))
+        {
+            context.DodgeTailFinished = true;
         }
     }
 
@@ -1087,6 +1576,18 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             Debug.LogError(
                 "BattleSceneExecutionPresenter缺少持久化的" +
                 "BattleAttackVsGuardPresentationPlayer。",
+                this
+            );
+        }
+    }
+
+    private void ValidateAttackVsDodgePresentationPlayer()
+    {
+        if (attackVsDodgePresentationPlayer == null)
+        {
+            Debug.LogError(
+                "BattleSceneExecutionPresenter缺少持久化的" +
+                "BattleAttackVsDodgePresentationPlayer。",
                 this
             );
         }

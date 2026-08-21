@@ -75,6 +75,7 @@ public sealed class BattleExecutionRunner
     BattlePresentationContinuation presentationContinuation;
 
     public BattleExecutionItem CurrentItem { get; private set; }
+    public BattleActionSlot CurrentActionSlot { get; private set; }
     public BattleClashSession CurrentClashSession { get; private set; }
     public BattleResolutionPlan CurrentResolutionPlan { get; private set; }
     public BattlePresentationRequest CurrentPresentationRequest { get; private set; }
@@ -151,6 +152,7 @@ public sealed class BattleExecutionRunner
         if (Phase == BattleExecutionRunnerPhase.ItemCompleted)
         {
             CurrentItem = null;
+            CurrentActionSlot = null;
             CurrentClashSession = null;
             CurrentResolutionPlan = null;
             CurrentItemCompleted = false;
@@ -217,6 +219,7 @@ public sealed class BattleExecutionRunner
             ? runtimeState.currentExecutionPlan
             : null;
         CurrentItem = FindNextPendingItem(plan);
+        CurrentActionSlot = null;
         CurrentClashSession = null;
         CurrentResolutionPlan = null;
         ClearPresentationReferences();
@@ -233,7 +236,7 @@ public sealed class BattleExecutionRunner
         }
 
         if (runtimeState.IsBattleEnded ||
-            CurrentItem.executionType != BattleExecutionItemType.RespondedEnemyIntent)
+            CurrentItem.executionType == BattleExecutionItemType.FreeAction)
         {
             bool executed = BattleExecutionPlanExecutor
                 .ExecuteNextItemFromLifecycle(lifecycleController);
@@ -246,13 +249,48 @@ public sealed class BattleExecutionRunner
         }
 
         bool itemCompleted;
-        if (!BattleExecutionPlanExecutor.TryBeginPausableRespondedEnemyIntent(
-                CurrentItem,
-                runtimeState,
-                out BattleClashSession session,
-                out itemCompleted,
-                out failureMessage
-            ))
+        BattleActionSlot actionSlot;
+        BattleClashSession session;
+        bool began;
+        if (CurrentItem.executionType ==
+            BattleExecutionItemType.RespondedEnemyIntent)
+        {
+            actionSlot = CurrentItem.actionSlot;
+            began = BattleExecutionPlanExecutor
+                .TryBeginPausableRespondedEnemyIntent(
+                    CurrentItem,
+                    runtimeState,
+                    out session,
+                    out itemCompleted,
+                    out failureMessage
+                );
+        }
+        else if (CurrentItem.executionType ==
+            BattleExecutionItemType.UnrespondedEnemyIntent)
+        {
+            began = BattleExecutionPlanExecutor
+                .TryBeginPausableUnrespondedEnemyIntent(
+                    CurrentItem,
+                    runtimeState,
+                    out actionSlot,
+                    out session,
+                    out itemCompleted,
+                    out failureMessage
+                );
+        }
+        else
+        {
+            bool executed = BattleExecutionPlanExecutor
+                .ExecuteNextItemFromLifecycle(lifecycleController);
+            if (!executed || !CurrentItem.isCompleted)
+            {
+                return Fail("不支持的Pausable Item未能按同步路径完成", out failureMessage);
+            }
+
+            return FinishCurrentItem(out failureMessage);
+        }
+
+        if (!began)
         {
             return Fail(failureMessage, out failureMessage);
         }
@@ -262,6 +300,12 @@ public sealed class BattleExecutionRunner
             return FinishCurrentItem(out failureMessage);
         }
 
+        if (actionSlot == null || session == null)
+        {
+            return Fail("Pausable Clash启动失败：行动槽位或Session为空", out failureMessage);
+        }
+
+        CurrentActionSlot = actionSlot;
         CurrentClashSession = session;
         return BeginPresentation(
             BattlePresentationCue.ActionBegin,
@@ -313,9 +357,10 @@ public sealed class BattleExecutionRunner
         {
             Phase = BattleExecutionRunnerPhase.Finalizing;
             CurrentResolutionPlan = BattleExecutionPlanExecutor
-                .BuildPausableRespondedEnemyIntentResolutionPlan(
+                .BuildPausableEnemyIntentResolutionPlan(
                     CurrentItem,
                     lifecycleController.RuntimeState,
+                    CurrentActionSlot,
                     CurrentClashSession
                 );
             if (CurrentResolutionPlan == null)
@@ -459,7 +504,7 @@ public sealed class BattleExecutionRunner
         if (continuation == BattlePresentationContinuation.AfterActionComplete)
         {
             if (!BattleExecutionPlanExecutor
-                    .CompletePausableRespondedEnemyIntentAction(
+                    .CompletePausableEnemyIntentAction(
                         CurrentItem,
                         lifecycleController.RuntimeState,
                         CurrentResolutionPlan
@@ -501,7 +546,7 @@ public sealed class BattleExecutionRunner
     {
         failureMessage = string.Empty;
         if (!BattleExecutionPlanExecutor
-                .TryCommitPausableRespondedEnemyIntentResolutionStep(
+                .TryCommitPausableEnemyIntentResolutionStep(
                     CurrentItem,
                     lifecycleController.RuntimeState,
                     CurrentResolutionPlan,

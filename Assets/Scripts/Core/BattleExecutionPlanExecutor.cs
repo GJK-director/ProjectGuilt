@@ -336,6 +336,20 @@ public static class BattleExecutionPlanExecutor
             guardSlots,
             item.enemyIntent
         );
+        return ExecuteUnrespondedEnemyIntentWithSelection(item, guardSelection);
+    }
+
+    static bool ExecuteUnrespondedEnemyIntentWithSelection(
+        BattleExecutionItem item,
+        BattleGuardSelectionResult guardSelection
+    )
+    {
+        if (item == null)
+        {
+            Debug.LogWarning("执行 UnrespondedEnemyIntent 失败：item 为空");
+            return false;
+        }
+
         BattleActionSlot passiveGuardSlot = guardSelection.slot;
         BattleResolveResult result = null;
 
@@ -353,34 +367,12 @@ public static class BattleExecutionPlanExecutor
                 ? BattleResolver.ResolveContinuousDodgeVsAttack(passiveGuardSlot, item.enemyIntent)
                 : BattleResolver.ResolveRespondedEnemyIntent(passiveGuardSlot, item.enemyIntent);
 
-            LogResolveResult(item.order, "Guard Resolver 结算结果", result);
-
-            if (TryCompleteTieLimit(item, result))
-            {
-                return true;
-            }
-
-            if (TryMarkResolveFailure(item, result, false))
-            {
-                Debug.LogWarning(
-                    item.order +
-                    ". UnrespondedEnemyIntent 守备失败，ExecutionPlan 停止"
-                );
-
-                return false;
-            }
-
-            HandlePlayerCardDisposition(
+            return CompleteUnrespondedGuardResult(
+                item,
                 passiveGuardSlot,
                 result,
-                GetContinuousDodgeSource(guardSelection.selectionType),
-                item.enemyIntent,
-                item.order + ". UnrespondedEnemyIntent"
+                guardSelection.selectionType
             );
-
-            // 一张敌人卡只处理选中的这一张卡；成功或失败都不继续寻找第二张守备。
-            item.MarkExecuted();
-            return true;
         }
 
         result = BattleResolver.ResolveUnrespondedEnemyIntent(item.enemyIntent);
@@ -402,6 +394,42 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
+        item.MarkExecuted();
+        return true;
+    }
+
+    static bool CompleteUnrespondedGuardResult(
+        BattleExecutionItem item,
+        BattleActionSlot guardSlot,
+        BattleResolveResult result,
+        BattleGuardSelectionType selectionType
+    )
+    {
+        LogResolveResult(item.order, "Guard Resolver 结算结果", result);
+
+        if (TryCompleteTieLimit(item, result))
+        {
+            return true;
+        }
+
+        if (TryMarkResolveFailure(item, result, false))
+        {
+            Debug.LogWarning(
+                item.order +
+                ". UnrespondedEnemyIntent 守备失败，ExecutionPlan 停止"
+            );
+            return false;
+        }
+
+        HandlePlayerCardDisposition(
+            guardSlot,
+            result,
+            GetContinuousDodgeSource(selectionType),
+            item.enemyIntent,
+            item.order + ". UnrespondedEnemyIntent"
+        );
+
+        // 一张敌人卡只处理选中的这一张卡；成功或失败都不继续寻找第二张守备。
         item.MarkExecuted();
         return true;
     }
@@ -612,27 +640,110 @@ public static class BattleExecutionPlanExecutor
         return completed;
     }
 
-    internal static BattleResolutionPlan BuildPausableRespondedEnemyIntentResolutionPlan(
+    // Unresponded Item仍由正式守备选择器决定；只有ContinuousDodge转入Pausable。
+    internal static bool TryBeginPausableUnrespondedEnemyIntent(
         BattleExecutionItem item,
         BattleRuntimeState runtimeState,
+        out BattleActionSlot actionSlot,
+        out BattleClashSession session,
+        out bool itemCompleted,
+        out string failureMessage
+    )
+    {
+        actionSlot = null;
+        session = null;
+        itemCompleted = false;
+        failureMessage = string.Empty;
+
+        if (item == null)
+        {
+            failureMessage = "Pausable UnrespondedEnemyIntent启动失败：item为空";
+            return false;
+        }
+
+        if (TryCompleteEnemyItemBecauseActualTargetDead(item))
+        {
+            itemCompleted = true;
+            return true;
+        }
+
+        System.Collections.Generic.IReadOnlyList<BattleActionSlot> guardSlots =
+            runtimeState != null
+                ? runtimeState.actionSlots
+                : item.passiveGuardCandidates;
+        BattleGuardSelectionResult guardSelection =
+            BattleGuardSelectionManager.SelectHandlingCardForEnemyIntent(
+                guardSlots,
+                item.enemyIntent
+            );
+
+        if (guardSelection.selectionType !=
+                BattleGuardSelectionType.ContinuousDodge ||
+            guardSelection.slot == null)
+        {
+            bool completed = ExecuteUnrespondedEnemyIntentWithSelection(
+                item,
+                guardSelection
+            );
+            itemCompleted = item.isCompleted;
+            if (!completed)
+            {
+                failureMessage =
+                    "Pausable UnrespondedEnemyIntent同步路径未能完成当前Item";
+            }
+            return completed;
+        }
+
+        actionSlot = guardSelection.slot;
+        BattleResolveResult beginFailure =
+            BattleResolver.TryBeginContinuousDodgeClash(
+                actionSlot,
+                item.enemyIntent,
+                out session
+            );
+        if (beginFailure == null && session != null)
+        {
+            return true;
+        }
+
+        bool failureCompleted = CompleteUnrespondedGuardResult(
+            item,
+            actionSlot,
+            beginFailure,
+            BattleGuardSelectionType.ContinuousDodge
+        );
+        itemCompleted = item.isCompleted;
+        if (!failureCompleted)
+        {
+            failureMessage =
+                "Pausable ContinuousDodge初始化失败";
+        }
+        return failureCompleted;
+    }
+
+    internal static BattleResolutionPlan BuildPausableEnemyIntentResolutionPlan(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        BattleActionSlot actionSlot,
         BattleClashSession session
     )
     {
-        if (item == null || runtimeState == null || session == null ||
+        if (item == null || runtimeState == null || actionSlot == null ||
+            session == null ||
             !session.IsFinalized)
         {
             return null;
         }
 
         return BattleResolver.BuildRespondedClashResolutionPlan(
-            item.actionSlot,
+            actionSlot,
             item.enemyIntent,
             session,
             item
         );
     }
 
-    internal static bool TryCommitPausableRespondedEnemyIntentResolutionStep(
+    internal static bool TryCommitPausableEnemyIntentResolutionStep(
         BattleExecutionItem item,
         BattleRuntimeState runtimeState,
         BattleResolutionPlan plan,
@@ -661,7 +772,7 @@ public static class BattleExecutionPlanExecutor
     }
 
     // ActionComplete表现结束后才提交槽位与ExecutionItem状态。
-    internal static bool CompletePausableRespondedEnemyIntentAction(
+    internal static bool CompletePausableEnemyIntentAction(
         BattleExecutionItem item,
         BattleRuntimeState runtimeState,
         BattleResolutionPlan plan
@@ -676,11 +787,34 @@ public static class BattleExecutionPlanExecutor
 
         if (!plan.IsActionCompleted)
         {
-            if (!CompleteRespondedEnemyIntentResult(
+            bool completed;
+            if (item.executionType ==
+                BattleExecutionItemType.RespondedEnemyIntent)
+            {
+                completed = CompleteRespondedEnemyIntentResult(
                     item,
                     runtimeState,
                     plan.CompletedResult
-                ))
+                );
+            }
+            else if (item.executionType ==
+                    BattleExecutionItemType.UnrespondedEnemyIntent &&
+                plan.clashSession != null &&
+                plan.clashSession.IsContinuousDodgeContinuation)
+            {
+                completed = CompleteUnrespondedGuardResult(
+                    item,
+                    plan.actionSlot,
+                    plan.CompletedResult,
+                    BattleGuardSelectionType.ContinuousDodge
+                );
+            }
+            else
+            {
+                return false;
+            }
+
+            if (!completed)
             {
                 return false;
             }

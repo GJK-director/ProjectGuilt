@@ -225,98 +225,16 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
 
     private IEnumerator RunApproachMovement(int version)
     {
-        if (!HasValidApproachActors())
-        {
-            yield break;
-        }
-
-        Vector3 firstStart = firstWorldRoot.position;
-        Vector3 secondStart = secondWorldRoot.position;
-        if (!BattleClashEngagementResolver.RequiresApproach(
-                firstStart,
-                secondStart,
-                clashEngagementResult
-            ))
-        {
-            yield break;
-        }
-
-        float horizontalDelta = secondStart.x - firstStart.x;
-        float directionSign = Mathf.Abs(horizontalDelta) > 0.0001f
-            ? Mathf.Sign(horizontalDelta)
-            : 1f;
-        float safeGap = Mathf.Max(0f, clashEngagementResult.FinalGap);
-        float horizontalDistance = Mathf.Abs(horizontalDelta);
-
-        firstActor.SetSprint();
-        secondActor.SetSprint();
-
-        float closeDistance = horizontalDistance - safeGap;
-        Vector3 firstTarget = firstStart;
-        Vector3 secondTarget = secondStart;
-        firstTarget.x += directionSign * closeDistance *
-            clashEngagementResult.SideAMovementShare;
-        secondTarget.x -= directionSign * closeDistance *
-            clashEngagementResult.SideBMovementShare;
-
-        float safeDuration = SprintDuration;
-        if (safeDuration <= 0f)
-        {
-            firstWorldRoot.position = firstTarget;
-            secondWorldRoot.position = secondTarget;
-            yield break;
-        }
-
-        firstActor.SpawnAfterimage();
-        secondActor.SpawnAfterimage();
-
-        float elapsed = 0f;
-        float afterimageElapsed = 0f;
-        float safeAfterimageInterval =
-            presentationProfile.AfterimageSpawnInterval;
-        bool spawnRepeatedAfterimages = safeAfterimageInterval > 0f;
-        while (elapsed < safeDuration && IsCurrentPlayback(version))
-        {
-            if (!HasValidApproachActors())
-            {
-                yield break;
-            }
-
-            elapsed += Time.deltaTime;
-            float linearT = Mathf.Clamp01(elapsed / safeDuration);
-            float easedT = BattlePresentationEasing.EaseOutQuad(linearT);
-            firstWorldRoot.position = firstStart +
-                (firstTarget - firstStart) * easedT;
-            secondWorldRoot.position = secondStart +
-                (secondTarget - secondStart) * easedT;
-
-            if (spawnRepeatedAfterimages)
-            {
-                afterimageElapsed += Time.deltaTime;
-                if (afterimageElapsed >= safeAfterimageInterval &&
-                    elapsed < safeDuration)
-                {
-                    firstActor.SpawnAfterimage();
-                    secondActor.SpawnAfterimage();
-                    afterimageElapsed = 0f;
-                }
-            }
-
-            yield return null;
-        }
-
-        if (!IsCurrentPlayback(version))
-        {
-            yield break;
-        }
-
-        if (HasValidApproachActors())
-        {
-            firstWorldRoot.position = firstTarget;
-            secondWorldRoot.position = secondTarget;
-        }
-
-        // 到达后保留Sprint Pose；Manual Roll等待由宿主负责。
+        yield return BattleClashReadyApproachMotion.Play(
+            firstActor,
+            firstWorldRoot,
+            secondActor,
+            secondWorldRoot,
+            clashEngagementResult,
+            SprintDuration,
+            presentationProfile.AfterimageSpawnInterval,
+            () => IsCurrentPlayback(version)
+        );
     }
 
     private IEnumerator RunTieResult(int version)

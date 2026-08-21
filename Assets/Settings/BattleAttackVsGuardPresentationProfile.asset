@@ -12,6 +12,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ab8a1f9feff74fc4a17ff5f4deca560e, type: 3}
   m_Name: BattleAttackVsGuardPresentationProfile
   m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsGuardPresentationProfile
-  sprintDuration: 0.35
+  sprintDuration: 0.48
   afterimageSpawnInterval: 0.08
   hitStopDuration: 0.08

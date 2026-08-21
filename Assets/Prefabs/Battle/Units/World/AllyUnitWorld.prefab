@@ -503,6 +503,7 @@ MonoBehaviour:
   slashSprite: {fileID: 21300000, guid: 9686a7892217e4142b2be5bd7d3ab330, type: 3}
   hitSprite: {fileID: 21300000, guid: 71695127325899a4e9268be1389cd4fb, type: 3}
   guardSprite: {fileID: 21300000, guid: c36a385fd5745344d9cd65bac205621b, type: 3}
+  dodgeSprite: {fileID: 21300000, guid: a7bf18d8d9c3f7640a292dd35c101882, type: 3}
   perfectGuardEffect: {fileID: 0}
   slashBackEffect: {fileID: 810000000000000003}
   slashFrontEffect: {fileID: 810000000000000013}
@@ -514,19 +515,21 @@ MonoBehaviour:
   afterimageLifetime: 0.18
   afterimageStartAlpha: 0.35
   hitRecoilDistance: 0.15
-  hitRecoilDuration: 0.06
+  hitRecoilDuration: 0.12
   hitShakeAmplitude: 0.05
   hitShakeDuration: 0.2
   hitPoseHoldDuration: 0.4
   parryRecoilDistance: 0.2
-  parryRecoilDuration: 0.08
+  parryRecoilDuration: 0.12
   parryShakeAmplitude: 0.03
   parryShakeDuration: 0.1
   parryHoldDuration: 0.1
   guardRecoilDistance: 0.1
-  guardRecoilDuration: 0.06
+  guardRecoilDuration: 0.12
   guardShakeAmplitude: 0.025
   guardShakeDuration: 0.1
   guardHoldDuration: 0.1
   perfectGuardEffectHoldDuration: 0.06
   perfectGuardEffectFadeOutDuration: 0.1
+  dodgeHorizontalDistance: 0.2
+  dodgeDuration: 0.3

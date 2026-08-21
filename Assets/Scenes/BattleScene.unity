@@ -458,6 +458,7 @@ GameObject:
   m_Component:
   - component: {fileID: 107164113}
   - component: {fileID: 107164112}
+  - component: {fileID: 107164114}
   m_Layer: 0
   m_Name: BattleSimpleUIController
   m_TagString: Untagged
@@ -497,6 +498,7 @@ MonoBehaviour:
   actionRelationLineController: {fileID: 382969168}
   unitViewSpawner: {fileID: 589115412}
   sceneExecutionPresenter: {fileID: 833021969}
+  turnTransitionPresentationCoordinator: {fileID: 107164114}
   assignA1FreeAttackButton: {fileID: 0}
   assignA1AbilityButton: {fileID: 0}
   assignB1RespondIntent1Button: {fileID: 0}
@@ -535,6 +537,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &107164114
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 107164111}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c148cf0605a4477fb5097d39f22084ce, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleTurnTransitionPresentationCoordinator
+  turnEndHoldDuration: 0.6
 --- !u!1 &115941475
 GameObject:
   m_ObjectHideFlags: 0
@@ -1003,7 +1018,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3d78fe29911843aaab0fd225c1ec010c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleFormalPresentationTestHarness
-  scenario: 3
+  scenario: 5
 --- !u!1 &293728785
 GameObject:
   m_ObjectHideFlags: 0
@@ -3224,6 +3239,7 @@ GameObject:
   - component: {fileID: 833021971}
   - component: {fileID: 833021972}
   - component: {fileID: 833021973}
+  - component: {fileID: 833021974}
   m_Layer: 0
   m_Name: BattleSceneExecutionPresenter
   m_TagString: Untagged
@@ -3247,6 +3263,7 @@ MonoBehaviour:
   defaultAttackPresentationPlayer: {fileID: 0}
   attackVsAttackPresentationPlayer: {fileID: 833021972}
   attackVsGuardPresentationPlayer: {fileID: 833021973}
+  attackVsDodgePresentationPlayer: {fileID: 833021974}
   clashEngagementProfile: {fileID: 11400000, guid: b9f30c692f87489f94c2b784d6e5ed65, type: 2}
   verboseLogging: 1
 --- !u!4 &833021970
@@ -3307,6 +3324,19 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsGuardPresentationPlayer
   presentationProfile: {fileID: 11400000, guid: 3e7f0ac0a07f45988bb686e371a01415, type: 2}
+--- !u!114 &833021974
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 833021968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: beaa6744d6a64da68b6e7f6ccfc04a1f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsDodgePresentationPlayer
+  presentationProfile: {fileID: 11400000, guid: 8f5ad35a90b944d19fc5e13f2bc41b78, type: 2}
 --- !u!1 &906990934
 GameObject:
   m_ObjectHideFlags: 0

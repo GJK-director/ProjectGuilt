@@ -27,6 +27,8 @@ public class CardTestData
     public string description;  // 一级卡面描述，由策划手写
     public string rarity;       // 稀有度
     public string cardType;     // 卡牌类型
+    // Attack 的空间 / 演出兑现方式。旧数据未填写时默认视为 Melee。
+    public string attackDeliveryMode;
     public bool isSinCard;      // 是否罪卡
     public bool consumeOnUse;   // 是否使用后消耗
     public CardUseConditionData[] useConditions;
@@ -60,4 +62,32 @@ public class CardTestData
 
     public List<CardEffectData> effects; // 卡牌效果列表
     public CardKeywordData[] keywords;   // 本卡描述中涉及的词条说明，由策划手写
+
+    public string GetAttackDeliveryMode()
+    {
+        if (cardType != CardType.Attack)
+        {
+            return AttackDeliveryMode.Melee;
+        }
+
+        return AttackDeliveryMode.ResolveOrDefault(attackDeliveryMode);
+    }
+
+    public bool IsMeleeAttack()
+    {
+        return cardType == CardType.Attack &&
+            GetAttackDeliveryMode() == AttackDeliveryMode.Melee;
+    }
+
+    public bool IsLongRangeShoot()
+    {
+        return cardType == CardType.Attack &&
+            GetAttackDeliveryMode() == AttackDeliveryMode.LongRangeShoot;
+    }
+
+    public bool IsCloseRangeShoot()
+    {
+        return cardType == CardType.Attack &&
+            GetAttackDeliveryMode() == AttackDeliveryMode.CloseRangeShoot;
+    }
 }

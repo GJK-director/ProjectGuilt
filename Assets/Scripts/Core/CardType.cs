@@ -12,3 +12,25 @@ public static class CardType
     // Dodge = 闪避卡
     public const string Dodge = "Dodge";
 }
+
+// AttackDeliveryMode = Attack 卡的空间 / 演出兑现方式常量表。
+// 它与 CardType 正交，不改变攻击、防御、闪避的规则分类。
+public static class AttackDeliveryMode
+{
+    public const string Melee = "Melee";
+    public const string LongRangeShoot = "LongRangeShoot";
+    public const string CloseRangeShoot = "CloseRangeShoot";
+
+    public static bool IsKnownSerializedValue(string value)
+    {
+        return string.IsNullOrEmpty(value) ||
+            value == Melee ||
+            value == LongRangeShoot ||
+            value == CloseRangeShoot;
+    }
+
+    public static string ResolveOrDefault(string value)
+    {
+        return string.IsNullOrEmpty(value) ? Melee : value;
+    }
+}

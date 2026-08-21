@@ -567,3 +567,526 @@ public static class BattleResolutionPlanTests
         });
     }
 }
+
+// Mode85：只验证LongRangeShoot终局资源提交，不包含任何射击表现。
+public static class BattleLongRangeShootResourceContractTests
+{
+    sealed class TestContext
+    {
+        public CharacterData ally;
+        public CharacterData enemy;
+        public BattleCardState playerCard;
+        public BattleCardState enemyCard;
+        public BattleActionSlot slot;
+        public BattleEnemyIntent intent;
+        public BattleClashSession session;
+    }
+
+    public static void Run()
+    {
+        Debug.Log("===== BattleLongRangeShootResourceContractBasic 聚合测试开始 =====");
+
+        bool a = VerifyMeleeLoseKeepsResource();
+        bool b = VerifyLongRangeShootWinConsumesOnce();
+        bool c = VerifyLongRangeShootLoseConsumesOnceWithoutWinnerEffects();
+        bool d = VerifyTieDoesNotConsume();
+        bool e = VerifyMultipleTiesThenWinConsumesOnce();
+        bool f = VerifyMultipleTiesThenLoseConsumesOnce();
+        bool g = VerifyDodgeSuccessConsumesWithoutDamage();
+        bool h = VerifyDodgeFailedConsumesWithDamage();
+        bool i = VerifyGuardResultsConsume();
+        bool j = VerifyUnrespondedConsumesExactlyOnce();
+        bool k = VerifyTieLimitDoesNotConsume();
+
+        Debug.Log("模式85 A Melee Attack Lose保持旧资源语义：" + a);
+        Debug.Log("模式85 B LongRangeShoot Win只支付一次：" + b);
+        Debug.Log("模式85 C LongRangeShoot Lose支付且不触发败方胜者效果：" + c);
+        Debug.Log("模式85 D LongRangeShoot Tie不支付：" + d);
+        Debug.Log("模式85 E 多次Tie后Win总共支付一次：" + e);
+        Debug.Log("模式85 F 多次Tie后Lose总共支付一次：" + f);
+        Debug.Log("模式85 G DodgeSuccess支付且零伤害：" + g);
+        Debug.Log("模式85 H DodgeFailed支付且正常伤害：" + h);
+        Debug.Log("模式85 I Guard FullBlock与ReducedDamage均支付：" + i);
+        Debug.Log("模式85 J Unresponded LongRangeShoot只支付一次：" + j);
+        Debug.Log("模式85 K TieLimit安全结束且不支付：" + k);
+        Debug.Log("模式85 聚合结果：" +
+            (a && b && c && d && e && f && g && h && i && j && k));
+    }
+
+    static bool VerifyMeleeLoseKeepsResource()
+    {
+        TestContext context = CreateRespondedContext(
+            "shoot85_a",
+            CardType.Attack,
+            4,
+            false,
+            true,
+            6,
+            false,
+            false
+        );
+        BattleResolveResult result = ResolveFinalized(context, out _);
+        return result != null && result.resultType == "EnemyWin" &&
+            !result.playerCardUsed && context.ally.GetBuffStack("Bullet") == 3;
+    }
+
+    static bool VerifyLongRangeShootWinConsumesOnce()
+    {
+        TestContext context = CreateRespondedContext(
+            "shoot85_b",
+            CardType.Attack,
+            6,
+            true,
+            true,
+            4,
+            false,
+            false
+        );
+        BattleResolveResult result = ResolveFinalized(context, out BattleResolutionPlan plan);
+        int bulletAfterFirst = context.ally.GetBuffStack("Bullet");
+        bool repeated = RepeatCompletedPlan(plan, result);
+        return result != null && result.resultType == "PlayerWin" &&
+            result.playerCardUsed && result.damage == 6 &&
+            bulletAfterFirst == 2 && context.ally.GetBuffStack("Bullet") == 2 &&
+            repeated;
+    }
+
+    static bool VerifyLongRangeShootLoseConsumesOnceWithoutWinnerEffects()
+    {
+        TestContext context = CreateRespondedContext(
+            "shoot85_c",
+            CardType.Attack,
+            4,
+            true,
+            true,
+            6,
+            false,
+            false
+        );
+        AddResolvedProbe(context.playerCard, "GuardUp");
+        BattleResolveResult result = ResolveFinalized(context, out BattleResolutionPlan plan);
+        int bulletAfterFirst = context.ally.GetBuffStack("Bullet");
+        bool repeated = RepeatCompletedPlan(plan, result);
+        return result != null && result.resultType == "EnemyWin" &&
+            !result.playerCardUsed && context.enemy.currentHP == 30 &&
+            context.ally.currentHP == 24 &&
+            context.ally.GetBuffStack("GuardUp") == 0 &&
+            bulletAfterFirst == 2 && context.ally.GetBuffStack("Bullet") == 2 &&
+            repeated;
+    }
+
+    static bool VerifyTieDoesNotConsume()
+    {
+        TestContext context = CreateRespondedContext(
+            "shoot85_d",
+            CardType.Attack,
+            5,
+            true,
+            true,
+            5,
+            false,
+            false
+        );
+        bool began = TryBegin(context);
+        bool rolled = began && context.session.RollNextAttempt();
+        return rolled && !context.session.IsFinalized &&
+            context.session.AttemptResult == BattleClashAttemptResult.AttackTie &&
+            context.ally.GetBuffStack("Bullet") == 3;
+    }
+
+    static bool VerifyMultipleTiesThenWinConsumesOnce()
+    {
+        TestContext context = CreateRespondedContext(
+            "shoot85_e",
+            CardType.Attack,
+            5,
+            true,
+            true,
+            5,
+            false,
+            false
+        );
+        if (!RollTwoTies(context))
+        {
+            return false;
+        }
+
+        SetPoint(context.session.SideA, 6);
+        if (!context.session.RollNextAttempt() || !context.session.IsFinalized)
+        {
+            return false;
+        }
+
+        BattleResolveResult result = CommitFinalizedSession(context, out BattleResolutionPlan plan);
+        int bulletAfterFirst = context.ally.GetBuffStack("Bullet");
+        return result != null && result.resultType == "PlayerWin" &&
+            context.session.AttemptIndex == 3 && bulletAfterFirst == 2 &&
+            RepeatCompletedPlan(plan, result) &&
+            context.ally.GetBuffStack("Bullet") == 2;
+    }
+
+    static bool VerifyMultipleTiesThenLoseConsumesOnce()
+    {
+        TestContext context = CreateRespondedContext(
+            "shoot85_f",
+            CardType.Attack,
+            5,
+            true,
+            true,
+            5,
+            false,
+            false
+        );
+        if (!RollTwoTies(context))
+        {
+            return false;
+        }
+
+        SetPoint(context.session.SideB, 6);
+        if (!context.session.RollNextAttempt() || !context.session.IsFinalized)
+        {
+            return false;
+        }
+
+        BattleResolveResult result = CommitFinalizedSession(context, out BattleResolutionPlan plan);
+        int bulletAfterFirst = context.ally.GetBuffStack("Bullet");
+        return result != null && result.resultType == "EnemyWin" &&
+            context.session.AttemptIndex == 3 && bulletAfterFirst == 2 &&
+            RepeatCompletedPlan(plan, result) &&
+            context.ally.GetBuffStack("Bullet") == 2;
+    }
+
+    static bool VerifyDodgeSuccessConsumesWithoutDamage()
+    {
+        TestContext context = CreateRespondedContext(
+            "shoot85_g",
+            CardType.Dodge,
+            6,
+            false,
+            false,
+            4,
+            true,
+            true
+        );
+        BattleResolveResult result = ResolveFinalized(context, out _);
+        return result != null && result.resultType == "DodgeSuccess" &&
+            !result.hasDamage && context.ally.currentHP == 30 &&
+            context.enemy.GetBuffStack("Bullet") == 2;
+    }
+
+    static bool VerifyDodgeFailedConsumesWithDamage()
+    {
+        TestContext context = CreateRespondedContext(
+            "shoot85_h",
+            CardType.Dodge,
+            2,
+            false,
+            false,
+            6,
+            true,
+            true
+        );
+        BattleResolveResult result = ResolveFinalized(context, out _);
+        return result != null && result.resultType == "DodgeFailed" &&
+            result.damage == 6 && context.ally.currentHP == 24 &&
+            context.enemy.GetBuffStack("Bullet") == 2;
+    }
+
+    static bool VerifyGuardResultsConsume()
+    {
+        TestContext fullBlock = CreateRespondedContext(
+            "shoot85_i_full",
+            CardType.Defense,
+            6,
+            false,
+            false,
+            4,
+            true,
+            true
+        );
+        BattleResolveResult fullResult = ResolveFinalized(fullBlock, out _);
+
+        TestContext reduced = CreateRespondedContext(
+            "shoot85_i_reduced",
+            CardType.Defense,
+            2,
+            false,
+            false,
+            6,
+            true,
+            true
+        );
+        BattleResolveResult reducedResult = ResolveFinalized(reduced, out _);
+
+        return fullResult != null && fullResult.resultType == "DefenseFullBlock" &&
+            !fullResult.hasDamage && fullBlock.ally.currentHP == 30 &&
+            fullBlock.enemy.GetBuffStack("Bullet") == 2 &&
+            reducedResult != null && reducedResult.resultType == "DefenseReducedDamage" &&
+            reducedResult.hasDamage && reduced.ally.currentHP < 30 &&
+            reduced.enemy.GetBuffStack("Bullet") == 2;
+    }
+
+    static bool VerifyUnrespondedConsumesExactlyOnce()
+    {
+        CharacterData target = new CharacterData("shoot85_j_target", 30, 10, 10);
+        CharacterData shooter = new CharacterData("shoot85_j_shooter", 30, 5, 5);
+        BattleCardState shootCard = CreateCard(
+            shooter,
+            "shoot85_j_card",
+            CardType.Attack,
+            6,
+            true,
+            true
+        );
+        BattleEnemyIntent intent = new BattleEnemyIntent(
+            "shoot85_j_intent",
+            shooter,
+            shootCard,
+            target,
+            1,
+            1
+        );
+
+        BattleResolveResult result = BattleResolver.ResolveUnrespondedEnemyIntent(intent);
+        return result != null && result.enemyCardUsed && result.damage == 6 &&
+            target.currentHP == 24 && shooter.GetBuffStack("Bullet") == 2;
+    }
+
+    static bool VerifyTieLimitDoesNotConsume()
+    {
+        TestContext context = CreateRespondedContext(
+            "shoot85_k",
+            CardType.Attack,
+            5,
+            true,
+            true,
+            5,
+            false,
+            false
+        );
+        if (!TryBegin(context))
+        {
+            return false;
+        }
+
+        for (int index = 0; index < BattleClashSession.MaxAttackTieCount; index++)
+        {
+            if (!context.session.RollNextAttempt())
+            {
+                return false;
+            }
+        }
+
+        BattleResolveResult result = CommitFinalizedSession(context, out BattleResolutionPlan plan);
+        int bulletAfterFirst = context.ally.GetBuffStack("Bullet");
+        return result != null && result.resultType == "TieLimit" &&
+            bulletAfterFirst == 3 && RepeatCompletedPlan(plan, result) &&
+            context.ally.GetBuffStack("Bullet") == 3;
+    }
+
+    static TestContext CreateRespondedContext(
+        string prefix,
+        string playerCardType,
+        int playerPoint,
+        bool playerLongRangeShoot,
+        bool playerUsesBullet,
+        int enemyPoint,
+        bool enemyLongRangeShoot,
+        bool enemyUsesBullet
+    )
+    {
+        TestContext context = new TestContext
+        {
+            ally = new CharacterData(prefix + "_ally", 30, 10, 10),
+            enemy = new CharacterData(prefix + "_enemy", 30, 5, 5)
+        };
+        context.playerCard = CreateCard(
+            context.ally,
+            prefix + "_player_card",
+            playerCardType,
+            playerPoint,
+            playerLongRangeShoot,
+            playerUsesBullet
+        );
+        context.enemyCard = CreateCard(
+            context.enemy,
+            prefix + "_enemy_card",
+            CardType.Attack,
+            enemyPoint,
+            enemyLongRangeShoot,
+            enemyUsesBullet
+        );
+        context.intent = new BattleEnemyIntent(
+            prefix + "_intent",
+            context.enemy,
+            context.enemyCard,
+            context.ally,
+            1,
+            1
+        );
+        context.slot = new BattleActionSlot(context.ally, 1);
+        context.slot.AssignResponse(
+            context.ally,
+            context.playerCard,
+            context.intent,
+            false
+        );
+        return context;
+    }
+
+    static BattleCardState CreateCard(
+        CharacterData owner,
+        string id,
+        string cardType,
+        int point,
+        bool longRangeShoot,
+        bool usesBullet
+    )
+    {
+        CardTestData data = new CardTestData
+        {
+            cardID = id + "_data",
+            cardName = id,
+            cardType = cardType,
+            attackDeliveryMode = longRangeShoot
+                ? AttackDeliveryMode.LongRangeShoot
+                : null,
+            isClashable = cardType == CardType.Attack || cardType == CardType.Dodge,
+            minPoint = point,
+            maxPoint = point,
+            damageFormula = "PointAsDamage",
+            defenseFormula = cardType == CardType.Defense ? "PointAsDefense" : "",
+            effects = new List<CardEffectData>(),
+            resourceRule = usesBullet ? CreateBulletResourceRule() : null
+        };
+        if (usesBullet)
+        {
+            owner.AddBuff("Bullet", 3, -1);
+        }
+        return BattleCardManager.CreateBattleCard(owner, data, id + "_instance");
+    }
+
+    static CardResourceRuleData CreateBulletResourceRule()
+    {
+        return new CardResourceRuleData
+        {
+            resourceType = "BuffStack",
+            resourceID = "Bullet",
+            requiredStackForNormalVersion = 1,
+            fallbackMinPoint = 0,
+            fallbackMaxPoint = 0,
+            consumeAmountOnSuccess = 1
+        };
+    }
+
+    static void AddResolvedProbe(BattleCardState cardState, string buffID)
+    {
+        cardState.cardData.effects.Add(new CardEffectData
+        {
+            trigger = BattleTiming.Resolved,
+            effectType = CardEffectType.ApplyBuff,
+            target = CardTargetType.Self,
+            buffType = buffID,
+            stack = 1,
+            duration = -1,
+            applyTiming = "Immediate"
+        });
+    }
+
+    static bool TryBegin(TestContext context)
+    {
+        BattleResolveResult failure = BattleResolver.TryBeginRespondedClash(
+            context.slot,
+            context.intent,
+            out context.session
+        );
+        return failure == null && context.session != null;
+    }
+
+    static BattleResolveResult ResolveFinalized(
+        TestContext context,
+        out BattleResolutionPlan plan
+    )
+    {
+        plan = null;
+        if (!TryBegin(context))
+        {
+            return null;
+        }
+
+        for (int index = 0; index <= BattleClashSession.MaxAttackTieCount &&
+            !context.session.IsFinalized; index++)
+        {
+            if (!context.session.RollNextAttempt())
+            {
+                return null;
+            }
+        }
+        return CommitFinalizedSession(context, out plan);
+    }
+
+    static BattleResolveResult CommitFinalizedSession(
+        TestContext context,
+        out BattleResolutionPlan plan
+    )
+    {
+        plan = BattleResolver.BuildRespondedClashResolutionPlan(
+            context.slot,
+            context.intent,
+            context.session
+        );
+        if (plan == null)
+        {
+            return null;
+        }
+
+        BattleResolveResult result = null;
+        for (int step = 0; step < 4 &&
+            plan.State != BattleResolutionPlanState.Completed; step++)
+        {
+            if (!BattleResolver.TryCommitNextResolutionStep(plan, out result))
+            {
+                return null;
+            }
+        }
+        return plan.CompletedResult ?? result;
+    }
+
+    static bool RollTwoTies(TestContext context)
+    {
+        if (!TryBegin(context))
+        {
+            return false;
+        }
+
+        for (int index = 0; index < 2; index++)
+        {
+            if (!context.session.RollNextAttempt() || context.session.IsFinalized ||
+                context.session.AttemptResult != BattleClashAttemptResult.AttackTie ||
+                context.ally.GetBuffStack("Bullet") != 3)
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static void SetPoint(BattleClashSideState side, int point)
+    {
+        side.resourceSnapshot.selectedMinPoint = point;
+        side.resourceSnapshot.selectedMaxPoint = point;
+    }
+
+    static bool RepeatCompletedPlan(
+        BattleResolutionPlan plan,
+        BattleResolveResult expectedResult
+    )
+    {
+        return plan != null && expectedResult != null &&
+            BattleResolver.TryCommitNextResolutionStep(
+                plan,
+                out BattleResolveResult repeatedResult
+            ) &&
+            object.ReferenceEquals(expectedResult, repeatedResult);
+    }
+}

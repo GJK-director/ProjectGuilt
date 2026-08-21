@@ -936,6 +936,7 @@ public static class BattleResolver
 
         ConsumeSuccessfulPointCardBuffs(winner.actor, winner.pointSnapshot);
         PayDefaultResourceCostOnSuccessfulUse(winner.actor, winner.resourceSnapshot);
+        PayLongRangeShootResourceOnTerminalUse(loser);
         TriggerBattleEvent(BattleTiming.ClashWin, winner.actor, defender,
             winner.cardState, winnerPoint, 0, false, false, ClashResult.Win);
         TriggerBattleEvent(BattleTiming.ClashLose, loser.actor, winner.actor,
@@ -2136,6 +2137,48 @@ public static class BattleResolver
         bool isContinuousDodgeContinuation = false
     )
     {
+        BattleResolveResult beginFailure = TryBeginDodgeClash(
+            playerSlot,
+            enemyIntent,
+            isContinuousDodgeContinuation,
+            out BattleClashSession session
+        );
+        if (beginFailure != null)
+        {
+            return beginFailure;
+        }
+
+        if (!session.RollNextAttempt())
+        {
+            return CreateInvalidResolveResult("ResolveRespondedDodgeVsAttack 失败：Dodge Clash无法Roll");
+        }
+
+        return FinalizeRespondedClash(playerSlot, enemyIntent, session);
+    }
+
+    internal static BattleResolveResult TryBeginContinuousDodgeClash(
+        BattleActionSlot playerSlot,
+        BattleEnemyIntent enemyIntent,
+        out BattleClashSession session
+    )
+    {
+        return TryBeginDodgeClash(
+            playerSlot,
+            enemyIntent,
+            true,
+            out session
+        );
+    }
+
+    // 同步与Pausable连续闪避共用同一套校验和Session初始化。
+    static BattleResolveResult TryBeginDodgeClash(
+        BattleActionSlot playerSlot,
+        BattleEnemyIntent enemyIntent,
+        bool isContinuousDodgeContinuation,
+        out BattleClashSession session
+    )
+    {
+        session = null;
         if (playerSlot == null)
         {
             return CreateInvalidResolveResult("ResolveRespondedDodgeVsAttack 失败：玩家响应槽位为空");
@@ -2213,18 +2256,12 @@ public static class BattleResolver
             );
         }
 
-        BattleClashSession session = CreateRespondedDodgeClashSession(
+        session = CreateRespondedDodgeClashSession(
             playerSlot,
             enemyIntent,
             isContinuousDodgeContinuation
         );
-
-        if (!session.RollNextAttempt())
-        {
-            return CreateInvalidResolveResult("ResolveRespondedDodgeVsAttack 失败：Dodge Clash无法Roll");
-        }
-
-        return FinalizeRespondedClash(playerSlot, enemyIntent, session);
+        return null;
     }
 
     internal static BattleClashSession CreateRespondedDodgeClashSession(
@@ -2687,7 +2724,28 @@ public static class BattleResolver
         // 默认资源成本只在本次卡牌被视为成功使用时支付。
         // Attack拼点失败、ActionUnavailable、TieLimit和死亡跳过不会支付。
         // 无资源降级版本即使成功使用，也不会凭空扣除资源。
-        if (unit == null || !snapshot.hasRule || !snapshot.shouldConsumeOnSuccess)
+        PayCapturedResourceCost(unit, snapshot);
+    }
+
+    static void PayLongRangeShootResourceOnTerminalUse(BattleClashSideState side)
+    {
+        if (side == null || side.cardState == null ||
+            !side.cardState.IsLongRangeShoot())
+        {
+            return;
+        }
+
+        // LongRangeShoot终局即代表实际开火；败方只支付资源，不触发胜者事件或伤害。
+        PayCapturedResourceCost(side.actor, side.resourceSnapshot);
+    }
+
+    static void PayCapturedResourceCost(
+        CharacterData unit,
+        BattleClashResourceSnapshot snapshot
+    )
+    {
+        if (unit == null || snapshot == null ||
+            !snapshot.hasRule || !snapshot.shouldConsumeOnSuccess)
         {
             return;
         }

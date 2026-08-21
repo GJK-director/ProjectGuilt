@@ -33,6 +33,11 @@ public static class CardDataLoader
             return null;
         }
 
+        if (!ValidateAttackDeliveryModes(cards))
+        {
+            return null;
+        }
+
         // showJsonLog = 是否显示完整 JSON 原文
         if (BattleDebugSettings.ShowJsonLog)
         {
@@ -44,6 +49,46 @@ public static class CardDataLoader
         }
 
         return cards;
+    }
+
+    static bool ValidateAttackDeliveryModes(List<CardTestData> cards)
+    {
+        bool isValid = true;
+
+        foreach (CardTestData card in cards)
+        {
+            if (card == null)
+            {
+                continue;
+            }
+
+            string serializedMode = card.attackDeliveryMode;
+            if (!AttackDeliveryMode.IsKnownSerializedValue(serializedMode))
+            {
+                Debug.LogError(
+                    "读取卡牌失败：attackDeliveryMode 未知。卡牌ID：" +
+                    card.cardID +
+                    "，当前值：" +
+                    serializedMode
+                );
+                isValid = false;
+                continue;
+            }
+
+            if (card.cardType != CardType.Attack && !string.IsNullOrEmpty(serializedMode))
+            {
+                Debug.LogWarning(
+                    "非 Attack 卡填写了 attackDeliveryMode，将按原卡牌类型处理。卡牌ID：" +
+                    card.cardID +
+                    "，卡牌类型：" +
+                    card.cardType +
+                    "，当前值：" +
+                    serializedMode
+                );
+            }
+        }
+
+        return isValid;
     }
 
     // PrintCardEffects = 打印所有卡牌的效果

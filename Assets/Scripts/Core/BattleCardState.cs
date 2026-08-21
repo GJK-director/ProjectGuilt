@@ -75,6 +75,29 @@ public class BattleCardState
 
         return cardData.consumeOnUse;
     }
+
+    public string GetAttackDeliveryMode()
+    {
+        return cardData != null
+            ? cardData.GetAttackDeliveryMode()
+            : AttackDeliveryMode.Melee;
+    }
+
+    public bool IsMeleeAttack()
+    {
+        return cardData != null && cardData.IsMeleeAttack();
+    }
+
+    public bool IsLongRangeShoot()
+    {
+        return cardData != null && cardData.IsLongRangeShoot();
+    }
+
+    public bool IsCloseRangeShoot()
+    {
+        return cardData != null && cardData.IsCloseRangeShoot();
+    }
+
     // GetSinCardUseRule = 获取罪卡使用规则
     public string GetSinCardUseRule()
     {

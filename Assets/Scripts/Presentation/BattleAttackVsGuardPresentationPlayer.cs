@@ -148,90 +148,16 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
 
     private IEnumerator RunApproachMovement(int version)
     {
-        if (!HasValidApproachActors())
-        {
-            yield break;
-        }
-
-        Vector3 sideAStart = approachSideAWorldRoot.position;
-        Vector3 sideBStart = approachSideBWorldRoot.position;
-        if (!BattleClashEngagementResolver.RequiresApproach(
-                sideAStart,
-                sideBStart,
-                clashEngagementResult
-            ))
-        {
-            yield break;
-        }
-
-        float horizontalDelta = sideBStart.x - sideAStart.x;
-        float directionSign = Mathf.Abs(horizontalDelta) > 0.0001f
-            ? Mathf.Sign(horizontalDelta)
-            : 1f;
-        float safeGap = Mathf.Max(0f, clashEngagementResult.FinalGap);
-        float horizontalDistance = Mathf.Abs(horizontalDelta);
-
-        approachSideA.SetSprint();
-        approachSideB.SetSprint();
-
-        float closeDistance = horizontalDistance - safeGap;
-        Vector3 sideATarget = sideAStart;
-        Vector3 sideBTarget = sideBStart;
-        sideATarget.x += directionSign * closeDistance *
-            clashEngagementResult.SideAMovementShare;
-        sideBTarget.x -= directionSign * closeDistance *
-            clashEngagementResult.SideBMovementShare;
-
-        float safeDuration = presentationProfile.SprintDuration;
-        if (safeDuration <= 0f)
-        {
-            approachSideAWorldRoot.position = sideATarget;
-            approachSideBWorldRoot.position = sideBTarget;
-            yield break;
-        }
-
-        approachSideA.SpawnAfterimage();
-        approachSideB.SpawnAfterimage();
-        float elapsed = 0f;
-        float afterimageElapsed = 0f;
-        float afterimageInterval = presentationProfile.AfterimageSpawnInterval;
-        bool spawnRepeatedAfterimages = afterimageInterval > 0f;
-        while (elapsed < safeDuration && IsCurrentPlayback(version))
-        {
-            if (!HasValidApproachActors())
-            {
-                yield break;
-            }
-
-            elapsed += Time.deltaTime;
-            float linearT = Mathf.Clamp01(elapsed / safeDuration);
-            float easedT = BattlePresentationEasing.EaseOutQuad(linearT);
-            approachSideAWorldRoot.position = sideAStart +
-                (sideATarget - sideAStart) * easedT;
-            approachSideBWorldRoot.position = sideBStart +
-                (sideBTarget - sideBStart) * easedT;
-
-            if (spawnRepeatedAfterimages)
-            {
-                afterimageElapsed += Time.deltaTime;
-                if (afterimageElapsed >= afterimageInterval &&
-                    elapsed < safeDuration)
-                {
-                    approachSideA.SpawnAfterimage();
-                    approachSideB.SpawnAfterimage();
-                    afterimageElapsed = 0f;
-                }
-            }
-
-            yield return null;
-        }
-
-        if (IsCurrentPlayback(version) && HasValidApproachActors())
-        {
-            // 只写X目标，Y/Z继续保持各自进入Approach时的世界位置。
-            approachSideAWorldRoot.position = sideATarget;
-            approachSideBWorldRoot.position = sideBTarget;
-        }
+        yield return BattleClashReadyApproachMotion.Play(
+            approachSideA,
+            approachSideAWorldRoot,
+            approachSideB,
+            approachSideBWorldRoot,
+            clashEngagementResult,
+            presentationProfile.SprintDuration,
+            presentationProfile.AfterimageSpawnInterval,
+            () => IsCurrentPlayback(version)
+        );
     }
 
     private IEnumerator RunGuardImpact(int version)
@@ -465,12 +391,6 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
             perfectGuardEffectCoroutine != null ||
             guardRecoilCoroutine != null ||
             dualHitStopCoroutine != null;
-    }
-
-    private bool HasValidApproachActors()
-    {
-        return approachSideA != null && approachSideB != null &&
-            approachSideAWorldRoot != null && approachSideBWorldRoot != null;
     }
 
     private void StopOwnedCoroutines()

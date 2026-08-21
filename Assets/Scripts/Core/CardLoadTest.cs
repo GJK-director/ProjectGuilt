@@ -68,7 +68,8 @@ public enum BattleTestMode
     BattleRollGateBasic = 81,
     BattleResolutionPlanBasic = 82,
     BattlePresentationProtocolBasic = 83,
-    BattleClashEngagementBasic = 84
+    BattleClashEngagementBasic = 84,
+    BattleLongRangeShootResourceContractBasic = 85
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -419,6 +420,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleClashEngagementBasic)
         {
             BattleClashEngagementTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleLongRangeShootResourceContractBasic)
+        {
+            BattleLongRangeShootResourceContractTests.Run();
             return;
         }
 

@@ -111,6 +111,10 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         {
             StartDodgeMotionTest();
         }
+        else if (keyboard.qKey.wasPressedThisFrame)
+        {
+            StartShootPrimitiveTest();
+        }
         else if (keyboard.rKey.wasPressedThisFrame)
         {
             ResetCharacterToTestStart();
@@ -194,6 +198,19 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         }
 
         dynamicTestCoroutine = StartCoroutine(RunDodgeMotionTest());
+    }
+
+    private void StartShootPrimitiveTest()
+    {
+        if (character == null || dynamicTestCoroutine != null)
+        {
+            return;
+        }
+
+        character.SetShoot();
+        character.PlayMuzzleFlash(
+            () => Debug.Log("[ShootSandbox] Shoot + MuzzleFlash Complete")
+        );
     }
 
     private IEnumerator RunDodgeMotionTest()

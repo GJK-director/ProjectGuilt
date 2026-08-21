@@ -18,9 +18,13 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     [SerializeField] private Sprite idleSprite;
     [SerializeField] private Sprite sprintSprite;
     [SerializeField] private Sprite slashSprite;
+    [SerializeField] private Sprite shootSprite;
     [SerializeField] private Sprite hitSprite;
     [SerializeField] private Sprite guardSprite;
     [SerializeField] private Sprite dodgeSprite;
+    [SerializeField] private Transform muzzleFlashAnchor;
+    [SerializeField] private SpriteRenderer muzzleFlashEffect;
+    [SerializeField] private float muzzleFlashDuration = 0.08f;
     [SerializeField] private SpriteRenderer perfectGuardEffect;
     [SerializeField] private SpriteRenderer slashBackEffect;
     [SerializeField] private SpriteRenderer slashFrontEffect;
@@ -33,24 +37,24 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     [SerializeField, Range(0f, 1f)]
     private float afterimageStartAlpha = 0.35f;
     [SerializeField] private float hitRecoilDistance = 0.15f;
-    [SerializeField] private float hitRecoilDuration = 0.06f;
+    [SerializeField] private float hitRecoilDuration = 0.12f;
     [SerializeField] private float hitShakeAmplitude = 0.04f;
     [SerializeField] private float hitShakeDuration = 0.12f;
     [SerializeField] private float hitPoseHoldDuration = 0.16f;
     [SerializeField] private float parryRecoilDistance = 0.20f;
-    [SerializeField] private float parryRecoilDuration = 0.08f;
+    [SerializeField] private float parryRecoilDuration = 0.12f;
     [SerializeField] private float parryShakeAmplitude = 0.03f;
     [SerializeField] private float parryShakeDuration = 0.10f;
     [SerializeField] private float parryHoldDuration = 0.10f;
     [SerializeField] private float guardRecoilDistance = 0.10f;
-    [SerializeField] private float guardRecoilDuration = 0.06f;
+    [SerializeField] private float guardRecoilDuration = 0.12f;
     [SerializeField] private float guardShakeAmplitude = 0.025f;
     [SerializeField] private float guardShakeDuration = 0.10f;
     [SerializeField] private float guardHoldDuration = 0.10f;
     [SerializeField] private float perfectGuardEffectHoldDuration = 0.06f;
     [SerializeField] private float perfectGuardEffectFadeOutDuration = 0.10f;
     [SerializeField] private float dodgeHorizontalDistance = 0.20f;
-    [SerializeField] private float dodgeDuration = 0.18f;
+    [SerializeField] private float dodgeDuration = 0.30f;
 
     private Vector3 bodyBaseLocalPosition;
     private Vector3 bodyMotionOffset;
@@ -58,6 +62,9 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     private Vector3 dodgeMotionOffset;
     private Coroutine dodgeMotionCoroutine;
     private Action dodgeMotionFinishedCallback;
+    private Coroutine muzzleFlashCoroutine;
+    private Action muzzleFlashFinishedCallback;
+    private int muzzleFlashPlaybackVersion;
     private bool bodyBaseStateCached;
     private Vector3 slashBackOriginalLocalPosition;
     private Vector3 slashFrontOriginalLocalPosition;
@@ -81,6 +88,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         CacheSlashEffectState();
         CachePerfectGuardEffectState();
         SetIdle();
+        ClearMuzzleFlashVisual();
         ClearSlashEffect();
         ClearPerfectGuardEffect();
     }
@@ -90,6 +98,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         presentationPaused = false;
         ClearBodyVisualOffsets();
         ClearAfterimages();
+        CancelMuzzleFlash();
         ClearSlashEffect();
         ClearPerfectGuardEffect();
         SetIdle();
@@ -108,6 +117,11 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     public void SetSlash()
     {
         SetPose(slashSprite);
+    }
+
+    public void SetShoot()
+    {
+        SetPose(shootSprite);
     }
 
     public void SetHit()
@@ -135,9 +149,55 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         presentationPaused = false;
         ClearBodyVisualOffsets();
         ClearAfterimages();
+        CancelMuzzleFlash();
         ClearSlashEffect();
         ClearPerfectGuardEffect();
         SetIdle();
+    }
+
+    public void PlayMuzzleFlash(Action finishedCallback = null)
+    {
+        CancelMuzzleFlash();
+        int playbackVersion = ++muzzleFlashPlaybackVersion;
+        muzzleFlashFinishedCallback = finishedCallback;
+
+        if (!isActiveAndEnabled || muzzleFlashAnchor == null ||
+            muzzleFlashEffect == null)
+        {
+            CompleteMuzzleFlash(playbackVersion);
+            return;
+        }
+
+        // 枪口位置由Prefab/Inspector明确提供，不在运行时猜测武器节点。
+        muzzleFlashEffect.transform.SetPositionAndRotation(
+            muzzleFlashAnchor.position,
+            muzzleFlashAnchor.rotation
+        );
+        muzzleFlashEffect.enabled = true;
+
+        float safeDuration = Mathf.Max(0f, muzzleFlashDuration);
+        if (safeDuration <= 0f)
+        {
+            CompleteMuzzleFlash(playbackVersion);
+            return;
+        }
+
+        muzzleFlashCoroutine = StartCoroutine(
+            RunMuzzleFlash(playbackVersion, safeDuration)
+        );
+    }
+
+    public void CancelMuzzleFlash()
+    {
+        muzzleFlashPlaybackVersion++;
+        if (muzzleFlashCoroutine != null)
+        {
+            StopCoroutine(muzzleFlashCoroutine);
+            muzzleFlashCoroutine = null;
+        }
+
+        muzzleFlashFinishedCallback = null;
+        ClearMuzzleFlashVisual();
     }
 
     public void FinishSlashPresentation()
@@ -909,6 +969,53 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
 
         impactTriggered = true;
         onImpact?.Invoke();
+    }
+
+    private IEnumerator RunMuzzleFlash(int playbackVersion, float duration)
+    {
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            if (!isActiveAndEnabled ||
+                playbackVersion != muzzleFlashPlaybackVersion)
+            {
+                yield break;
+            }
+
+            if (presentationPaused)
+            {
+                yield return null;
+                continue;
+            }
+
+            elapsed = Mathf.Min(duration, elapsed + Time.deltaTime);
+            yield return null;
+        }
+
+        CompleteMuzzleFlash(playbackVersion);
+    }
+
+    private void CompleteMuzzleFlash(int playbackVersion)
+    {
+        if (playbackVersion != muzzleFlashPlaybackVersion)
+        {
+            return;
+        }
+
+        muzzleFlashCoroutine = null;
+        ClearMuzzleFlashVisual();
+
+        Action callback = muzzleFlashFinishedCallback;
+        muzzleFlashFinishedCallback = null;
+        callback?.Invoke();
+    }
+
+    private void ClearMuzzleFlashVisual()
+    {
+        if (muzzleFlashEffect != null)
+        {
+            muzzleFlashEffect.enabled = false;
+        }
     }
 
     private IEnumerator RunDodgeMotion(

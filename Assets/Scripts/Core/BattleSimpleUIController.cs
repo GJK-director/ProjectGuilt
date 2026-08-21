@@ -50,6 +50,9 @@ public class BattleSimpleUIController : MonoBehaviour
     [SerializeField] private BattleUnitViewSpawner unitViewSpawner;
     [SerializeField]
     private BattleSceneExecutionPresenter sceneExecutionPresenter;
+    [SerializeField]
+    private BattleTurnTransitionPresentationCoordinator
+        turnTransitionPresentationCoordinator;
 
     [SerializeField] private Button assignA1FreeAttackButton;
     [SerializeField] private Button assignA1AbilityButton;
@@ -124,6 +127,9 @@ public class BattleSimpleUIController : MonoBehaviour
     private bool isRunningCompleteTurnCycle;
     private bool isScenePresentedTurnCycleRunning;
     private BattleAutomaticTurnCycleResult scenePresentedTurnCycleResult;
+    private bool hasStartedTurnEndPresentation;
+    private bool hasCompletedTurnEndPresentation;
+    private int scenePresentedTurnCycleVersion;
     private bool terminalInteractionStateCleared;
     private readonly BattleCardSelectionController cardSelectionController =
         new BattleCardSelectionController();
@@ -303,6 +309,8 @@ public class BattleSimpleUIController : MonoBehaviour
 
     void OnDestroy()
     {
+        scenePresentedTurnCycleVersion++;
+        turnTransitionPresentationCoordinator?.CancelTurnEndPresentation();
         cardSelectionController.SelectionChanged -=
             OnCardSelectionChanged;
         if (cardInteractionCoordinator != null)
@@ -2335,6 +2343,8 @@ public class BattleSimpleUIController : MonoBehaviour
             return false;
         }
 
+        scenePresentedTurnCycleVersion++;
+        ResetTurnEndPresentationState(true);
         scenePresentedTurnCycleResult = result;
         isScenePresentedTurnCycleRunning = true;
         return true;
@@ -2362,6 +2372,11 @@ public class BattleSimpleUIController : MonoBehaviour
 
         if (!runner.IsCompleted)
         {
+            int ally01HpBefore = GetCurrentHitPoints(ally01);
+            int ally02HpBefore = GetCurrentHitPoints(ally02);
+            int enemy01HpBefore = GetCurrentHitPoints(enemy01);
+            int enemy02HpBefore = GetCurrentHitPoints(enemy02);
+
             if (!lifecycleController.AdvancePausableExecution(
                     Time.deltaTime,
                     out string failureMessage
@@ -2369,6 +2384,15 @@ public class BattleSimpleUIController : MonoBehaviour
             {
                 FailScenePresentedTurnCycle(failureMessage);
                 return;
+            }
+
+            if (HasCurrentHitPointsChanged(ally01, ally01HpBefore) ||
+                HasCurrentHitPointsChanged(ally02, ally02HpBefore) ||
+                HasCurrentHitPointsChanged(enemy01, enemy01HpBefore) ||
+                HasCurrentHitPointsChanged(enemy02, enemy02HpBefore))
+            {
+                // Impact提交后只同步正式单位状态，不触发Planning界面的完整刷新。
+                RefreshCharacterStatusViews();
             }
 
             runner = lifecycleController.ExecutionRunner;
@@ -2384,6 +2408,37 @@ public class BattleSimpleUIController : MonoBehaviour
         if (!runner.IsCompleted)
         {
             return;
+        }
+
+        if (runtimeState == null)
+        {
+            FailScenePresentedTurnCycle(
+                "完整回合收尾失败：RuntimeState为空"
+            );
+            return;
+        }
+
+        if (!runtimeState.IsBattleEnded)
+        {
+            if (runtimeState.LifecyclePhase !=
+                BattleLifecyclePhase.TurnResolved)
+            {
+                FailScenePresentedTurnCycle(
+                    "完整回合收尾失败：Runner完成后未处于TurnResolved"
+                );
+                return;
+            }
+
+            if (!hasStartedTurnEndPresentation)
+            {
+                BeginTurnEndPresentation();
+                return;
+            }
+
+            if (!hasCompletedTurnEndPresentation)
+            {
+                return;
+            }
         }
 
         BattleAutomaticTurnCycleResult result =
@@ -2404,6 +2459,50 @@ public class BattleSimpleUIController : MonoBehaviour
         CompleteScenePresentedTurnCycle(result);
     }
 
+    private static int GetCurrentHitPoints(CharacterData character)
+    {
+        return character != null ? character.currentHP : int.MinValue;
+    }
+
+    private static bool HasCurrentHitPointsChanged(
+        CharacterData character,
+        int previousHitPoints
+    )
+    {
+        return GetCurrentHitPoints(character) != previousHitPoints;
+    }
+
+    private void BeginTurnEndPresentation()
+    {
+        hasStartedTurnEndPresentation = true;
+        int cycleVersion = scenePresentedTurnCycleVersion;
+        if (turnTransitionPresentationCoordinator != null &&
+            turnTransitionPresentationCoordinator.TryPlayTurnEndPresentation(
+                () => CompleteTurnEndPresentation(cycleVersion)
+            ))
+        {
+            return;
+        }
+
+        Debug.LogWarning(
+            "[TurnTransition] Coordinator不可用，已安全跳过TurnEnd等待。",
+            this
+        );
+        CompleteTurnEndPresentation(cycleVersion);
+    }
+
+    private void CompleteTurnEndPresentation(int cycleVersion)
+    {
+        if (cycleVersion != scenePresentedTurnCycleVersion ||
+            !isScenePresentedTurnCycleRunning)
+        {
+            return;
+        }
+
+        // completion只开放下一帧收尾资格，避免回调重入Lifecycle。
+        hasCompletedTurnEndPresentation = true;
+    }
+
     private void CompleteScenePresentedTurnCycle(
         BattleAutomaticTurnCycleResult result
     )
@@ -2419,6 +2518,9 @@ public class BattleSimpleUIController : MonoBehaviour
         {
             // Prepare已完成，先恢复世界姿态，再刷新下一轮规划UI与关系线。
             unitViewSpawner?.RestoreGeneratedUnitWorldPoses();
+            LogTurnTransitionDevelopment(
+                "[TurnTransition] Stable Reset"
+            );
         }
 
         if (result != null &&
@@ -2428,10 +2530,21 @@ public class BattleSimpleUIController : MonoBehaviour
         }
 
         RefreshView();
+        if (result != null && result.advancedToNextTurn)
+        {
+            LogTurnTransitionDevelopment(
+                "[TurnTransition] Planning Restored"
+            );
+        }
+
+        scenePresentedTurnCycleVersion++;
+        ResetTurnEndPresentationState(false);
     }
 
     private void FailScenePresentedTurnCycle(string failureMessage)
     {
+        scenePresentedTurnCycleVersion++;
+        ResetTurnEndPresentationState(true);
         isScenePresentedTurnCycleRunning = false;
         scenePresentedTurnCycleResult = null;
         isRunningCompleteTurnCycle = false;
@@ -2439,6 +2552,25 @@ public class BattleSimpleUIController : MonoBehaviour
             ? "完整回合跨帧执行失败"
             : failureMessage;
         RefreshView();
+    }
+
+    private void ResetTurnEndPresentationState(bool cancelCoordinator)
+    {
+        if (cancelCoordinator)
+        {
+            turnTransitionPresentationCoordinator?
+                .CancelTurnEndPresentation();
+        }
+
+        hasStartedTurnEndPresentation = false;
+        hasCompletedTurnEndPresentation = false;
+    }
+
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    private static void LogTurnTransitionDevelopment(string message)
+    {
+        Debug.Log(message);
     }
 
     private void OnClickCreateExecutionPlan()

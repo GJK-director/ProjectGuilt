@@ -111,6 +111,7 @@
     ],
     "rarity": "White",
     "cardType": "Attack",
+    "attackDeliveryMode": "LongRangeShoot",
     "isClashable": true,
     "isSinCard": false,
     "minPoint": 1,

@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c69064a87817450fa52f67091642de7d, type: 3}
   m_Name: BattleAttackVsAttackPresentationProfile
   m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsAttackPresentationProfile
-  sprintDuration: 0.35
+  sprintDuration: 0.48
   afterimageSpawnInterval: 0.08
   slashHoldDuration: 0.5
   hitStopDuration: 0.08
