@@ -30,6 +30,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
     private Coroutine dualHitStopCoroutine;
     private int playbackVersion;
     private bool visualImpactReached;
+    private bool attackerUsesCloseRangeShoot;
 
     void OnDisable()
     {
@@ -69,6 +70,27 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         Action completion
     )
     {
+        return TryPlayGuardImpact(
+            attackActor,
+            guardActor,
+            directionSign,
+            result,
+            false,
+            onImpactReached,
+            completion
+        );
+    }
+
+    public bool TryPlayGuardImpact(
+        BattleCharacterPresentationController attackActor,
+        BattleCharacterPresentationController guardActor,
+        float directionSign,
+        BattleGuardPresentationResult result,
+        bool useCloseRangeShoot,
+        Action onImpactReached,
+        Action completion
+    )
+    {
         if (IsRunning || !isActiveAndEnabled || attackActor == null ||
             guardActor == null || !ValidatePresentationProfile())
         {
@@ -80,6 +102,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         defender = guardActor;
         presentationResult = result;
         attackDirectionSign = directionSign >= 0f ? 1f : -1f;
+        attackerUsesCloseRangeShoot = useCloseRangeShoot;
         onVisualImpact = onImpactReached;
         onFinished = completion;
         visualImpactReached = false;
@@ -105,15 +128,33 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
     {
         PrepareGuardActors();
         defender.SetGuard();
-        attacker.SetSlash();
 
-        bool playAttackEffect =
-            presentationResult == BattleGuardPresentationResult.ReducedDamage;
-        yield return attacker.PlaySlashPresentation(
-            attackDirectionSign,
-            () => ReachVisualImpact(version),
-            playAttackEffect
-        );
+        if (attackerUsesCloseRangeShoot)
+        {
+            attacker.SetCloseRangeShoot();
+            bool muzzleFlashFinished = false;
+            attacker.PlayCloseRangeMuzzleFlash(
+                () => muzzleFlashFinished = true
+            );
+
+            // 枪火出现即沿用原Guard视觉接触点，真实结算仍由Runner提交。
+            ReachVisualImpact(version);
+            while (!muzzleFlashFinished && IsCurrentPlayback(version))
+            {
+                yield return null;
+            }
+        }
+        else
+        {
+            attacker.SetSlash();
+            bool playAttackEffect = presentationResult ==
+                BattleGuardPresentationResult.ReducedDamage;
+            yield return attacker.PlaySlashPresentation(
+                attackDirectionSign,
+                () => ReachVisualImpact(version),
+                playAttackEffect
+            );
+        }
 
         if (!IsCurrentPlayback(version))
         {
@@ -170,7 +211,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
             );
         }
 
-        // 命中边界来自Character的Slash回调，并且每次播放最多通知一次宿主。
+        // 命中边界由当前攻击表现触发，并且每次播放最多通知一次宿主。
         Action callback = onVisualImpact;
         onVisualImpact = null;
         callback?.Invoke();
@@ -275,7 +316,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
 
     private void CleanupGuardActorsPreservingPose()
     {
-        // 正常完成只清瞬时反馈，攻击方Slash与防守方Guard Pose继续保留。
+        // 正常完成只清瞬时反馈，攻击方最终Pose与防守方Guard Pose继续保留。
         if (attacker != null)
         {
             attacker.SetPresentationPaused(false);
@@ -362,6 +403,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         guardRecoilCoroutine = null;
         dualHitStopCoroutine = null;
         visualImpactReached = false;
+        attackerUsesCloseRangeShoot = false;
         attackDirectionSign = 1f;
     }
 

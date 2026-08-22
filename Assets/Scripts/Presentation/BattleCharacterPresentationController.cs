@@ -20,11 +20,14 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     [SerializeField] private Sprite slashSprite;
     [SerializeField] private Sprite aimSprite;
     [SerializeField] private Sprite shootSprite;
+    [SerializeField] private Sprite closeRangeShootSprite;
     [SerializeField] private Sprite hitSprite;
     [SerializeField] private Sprite guardSprite;
     [SerializeField] private Sprite dodgeSprite;
     [SerializeField] private Transform muzzleFlashAnchor;
     [SerializeField] private SpriteRenderer muzzleFlashEffect;
+    [SerializeField] private Transform closeRangeMuzzleFlashAnchor;
+    [SerializeField] private SpriteRenderer closeRangeMuzzleFlashEffect;
     [SerializeField] private float muzzleFlashDuration = 0.08f;
     [SerializeField] private SpriteRenderer perfectGuardEffect;
     [SerializeField] private SpriteRenderer slashBackEffect;
@@ -130,6 +133,11 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         SetPose(shootSprite);
     }
 
+    public void SetCloseRangeShoot()
+    {
+        SetPose(closeRangeShootSprite);
+    }
+
     public void SetHit()
     {
         SetPose(hitSprite);
@@ -163,23 +171,44 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
 
     public void PlayMuzzleFlash(Action finishedCallback = null)
     {
+        PlayMuzzleFlashInternal(
+            muzzleFlashAnchor,
+            muzzleFlashEffect,
+            finishedCallback
+        );
+    }
+
+    public void PlayCloseRangeMuzzleFlash(Action finishedCallback = null)
+    {
+        PlayMuzzleFlashInternal(
+            closeRangeMuzzleFlashAnchor,
+            closeRangeMuzzleFlashEffect,
+            finishedCallback
+        );
+    }
+
+    private void PlayMuzzleFlashInternal(
+        Transform anchor,
+        SpriteRenderer effect,
+        Action finishedCallback
+    )
+    {
         CancelMuzzleFlash();
         int playbackVersion = ++muzzleFlashPlaybackVersion;
         muzzleFlashFinishedCallback = finishedCallback;
 
-        if (!isActiveAndEnabled || muzzleFlashAnchor == null ||
-            muzzleFlashEffect == null)
+        if (!isActiveAndEnabled || anchor == null || effect == null)
         {
             CompleteMuzzleFlash(playbackVersion);
             return;
         }
 
         // 枪口位置由Prefab/Inspector明确提供，不在运行时猜测武器节点。
-        muzzleFlashEffect.transform.SetPositionAndRotation(
-            muzzleFlashAnchor.position,
-            muzzleFlashAnchor.rotation
+        effect.transform.SetPositionAndRotation(
+            anchor.position,
+            anchor.rotation
         );
-        muzzleFlashEffect.enabled = true;
+        effect.enabled = true;
 
         float safeDuration = Mathf.Max(0f, muzzleFlashDuration);
         if (safeDuration <= 0f)
@@ -1021,6 +1050,11 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         if (muzzleFlashEffect != null)
         {
             muzzleFlashEffect.enabled = false;
+        }
+
+        if (closeRangeMuzzleFlashEffect != null)
+        {
+            closeRangeMuzzleFlashEffect.enabled = false;
         }
     }
 

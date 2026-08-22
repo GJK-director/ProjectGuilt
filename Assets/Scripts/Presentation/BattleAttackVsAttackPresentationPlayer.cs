@@ -8,6 +8,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
     private enum PlaybackStage
     {
         None,
+        ClashReadyApproach,
         ResolvedReengagementApproach,
         AttackTieResult,
         ResolvedWinnerAttack
@@ -99,11 +100,32 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             return false;
         }
 
-        // ClashReady只切换拼点等待Pose，不拥有WorldRoot接敌位移。
-        sideA.SetSprint();
-        sideB.SetSprint();
-        IsFinished = true;
-        finishedCallback?.Invoke();
+        if (!BattleClashEngagementResolver.RequiresApproach(
+                sideAWorldRoot.position,
+                sideBWorldRoot.position,
+                engagementResult
+            ))
+        {
+            // 已满足FinalGap时不创建Coroutine，也不覆盖上一动作的最终Pose。
+            IsFinished = true;
+            finishedCallback?.Invoke();
+            return true;
+        }
+
+        playbackStage = PlaybackStage.ClashReadyApproach;
+        firstActor = sideA;
+        secondActor = sideB;
+        firstWorldRoot = sideAWorldRoot;
+        secondWorldRoot = sideBWorldRoot;
+        clashEngagementResult = engagementResult;
+        onFinished = finishedCallback;
+        visualImpactInvoked = false;
+        IsRunning = true;
+        IsFinished = false;
+        playbackVersion++;
+
+        int version = playbackVersion;
+        playbackCoroutine = StartCoroutine(RunClashReadyApproach(version));
         return true;
     }
 
@@ -304,6 +326,16 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             presentationProfile.AfterimageSpawnInterval,
             () => IsCurrentPlayback(version)
         );
+    }
+
+    private IEnumerator RunClashReadyApproach(int version)
+    {
+        yield return RunApproachMovement(version);
+
+        if (IsCurrentPlayback(version))
+        {
+            FinishApproach(version);
+        }
     }
 
     private IEnumerator RunResolvedReengagementApproach(int version)
@@ -558,9 +590,9 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
 
     private IEnumerator RunResolvedWinnerCloseRangeShoot(int version)
     {
-        winner.SetShoot();
+        winner.SetCloseRangeShoot();
         bool muzzleFlashFinished = false;
-        winner.PlayMuzzleFlash(() => muzzleFlashFinished = true);
+        winner.PlayCloseRangeMuzzleFlash(() => muzzleFlashFinished = true);
 
         // 枪口火焰出现后沿用同一Visual Impact边界触发受击与规则提交。
         ReachVisualImpact(version);
@@ -654,6 +686,20 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
 
         StopSecondaryCoroutines();
         CleanupResolvedActorsPreservingPose();
+        Action callback = onFinished;
+        ClearPlaybackReferences();
+        IsRunning = false;
+        IsFinished = true;
+        callback?.Invoke();
+    }
+
+    private void FinishApproach(int version)
+    {
+        if (!IsCurrentPlayback(version))
+        {
+            return;
+        }
+
         Action callback = onFinished;
         ClearPlaybackReferences();
         IsRunning = false;

@@ -1777,11 +1777,14 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         context.GuardImpactRequestId = requestId;
         activePresentationRequestId = requestId;
 
+        bool useCloseRangeShoot = request.Impact.sourceCardState != null &&
+            request.Impact.sourceCardState.IsCloseRangeShoot();
         bool started = attackVsGuardPresentationPlayer.TryPlayGuardImpact(
             context.DefenseAttackerPresentation,
             context.DefenseDefenderPresentation,
             directionSign,
             context.GuardPresentationResult,
+            useCloseRangeShoot,
             () => CompleteDefenseGuardImpact(
                 context,
                 executionItem,

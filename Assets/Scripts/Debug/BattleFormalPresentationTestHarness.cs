@@ -16,7 +16,9 @@ public enum BattleFormalPresentationTestScenario
     LongRangeShootVsAttackNoBullet,
     CloseRangeShootVsAttackShooterWin,
     CloseRangeShootVsAttackShooterLose,
-    CloseRangeShootVsAttackTieThenShooterWin
+    CloseRangeShootVsAttackTieThenShooterWin,
+    CloseRangeShootVsGuardFullBlock,
+    CloseRangeShootVsGuardReducedDamage
 }
 
 // 正式BattleScene的开发测试输入入口；只准备规则数据，不驱动执行或表现。
@@ -37,6 +39,14 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         "[TEST]_FORMAL_GUARD_REDUCED_ATTACK";
     private const string ReducedIntentID =
         "[TEST]_FORMAL_GUARD_REDUCED_INTENT";
+    private const string CloseRangeFullGuardAttackCardID =
+        "[TEST]_FORMAL_CLOSE_RANGE_GUARD_FULL_ATTACK";
+    private const string CloseRangeFullGuardIntentID =
+        "[TEST]_FORMAL_CLOSE_RANGE_GUARD_FULL_INTENT";
+    private const string CloseRangeReducedGuardAttackCardID =
+        "[TEST]_FORMAL_CLOSE_RANGE_GUARD_REDUCED_ATTACK";
+    private const string CloseRangeReducedGuardIntentID =
+        "[TEST]_FORMAL_CLOSE_RANGE_GUARD_REDUCED_INTENT";
     private const string ContinuousSuccessSuccessDodgeCardID =
         "[TEST]_FORMAL_CONTINUOUS_DODGE_SUCCESS_SUCCESS";
     private const string ContinuousSuccessSuccessAttackOneCardID =
@@ -122,12 +132,28 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                 return TryPrepareAttackVsGuard(
                     runtimeState,
                     true,
+                    false,
                     out failureMessage
                 );
             case BattleFormalPresentationTestScenario.AttackVsGuardReducedDamage:
                 return TryPrepareAttackVsGuard(
                     runtimeState,
                     false,
+                    false,
+                    out failureMessage
+                );
+            case BattleFormalPresentationTestScenario.CloseRangeShootVsGuardFullBlock:
+                return TryPrepareAttackVsGuard(
+                    runtimeState,
+                    true,
+                    true,
+                    out failureMessage
+                );
+            case BattleFormalPresentationTestScenario.CloseRangeShootVsGuardReducedDamage:
+                return TryPrepareAttackVsGuard(
+                    runtimeState,
+                    false,
+                    true,
                     out failureMessage
                 );
             case BattleFormalPresentationTestScenario.AttackVsDodgeContinuousSuccessSuccess:
@@ -710,6 +736,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
     private bool TryPrepareAttackVsGuard(
         BattleRuntimeState runtimeState,
         bool expectFullBlock,
+        bool useCloseRangeShoot,
         out string failureMessage
     )
     {
@@ -719,6 +746,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         if (!TryValidateAttackVsGuardPrerequisites(
                 runtimeState,
                 expectFullBlock,
+                useCloseRangeShoot,
                 out ally,
                 out enemy,
                 out allySlot,
@@ -732,22 +760,49 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         string defenseCardID = expectFullBlock
             ? FullDefenseCardID
             : ReducedDefenseCardID;
-        string attackCardID = expectFullBlock
-            ? FullAttackCardID
-            : ReducedAttackCardID;
-        string intentID = expectFullBlock
-            ? FullIntentID
-            : ReducedIntentID;
-        string scenarioName = expectFullBlock
-            ? "AttackVsGuardFullBlock"
-            : "AttackVsGuardReducedDamage";
+        string attackCardID = useCloseRangeShoot
+            ? (expectFullBlock
+                ? CloseRangeFullGuardAttackCardID
+                : CloseRangeReducedGuardAttackCardID)
+            : (expectFullBlock ? FullAttackCardID : ReducedAttackCardID);
+        string intentID = useCloseRangeShoot
+            ? (expectFullBlock
+                ? CloseRangeFullGuardIntentID
+                : CloseRangeReducedGuardIntentID)
+            : (expectFullBlock ? FullIntentID : ReducedIntentID);
+        string scenarioName = GetAttackVsGuardScenarioName(
+            expectFullBlock,
+            useCloseRangeShoot
+        );
 
         List<BattleEnemyIntent> originalIntentQueue = runtimeState.intentQueue;
+        List<BuffData> originalEnemyBuffs = useCloseRangeShoot &&
+                enemy.buffs != null
+            ? new List<BuffData>(enemy.buffs)
+            : null;
         BattleCardState defenseCard = null;
         BattleCardState attackCard = null;
 
         try
         {
+            if (useCloseRangeShoot && !ConfigureBulletTestBuff(enemy, 1))
+            {
+                RollbackAttackVsGuard(
+                    runtimeState,
+                    originalIntentQueue,
+                    allySlot,
+                    ally,
+                    defenseCard,
+                    enemy,
+                    attackCard,
+                    originalEnemyBuffs
+                );
+                return Fail(
+                    "无法为CloseRange Guard场景准备Bullet资源。",
+                    out failureMessage
+                );
+            }
+
             defenseCard = BattleCardManager.CreateBattleCard(
                 ally,
                 CreateTestDefenseCard(
@@ -761,13 +816,22 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             );
             attackCard = BattleCardManager.CreateBattleCard(
                 enemy,
-                CreateTestAttackCard(
-                    attackCardID,
-                    expectFullBlock
-                        ? "[TEST] Full Attack"
-                        : "[TEST] Reduced Attack",
-                    attackPoint
-                ),
+                useCloseRangeShoot
+                    ? CreateCloseRangeTestAttackCard(
+                        attackCardID,
+                        expectFullBlock
+                            ? "[TEST] Close Range Full Attack"
+                            : "[TEST] Close Range Reduced Attack",
+                        attackPoint,
+                        attackPoint
+                    )
+                    : CreateTestAttackCard(
+                        attackCardID,
+                        expectFullBlock
+                            ? "[TEST] Full Attack"
+                            : "[TEST] Reduced Attack",
+                        attackPoint
+                    ),
                 attackCardID + "_INSTANCE"
             );
 
@@ -781,7 +845,8 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                     ally,
                     defenseCard,
                     enemy,
-                    attackCard
+                    attackCard,
+                    originalEnemyBuffs
                 );
                 return Fail(
                     "Runtime Guard测试卡创建或Owner绑定失败。",
@@ -831,7 +896,8 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                     ally,
                     defenseCard,
                     enemy,
-                    attackCard
+                    attackCard,
+                    originalEnemyBuffs
                 );
                 return Fail(
                     "未能建立正式Defense RespondedEnemyIntent关系：" +
@@ -849,7 +915,10 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                 "，Expected=" +
                 (expectFullBlock
                     ? "DefenseFullBlock"
-                    : "DefenseReducedDamage(RemainingAttackPoint=3)"),
+                    : "DefenseReducedDamage(RemainingAttackPoint=3)") +
+                (useCloseRangeShoot
+                    ? "，Bullet=" + enemy.GetBuffStack("Bullet")
+                    : string.Empty),
                 this
             );
             return true;
@@ -863,7 +932,8 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                 ally,
                 defenseCard,
                 enemy,
-                attackCard
+                attackCard,
+                originalEnemyBuffs
             );
             return Fail(
                 "准备" + scenarioName + "场景时发生异常，已回滚：" +
@@ -876,6 +946,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
     private bool TryValidateAttackVsGuardPrerequisites(
         BattleRuntimeState runtimeState,
         bool expectFullBlock,
+        bool useCloseRangeShoot,
         out CharacterData ally,
         out CharacterData enemy,
         out BattleActionSlot allySlot,
@@ -885,9 +956,10 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         ally = runtimeState != null ? runtimeState.allyA : null;
         enemy = runtimeState != null ? runtimeState.enemy : null;
         allySlot = null;
-        string scenarioName = expectFullBlock
-            ? "AttackVsGuardFullBlock"
-            : "AttackVsGuardReducedDamage";
+        string scenarioName = GetAttackVsGuardScenarioName(
+            expectFullBlock,
+            useCloseRangeShoot
+        );
 
         if (runtimeState == null)
         {
@@ -973,14 +1045,31 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                 defenderNextClash + "/" + defenderNextCard +
                 "，Next Attacker=" + attackerNextClash + "/" +
                 attackerNextCard + "，DamageMultiplier=" +
-                damageMultiplier + "% 。测试卡无ResourceRule，因此" +
-                "Resource Point Modifier固定为0。",
+                damageMultiplier + "% 。测试卡的Resource Point Modifier" +
+                "固定为0。",
                 out failureMessage
             );
         }
 
         failureMessage = string.Empty;
         return true;
+    }
+
+    private static string GetAttackVsGuardScenarioName(
+        bool expectFullBlock,
+        bool useCloseRangeShoot
+    )
+    {
+        if (useCloseRangeShoot)
+        {
+            return expectFullBlock
+                ? "CloseRangeShootVsGuardFullBlock"
+                : "CloseRangeShootVsGuardReducedDamage";
+        }
+
+        return expectFullBlock
+            ? "AttackVsGuardFullBlock"
+            : "AttackVsGuardReducedDamage";
     }
 
     private bool TryPrepareContinuousDodge(
@@ -1639,6 +1728,34 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         return card;
     }
 
+    private static bool ConfigureBulletTestBuff(
+        CharacterData actor,
+        int bulletStack
+    )
+    {
+        if (actor == null || actor.buffs == null)
+        {
+            return false;
+        }
+
+        for (int index = actor.buffs.Count - 1; index >= 0; index--)
+        {
+            BuffData buff = actor.buffs[index];
+            if (buff != null && buff.buffID == "Bullet")
+            {
+                actor.buffs.RemoveAt(index);
+            }
+        }
+
+        int safeStack = Mathf.Max(0, bulletStack);
+        if (safeStack > 0)
+        {
+            actor.AddBuff("Bullet", safeStack, -1);
+        }
+
+        return actor.GetBuffStack("Bullet") >= safeStack;
+    }
+
     private static void ConfigureLongRangeTestBuffs(
         CharacterData shooter,
         int bulletStack
@@ -1962,7 +2079,8 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         CharacterData ally,
         BattleCardState defenseCard,
         CharacterData enemy,
-        BattleCardState attackCard
+        BattleCardState attackCard,
+        List<BuffData> originalEnemyBuffs = null
     )
     {
         if (allySlot != null)
@@ -1977,6 +2095,12 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
 
         RemoveTestCard(ally, defenseCard);
         RemoveTestCard(enemy, attackCard);
+        if (originalEnemyBuffs != null && enemy != null &&
+            enemy.buffs != null)
+        {
+            enemy.buffs.Clear();
+            enemy.buffs.AddRange(originalEnemyBuffs);
+        }
     }
 
     private static void RollbackContinuousDodge(
