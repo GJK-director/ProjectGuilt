@@ -14,6 +14,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
     private enum PlaybackStage
     {
         None,
+        ClashReadyApproach,
         DodgeResult
     }
 
@@ -29,6 +30,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
     private BattleDodgePresentationResult presentationResult;
     private bool useCloseRangeShoot;
     private float attackDirectionSign = 1f;
+    private Action onClashReadyFinished;
     private Action onRollResultReady;
     private Action onImpactFinished;
     private Action onActionTailFinished;
@@ -56,6 +58,27 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         Action completion
     )
     {
+        return TryPlayClashReadyApproach(
+            dodgeSide,
+            dodgeWorldRoot,
+            attackSide,
+            attackWorldRoot,
+            engagementResult,
+            false,
+            completion
+        );
+    }
+
+    public bool TryPlayClashReadyApproach(
+        BattleCharacterPresentationController dodgeSide,
+        Transform dodgeWorldRoot,
+        BattleCharacterPresentationController attackSide,
+        Transform attackWorldRoot,
+        BattleClashEngagementResult engagementResult,
+        bool useRealApproach,
+        Action completion
+    )
+    {
         if (!CanStartPlayback() || dodgeSide == null || attackSide == null ||
             dodgeWorldRoot == null || attackWorldRoot == null ||
             engagementResult == null)
@@ -63,11 +86,77 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
             return false;
         }
 
-        // Dodge保留当前Pose；Attack只进入Sprint拼点等待Pose。
-        attackSide.SetSprint();
-        IsFinished = true;
-        completion?.Invoke();
+        if (!useRealApproach)
+        {
+            // 旧路径保持原行为：Dodge保留当前Pose，Attack只进入Sprint等待Pose。
+            attackSide.SetSprint();
+            IsFinished = true;
+            completion?.Invoke();
+            return true;
+        }
+
+        if (!BattleClashEngagementResolver.RequiresApproach(
+                dodgeWorldRoot.position,
+                attackWorldRoot.position,
+                engagementResult
+            ))
+        {
+            // 已满足FinalGap时保留上一动作Pose与WorldRoot，不重复接敌。
+            IsFinished = true;
+            completion?.Invoke();
+            return true;
+        }
+
+        playbackVersion++;
+        playbackStage = PlaybackStage.ClashReadyApproach;
+        attacker = attackSide;
+        defender = dodgeSide;
+        onClashReadyFinished = completion;
+        IsRunning = true;
+        IsFinished = false;
+        playbackCoroutine = StartCoroutine(
+            RunClashReadyApproach(
+                playbackVersion,
+                dodgeSide,
+                dodgeWorldRoot,
+                attackSide,
+                attackWorldRoot,
+                engagementResult
+            )
+        );
         return true;
+    }
+
+    private IEnumerator RunClashReadyApproach(
+        int version,
+        BattleCharacterPresentationController dodgeSide,
+        Transform dodgeWorldRoot,
+        BattleCharacterPresentationController attackSide,
+        Transform attackWorldRoot,
+        BattleClashEngagementResult engagementResult
+    )
+    {
+        yield return BattleClashReadyApproachMotion.Play(
+            dodgeSide,
+            dodgeWorldRoot,
+            attackSide,
+            attackWorldRoot,
+            engagementResult,
+            presentationProfile.SprintDuration,
+            presentationProfile.AfterimageSpawnInterval,
+            () => IsCurrentPlayback(version)
+        );
+
+        if (!IsCurrentPlayback(version))
+        {
+            yield break;
+        }
+
+        Action callback = onClashReadyFinished;
+        ClearPlaybackReferences();
+        IsRunning = false;
+        IsFinished = true;
+        callback?.Invoke();
     }
 
     public bool TryPlayDodgeRollResult(
@@ -369,6 +458,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         playbackStage = PlaybackStage.None;
         attacker = null;
         defender = null;
+        onClashReadyFinished = null;
         onRollResultReady = null;
         onImpactFinished = null;
         onActionTailFinished = null;

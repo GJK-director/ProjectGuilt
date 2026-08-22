@@ -330,7 +330,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6f456c1e8bfa4fb893a95ce6c465d57b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattlePresentationSandboxController
-  testScenario: 1
+  testScenario: 19
   character: {fileID: 1435928652}
   defender: {fileID: 385498946}
   attackVsAttackPresentationPlayer: {fileID: 546880345}

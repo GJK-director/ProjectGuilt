@@ -777,6 +777,33 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             request.ClashSession.ClashType == BattleClashType.DodgeVsAttack;
     }
 
+    private static BattleCardState GetDodgeAttackCardState(
+        BattleClashSession session
+    )
+    {
+        if (session == null ||
+            session.ClashType != BattleClashType.DodgeVsAttack)
+        {
+            return null;
+        }
+
+        if (session.SideA != null && session.SideA.cardState != null &&
+            session.SideA.cardState.cardData != null &&
+            session.SideA.cardState.cardData.cardType == CardType.Attack)
+        {
+            return session.SideA.cardState;
+        }
+
+        if (session.SideB != null && session.SideB.cardState != null &&
+            session.SideB.cardState.cardData != null &&
+            session.SideB.cardState.cardData.cardType == CardType.Attack)
+        {
+            return session.SideB.cardState;
+        }
+
+        return null;
+    }
+
     private bool TryStartDodgeVsAttackApproach(
         BattlePresentationRequest request,
         BattlePresentationCompletion completion,
@@ -807,6 +834,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         long requestId = request.RequestId;
         BattleExecutionItem executionItem = request.ExecutionItem;
+        BattleCardState attackCardState = GetDodgeAttackCardState(
+            request.ClashSession
+        );
+        bool useRealApproach = attackCardState != null &&
+            attackCardState.IsCloseRangeShoot();
         activePresentationRequestId = requestId;
         bool started = attackVsDodgePresentationPlayer
             .TryPlayClashReadyApproach(
@@ -815,6 +847,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 context.DodgeAttackerPresentation,
                 context.DodgeAttackerHandle.WorldRoot.transform,
                 context.ClashEngagement,
+                useRealApproach,
                 () => CompleteDodgeVsAttackApproach(
                     context,
                     executionItem,
@@ -1999,27 +2032,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         context.DodgeRollRequestId = requestId;
         activePresentationRequestId = requestId;
 
-        BattleClashSession session = request.ClashSession;
-        BattleCardState attackCardState = null;
-        if (session != null &&
-            session.ClashType == BattleClashType.DodgeVsAttack)
-        {
-            if (session.SideA != null &&
-                session.SideA.cardState != null &&
-                session.SideA.cardState.cardData != null &&
-                session.SideA.cardState.cardData.cardType == CardType.Attack)
-            {
-                attackCardState = session.SideA.cardState;
-            }
-            else if (session.SideB != null &&
-                session.SideB.cardState != null &&
-                session.SideB.cardState.cardData != null &&
-                session.SideB.cardState.cardData.cardType == CardType.Attack)
-            {
-                attackCardState = session.SideB.cardState;
-            }
-        }
-
+        BattleCardState attackCardState = GetDodgeAttackCardState(
+            request.ClashSession
+        );
         bool useCloseRangeShoot = attackCardState != null &&
             attackCardState.IsCloseRangeShoot();
         bool started = attackVsDodgePresentationPlayer

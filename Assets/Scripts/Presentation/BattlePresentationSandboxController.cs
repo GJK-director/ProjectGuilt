@@ -473,6 +473,67 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         BattleDodgePresentationResult result
     )
     {
+        BattleClashEngagementResult engagement =
+            BattleClashEngagementResolver.Resolve(
+                clashEngagementProfile,
+                defender.PresentationKey,
+                character.PresentationKey,
+                defenderTestSpeed,
+                characterTestSpeed
+            );
+        if (engagement == null)
+        {
+            Debug.LogWarning(
+                "BattlePresentationSandboxController：CloseRange Dodge无法解析Clash Engagement。"
+            );
+            dynamicTestCoroutine = null;
+            yield break;
+        }
+
+        bool approachFinished = false;
+        bool approachStarted = attackVsDodgePresentationPlayer
+            .TryPlayClashReadyApproach(
+                defender,
+                defender.transform,
+                character,
+                character.transform,
+                engagement,
+                true,
+                () => approachFinished = true
+            );
+        if (!approachStarted)
+        {
+            Debug.LogWarning(
+                "BattlePresentationSandboxController：CloseRange Dodge Approach启动失败。"
+            );
+            dynamicTestCoroutine = null;
+            yield break;
+        }
+
+        while (!approachFinished)
+        {
+            if (character == null || defender == null ||
+                attackVsDodgePresentationPlayer == null)
+            {
+                attackVsDodgePresentationPlayer?.CancelAndReset();
+                waitingForManualRoll = false;
+                dynamicTestCoroutine = null;
+                yield break;
+            }
+
+            yield return null;
+        }
+
+        yield return WaitForManualRollForPair();
+        if (character == null || defender == null ||
+            attackVsDodgePresentationPlayer == null)
+        {
+            attackVsDodgePresentationPlayer?.CancelAndReset();
+            waitingForManualRoll = false;
+            dynamicTestCoroutine = null;
+            yield break;
+        }
+
         float attackDirectionSign = GetHorizontalDirectionSign(
             defender.transform.position.x - character.transform.position.x
         );
