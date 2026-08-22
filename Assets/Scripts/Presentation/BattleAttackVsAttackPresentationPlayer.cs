@@ -52,6 +52,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
     private int playbackVersion;
     private float attackDirectionSign;
     private float tieDirectionSign;
+    private bool resolvedWinnerUsesCloseRangeShoot;
 
     void OnDisable()
     {
@@ -168,9 +169,51 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         Action finishedCallback
     )
     {
-        if (!ValidatePresentationProfile(
-                nameof(TryPlayResolvedWinnerAttack)
-            ))
+        return TryStartResolvedWinnerAttack(
+            winnerController,
+            loserController,
+            loserRoot,
+            directionSign,
+            false,
+            visualImpactCallback,
+            finishedCallback,
+            nameof(TryPlayResolvedWinnerAttack)
+        );
+    }
+
+    public bool TryPlayResolvedWinnerCloseRangeShoot(
+        BattleCharacterPresentationController winnerController,
+        BattleCharacterPresentationController loserController,
+        Transform loserRoot,
+        float directionSign,
+        Action visualImpactCallback,
+        Action finishedCallback
+    )
+    {
+        return TryStartResolvedWinnerAttack(
+            winnerController,
+            loserController,
+            loserRoot,
+            directionSign,
+            true,
+            visualImpactCallback,
+            finishedCallback,
+            nameof(TryPlayResolvedWinnerCloseRangeShoot)
+        );
+    }
+
+    private bool TryStartResolvedWinnerAttack(
+        BattleCharacterPresentationController winnerController,
+        BattleCharacterPresentationController loserController,
+        Transform loserRoot,
+        float directionSign,
+        bool useCloseRangeShoot,
+        Action visualImpactCallback,
+        Action finishedCallback,
+        string requestName
+    )
+    {
+        if (!ValidatePresentationProfile(requestName))
         {
             return false;
         }
@@ -186,6 +229,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         loser = loserController;
         loserWorldRoot = loserRoot;
         attackDirectionSign = directionSign >= 0f ? 1f : -1f;
+        resolvedWinnerUsesCloseRangeShoot = useCloseRangeShoot;
         onVisualImpact = visualImpactCallback;
         onFinished = finishedCallback;
         visualImpactInvoked = false;
@@ -473,6 +517,12 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
 
     private IEnumerator RunResolvedWinnerAttack(int version)
     {
+        if (resolvedWinnerUsesCloseRangeShoot)
+        {
+            yield return RunResolvedWinnerCloseRangeShoot(version);
+            yield break;
+        }
+
         winner.SetSlash();
         float slashStartedAt = Time.time;
         yield return winner.PlaySlashPresentation(
@@ -504,6 +554,25 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         }
 
         FinishResolvedAttack(version);
+    }
+
+    private IEnumerator RunResolvedWinnerCloseRangeShoot(int version)
+    {
+        winner.SetShoot();
+        bool muzzleFlashFinished = false;
+        winner.PlayMuzzleFlash(() => muzzleFlashFinished = true);
+
+        // 枪口火焰出现后沿用同一Visual Impact边界触发受击与规则提交。
+        ReachVisualImpact(version);
+        while (!muzzleFlashFinished && IsCurrentPlayback(version))
+        {
+            yield return null;
+        }
+
+        if (IsCurrentPlayback(version))
+        {
+            FinishResolvedAttack(version);
+        }
     }
 
     private void ReachVisualImpact(int version)
@@ -717,6 +786,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         secondTieSlashCoroutine = null;
         tieRecoilCoroutine = null;
         clashEngagementResult = null;
+        resolvedWinnerUsesCloseRangeShoot = false;
         ResetTiePlaybackState();
     }
 

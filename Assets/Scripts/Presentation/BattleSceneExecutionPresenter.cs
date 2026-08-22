@@ -352,6 +352,28 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 session.SideB.cardState.IsLongRangeShoot();
     }
 
+    private static bool IsCloseRangeShootVsMelee(
+        BattlePresentationRequest request
+    )
+    {
+        BattleClashSession session = request != null
+            ? request.ClashSession
+            : null;
+        if (session == null ||
+            session.ClashType != BattleClashType.AttackVsAttack ||
+            session.SideA == null || session.SideB == null ||
+            session.SideA.cardState == null ||
+            session.SideB.cardState == null)
+        {
+            return false;
+        }
+
+        return session.SideA.cardState.IsCloseRangeShoot() &&
+                session.SideB.cardState.IsMeleeAttack() ||
+            session.SideB.cardState.IsCloseRangeShoot() &&
+                session.SideA.cardState.IsMeleeAttack();
+    }
+
     private bool TryResolveLongRangeShootVsMelee(
         ActionPresentationContext context
     )
@@ -982,6 +1004,14 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (IsAnyLongRangeAttackVsAttack(request))
         {
             HandleLongRangeRollResult(request, completion, context);
+            return;
+        }
+
+        if (IsCloseRangeShootVsMelee(request) &&
+            ShouldPlayAttackTieResult(request))
+        {
+            // CloseRange平点保持双方Sprint，等待下一次Manual Roll。
+            CompleteRequest(request, completion);
             return;
         }
 
@@ -2135,8 +2165,24 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         context.DefaultAttackImpactRequestId = requestId;
         activePresentationRequestId = requestId;
 
-        bool started = attackVsAttackPresentationPlayer
-            .TryPlayResolvedWinnerAttack(
+        bool closeRangeShootWon = request.Impact.sourceCardState != null &&
+            request.Impact.sourceCardState.IsCloseRangeShoot();
+        bool started = closeRangeShootWon
+            ? attackVsAttackPresentationPlayer
+                .TryPlayResolvedWinnerCloseRangeShoot(
+                    context.CurrentAttackerPresentation,
+                    context.CurrentTargetPresentation,
+                    context.CurrentTargetHandle.WorldRoot.transform,
+                    directionSign,
+                    () => CompleteDefaultAttackImpact(
+                        context,
+                        executionItem,
+                        requestId,
+                        completion
+                    ),
+                    () => MarkDefaultAttackFinished(context, executionItem)
+                )
+            : attackVsAttackPresentationPlayer.TryPlayResolvedWinnerAttack(
                 context.CurrentAttackerPresentation,
                 context.CurrentTargetPresentation,
                 context.CurrentTargetHandle.WorldRoot.transform,

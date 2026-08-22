@@ -13,7 +13,10 @@ public enum BattleFormalPresentationTestScenario
     LongRangeShootVsAttackShooterWin,
     LongRangeShootVsAttackShooterLose,
     LongRangeShootVsAttackTieThenShooterWin,
-    LongRangeShootVsAttackNoBullet
+    LongRangeShootVsAttackNoBullet,
+    CloseRangeShootVsAttackShooterWin,
+    CloseRangeShootVsAttackShooterLose,
+    CloseRangeShootVsAttackTieThenShooterWin
 }
 
 // 正式BattleScene的开发测试输入入口；只准备规则数据，不驱动执行或表现。
@@ -60,6 +63,12 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         "[TEST]_FORMAL_LONG_RANGE_MELEE";
     private const string LongRangeIntentID =
         "[TEST]_FORMAL_LONG_RANGE_INTENT";
+    private const string CloseRangeShooterCardID =
+        "[TEST]_FORMAL_CLOSE_RANGE_SHOOTER";
+    private const string CloseRangeMeleeCardID =
+        "[TEST]_FORMAL_CLOSE_RANGE_MELEE";
+    private const string CloseRangeIntentID =
+        "[TEST]_FORMAL_CLOSE_RANGE_INTENT";
     private const int TestSlotIndex = 1;
 
     [SerializeField]
@@ -137,7 +146,10 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             case BattleFormalPresentationTestScenario.LongRangeShootVsAttackShooterLose:
             case BattleFormalPresentationTestScenario.LongRangeShootVsAttackTieThenShooterWin:
             case BattleFormalPresentationTestScenario.LongRangeShootVsAttackNoBullet:
-                return TryPrepareLongRangeShootVsAttack(
+            case BattleFormalPresentationTestScenario.CloseRangeShootVsAttackShooterWin:
+            case BattleFormalPresentationTestScenario.CloseRangeShootVsAttackShooterLose:
+            case BattleFormalPresentationTestScenario.CloseRangeShootVsAttackTieThenShooterWin:
+                return TryPrepareShootVsAttack(
                     runtimeState,
                     scenario,
                     out failureMessage
@@ -293,7 +305,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         }
     }
 
-    private bool TryPrepareLongRangeShootVsAttack(
+    private bool TryPrepareShootVsAttack(
         BattleRuntimeState runtimeState,
         BattleFormalPresentationTestScenario testScenario,
         out string failureMessage
@@ -312,15 +324,35 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             return false;
         }
 
+        bool isCloseRange =
+            testScenario == BattleFormalPresentationTestScenario
+                .CloseRangeShootVsAttackShooterWin ||
+            testScenario == BattleFormalPresentationTestScenario
+                .CloseRangeShootVsAttackShooterLose ||
+            testScenario == BattleFormalPresentationTestScenario
+                .CloseRangeShootVsAttackTieThenShooterWin;
         bool shooterWins = testScenario ==
-            BattleFormalPresentationTestScenario
-                .LongRangeShootVsAttackShooterWin;
+                BattleFormalPresentationTestScenario
+                    .LongRangeShootVsAttackShooterWin ||
+            testScenario == BattleFormalPresentationTestScenario
+                .CloseRangeShootVsAttackShooterWin;
         bool tieThenShooterWins = testScenario ==
-            BattleFormalPresentationTestScenario
-                .LongRangeShootVsAttackTieThenShooterWin;
+                BattleFormalPresentationTestScenario
+                    .LongRangeShootVsAttackTieThenShooterWin ||
+            testScenario == BattleFormalPresentationTestScenario
+                .CloseRangeShootVsAttackTieThenShooterWin;
         bool hasBullet = testScenario !=
             BattleFormalPresentationTestScenario
                 .LongRangeShootVsAttackNoBullet;
+        string shooterCardID = isCloseRange
+            ? CloseRangeShooterCardID
+            : LongRangeShooterCardID;
+        string meleeCardID = isCloseRange
+            ? CloseRangeMeleeCardID
+            : LongRangeMeleeCardID;
+        string intentID = isCloseRange
+            ? CloseRangeIntentID
+            : LongRangeIntentID;
         int shooterMinPoint = shooterWins ? 7 : 4;
         int shooterMaxPoint = shooterMinPoint;
         int meleeMinPoint = shooterWins ? 4 : 7;
@@ -385,23 +417,30 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
 
             shooterCard = BattleCardManager.CreateBattleCard(
                 ally,
-                CreateLongRangeTestAttackCard(
-                    LongRangeShooterCardID,
-                    "[TEST] Long Range Shoot",
-                    shooterMinPoint,
-                    shooterMaxPoint
-                ),
-                LongRangeShooterCardID + "_INSTANCE"
+                isCloseRange
+                    ? CreateCloseRangeTestAttackCard(
+                        shooterCardID,
+                        "[TEST] Close Range Shoot",
+                        shooterMinPoint,
+                        shooterMaxPoint
+                    )
+                    : CreateLongRangeTestAttackCard(
+                        shooterCardID,
+                        "[TEST] Long Range Shoot",
+                        shooterMinPoint,
+                        shooterMaxPoint
+                    ),
+                shooterCardID + "_INSTANCE"
             );
             meleeCard = BattleCardManager.CreateBattleCard(
                 enemy,
                 CreateTestAttackCardRange(
-                    LongRangeMeleeCardID,
+                    meleeCardID,
                     "[TEST] Melee Attack",
                     meleeMinPoint,
                     meleeMaxPoint
                 ),
-                LongRangeMeleeCardID + "_INSTANCE"
+                meleeCardID + "_INSTANCE"
             );
 
             if (!IsOwnedCard(shooterCard, ally) ||
@@ -424,7 +463,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             }
 
             BattleEnemyIntent testIntent = new BattleEnemyIntent(
-                LongRangeIntentID,
+                intentID,
                 enemy,
                 meleeCard,
                 ally,
@@ -1559,6 +1598,34 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             maxPoint
         );
         card.attackDeliveryMode = AttackDeliveryMode.LongRangeShoot;
+        card.resourceRule = new CardResourceRuleData
+        {
+            resourceType = "BuffStack",
+            resourceID = "Bullet",
+            requiredStackForNormalVersion = 1,
+            fallbackMinPoint = 0,
+            fallbackMaxPoint = 0,
+            pointPerStack = 0,
+            consumeAmountOnSuccess = 1
+        };
+        return card;
+    }
+
+    private static CardTestData CreateCloseRangeTestAttackCard(
+        string cardID,
+        string cardName,
+        int minPoint,
+        int maxPoint
+    )
+    {
+        CardTestData card = CreateTestAttackCardRange(
+            cardID,
+            cardName,
+            minPoint,
+            maxPoint
+        );
+        card.attackDeliveryMode = AttackDeliveryMode.CloseRangeShoot;
+        card.cooldown = 1;
         card.resourceRule = new CardResourceRuleData
         {
             resourceType = "BuffStack",
