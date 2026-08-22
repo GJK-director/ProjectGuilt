@@ -18,7 +18,9 @@ public enum BattleFormalPresentationTestScenario
     CloseRangeShootVsAttackShooterLose,
     CloseRangeShootVsAttackTieThenShooterWin,
     CloseRangeShootVsGuardFullBlock,
-    CloseRangeShootVsGuardReducedDamage
+    CloseRangeShootVsGuardReducedDamage,
+    CloseRangeShootVsDodgeSuccess,
+    CloseRangeShootVsDodgeFailed
 }
 
 // 正式BattleScene的开发测试输入入口；只准备规则数据，不驱动执行或表现。
@@ -47,6 +49,18 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         "[TEST]_FORMAL_CLOSE_RANGE_GUARD_REDUCED_ATTACK";
     private const string CloseRangeReducedGuardIntentID =
         "[TEST]_FORMAL_CLOSE_RANGE_GUARD_REDUCED_INTENT";
+    private const string CloseRangeDodgeSuccessCardID =
+        "[TEST]_FORMAL_CLOSE_RANGE_DODGE_SUCCESS_DODGE";
+    private const string CloseRangeDodgeSuccessAttackCardID =
+        "[TEST]_FORMAL_CLOSE_RANGE_DODGE_SUCCESS_ATTACK";
+    private const string CloseRangeDodgeSuccessIntentID =
+        "[TEST]_FORMAL_CLOSE_RANGE_DODGE_SUCCESS_INTENT";
+    private const string CloseRangeDodgeFailedCardID =
+        "[TEST]_FORMAL_CLOSE_RANGE_DODGE_FAILED_DODGE";
+    private const string CloseRangeDodgeFailedAttackCardID =
+        "[TEST]_FORMAL_CLOSE_RANGE_DODGE_FAILED_ATTACK";
+    private const string CloseRangeDodgeFailedIntentID =
+        "[TEST]_FORMAL_CLOSE_RANGE_DODGE_FAILED_INTENT";
     private const string ContinuousSuccessSuccessDodgeCardID =
         "[TEST]_FORMAL_CONTINUOUS_DODGE_SUCCESS_SUCCESS";
     private const string ContinuousSuccessSuccessAttackOneCardID =
@@ -154,6 +168,18 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                     runtimeState,
                     false,
                     true,
+                    out failureMessage
+                );
+            case BattleFormalPresentationTestScenario.CloseRangeShootVsDodgeSuccess:
+                return TryPrepareCloseRangeShootVsDodge(
+                    runtimeState,
+                    true,
+                    out failureMessage
+                );
+            case BattleFormalPresentationTestScenario.CloseRangeShootVsDodgeFailed:
+                return TryPrepareCloseRangeShootVsDodge(
+                    runtimeState,
+                    false,
                     out failureMessage
                 );
             case BattleFormalPresentationTestScenario.AttackVsDodgeContinuousSuccessSuccess:
@@ -1072,6 +1098,229 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             : "AttackVsGuardReducedDamage";
     }
 
+    private bool TryPrepareCloseRangeShootVsDodge(
+        BattleRuntimeState runtimeState,
+        bool expectDodgeSuccess,
+        out string failureMessage
+    )
+    {
+        CharacterData ally;
+        CharacterData enemy;
+        BattleActionSlot allySlot;
+        if (!TryValidateContinuousDodgePrerequisites(
+                runtimeState,
+                expectDodgeSuccess,
+                out ally,
+                out enemy,
+                out allySlot,
+                out failureMessage))
+        {
+            return false;
+        }
+
+        int dodgePoint = expectDodgeSuccess ? 6 : 5;
+        int attackPoint = expectDodgeSuccess ? 4 : 7;
+        string dodgeCardID = expectDodgeSuccess
+            ? CloseRangeDodgeSuccessCardID
+            : CloseRangeDodgeFailedCardID;
+        string attackCardID = expectDodgeSuccess
+            ? CloseRangeDodgeSuccessAttackCardID
+            : CloseRangeDodgeFailedAttackCardID;
+        string intentID = expectDodgeSuccess
+            ? CloseRangeDodgeSuccessIntentID
+            : CloseRangeDodgeFailedIntentID;
+        string scenarioName = expectDodgeSuccess
+            ? "CloseRangeShootVsDodgeSuccess"
+            : "CloseRangeShootVsDodgeFailed";
+
+        List<BattleEnemyIntent> originalIntentQueue = runtimeState.intentQueue;
+        List<BuffData> originalEnemyBuffs = enemy.buffs != null
+            ? new List<BuffData>(enemy.buffs)
+            : null;
+        BattleCardState dodgeCard = null;
+        BattleCardState attackCard = null;
+
+        try
+        {
+            if (!ConfigureBulletTestBuff(enemy, 1))
+            {
+                RollbackCloseRangeShootVsDodge(
+                    runtimeState,
+                    originalIntentQueue,
+                    allySlot,
+                    ally,
+                    dodgeCard,
+                    enemy,
+                    attackCard,
+                    originalEnemyBuffs
+                );
+                return Fail(
+                    "无法为" + scenarioName + "准备Enemy Bullet资源。",
+                    out failureMessage
+                );
+            }
+
+            dodgeCard = BattleCardManager.CreateBattleCard(
+                ally,
+                CreateTestDodgeCard(
+                    dodgeCardID,
+                    "[TEST] Close Range Dodge",
+                    dodgePoint
+                ),
+                dodgeCardID + "_INSTANCE"
+            );
+            attackCard = BattleCardManager.CreateBattleCard(
+                enemy,
+                CreateCloseRangeTestAttackCard(
+                    attackCardID,
+                    "[TEST] Close Range Dodge Attack",
+                    attackPoint,
+                    attackPoint
+                ),
+                attackCardID + "_INSTANCE"
+            );
+
+            if (!IsOwnedCard(dodgeCard, ally) ||
+                !IsOwnedCard(attackCard, enemy))
+            {
+                RollbackCloseRangeShootVsDodge(
+                    runtimeState,
+                    originalIntentQueue,
+                    allySlot,
+                    ally,
+                    dodgeCard,
+                    enemy,
+                    attackCard,
+                    originalEnemyBuffs
+                );
+                return Fail(
+                    "Runtime " + scenarioName + "测试卡创建或Owner绑定失败。",
+                    out failureMessage
+                );
+            }
+
+            CardEligibilityResult dodgeEligibility =
+                BattleCardManager.EvaluateCardEligibility(
+                    ally,
+                    enemy,
+                    dodgeCard
+                );
+            CardEligibilityResult attackEligibility =
+                BattleCardManager.EvaluateCardEligibility(
+                    enemy,
+                    ally,
+                    attackCard
+                );
+            if (dodgeEligibility == null || !dodgeEligibility.isEligible ||
+                attackEligibility == null || !attackEligibility.isEligible)
+            {
+                string eligibilityFailure =
+                    "Dodge=" + GetEligibilityFailure(dodgeEligibility) +
+                    "，CloseRangeAttack=" +
+                    GetEligibilityFailure(attackEligibility);
+                RollbackCloseRangeShootVsDodge(
+                    runtimeState,
+                    originalIntentQueue,
+                    allySlot,
+                    ally,
+                    dodgeCard,
+                    enemy,
+                    attackCard,
+                    originalEnemyBuffs
+                );
+                return Fail(eligibilityFailure, out failureMessage);
+            }
+
+            BattleEnemyIntent testIntent = new BattleEnemyIntent(
+                intentID,
+                enemy,
+                attackCard,
+                ally,
+                TestSlotIndex,
+                1,
+                1
+            );
+            runtimeState.SetIntentQueue(
+                new List<BattleEnemyIntent> { testIntent }
+            );
+
+            BattleActionAssignmentResult assignmentResult;
+            bool assigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+                runtimeState,
+                ally,
+                TestSlotIndex,
+                dodgeCard,
+                testIntent,
+                out assignmentResult
+            );
+
+            if (!assigned || !IsValidCloseRangeShootVsDodgeRelation(
+                    allySlot,
+                    ally,
+                    dodgeCard,
+                    enemy,
+                    attackCard,
+                    testIntent,
+                    assignmentResult))
+            {
+                string assignmentMessage = assignmentResult != null
+                    ? assignmentResult.message
+                    : "无安排结果";
+                RollbackCloseRangeShootVsDodge(
+                    runtimeState,
+                    originalIntentQueue,
+                    allySlot,
+                    ally,
+                    dodgeCard,
+                    enemy,
+                    attackCard,
+                    originalEnemyBuffs
+                );
+                return Fail(
+                    "未能建立正式Dodge RespondedEnemyIntent关系：" +
+                    assignmentMessage,
+                    out failureMessage
+                );
+            }
+
+            hasPreparedScenario = true;
+            preparedRuntimeState = runtimeState;
+            Debug.Log(
+                "[FormalPresentationTest] Scenario=" + scenarioName +
+                " prepared. Ally Slot1 DodgePoint=" + dodgePoint +
+                "，Enemy CloseRange AttackPoint=" + attackPoint +
+                "，ExpectedFinalResult=" +
+                (expectDodgeSuccess ? "DodgeSuccess" : "DodgeFailed") +
+                "，ExpectedDamage=" + (expectDodgeSuccess ? 0 : attackPoint) +
+                "，EnemyBulletBefore=" + enemy.GetBuffStack("Bullet") +
+                "，ExpectedEnemyBulletAfter=0" +
+                "，ExpectedAttackResolved=True" +
+                "，ExpectedAttackCooldownAfterResolved=2" +
+                "，ExpectedAttackCooldownAfterTurnEnd=1",
+                this
+            );
+            return true;
+        }
+        catch (Exception exception)
+        {
+            RollbackCloseRangeShootVsDodge(
+                runtimeState,
+                originalIntentQueue,
+                allySlot,
+                ally,
+                dodgeCard,
+                enemy,
+                attackCard,
+                originalEnemyBuffs
+            );
+            return Fail(
+                "准备" + scenarioName + "场景时发生异常，已回滚：" +
+                exception.Message,
+                out failureMessage
+            );
+        }
+    }
+
     private bool TryPrepareContinuousDodge(
         BattleRuntimeState runtimeState,
         bool expectSecondSuccess,
@@ -1982,6 +2231,48 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             intent.actualTargetSlotIndex == TestSlotIndex;
     }
 
+    private static bool IsValidCloseRangeShootVsDodgeRelation(
+        BattleActionSlot allySlot,
+        CharacterData ally,
+        BattleCardState dodgeCard,
+        CharacterData enemy,
+        BattleCardState attackCard,
+        BattleEnemyIntent intent,
+        BattleActionAssignmentResult assignmentResult
+    )
+    {
+        return dodgeCard != null && dodgeCard.cardData != null &&
+            dodgeCard.cardData.cardType == CardType.Dodge &&
+            attackCard != null && attackCard.cardData != null &&
+            attackCard.cardData.cardType == CardType.Attack &&
+            attackCard.IsCloseRangeShoot() &&
+            allySlot != null && assignmentResult != null &&
+            assignmentResult.isSuccess &&
+            !assignmentResult.wasAutoDowngraded &&
+            assignmentResult.placementType ==
+                BattleActionPlacementType.ExactEnemyIntent &&
+            assignmentResult.effectiveSlotType ==
+                BattleActionSlotType.RespondToEnemyIntent &&
+            ReferenceEquals(allySlot.owner, ally) &&
+            ReferenceEquals(allySlot.actor, ally) &&
+            ReferenceEquals(allySlot.cardState, dodgeCard) &&
+            allySlot.slotIndex == TestSlotIndex &&
+            allySlot.slotType == BattleActionSlotType.RespondToEnemyIntent &&
+            allySlot.placementType ==
+                BattleActionPlacementType.ExactEnemyIntent &&
+            ReferenceEquals(allySlot.requestedEnemyIntent, intent) &&
+            ReferenceEquals(allySlot.enemyIntent, intent) &&
+            ReferenceEquals(allySlot.target, enemy) &&
+            intent.intentOrder == 1 && intent.enemySlotIndex == 1 &&
+            ReferenceEquals(intent.enemy, enemy) &&
+            ReferenceEquals(intent.enemyCardState, attackCard) &&
+            ReferenceEquals(intent.originalTargetCharacter, ally) &&
+            intent.originalTargetSlotIndex == TestSlotIndex &&
+            intent.isResponded &&
+            ReferenceEquals(intent.actualTargetCharacter, ally) &&
+            intent.actualTargetSlotIndex == TestSlotIndex;
+    }
+
     private static bool IsOwnedCard(BattleCardState card, CharacterData owner)
     {
         return card != null &&
@@ -2127,6 +2418,39 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         RemoveTestCard(ally, dodgeCard);
         RemoveTestCard(enemy, attackOneCard);
         RemoveTestCard(enemy, attackTwoCard);
+    }
+
+    private static void RollbackCloseRangeShootVsDodge(
+        BattleRuntimeState runtimeState,
+        List<BattleEnemyIntent> originalIntentQueue,
+        BattleActionSlot allySlot,
+        CharacterData ally,
+        BattleCardState dodgeCard,
+        CharacterData enemy,
+        BattleCardState attackCard,
+        List<BuffData> originalEnemyBuffs
+    )
+    {
+        if (allySlot != null)
+        {
+            allySlot.Clear();
+        }
+
+        if (runtimeState != null)
+        {
+            runtimeState.SetIntentQueue(originalIntentQueue);
+        }
+
+        RemoveTestCard(ally, dodgeCard);
+        RemoveTestCard(enemy, attackCard);
+        if (enemy != null && enemy.buffs != null)
+        {
+            enemy.buffs.Clear();
+            if (originalEnemyBuffs != null)
+            {
+                enemy.buffs.AddRange(originalEnemyBuffs);
+            }
+        }
     }
 
     private static void RemoveTestCard(CharacterData owner, BattleCardState card)

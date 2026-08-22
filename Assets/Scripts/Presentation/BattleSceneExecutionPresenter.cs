@@ -1999,12 +1999,36 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         context.DodgeRollRequestId = requestId;
         activePresentationRequestId = requestId;
 
+        BattleClashSession session = request.ClashSession;
+        BattleCardState attackCardState = null;
+        if (session != null &&
+            session.ClashType == BattleClashType.DodgeVsAttack)
+        {
+            if (session.SideA != null &&
+                session.SideA.cardState != null &&
+                session.SideA.cardState.cardData != null &&
+                session.SideA.cardState.cardData.cardType == CardType.Attack)
+            {
+                attackCardState = session.SideA.cardState;
+            }
+            else if (session.SideB != null &&
+                session.SideB.cardState != null &&
+                session.SideB.cardState.cardData != null &&
+                session.SideB.cardState.cardData.cardType == CardType.Attack)
+            {
+                attackCardState = session.SideB.cardState;
+            }
+        }
+
+        bool useCloseRangeShoot = attackCardState != null &&
+            attackCardState.IsCloseRangeShoot();
         bool started = attackVsDodgePresentationPlayer
             .TryPlayDodgeRollResult(
                 context.DodgeAttackerPresentation,
                 context.DodgeDefenderPresentation,
                 directionSign,
                 context.DodgePresentationResult,
+                useCloseRangeShoot,
                 () => CompleteDodgeRollResult(
                     context,
                     executionItem,
