@@ -27,6 +27,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
     private BattleCharacterPresentationController attacker;
     private BattleCharacterPresentationController defender;
     private BattleDodgePresentationResult presentationResult;
+    private bool useCloseRangeShoot;
     private float attackDirectionSign = 1f;
     private Action onRollResultReady;
     private Action onImpactFinished;
@@ -78,6 +79,27 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         Action actionTailCompletion
     )
     {
+        return TryPlayDodgeRollResult(
+            attackActor,
+            dodgeActor,
+            directionSign,
+            result,
+            false,
+            rollResultCompletion,
+            actionTailCompletion
+        );
+    }
+
+    public bool TryPlayDodgeRollResult(
+        BattleCharacterPresentationController attackActor,
+        BattleCharacterPresentationController dodgeActor,
+        float directionSign,
+        BattleDodgePresentationResult result,
+        bool playCloseRangeShoot,
+        Action rollResultCompletion,
+        Action actionTailCompletion
+    )
+    {
         if (!CanStartPlayback() || attackActor == null || dodgeActor == null)
         {
             return false;
@@ -88,6 +110,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         attacker = attackActor;
         defender = dodgeActor;
         presentationResult = result;
+        useCloseRangeShoot = playCloseRangeShoot;
         attackDirectionSign = directionSign >= 0f ? 1f : -1f;
         onRollResultReady = rollResultCompletion;
         onActionTailFinished = actionTailCompletion;
@@ -140,14 +163,35 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
     private IEnumerator RunDodgeResult(int version)
     {
         PrepareResultActors();
-        attacker.SetSlash();
+        if (useCloseRangeShoot)
+        {
+            attacker.SetCloseRangeShoot();
+        }
+        else
+        {
+            attacker.SetSlash();
+        }
         defender.SetDodge();
 
         dodgeFinished = !defender.PlayDodgeMotion(
             attackDirectionSign,
             () => MarkDodgeFinished(version)
         );
-        slashCoroutine = StartCoroutine(RunSlash(version));
+        if (useCloseRangeShoot)
+        {
+            // Flash开始即为开枪接触点；完成回调则等价于原Slash结束边界。
+            attacker.PlayCloseRangeMuzzleFlash(
+                () => MarkCloseRangeAttackFinished(version)
+            );
+            if (presentationResult == BattleDodgePresentationResult.DodgeFailed)
+            {
+                ReachAttackVisualImpact(version);
+            }
+        }
+        else
+        {
+            slashCoroutine = StartCoroutine(RunSlash(version));
+        }
 
         while (IsCurrentPlayback(version))
         {
@@ -173,7 +217,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
     {
         yield return attacker.PlaySlashPresentation(
             attackDirectionSign,
-            () => ReachSlashImpact(version)
+            () => ReachAttackVisualImpact(version)
         );
 
         if (!IsCurrentPlayback(version))
@@ -187,7 +231,16 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         if (!rollResultReady &&
             presentationResult == BattleDodgePresentationResult.DodgeFailed)
         {
-            ReachSlashImpact(version);
+            ReachAttackVisualImpact(version);
+        }
+    }
+
+    private void MarkCloseRangeAttackFinished(int version)
+    {
+        if (IsCurrentPlayback(version))
+        {
+            // 沿用既有完成标记，避免改变Dodge状态机的收尾条件。
+            slashFinished = true;
         }
     }
 
@@ -212,7 +265,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         callback?.Invoke();
     }
 
-    private void ReachSlashImpact(int version)
+    private void ReachAttackVisualImpact(int version)
     {
         if (!IsCurrentPlayback(version) || rollResultReady ||
             presentationResult != BattleDodgePresentationResult.DodgeFailed)
@@ -220,7 +273,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
             return;
         }
 
-        // DodgeFailed只在Common Slash的真实接触回调释放RollResult。
+        // Melee使用Slash接触点；CloseRange使用Flash开始时刻释放RollResult。
         defender.FinishDodgePresentation();
         dodgeFinished = true;
         rollResultReady = true;
@@ -272,7 +325,10 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         {
             attacker.SetPresentationPaused(false);
             attacker.ClearSlashEffect();
-            attacker.FinishSlashPresentation();
+            if (!useCloseRangeShoot)
+            {
+                attacker.FinishSlashPresentation();
+            }
         }
 
         if (defender != null)
@@ -324,6 +380,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         rollResultReady = false;
         impactStarted = false;
         hitFinished = false;
+        useCloseRangeShoot = false;
         attackDirectionSign = 1f;
     }
 

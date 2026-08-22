@@ -2,15 +2,42 @@ using System.Collections;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
+public enum BattlePresentationSandboxScenario
+{
+    None,
+    BasicIdle,
+    BasicSprint,
+    BasicSlash,
+    SprintForward,
+    SprintSlash,
+    HitReaction,
+    CharacterAttack,
+    AttackVsAttack,
+    AttackVsAttackAlternateResult,
+    AttackTieLoop,
+    GuardPose,
+    MeleeVsGuardFullBlock,
+    MeleeVsGuardReducedDamage,
+    CloseRangeVsGuardFullBlock,
+    CloseRangeVsGuardReducedDamage,
+    DodgeMotion,
+    CloseRangeVsDodgeSuccess,
+    CloseRangeVsDodgeFailed,
+    LongRangeBasicShoot
+}
+
 // 仅用于 BattlePresentationSandbox 的手动姿态切换测试。
 public sealed class BattlePresentationSandboxController : MonoBehaviour
 {
+    [SerializeField] private BattlePresentationSandboxScenario testScenario;
     [SerializeField] private BattleCharacterPresentationController character;
     [SerializeField] private BattleCharacterPresentationController defender;
     [SerializeField]
     private BattleAttackVsAttackPresentationPlayer attackVsAttackPresentationPlayer;
     [SerializeField]
     private BattleAttackVsGuardPresentationPlayer attackVsGuardPresentationPlayer;
+    [SerializeField]
+    private BattleAttackVsDodgePresentationPlayer attackVsDodgePresentationPlayer;
     [SerializeField] private BattleClashEngagementProfile clashEngagementProfile;
     [SerializeField, Min(0f)] private float characterTestSpeed = 5f;
     [SerializeField, Min(0f)] private float defenderTestSpeed = 5f;
@@ -34,6 +61,8 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
     private bool hasWarnedMissingTiePair;
     private bool hasWarnedMissingGuardPair;
     private bool hasWarnedMissingSharedGuardPlayer;
+    private bool hasWarnedMissingDodgePair;
+    private bool hasWarnedMissingSharedDodgePlayer;
     private Vector3 characterResetPosition;
     private bool hasCharacterResetPosition;
 
@@ -50,10 +79,17 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             return;
         }
 
-        if (waitingForManualRoll && keyboard.spaceKey.wasPressedThisFrame)
+        if (keyboard.spaceKey.wasPressedThisFrame)
         {
-            // Space只解除当前ClashReady等待，不直接执行Slash逻辑。
-            waitingForManualRoll = false;
+            if (waitingForManualRoll)
+            {
+                // 等待中只解除当前ClashReady，不重复启动所选Scenario。
+                waitingForManualRoll = false;
+            }
+            else
+            {
+                RunSelectedTest();
+            }
         }
 
         if (character != null && keyboard.digit1Key.wasPressedThisFrame)
@@ -102,15 +138,36 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         }
         else if (keyboard.hKey.wasPressedThisFrame)
         {
-            StartPerfectGuardTest();
+            StartPerfectGuardTest(
+                keyboard.leftShiftKey.isPressed ||
+                keyboard.rightShiftKey.isPressed
+            );
         }
         else if (keyboard.jKey.wasPressedThisFrame)
         {
-            StartPartialGuardTest();
+            StartPartialGuardTest(
+                keyboard.leftShiftKey.isPressed ||
+                keyboard.rightShiftKey.isPressed
+            );
         }
         else if (keyboard.kKey.wasPressedThisFrame)
         {
-            StartDodgeMotionTest();
+            bool shiftPressed = keyboard.leftShiftKey.isPressed ||
+                keyboard.rightShiftKey.isPressed;
+            bool controlPressed = keyboard.leftCtrlKey.isPressed ||
+                keyboard.rightCtrlKey.isPressed;
+            if (shiftPressed)
+            {
+                StartCloseRangeDodgeTest(
+                    controlPressed
+                        ? BattleDodgePresentationResult.DodgeFailed
+                        : BattleDodgePresentationResult.DodgeSuccess
+                );
+            }
+            else
+            {
+                StartDodgeMotionTest();
+            }
         }
         else if (keyboard.qKey.wasPressedThisFrame)
         {
@@ -120,6 +177,101 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         {
             ResetCharacterToTestStart();
         }
+    }
+
+    public void RunSelectedTest()
+    {
+        if (!Application.isPlaying)
+        {
+            Debug.LogWarning(
+                "BattlePresentationSandboxController：只能在Play Mode运行测试。",
+                this
+            );
+            return;
+        }
+
+        // Scenario只负责路由，所有表现仍由现有测试方法和共享Player执行。
+        switch (testScenario)
+        {
+            case BattlePresentationSandboxScenario.BasicIdle:
+                character?.SetIdle();
+                break;
+            case BattlePresentationSandboxScenario.BasicSprint:
+                character?.SetSprint();
+                break;
+            case BattlePresentationSandboxScenario.BasicSlash:
+                character?.SetSlash();
+                break;
+            case BattlePresentationSandboxScenario.SprintForward:
+                StartSprintForward();
+                break;
+            case BattlePresentationSandboxScenario.SprintSlash:
+                StartSprintSlash();
+                break;
+            case BattlePresentationSandboxScenario.HitReaction:
+                StartHitReaction();
+                break;
+            case BattlePresentationSandboxScenario.CharacterAttack:
+                StartCharacterAttackTest();
+                break;
+            case BattlePresentationSandboxScenario.AttackVsAttack:
+                StartAttackVsAttackTest(false);
+                break;
+            case BattlePresentationSandboxScenario.AttackVsAttackAlternateResult:
+                StartAttackVsAttackTest(true);
+                break;
+            case BattlePresentationSandboxScenario.AttackTieLoop:
+                StartAttackTieLoopTest();
+                break;
+            case BattlePresentationSandboxScenario.GuardPose:
+                SetGuardPoseForInspection();
+                break;
+            case BattlePresentationSandboxScenario.MeleeVsGuardFullBlock:
+                StartPerfectGuardTest(false);
+                break;
+            case BattlePresentationSandboxScenario.MeleeVsGuardReducedDamage:
+                StartPartialGuardTest(false);
+                break;
+            case BattlePresentationSandboxScenario.CloseRangeVsGuardFullBlock:
+                StartPerfectGuardTest(true);
+                break;
+            case BattlePresentationSandboxScenario.CloseRangeVsGuardReducedDamage:
+                StartPartialGuardTest(true);
+                break;
+            case BattlePresentationSandboxScenario.DodgeMotion:
+                StartDodgeMotionTest();
+                break;
+            case BattlePresentationSandboxScenario.CloseRangeVsDodgeSuccess:
+                StartCloseRangeDodgeTest(
+                    BattleDodgePresentationResult.DodgeSuccess
+                );
+                break;
+            case BattlePresentationSandboxScenario.CloseRangeVsDodgeFailed:
+                StartCloseRangeDodgeTest(
+                    BattleDodgePresentationResult.DodgeFailed
+                );
+                break;
+            case BattlePresentationSandboxScenario.LongRangeBasicShoot:
+                StartBasicShootSequenceTest();
+                break;
+            case BattlePresentationSandboxScenario.None:
+            default:
+                break;
+        }
+    }
+
+    public void ResetSelectedTest()
+    {
+        if (!Application.isPlaying)
+        {
+            Debug.LogWarning(
+                "BattlePresentationSandboxController：只能在Play Mode重置测试。",
+                this
+            );
+            return;
+        }
+
+        ResetCharacterToTestStart();
     }
 
     void OnDisable()
@@ -151,6 +303,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         // Sandbox停用时同步取消共享Player，避免留下暂停、特效或回调等待。
         attackVsAttackPresentationPlayer?.CancelAndReset();
         attackVsGuardPresentationPlayer?.CancelAndReset();
+        attackVsDodgePresentationPlayer?.CancelAndReset();
 
         waitingForManualRoll = false;
         attackImpactHandled = false;
@@ -275,6 +428,102 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         dynamicTestCoroutine = null;
     }
 
+    private void StartCloseRangeDodgeTest(
+        BattleDodgePresentationResult result
+    )
+    {
+        if (character == null || defender == null)
+        {
+            if (!hasWarnedMissingDodgePair)
+            {
+                Debug.LogWarning(
+                    "BattlePresentationSandboxController：Shift+K测试需要同时绑定Character和Defender。"
+                );
+                hasWarnedMissingDodgePair = true;
+            }
+            return;
+        }
+
+        hasWarnedMissingDodgePair = false;
+        if (attackVsDodgePresentationPlayer == null)
+        {
+            if (!hasWarnedMissingSharedDodgePlayer)
+            {
+                Debug.LogWarning(
+                    "BattlePresentationSandboxController：Shift+K测试缺少共享AttackVsDodge Player。"
+                );
+                hasWarnedMissingSharedDodgePlayer = true;
+            }
+            return;
+        }
+
+        hasWarnedMissingSharedDodgePlayer = false;
+        if (dynamicTestCoroutine != null ||
+            attackVsDodgePresentationPlayer.IsRunning)
+        {
+            return;
+        }
+
+        dynamicTestCoroutine = StartCoroutine(
+            RunCloseRangeDodgeTest(result)
+        );
+    }
+
+    private IEnumerator RunCloseRangeDodgeTest(
+        BattleDodgePresentationResult result
+    )
+    {
+        float attackDirectionSign = GetHorizontalDirectionSign(
+            defender.transform.position.x - character.transform.position.x
+        );
+        bool actionTailFinished = false;
+        bool impactStartFailed = false;
+        bool started = attackVsDodgePresentationPlayer.TryPlayDodgeRollResult(
+            character,
+            defender,
+            attackDirectionSign,
+            result,
+            true,
+            () =>
+            {
+                if (result != BattleDodgePresentationResult.DodgeFailed)
+                {
+                    return;
+                }
+
+                // 失败分支保留正式的RollResult -> Impact两阶段边界。
+                bool impactStarted = attackVsDodgePresentationPlayer
+                    .TryPlayDodgeFailedImpact(
+                        defender,
+                        defender.transform,
+                        attackDirectionSign,
+                        null
+                    );
+                if (!impactStarted)
+                {
+                    impactStartFailed = true;
+                    attackVsDodgePresentationPlayer.CancelAndReset();
+                }
+            },
+            () => actionTailFinished = true
+        );
+        if (!started || impactStartFailed)
+        {
+            dynamicTestCoroutine = null;
+            yield break;
+        }
+
+        // 共享Player拥有Flash、Dodge和Hit时序；Sandbox只等待完整尾段。
+        while (!actionTailFinished &&
+            attackVsDodgePresentationPlayer != null &&
+            attackVsDodgePresentationPlayer.IsRunning)
+        {
+            yield return null;
+        }
+
+        dynamicTestCoroutine = null;
+    }
+
     private void SetGuardPoseForInspection()
     {
         BattleCharacterPresentationController guardCharacter =
@@ -285,17 +534,26 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
         }
     }
 
-    private void StartPerfectGuardTest()
+    private void StartPerfectGuardTest(bool useCloseRangeShoot)
     {
-        StartSharedGuardTest(BattleGuardPresentationResult.FullBlock);
+        StartSharedGuardTest(
+            BattleGuardPresentationResult.FullBlock,
+            useCloseRangeShoot
+        );
     }
 
-    private void StartPartialGuardTest()
+    private void StartPartialGuardTest(bool useCloseRangeShoot)
     {
-        StartSharedGuardTest(BattleGuardPresentationResult.ReducedDamage);
+        StartSharedGuardTest(
+            BattleGuardPresentationResult.ReducedDamage,
+            useCloseRangeShoot
+        );
     }
 
-    private void StartSharedGuardTest(BattleGuardPresentationResult result)
+    private void StartSharedGuardTest(
+        BattleGuardPresentationResult result,
+        bool useCloseRangeShoot
+    )
     {
         if (character == null || defender == null)
         {
@@ -329,10 +587,15 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             return;
         }
 
-        dynamicTestCoroutine = StartCoroutine(RunSharedGuardTest(result));
+        dynamicTestCoroutine = StartCoroutine(
+            RunSharedGuardTest(result, useCloseRangeShoot)
+        );
     }
 
-    private IEnumerator RunSharedGuardTest(BattleGuardPresentationResult result)
+    private IEnumerator RunSharedGuardTest(
+        BattleGuardPresentationResult result,
+        bool useCloseRangeShoot
+    )
     {
         float attackDirectionSign = GetHorizontalDirectionSign(
             defender.transform.position.x - character.transform.position.x
@@ -343,6 +606,7 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             defender,
             attackDirectionSign,
             result,
+            useCloseRangeShoot,
             null,
             () => finished = true
         );
