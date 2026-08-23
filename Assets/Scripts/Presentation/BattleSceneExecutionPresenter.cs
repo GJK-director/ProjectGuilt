@@ -240,6 +240,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         bool unavailableLongRangeResponse =
             TryResolveUnavailableLongRangeResponse(activeContext);
         LogRequest(request, activeContext);
+        BattleActionRollPanelHost.ShowForActionBegin(request);
 
         if (unavailableLongRangeResponse)
         {

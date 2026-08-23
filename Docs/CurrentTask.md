@@ -10880,3 +10880,19 @@ Project Guilt/UI/重新生成行动槽位卡牌详情预设体
 - `ProjectGuilt.sln` 完整编译通过，0 警告、0 错误。
 - `BattleActionRollPanelPrefabGenerator.ValidatePrefab()` 会校验宿主、双方 View、正式卡牌预设体、字体和 Roll 图片引用。
 - `git diff --check` 通过。
+
+## 一百、行动 Roll 面板前移到首次位移动画
+
+行动 Roll 面板的首次显示节点已由 `RollResult` 前移到 `ActionBegin`。
+
+当前表现时序：
+
+- `ActionBegin` 开始接敌位移动画的同一帧，动态生成并淡入行动面板。
+- 位移阶段已经显示双方实际行动卡和本次有效 `x~y` 点数区间。
+- 尚未 Roll 时，实际点数位置显示 `—`，避免用默认 `0` 冒充随机结果。
+- 空格完成 Roll 后，原面板不重新淡入，只把 `—` 更新为双方真实点数。
+- 平点重投继续只刷新点数。
+- 胜负攻击、受击和全部动画收尾结束后，仍由 `ActionComplete` 路径立即关闭面板。
+- 取消表现、开始下一行动或 Presenter 停用时继续清理残留面板。
+
+本次只调整 UI 表现时序，没有修改位移动画、拼点随机数、胜负、伤害、卡牌消耗或行动计划规则。

@@ -24,13 +24,10 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
     Rect lastSafeArea;
     Vector2Int lastScreenSize;
 
-    public static void ShowForRoll(BattlePresentationRequest request)
+    public static void ShowForActionBegin(BattlePresentationRequest request)
     {
-        BattleClashSession session = request != null
-            ? request.ClashSession
-            : null;
-        if (session == null ||
-            session.ClashType != BattleClashType.AttackVsAttack)
+        BattleClashSession session = GetSupportedSession(request);
+        if (session == null)
         {
             return;
         }
@@ -38,7 +35,22 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         BattleActionRollPanelHost host = ResolveOrCreateInstance();
         if (host != null)
         {
-            host.ShowSession(session);
+            host.ShowSession(session, false);
+        }
+    }
+
+    public static void ShowForRoll(BattlePresentationRequest request)
+    {
+        BattleClashSession session = GetSupportedSession(request);
+        if (session == null)
+        {
+            return;
+        }
+
+        BattleActionRollPanelHost host = ResolveOrCreateInstance();
+        if (host != null)
+        {
+            host.ShowSession(session, true);
         }
     }
 
@@ -81,20 +93,30 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         ApplySafeArea(false);
     }
 
-    void ShowSession(BattleClashSession session)
+    void ShowSession(BattleClashSession session, bool hasRolledPoint)
     {
         ApplySafeArea(false);
 
-        bool allyShown = allySideView != null && allySideView.ShowRoll(
-            session.SideA,
-            session.SideB != null ? session.SideB.actor : null,
-            session.SideAPoint
-        );
-        bool enemyShown = enemySideView != null && enemySideView.ShowRoll(
-            session.SideB,
-            session.SideA != null ? session.SideA.actor : null,
-            session.SideBPoint
-        );
+        CharacterData allyTarget = session.SideB != null
+            ? session.SideB.actor
+            : null;
+        CharacterData enemyTarget = session.SideA != null
+            ? session.SideA.actor
+            : null;
+        bool allyShown = allySideView != null && (hasRolledPoint
+            ? allySideView.ShowRoll(
+                session.SideA,
+                allyTarget,
+                session.SideAPoint
+            )
+            : allySideView.ShowPending(session.SideA, allyTarget));
+        bool enemyShown = enemySideView != null && (hasRolledPoint
+            ? enemySideView.ShowRoll(
+                session.SideB,
+                enemyTarget,
+                session.SideBPoint
+            )
+            : enemySideView.ShowPending(session.SideB, enemyTarget));
         if (!allyShown && !enemyShown)
         {
             HideInternal();
@@ -114,6 +136,19 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
             StopCoroutine(fadeCoroutine);
         }
         fadeCoroutine = StartCoroutine(FadeIn());
+    }
+
+    static BattleClashSession GetSupportedSession(
+        BattlePresentationRequest request
+    )
+    {
+        BattleClashSession session = request != null
+            ? request.ClashSession
+            : null;
+        return session != null &&
+            session.ClashType == BattleClashType.AttackVsAttack
+                ? session
+                : null;
     }
 
     IEnumerator FadeIn()

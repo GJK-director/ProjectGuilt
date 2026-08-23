@@ -26,9 +26,27 @@ public sealed class BattleActionRollPanelSideView : MonoBehaviour
     BattleCardUIView cardPreviewView;
     RectTransform cardPreviewRect;
 
+    internal bool ShowPending(
+        BattleClashSideState side,
+        CharacterData target
+    )
+    {
+        return Show(side, target, false, 0);
+    }
+
     internal bool ShowRoll(
         BattleClashSideState side,
         CharacterData target,
+        int rolledPoint
+    )
+    {
+        return Show(side, target, true, rolledPoint);
+    }
+
+    bool Show(
+        BattleClashSideState side,
+        CharacterData target,
+        bool hasRolledPoint,
         int rolledPoint
     )
     {
@@ -63,7 +81,9 @@ public sealed class BattleActionRollPanelSideView : MonoBehaviour
         }
         if (rolledPointText != null)
         {
-            rolledPointText.text = rolledPoint.ToString();
+            rolledPointText.text = hasRolledPoint
+                ? rolledPoint.ToString()
+                : "—";
         }
 
         gameObject.SetActive(true);
