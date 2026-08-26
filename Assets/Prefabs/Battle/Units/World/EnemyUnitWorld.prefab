@@ -445,6 +445,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleCharacterPresentationController
   presentationKey: enemy_default
+  sourceFacesRight: 0
   characterSprite: {fileID: 7026447746880092567}
   bodyVisualRoot: {fileID: 3272499011285696981}
   idleSprite: {fileID: 21300000, guid: 6ac4a9e2023429f4b98af80cae346458, type: 3}

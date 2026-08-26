@@ -13,6 +13,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     }
 
     [SerializeField] private string presentationKey;
+    [SerializeField] private bool sourceFacesRight = true;
     [SerializeField] private SpriteRenderer characterSprite;
     [SerializeField] private Transform bodyVisualRoot;
     [SerializeField] private Sprite idleSprite;
@@ -83,6 +84,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         new List<ActiveAfterimage>();
 
     public string PresentationKey => presentationKey ?? string.Empty;
+    public bool SourceFacesRight => sourceFacesRight;
     public SpriteRenderer CharacterSpriteRenderer => characterSprite;
 
     void Awake()

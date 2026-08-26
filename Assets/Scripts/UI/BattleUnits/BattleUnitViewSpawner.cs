@@ -468,9 +468,14 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
             return false;
         }
 
-        // Prefab中的Sprite是当前默认外观。这里不写sprite、不改Scale，
-        // 只对敌方应用阵营朝向，因此同阵营两名单位可以安全共用模板。
-        ApplyCampVisualSettings(worldVisual.renderer, camp);
+        BattleCharacterPresentationController presentationController =
+            worldRoot.GetComponent<BattleCharacterPresentationController>();
+        // 素材原始朝向与阵营目标朝向共同决定最终镜像，不改Sprite或Scale。
+        ApplyCampVisualSettings(
+            worldVisual.renderer,
+            presentationController,
+            camp
+        );
         if (camp == BattleUnitCamp.Ally && worldName == "Ally_01")
         {
             // 临时诊断仅观察第一名友方的锚点与可见脚底投影差异。
@@ -483,9 +488,6 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
                 worldVisual.renderer
             );
         }
-        BattleCharacterPresentationController presentationController =
-            worldRoot.GetComponent<BattleCharacterPresentationController>();
-
         GameObject statusRoot = Instantiate(
             statusPrefab,
             worldFollowUIRoot,
@@ -664,13 +666,27 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
 
     private static void ApplyCampVisualSettings(
         SpriteRenderer renderer,
+        BattleCharacterPresentationController presentationController,
         BattleUnitCamp camp
     )
     {
-        if (renderer != null && camp == BattleUnitCamp.Enemy)
+        if (renderer == null)
         {
-            renderer.flipX = true;
+            return;
         }
+
+        if (presentationController == null)
+        {
+            if (camp == BattleUnitCamp.Enemy)
+            {
+                renderer.flipX = true;
+            }
+            return;
+        }
+
+        bool desiredFacesRight = camp == BattleUnitCamp.Ally;
+        renderer.flipX = presentationController.SourceFacesRight !=
+            desiredFacesRight;
     }
 
     private static bool HasRuntimeActionSlot(

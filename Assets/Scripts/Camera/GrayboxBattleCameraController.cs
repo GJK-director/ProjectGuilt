@@ -287,6 +287,8 @@ public class GrayboxBattleCameraController : MonoBehaviour
     private float idleSwayBlendVelocity;
     private bool isCameraDragBlockedForCurrentPress;
     private bool isInteractiveUiPressActive;
+    private bool ignoreCameraDragUntilPointerRelease;
+    private bool isCinematicControlActive;
     private EventSystem pointerEventSystem;
     private PointerEventData pointerEventData;
     private readonly List<RaycastResult> pointerRaycastResults =
@@ -296,6 +298,48 @@ public class GrayboxBattleCameraController : MonoBehaviour
     private const float DragFollowStopThreshold = 0.01f;
     private const float ZoomFollowStopThreshold = 0.0001f;
     private const float IdleSwayWeightStopThreshold = 0.0001f;
+
+    public bool IsCinematicControlActive => isCinematicControlActive;
+    public float DefaultOrbitRadius => defaultOrbitRadius;
+    public float CurrentOrbitRadius => currentOrbitRadius;
+
+    public void SetCinematicControl(bool active)
+    {
+        if (isCinematicControlActive == active)
+            return;
+
+        isCinematicControlActive = active;
+        if (active)
+        {
+            ClearCameraDragState();
+            ClearPointerPressOwnership();
+            ignoreCameraDragUntilPointerRelease = false;
+            targetOrbitRadius = currentOrbitRadius;
+            zoomFollowVelocity = 0f;
+            return;
+        }
+
+        // 运镜期间按住的鼠标不能在解锁后接续为一次旧 Drag。
+        Mouse mouse = Mouse.current;
+        ignoreCameraDragUntilPointerRelease =
+            mouse != null && mouse.leftButton.isPressed;
+    }
+
+    public void SetCinematicOrbitRadius(float radius)
+    {
+        if (!isCinematicControlActive)
+            return;
+
+        float clampedRadius = Mathf.Clamp(
+            radius,
+            minOrbitRadius,
+            maxOrbitRadius
+        );
+        currentOrbitRadius = clampedRadius;
+        targetOrbitRadius = clampedRadius;
+        zoomFollowVelocity = 0f;
+        ApplyCameraTransform();
+    }
 
 
     // =========================================================
@@ -322,6 +366,14 @@ public class GrayboxBattleCameraController : MonoBehaviour
 
     private void Update()
     {
+        if (isCinematicControlActive)
+        {
+            // Cinematic 期间不读取任何玩家 Camera 输入，但继续更新最终几何。
+            UpdateIdleHorizontalSway(false);
+            ApplyCameraTransform();
+            return;
+        }
+
         Mouse mouse = Mouse.current;
 
         if (mouse == null)
@@ -342,13 +394,22 @@ public class GrayboxBattleCameraController : MonoBehaviour
         // 左键统一控制水平与纵向 Camera 拖拽。
         // -----------------------------------------------------
 
-        UpdateCameraDragInput(
-            mouse,
-            delta,
-            pointerPosition,
-            isPointerOverInteractiveUi,
-            blockCameraDrag
-        );
+        if (ignoreCameraDragUntilPointerRelease &&
+            !mouse.leftButton.isPressed)
+        {
+            ignoreCameraDragUntilPointerRelease = false;
+        }
+
+        if (!ignoreCameraDragUntilPointerRelease)
+        {
+            UpdateCameraDragInput(
+                mouse,
+                delta,
+                pointerPosition,
+                isPointerOverInteractiveUi,
+                blockCameraDrag
+            );
+        }
 
         if (mouse.leftButton.wasReleasedThisFrame)
         {
@@ -1150,6 +1211,7 @@ public class GrayboxBattleCameraController : MonoBehaviour
                 isInteractiveUiPressActive);
         float targetWeight =
             enableIdleHorizontalSway &&
+            !isCinematicControlActive &&
             !hasActiveHorizontalInput &&
             !shouldPauseForInteractiveUi
                 ? 1f
