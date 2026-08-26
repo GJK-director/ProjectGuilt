@@ -23,7 +23,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
     [SerializeField, Min(0f)]
     private float initializationTimeout = 10f;
 
-    [Header("Battle Intro")]
+    [Header("Battle Startup Intro")]
+    [SerializeField, Range(0f, 1f)]
+    private float introStartOverlayAlpha = 1f;
+
     [SerializeField]
     private float introStartOrbitRadius = 8.5f;
 
@@ -39,12 +42,39 @@ public sealed class BattleCameraDirector : MonoBehaviour
     [SerializeField, Min(0.01f)]
     private float introFadeDuration = 1.50f;
 
+    [Header("Turn End Recovery")]
+    [SerializeField, Range(0f, 1f)]
+    private float recoveryStartOverlayAlpha = 0.65f;
+
+    [SerializeField]
+    private float recoveryStartOrbitRadius = 8.5f;
+
+    [SerializeField, Min(0f)]
+    private float recoveryCameraDelay = 0.10f;
+
+    [SerializeField, Min(0.01f)]
+    private float recoveryCameraDuration = 1.00f;
+
+    [SerializeField, Min(0f)]
+    private float recoveryFadeDelay = 0.05f;
+
+    [SerializeField, Min(0.01f)]
+    private float recoveryFadeDuration = 1.00f;
+
+    [SerializeField, Min(0f)]
+    private float recoveryInteractionUnlockDelay = 0.5f;
+
     private GameObject overlayRoot;
     private CanvasGroup overlayGroup;
-    private Coroutine introCoroutine;
+    private Coroutine activePresentationCoroutine;
     private bool isIntroPlaying;
+    private bool isTurnEndRecoveryPlaying;
+    private bool presentationInteractionUnlocked;
 
     public bool IsIntroPlaying => isIntroPlaying;
+
+    private bool IsPresentationPlaying =>
+        isIntroPlaying || isTurnEndRecoveryPlaying;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void RegisterDevelopmentRuntimeDirector()
@@ -97,20 +127,21 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
     private void OnDisable()
     {
-        if (introCoroutine != null)
+        if (activePresentationCoroutine != null)
         {
-            StopCoroutine(introCoroutine);
-            introCoroutine = null;
+            StopCoroutine(activePresentationCoroutine);
+            activePresentationCoroutine = null;
         }
 
         HideOverlay();
         cameraController?.SetCinematicControl(false);
         isIntroPlaying = false;
+        isTurnEndRecoveryPlaying = false;
     }
 
     public void PlayBattleIntro()
     {
-        if (isIntroPlaying)
+        if (IsPresentationPlaying)
         {
             return;
         }
@@ -128,7 +159,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
         isIntroPlaying = true;
         cameraController.SetCinematicControl(true);
-        ShowOverlay();
+        ShowOverlay(introStartOverlayAlpha);
 
         if (battleUIController == null)
         {
@@ -137,11 +168,37 @@ public sealed class BattleCameraDirector : MonoBehaviour
                 "Battle Intro已安全取消。",
                 this
             );
-            FinishIntro(false);
+            FinishPresentation(false);
             return;
         }
 
-        introCoroutine = StartCoroutine(PlayBattleIntroSequence());
+        activePresentationCoroutine =
+            StartCoroutine(PlayBattleIntroSequence());
+    }
+
+    public void PlayTurnEndRecovery()
+    {
+        if (IsPresentationPlaying)
+        {
+            return;
+        }
+
+        ResolveReferences();
+        if (cameraController == null)
+        {
+            Debug.LogError(
+                "BattleCameraDirector找不到GrayboxBattleCameraController，" +
+                "Turn End Recovery已取消。",
+                this
+            );
+            return;
+        }
+
+        isTurnEndRecoveryPlaying = true;
+        cameraController.SetCinematicControl(true);
+        ShowOverlay(recoveryStartOverlayAlpha);
+        activePresentationCoroutine =
+            StartCoroutine(PlayTurnEndRecoverySequence());
     }
 
     private IEnumerator PlayBattleIntroSequence()
@@ -156,7 +213,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
                     "Battle Intro等待BattleScene初始化超时，已解除黑幕与输入锁。",
                     this
                 );
-                FinishIntro(false);
+                FinishPresentation(false);
                 yield break;
             }
 
@@ -207,7 +264,11 @@ public sealed class BattleCameraDirector : MonoBehaviour
             cameraController.SetCinematicOrbitRadius(
                 Mathf.Lerp(startRadius, defaultRadius, easedCameraProgress)
             );
-            SetOverlayAlpha(1f - easedFadeProgress);
+            SetOverlayAlpha(Mathf.Lerp(
+                introStartOverlayAlpha,
+                0f,
+                easedFadeProgress
+            ));
 
             elapsed += Time.unscaledDeltaTime;
             yield return null;
@@ -215,7 +276,67 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
         cameraController.SetCinematicOrbitRadius(defaultRadius);
         SetOverlayAlpha(0f);
-        FinishIntro(true);
+        FinishPresentation(true);
+    }
+
+    private IEnumerator PlayTurnEndRecoverySequence()
+    {
+        cameraController.ResetToDefault();
+        cameraController.SetCinematicControl(true);
+
+        float defaultRadius = cameraController.DefaultOrbitRadius;
+        cameraController.SetCinematicOrbitRadius(
+            recoveryStartOrbitRadius
+        );
+        float startRadius = cameraController.CurrentOrbitRadius;
+
+        float cameraDelay = Mathf.Max(0f, recoveryCameraDelay);
+        float cameraDuration = Mathf.Max(0f, recoveryCameraDuration);
+        float fadeDelay = Mathf.Max(0f, recoveryFadeDelay);
+        float fadeDuration = Mathf.Max(0f, recoveryFadeDuration);
+        float totalDuration = Mathf.Max(
+            cameraDelay + cameraDuration,
+            fadeDelay + fadeDuration
+        );
+        float elapsed = 0f;
+
+        while (elapsed < totalDuration)
+        {
+            float cameraProgress = GetTimelineProgress(
+                elapsed,
+                cameraDelay,
+                cameraDuration
+            );
+            float fadeProgress = GetTimelineProgress(
+                elapsed,
+                fadeDelay,
+                fadeDuration
+            );
+            float easedCameraProgress =
+                1f - Mathf.Pow(1f - cameraProgress, 3f);
+            float easedFadeProgress =
+                1f - Mathf.Pow(1f - fadeProgress, 3f);
+
+            cameraController.SetCinematicOrbitRadius(
+                Mathf.Lerp(startRadius, defaultRadius, easedCameraProgress)
+            );
+            SetOverlayAlpha(Mathf.Lerp(
+                recoveryStartOverlayAlpha,
+                0f,
+                easedFadeProgress
+            ));
+            if (elapsed >= recoveryInteractionUnlockDelay)
+            {
+                UnlockPresentationPointerInteraction();
+            }
+
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        cameraController.SetCinematicOrbitRadius(defaultRadius);
+        SetOverlayAlpha(0f);
+        FinishPresentation(true);
     }
 
     private void ResolveReferences()
@@ -232,11 +353,12 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
     }
 
-    private void ShowOverlay()
+    private void ShowOverlay(float startAlpha)
     {
         EnsureOverlay();
+        presentationInteractionUnlocked = false;
         overlayRoot.SetActive(true);
-        overlayGroup.alpha = 1f;
+        overlayGroup.alpha = Mathf.Clamp01(startAlpha);
         overlayGroup.interactable = true;
         overlayGroup.blocksRaycasts = true;
     }
@@ -253,6 +375,21 @@ public sealed class BattleCameraDirector : MonoBehaviour
         if (overlayRoot != null)
         {
             overlayRoot.SetActive(false);
+        }
+    }
+
+    private void UnlockPresentationPointerInteraction()
+    {
+        if (presentationInteractionUnlocked)
+        {
+            return;
+        }
+
+        presentationInteractionUnlocked = true;
+        if (overlayGroup != null)
+        {
+            overlayGroup.interactable = false;
+            overlayGroup.blocksRaycasts = false;
         }
     }
 
@@ -310,7 +447,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         shieldImage.raycastTarget = true;
     }
 
-    private void FinishIntro(bool completedNormally)
+    private void FinishPresentation(bool completedNormally)
     {
         if (completedNormally && cameraController != null)
         {
@@ -321,8 +458,9 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
         HideOverlay();
         cameraController?.SetCinematicControl(false);
-        introCoroutine = null;
+        activePresentationCoroutine = null;
         isIntroPlaying = false;
+        isTurnEndRecoveryPlaying = false;
     }
 
     private static float GetTimelineProgress(

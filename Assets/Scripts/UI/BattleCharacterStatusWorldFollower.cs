@@ -36,6 +36,9 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
     private bool warnedMissingFootGroup;
     private bool warnedMissingSelfGroup;
     private Camera lastCanvasEventCamera;
+    private GrayboxBattleCameraController cameraController;
+    private Vector3 headBaseScale = Vector3.one;
+    private Vector3 footBaseScale = Vector3.one;
 
     public bool IsBound =>
         worldCamera != null &&
@@ -49,6 +52,7 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
 
     private void Awake()
     {
+        CacheUIBaseScales();
         ResolveInitialReferencesOnce();
     }
 
@@ -92,9 +96,22 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
         Vector3 headScreenPoint = default;
         Vector3 footScreenPoint = default;
         Vector3 centerScreenPoint = default;
-        bool hasHead = TryProjectHead(out headScreenPoint);
-        bool hasFoot = TryProjectFoot(out footScreenPoint);
+        bool hasHead = TryProjectHead(
+            out headScreenPoint,
+            out Vector3 headWorldPoint
+        );
+        bool hasFoot = TryProjectFoot(
+            out footScreenPoint,
+            out Vector3 footWorldPoint
+        );
         bool hasCenter = TryProjectAnchor(centerWorldAnchor, out centerScreenPoint);
+        float perspectiveScale = GetPerspectiveScale(
+            hasHead,
+            headWorldPoint,
+            hasFoot,
+            footWorldPoint
+        );
+        ApplyPerspectiveScale(perspectiveScale);
         bool anyAnchorBehind =
             (hasHead && headScreenPoint.z <= 0f) ||
             (hasFoot && footScreenPoint.z <= 0f) ||
@@ -125,7 +142,7 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
             hasHead,
             headScreenPoint,
             headSlotGroup,
-            headOffset,
+            headOffset * perspectiveScale,
             ref warnedMissingHeadGroup,
             "HeadSlotGroup"
         );
@@ -133,7 +150,7 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
             hasFoot,
             footScreenPoint,
             footStatusGroup,
-            footOffset,
+            footOffset * perspectiveScale,
             ref warnedMissingFootGroup,
             "FootStatusGroup"
         );
@@ -156,10 +173,12 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
     )
     {
         worldCamera = camera;
+        cameraController = null;
         targetCanvas = canvas;
         headWorldAnchor = headAnchor;
         footWorldAnchor = footAnchor;
         centerWorldAnchor = centerAnchor;
+        ResolveCameraController();
         ResetMissingReferenceWarnings();
         RefreshNow();
     }
@@ -199,6 +218,7 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
         headSlotGroup = headGroup;
         footStatusGroup = footGroup;
         selfActionDropZone = selfGroup;
+        CacheUIBaseScales();
     }
 
     internal void ConfigureOffsetsForTesting(
@@ -224,6 +244,8 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
     internal void SetWorldCameraForTesting(Camera camera)
     {
         worldCamera = camera;
+        cameraController = null;
+        ResolveCameraController();
     }
 
     internal bool TryGetAnchorLocalPosition(
@@ -270,8 +292,16 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
 
     private bool TryProjectFoot(out Vector3 screenPoint)
     {
+        return TryProjectFoot(out screenPoint, out _);
+    }
+
+    private bool TryProjectFoot(
+        out Vector3 screenPoint,
+        out Vector3 worldPoint
+    )
+    {
         screenPoint = default;
-        if (!TryGetFootProjectionWorldPoint(out Vector3 worldPoint))
+        if (!TryGetFootProjectionWorldPoint(out worldPoint))
         {
             return false;
         }
@@ -282,14 +312,84 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
 
     private bool TryProjectHead(out Vector3 screenPoint)
     {
+        return TryProjectHead(out screenPoint, out _);
+    }
+
+    private bool TryProjectHead(
+        out Vector3 screenPoint,
+        out Vector3 worldPoint
+    )
+    {
         screenPoint = default;
-        if (!TryGetHeadProjectionWorldPoint(out Vector3 worldPoint))
+        if (!TryGetHeadProjectionWorldPoint(out worldPoint))
         {
             return false;
         }
 
         screenPoint = worldCamera.WorldToScreenPoint(worldPoint);
         return true;
+    }
+
+    private float GetPerspectiveScale(
+        bool hasHead,
+        Vector3 headWorldPoint,
+        bool hasFoot,
+        Vector3 footWorldPoint
+    )
+    {
+        if (cameraController == null)
+        {
+            return 1f;
+        }
+
+        Vector3 referencePoint;
+        if (hasHead && hasFoot)
+        {
+            referencePoint = (headWorldPoint + footWorldPoint) * 0.5f;
+        }
+        else if (hasHead)
+        {
+            referencePoint = headWorldPoint;
+        }
+        else if (hasFoot)
+        {
+            referencePoint = footWorldPoint;
+        }
+        else if (centerWorldAnchor != null)
+        {
+            referencePoint = centerWorldAnchor.position;
+        }
+        else
+        {
+            return 1f;
+        }
+
+        return cameraController.GetPerspectiveScaleRelativeToDefault(
+            referencePoint
+        );
+    }
+
+    private void ApplyPerspectiveScale(float perspectiveScale)
+    {
+        if (headSlotGroup != null)
+        {
+            headSlotGroup.localScale = headBaseScale * perspectiveScale;
+        }
+
+        if (footStatusGroup != null)
+        {
+            footStatusGroup.localScale = footBaseScale * perspectiveScale;
+        }
+    }
+
+    private void CacheUIBaseScales()
+    {
+        headBaseScale = headSlotGroup != null
+            ? headSlotGroup.localScale
+            : Vector3.one;
+        footBaseScale = footStatusGroup != null
+            ? footStatusGroup.localScale
+            : Vector3.one;
     }
 
     private bool TryGetHeadProjectionWorldPoint(out Vector3 worldPoint)
@@ -433,6 +533,27 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
         if (worldCamera == null)
         {
             worldCamera = Camera.main;
+        }
+        ResolveCameraController();
+    }
+
+    private void ResolveCameraController()
+    {
+        if (cameraController != null)
+        {
+            return;
+        }
+
+        if (worldCamera != null)
+        {
+            cameraController =
+                worldCamera.GetComponent<GrayboxBattleCameraController>();
+        }
+
+        if (cameraController == null)
+        {
+            cameraController =
+                FindFirstObjectByType<GrayboxBattleCameraController>();
         }
     }
 
