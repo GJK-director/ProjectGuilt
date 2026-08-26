@@ -6,6 +6,12 @@ using UnityEngine.UI;
 // 战斗镜头的上层演出入口；底层位置与旋转仍由Camera Controller统一计算。
 public sealed class BattleCameraDirector : MonoBehaviour
 {
+    private enum TwoUnitFocusEasingMode
+    {
+        CubicEaseOut,
+        SmoothStep
+    }
+
     [SerializeField]
     private GrayboxBattleCameraController cameraController;
 
@@ -65,6 +71,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
     private float recoveryInteractionUnlockDelay = 0.5f;
 
     [Header("Generic Battle Focus")]
+    [SerializeField]
+    private TwoUnitFocusEasingMode twoUnitFocusEasingMode =
+        TwoUnitFocusEasingMode.CubicEaseOut;
+
     [SerializeField, Min(0.01f)]
     private float twoUnitFocusDuration = 0.35f;
 
@@ -218,7 +228,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
     public bool TryPlayTwoUnitFocus(
         BattleUnitViewHandle first,
         BattleUnitViewHandle second,
-        bool releaseCinematicControlOnComplete
+        bool releaseCinematicControlOnComplete,
+        System.Action completion = null
     )
     {
         if (IsPresentationPlaying)
@@ -266,10 +277,46 @@ public sealed class BattleCameraDirector : MonoBehaviour
                 twoUnitFocusOrbitRadius,
                 startVerticalProgress,
                 twoUnitFocusVerticalViewProgress,
-                releaseCinematicControlOnComplete
+                releaseCinematicControlOnComplete,
+                completion
             )
         );
         return true;
+    }
+
+    public bool CancelTwoUnitFocus(
+        bool releaseCinematicControl = true
+    )
+    {
+        if (!isTwoUnitFocusPlaying)
+        {
+            return false;
+        }
+
+        if (activePresentationCoroutine != null)
+        {
+            StopCoroutine(activePresentationCoroutine);
+        }
+
+        activePresentationCoroutine = null;
+        isTwoUnitFocusPlaying = false;
+        if (releaseCinematicControl)
+        {
+            cameraController?.SetCinematicControl(false);
+        }
+
+        return true;
+    }
+
+    public void ReleaseBattleActionCinematicControl()
+    {
+        if (IsPresentationPlaying)
+        {
+            return;
+        }
+
+        ResolveReferences();
+        cameraController?.SetCinematicControl(false);
     }
 
     private IEnumerator PlayBattleIntroSequence()
@@ -417,7 +464,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
         float targetRadius,
         float startVerticalProgress,
         float targetVerticalProgress,
-        bool releaseCinematicControlOnComplete
+        bool releaseCinematicControlOnComplete,
+        System.Action completion
     )
     {
         float duration = Mathf.Max(0f, twoUnitFocusDuration);
@@ -428,8 +476,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
             float progress = duration > Mathf.Epsilon
                 ? Mathf.Clamp01(elapsed / duration)
                 : 1f;
-            float easedProgress =
-                1f - Mathf.Pow(1f - progress, 3f);
+            float easedProgress = twoUnitFocusEasingMode ==
+                TwoUnitFocusEasingMode.SmoothStep
+                    ? Mathf.SmoothStep(0f, 1f, progress)
+                    : 1f - Mathf.Pow(1f - progress, 3f);
 
             cameraController.SetCinematicHorizontalWorldX(
                 Mathf.Lerp(startWorldX, targetWorldX, easedProgress)
@@ -454,7 +504,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
         cameraController.SetCinematicVerticalViewProgress(
             targetVerticalProgress
         );
-        FinishTwoUnitFocus(releaseCinematicControlOnComplete);
+        FinishTwoUnitFocus(
+            releaseCinematicControlOnComplete,
+            completion
+        );
     }
 
     private void ResolveReferences()
@@ -583,16 +636,19 @@ public sealed class BattleCameraDirector : MonoBehaviour
     }
 
     private void FinishTwoUnitFocus(
-        bool releaseCinematicControlOnComplete
+        bool releaseCinematicControlOnComplete,
+        System.Action completion
     )
     {
+        activePresentationCoroutine = null;
+        isTwoUnitFocusPlaying = false;
+
         if (releaseCinematicControlOnComplete)
         {
             cameraController?.SetCinematicControl(false);
         }
 
-        activePresentationCoroutine = null;
-        isTwoUnitFocusPlaying = false;
+        completion?.Invoke();
     }
 
     private static float GetTimelineProgress(

@@ -60,6 +60,10 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public bool DefaultAttackImpactReached;
         public bool DefaultAttackFinished;
         public long DefaultAttackImpactRequestId;
+        public bool CameraCinematicOwned;
+        public bool AttackVsAttackParallelBeginActive;
+        public bool AttackVsAttackFocusFinished;
+        public bool AttackVsAttackApproachFinished;
 
         public BattleClashSideState LongRangeShooterSide;
         public BattleClashSideState LongRangeMeleeSide;
@@ -98,6 +102,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         longRangeShootVsAttackPresentationPlayer;
     [SerializeField]
     private BattleClashEngagementProfile clashEngagementProfile;
+    [SerializeField]
+    private BattleCameraDirector battleCameraDirector;
     [SerializeField] private bool verboseLogging = false;
 
     private ActionPresentationContext activeContext;
@@ -135,6 +141,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (activeContext != null)
         {
             activeContext.Cancelled = true;
+            ClearAttackVsAttackParallelBeginState(activeContext);
+            CancelOrReleaseCameraForContext(activeContext);
         }
 
         attackVsAttackPresentationPlayer?.CancelAndReset();
@@ -184,6 +192,20 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (request == null || completion == null)
         {
             return;
+        }
+
+        ActionPresentationContext cancellingContext =
+            activeContext != null &&
+            object.ReferenceEquals(
+                activeContext.ExecutionItem,
+                request.ExecutionItem)
+                ? activeContext
+                : null;
+        if (cancellingContext != null)
+        {
+            cancellingContext.Cancelled = true;
+            ClearAttackVsAttackParallelBeginState(cancellingContext);
+            CancelOrReleaseCameraForContext(cancellingContext);
         }
 
         if (activePresentationRequestId == request.RequestId)
@@ -289,6 +311,16 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         if (ShouldPlayAttackVsAttackApproach(request))
         {
+            if (ShouldPlayGenericMeleeAttackVsAttackFocus(request) &&
+                TryStartAttackVsAttackFocusAndApproach(
+                    request,
+                    completion,
+                    activeContext
+                ))
+            {
+                return;
+            }
+
             if (!TryStartAttackVsAttackApproach(
                     request,
                     completion,
@@ -380,6 +412,24 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 session.SideB.cardState.IsMeleeAttack() ||
             session.SideB.cardState.IsCloseRangeShoot() &&
                 session.SideA.cardState.IsMeleeAttack();
+    }
+
+    private bool ShouldPlayGenericMeleeAttackVsAttackFocus(
+        BattlePresentationRequest request
+    )
+    {
+        BattleClashSession session = request != null
+            ? request.ClashSession
+            : null;
+        return ShouldPlayAttackVsAttackApproach(request) &&
+            !IsAnyLongRangeAttackVsAttack(request) &&
+            !IsCloseRangeShootVsMelee(request) &&
+            session != null &&
+            session.SideA != null && session.SideB != null &&
+            session.SideA.cardState != null &&
+            session.SideB.cardState != null &&
+            session.SideA.cardState.IsMeleeAttack() &&
+            session.SideB.cardState.IsMeleeAttack();
     }
 
     private bool TryResolveLongRangeShootVsMelee(
@@ -635,13 +685,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         long requestId = request.RequestId;
         BattleExecutionItem executionItem = request.ExecutionItem;
-        context.ClashEngagement = BattleClashEngagementResolver.Resolve(
-            clashEngagementProfile,
-            context.SideAPresentation.PresentationKey,
-            context.SideBPresentation.PresentationKey,
-            GetPresentationSpeed(context.SideAActor),
-            GetPresentationSpeed(context.SideBActor)
-        );
+        if (context.ClashEngagement == null)
+        {
+            context.ClashEngagement =
+                ResolveAttackVsAttackClashEngagement(context);
+        }
         activePresentationRequestId = requestId;
         LogApproachStarted(requestId, context);
         bool started = attackVsAttackPresentationPlayer
@@ -670,6 +718,198 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
         LogApproachFallback(requestId, "共享AttackVsAttack Player启动失败");
         return false;
+    }
+
+    private bool TryStartAttackVsAttackFocusAndApproach(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (clashEngagementProfile == null)
+        {
+            LogApproachFallback(request, "接敌Profile未配置");
+            return false;
+        }
+
+        if (!HasCompleteClashPresentationMapping(context) ||
+            attackVsAttackPresentationPlayer == null ||
+            !attackVsAttackPresentationPlayer.isActiveAndEnabled)
+        {
+            LogApproachFallback(request, "角色表现映射不完整");
+            return false;
+        }
+
+        BattleCameraDirector director = ResolveBattleCameraDirector();
+        if (director == null)
+        {
+            return false;
+        }
+
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        context.ClashEngagement =
+            ResolveAttackVsAttackClashEngagement(context);
+        context.AttackVsAttackParallelBeginActive = true;
+        context.AttackVsAttackFocusFinished = false;
+        context.AttackVsAttackApproachFinished = false;
+        activePresentationRequestId = requestId;
+
+        bool focusStarted = director.TryPlayTwoUnitFocus(
+            context.SideAHandle,
+            context.SideBHandle,
+            false,
+            () => MarkAttackVsAttackFocusFinished(
+                completion,
+                context,
+                executionItem,
+                requestId
+            )
+        );
+        if (!focusStarted)
+        {
+            ClearAttackVsAttackParallelBeginState(context);
+            if (activePresentationRequestId == requestId)
+            {
+                activePresentationRequestId = 0L;
+            }
+            return false;
+        }
+
+        context.CameraCinematicOwned = true;
+        LogApproachStarted(requestId, context);
+        bool approachStarted = attackVsAttackPresentationPlayer
+            .TryPlayClashReadyApproach(
+                context.SideAPresentation,
+                context.SideAHandle.WorldRoot.transform,
+                context.SideBPresentation,
+                context.SideBHandle.WorldRoot.transform,
+                context.ClashEngagement,
+                () => MarkAttackVsAttackApproachFinished(
+                    completion,
+                    context,
+                    executionItem,
+                    requestId
+                )
+            );
+        if (approachStarted)
+        {
+            return true;
+        }
+
+        if (!director.CancelTwoUnitFocus(true))
+        {
+            director.ReleaseBattleActionCinematicControl();
+        }
+        context.CameraCinematicOwned = false;
+        ClearAttackVsAttackParallelBeginState(context);
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        LogApproachFallback(requestId, "共享AttackVsAttack Player启动失败");
+        return false;
+    }
+
+    private void MarkAttackVsAttackFocusFinished(
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId
+    )
+    {
+        if (!IsOwnedAttackVsAttackParallelBegin(
+                context,
+                executionItem,
+                requestId
+            ))
+        {
+            return;
+        }
+
+        context.AttackVsAttackFocusFinished = true;
+        TryCompleteAttackVsAttackParallelBegin(
+            completion,
+            context,
+            executionItem,
+            requestId
+        );
+    }
+
+    private void MarkAttackVsAttackApproachFinished(
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId
+    )
+    {
+        if (!IsOwnedAttackVsAttackParallelBegin(
+                context,
+                executionItem,
+                requestId
+            ))
+        {
+            return;
+        }
+
+        context.AttackVsAttackApproachFinished = true;
+        LogApproachCompleted(requestId);
+        TryCompleteAttackVsAttackParallelBegin(
+            completion,
+            context,
+            executionItem,
+            requestId
+        );
+    }
+
+    private void TryCompleteAttackVsAttackParallelBegin(
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId
+    )
+    {
+        if (!context.AttackVsAttackFocusFinished ||
+            !context.AttackVsAttackApproachFinished ||
+            !IsOwnedAttackVsAttackParallelBegin(
+                context,
+                executionItem,
+                requestId
+            ))
+        {
+            return;
+        }
+
+        context.AttackVsAttackParallelBeginActive = false;
+        activePresentationRequestId = 0L;
+        completion.TryComplete(requestId);
+    }
+
+    private bool IsOwnedAttackVsAttackParallelBegin(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId
+    )
+    {
+        return context != null &&
+            context.AttackVsAttackParallelBeginActive &&
+            IsCurrentPresentationRequest(requestId) &&
+            object.ReferenceEquals(activeContext, context) &&
+            object.ReferenceEquals(context.ExecutionItem, executionItem);
+    }
+
+    private BattleClashEngagementResult
+        ResolveAttackVsAttackClashEngagement(
+            ActionPresentationContext context
+        )
+    {
+        return BattleClashEngagementResolver.Resolve(
+            clashEngagementProfile,
+            context.SideAPresentation.PresentationKey,
+            context.SideBPresentation.PresentationKey,
+            GetPresentationSpeed(context.SideAActor),
+            GetPresentationSpeed(context.SideBActor)
+        );
     }
 
     private void CompleteAttackVsAttackApproach(
@@ -1639,6 +1879,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (!context.DefaultAttackStarted)
         {
             BattleActionRollPanelHost.HideImmediate();
+            ReleaseCameraForContext(context);
             CompleteRequest(request, completion);
             activeContext = null;
             return;
@@ -1726,6 +1967,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         activePresentationCoroutine = null;
         activePresentationRequestId = 0L;
         BattleActionRollPanelHost.HideImmediate();
+        ReleaseCameraForContext(context);
         completion.TryComplete(requestId);
         activeContext = null;
     }
@@ -2522,6 +2764,67 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         presentation = handle != null
             ? handle.PresentationController
             : null;
+    }
+
+    private BattleCameraDirector ResolveBattleCameraDirector()
+    {
+        if (battleCameraDirector == null)
+        {
+            battleCameraDirector =
+                FindFirstObjectByType<BattleCameraDirector>();
+        }
+
+        return battleCameraDirector;
+    }
+
+    private void ReleaseCameraForContext(
+        ActionPresentationContext context
+    )
+    {
+        if (context == null || !context.CameraCinematicOwned)
+        {
+            return;
+        }
+
+        context.CameraCinematicOwned = false;
+        ResolveBattleCameraDirector()?
+            .ReleaseBattleActionCinematicControl();
+    }
+
+    private void CancelOrReleaseCameraForContext(
+        ActionPresentationContext context
+    )
+    {
+        if (context == null || !context.CameraCinematicOwned)
+        {
+            return;
+        }
+
+        context.CameraCinematicOwned = false;
+        BattleCameraDirector director = ResolveBattleCameraDirector();
+        if (director == null)
+        {
+            return;
+        }
+
+        if (!director.CancelTwoUnitFocus(true))
+        {
+            director.ReleaseBattleActionCinematicControl();
+        }
+    }
+
+    private static void ClearAttackVsAttackParallelBeginState(
+        ActionPresentationContext context
+    )
+    {
+        if (context == null)
+        {
+            return;
+        }
+
+        context.AttackVsAttackParallelBeginActive = false;
+        context.AttackVsAttackFocusFinished = false;
+        context.AttackVsAttackApproachFinished = false;
     }
 
     private void CompleteRequest(
