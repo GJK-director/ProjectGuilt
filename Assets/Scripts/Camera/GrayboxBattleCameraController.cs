@@ -303,6 +303,55 @@ public class GrayboxBattleCameraController : MonoBehaviour
     public float DefaultOrbitRadius => defaultOrbitRadius;
     public float CurrentOrbitRadius => currentOrbitRadius;
 
+    public float GetPerspectiveScaleRelativeToDefault(Vector3 worldPoint)
+    {
+        if (orbitPivot == null)
+            return 1f;
+
+        float defaultAngleRad = defaultOrbitAngle * Mathf.Deg2Rad;
+        Vector3 defaultCameraPosition =
+            basePivotPosition
+            + new Vector3(
+                0f,
+                Mathf.Sin(defaultAngleRad) * defaultOrbitRadius,
+                -Mathf.Cos(defaultAngleRad) * defaultOrbitRadius
+            );
+        Quaternion defaultCameraRotation = Quaternion.Euler(
+            GetDefaultCameraPitch(),
+            0f,
+            0f
+        );
+
+        float currentDepth = Vector3.Dot(
+            worldPoint - transform.position,
+            transform.forward
+        );
+        float defaultDepth = Vector3.Dot(
+            worldPoint - defaultCameraPosition,
+            defaultCameraRotation * Vector3.forward
+        );
+
+        if (!IsValidPositiveDepth(currentDepth) ||
+            !IsValidPositiveDepth(defaultDepth))
+        {
+            return 1f;
+        }
+
+        float perspectiveScale = defaultDepth / currentDepth;
+        return float.IsNaN(perspectiveScale) ||
+            float.IsInfinity(perspectiveScale) ||
+            perspectiveScale <= 0f
+            ? 1f
+            : perspectiveScale;
+    }
+
+    private static bool IsValidPositiveDepth(float depth)
+    {
+        return !float.IsNaN(depth) &&
+            !float.IsInfinity(depth) &&
+            depth > Mathf.Epsilon;
+    }
+
     public void SetCinematicControl(bool active)
     {
         if (isCinematicControlActive == active)

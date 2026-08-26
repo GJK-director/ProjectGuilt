@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 // 战斗镜头的上层演出入口；底层位置与旋转仍由Camera Controller统一计算。
@@ -45,17 +46,44 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
     public bool IsIntroPlaying => isIntroPlaying;
 
-    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-    private static void EnsureDevelopmentRuntimeDirector()
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void RegisterDevelopmentRuntimeDirector()
     {
-        if (FindFirstObjectByType<BattleCameraDirector>() != null ||
-            FindFirstObjectByType<BattleSimpleUIController>() == null)
+        SceneManager.sceneLoaded -= HandleSceneLoaded;
+        SceneManager.sceneLoaded += HandleSceneLoaded;
+    }
+
+    private static void HandleSceneLoaded(Scene scene, LoadSceneMode loadSceneMode)
+    {
+        EnsureDevelopmentRuntimeDirector(scene);
+    }
+
+    private static void EnsureDevelopmentRuntimeDirector(Scene scene)
+    {
+        if (!scene.IsValid() || !scene.isLoaded ||
+            FindComponentInScene<BattleCameraDirector>(scene) != null ||
+            FindComponentInScene<BattleSimpleUIController>(scene) == null)
         {
             return;
         }
 
-        new GameObject(nameof(BattleCameraDirector))
-            .AddComponent<BattleCameraDirector>();
+        GameObject directorObject = new GameObject(nameof(BattleCameraDirector));
+        SceneManager.MoveGameObjectToScene(directorObject, scene);
+        directorObject.AddComponent<BattleCameraDirector>();
+    }
+
+    private static T FindComponentInScene<T>(Scene scene) where T : Component
+    {
+        T[] components = FindObjectsByType<T>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        for (int i = 0; i < components.Length; i++)
+        {
+            if (components[i].gameObject.scene == scene)
+            {
+                return components[i];
+            }
+        }
+
+        return null;
     }
 
     private void Start()

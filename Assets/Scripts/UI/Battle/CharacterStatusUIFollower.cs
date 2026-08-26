@@ -3,6 +3,7 @@ using UnityEngine;
 public class CharacterStatusUIFollower : MonoBehaviour
 {
     [SerializeField] private Camera worldCamera;
+    [SerializeField] private GrayboxBattleCameraController cameraController;
     [SerializeField] private RectTransform canvasRect;
     [SerializeField] private Transform headAnchor;
     [SerializeField] private Transform footAnchor;
@@ -11,6 +12,29 @@ public class CharacterStatusUIFollower : MonoBehaviour
     [SerializeField] private Vector2 headOffset;
     [SerializeField] private Vector2 footOffset;
 
+    private Vector3 headBaseScale = Vector3.one;
+    private Vector3 footBaseScale = Vector3.one;
+
+    void Awake()
+    {
+        if (headSlotGroup != null)
+        {
+            headBaseScale = headSlotGroup.localScale;
+        }
+
+        if (footStatusGroup != null)
+        {
+            footBaseScale = footStatusGroup.localScale;
+        }
+
+        ResolveCameraController();
+    }
+
+    void Start()
+    {
+        ResolveCameraController();
+    }
+
     void LateUpdate()
     {
         if (worldCamera == null || canvasRect == null)
@@ -18,8 +42,82 @@ public class CharacterStatusUIFollower : MonoBehaviour
             return;
         }
 
-        UpdateFollowGroup(headAnchor, headSlotGroup, headOffset);
-        UpdateFollowGroup(footAnchor, footStatusGroup, footOffset);
+        float perspectiveScale = GetPerspectiveScale();
+        ApplyPerspectiveScale(perspectiveScale);
+        UpdateFollowGroup(
+            headAnchor,
+            headSlotGroup,
+            headOffset * perspectiveScale
+        );
+        UpdateFollowGroup(
+            footAnchor,
+            footStatusGroup,
+            footOffset * perspectiveScale
+        );
+    }
+
+    private void ResolveCameraController()
+    {
+        if (cameraController != null)
+        {
+            return;
+        }
+
+        if (worldCamera != null)
+        {
+            cameraController =
+                worldCamera.GetComponent<GrayboxBattleCameraController>();
+        }
+
+        if (cameraController == null)
+        {
+            cameraController =
+                FindFirstObjectByType<GrayboxBattleCameraController>();
+        }
+    }
+
+    private float GetPerspectiveScale()
+    {
+        if (cameraController == null)
+        {
+            return 1f;
+        }
+
+        Vector3 referencePoint;
+        if (headAnchor != null && footAnchor != null)
+        {
+            referencePoint =
+                (headAnchor.position + footAnchor.position) * 0.5f;
+        }
+        else if (headAnchor != null)
+        {
+            referencePoint = headAnchor.position;
+        }
+        else if (footAnchor != null)
+        {
+            referencePoint = footAnchor.position;
+        }
+        else
+        {
+            return 1f;
+        }
+
+        return cameraController.GetPerspectiveScaleRelativeToDefault(
+            referencePoint
+        );
+    }
+
+    private void ApplyPerspectiveScale(float perspectiveScale)
+    {
+        if (headSlotGroup != null)
+        {
+            headSlotGroup.localScale = headBaseScale * perspectiveScale;
+        }
+
+        if (footStatusGroup != null)
+        {
+            footStatusGroup.localScale = footBaseScale * perspectiveScale;
+        }
     }
 
     void UpdateFollowGroup(Transform anchor, RectTransform uiGroup, Vector2 screenOffset)
