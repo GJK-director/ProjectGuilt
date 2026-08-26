@@ -31,16 +31,16 @@ public sealed class BattleCameraDirector : MonoBehaviour
     private float introStartOrbitRadius = 8.5f;
 
     [SerializeField, Min(0f)]
-    private float introCameraDelay = 0.20f;
+    private float introCameraDelay = 0.10f;
 
     [SerializeField, Min(0.01f)]
-    private float introCameraDuration = 1.25f;
+    private float introCameraDuration = 0.85f;
 
     [SerializeField, Min(0f)]
-    private float introFadeDelay = 0.10f;
+    private float introFadeDelay = 0.05f;
 
     [SerializeField, Min(0.01f)]
-    private float introFadeDuration = 1.50f;
+    private float introFadeDuration = 0.95f;
 
     [Header("Turn End Recovery")]
     [SerializeField, Range(0f, 1f)]
@@ -64,17 +64,30 @@ public sealed class BattleCameraDirector : MonoBehaviour
     [SerializeField, Min(0f)]
     private float recoveryInteractionUnlockDelay = 0.5f;
 
+    [Header("Generic Battle Focus")]
+    [SerializeField, Min(0.01f)]
+    private float twoUnitFocusDuration = 0.35f;
+
+    [SerializeField]
+    private float twoUnitFocusOrbitRadius = 9.5f;
+
+    [SerializeField, Range(-1f, 1f)]
+    private float twoUnitFocusVerticalViewProgress = 0.35f;
+
     private GameObject overlayRoot;
     private CanvasGroup overlayGroup;
     private Coroutine activePresentationCoroutine;
     private bool isIntroPlaying;
     private bool isTurnEndRecoveryPlaying;
+    private bool isTwoUnitFocusPlaying;
     private bool presentationInteractionUnlocked;
 
     public bool IsIntroPlaying => isIntroPlaying;
 
     private bool IsPresentationPlaying =>
-        isIntroPlaying || isTurnEndRecoveryPlaying;
+        isIntroPlaying ||
+        isTurnEndRecoveryPlaying ||
+        isTwoUnitFocusPlaying;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void RegisterDevelopmentRuntimeDirector()
@@ -137,6 +150,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         cameraController?.SetCinematicControl(false);
         isIntroPlaying = false;
         isTurnEndRecoveryPlaying = false;
+        isTwoUnitFocusPlaying = false;
     }
 
     public void PlayBattleIntro()
@@ -199,6 +213,63 @@ public sealed class BattleCameraDirector : MonoBehaviour
         ShowOverlay(recoveryStartOverlayAlpha);
         activePresentationCoroutine =
             StartCoroutine(PlayTurnEndRecoverySequence());
+    }
+
+    public bool TryPlayTwoUnitFocus(
+        BattleUnitViewHandle first,
+        BattleUnitViewHandle second,
+        bool releaseCinematicControlOnComplete
+    )
+    {
+        if (IsPresentationPlaying)
+        {
+            return false;
+        }
+
+        if (first == null || second == null ||
+            first.WorldRoot == null || second.WorldRoot == null)
+        {
+            Debug.LogWarning(
+                "Two Unit Focus启动失败：单位表现引用无效。",
+                this
+            );
+            return false;
+        }
+
+        ResolveReferences();
+        if (cameraController == null)
+        {
+            Debug.LogWarning(
+                "Two Unit Focus启动失败：找不到GrayboxBattleCameraController。",
+                this
+            );
+            return false;
+        }
+
+        float targetWorldX =
+            (first.WorldRoot.transform.position.x
+            + second.WorldRoot.transform.position.x)
+            * 0.5f;
+        float startWorldX =
+            cameraController.CurrentHorizontalWorldX;
+        float startRadius = cameraController.CurrentOrbitRadius;
+        float startVerticalProgress =
+            cameraController.CurrentCinematicVerticalViewProgress;
+
+        isTwoUnitFocusPlaying = true;
+        cameraController.SetCinematicControl(true);
+        activePresentationCoroutine = StartCoroutine(
+            PlayTwoUnitFocusSequence(
+                startWorldX,
+                targetWorldX,
+                startRadius,
+                twoUnitFocusOrbitRadius,
+                startVerticalProgress,
+                twoUnitFocusVerticalViewProgress,
+                releaseCinematicControlOnComplete
+            )
+        );
+        return true;
     }
 
     private IEnumerator PlayBattleIntroSequence()
@@ -339,6 +410,53 @@ public sealed class BattleCameraDirector : MonoBehaviour
         FinishPresentation(true);
     }
 
+    private IEnumerator PlayTwoUnitFocusSequence(
+        float startWorldX,
+        float targetWorldX,
+        float startRadius,
+        float targetRadius,
+        float startVerticalProgress,
+        float targetVerticalProgress,
+        bool releaseCinematicControlOnComplete
+    )
+    {
+        float duration = Mathf.Max(0f, twoUnitFocusDuration);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            float progress = duration > Mathf.Epsilon
+                ? Mathf.Clamp01(elapsed / duration)
+                : 1f;
+            float easedProgress =
+                1f - Mathf.Pow(1f - progress, 3f);
+
+            cameraController.SetCinematicHorizontalWorldX(
+                Mathf.Lerp(startWorldX, targetWorldX, easedProgress)
+            );
+            cameraController.SetCinematicOrbitRadius(
+                Mathf.Lerp(startRadius, targetRadius, easedProgress)
+            );
+            cameraController.SetCinematicVerticalViewProgress(
+                Mathf.Lerp(
+                    startVerticalProgress,
+                    targetVerticalProgress,
+                    easedProgress
+                )
+            );
+
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        cameraController.SetCinematicHorizontalWorldX(targetWorldX);
+        cameraController.SetCinematicOrbitRadius(targetRadius);
+        cameraController.SetCinematicVerticalViewProgress(
+            targetVerticalProgress
+        );
+        FinishTwoUnitFocus(releaseCinematicControlOnComplete);
+    }
+
     private void ResolveReferences()
     {
         if (cameraController == null)
@@ -461,6 +579,20 @@ public sealed class BattleCameraDirector : MonoBehaviour
         activePresentationCoroutine = null;
         isIntroPlaying = false;
         isTurnEndRecoveryPlaying = false;
+        isTwoUnitFocusPlaying = false;
+    }
+
+    private void FinishTwoUnitFocus(
+        bool releaseCinematicControlOnComplete
+    )
+    {
+        if (releaseCinematicControlOnComplete)
+        {
+            cameraController?.SetCinematicControl(false);
+        }
+
+        activePresentationCoroutine = null;
+        isTwoUnitFocusPlaying = false;
     }
 
     private static float GetTimelineProgress(

@@ -302,6 +302,10 @@ public class GrayboxBattleCameraController : MonoBehaviour
     public bool IsCinematicControlActive => isCinematicControlActive;
     public float DefaultOrbitRadius => defaultOrbitRadius;
     public float CurrentOrbitRadius => currentOrbitRadius;
+    public float CurrentHorizontalWorldX =>
+        basePivotPosition.x + currentX;
+    public float CurrentCinematicVerticalViewProgress =>
+        GetCurrentCinematicVerticalViewProgress();
 
     public float GetPerspectiveScaleRelativeToDefault(Vector3 worldPoint)
     {
@@ -379,6 +383,7 @@ public class GrayboxBattleCameraController : MonoBehaviour
         if (!isCinematicControlActive)
             return;
 
+        float previousOrbitRadius = currentOrbitRadius;
         float clampedRadius = Mathf.Clamp(
             radius,
             minOrbitRadius,
@@ -387,6 +392,117 @@ public class GrayboxBattleCameraController : MonoBehaviour
         currentOrbitRadius = clampedRadius;
         targetOrbitRadius = clampedRadius;
         zoomFollowVelocity = 0f;
+
+        float actualRadiusDelta =
+            currentOrbitRadius - previousOrbitRadius;
+        if (isInSecondStage)
+        {
+            secondStageOrbitRadius = Mathf.Max(
+                Mathf.Epsilon,
+                secondStageOrbitRadius + actualRadiusDelta
+            );
+        }
+
+        ApplyCameraTransform();
+    }
+
+    public void SetCinematicHorizontalWorldX(float worldX)
+    {
+        if (!isCinematicControlActive)
+            return;
+
+        float safeLimit = Mathf.Abs(horizontalLimit);
+        currentX = Mathf.Clamp(
+            worldX - basePivotPosition.x,
+            -safeLimit,
+            safeLimit
+        );
+        ApplyCameraTransform();
+    }
+
+    public void SetCinematicVerticalViewProgress(float progress)
+    {
+        if (!isCinematicControlActive)
+            return;
+
+        progress = Mathf.Clamp(progress, -1f, 1f);
+        float safeFloorLimit = Mathf.Max(0f, floorPanLimit);
+        float safeBackgroundLimit = Mathf.Max(0f, backgroundPanLimit);
+
+        if (Mathf.Abs(progress) <= Mathf.Epsilon)
+        {
+            currentVerticalPan = 0f;
+            ClearSecondStageForPurePan();
+            ApplyCameraTransform();
+            return;
+        }
+
+        if (progress < 0f)
+        {
+            currentVerticalPan = Mathf.Lerp(
+                0f,
+                -safeFloorLimit,
+                -progress
+            );
+            ClearSecondStageForPurePan();
+            ApplyCameraTransform();
+            return;
+        }
+
+        float panSensitivity = Mathf.Abs(verticalPanSensitivity);
+        float purePanInputDistance = panSensitivity > Mathf.Epsilon
+            ? safeBackgroundLimit / panSensitivity
+            : 0f;
+        float secondStageSensitivity =
+            GetCinematicSecondStageProgressSensitivity(
+                safeBackgroundLimit
+            );
+        float secondStageInputDistance =
+            secondStageSensitivity > Mathf.Epsilon
+                ? 1f / secondStageSensitivity
+                : 0f;
+        float totalInputDistance =
+            purePanInputDistance + secondStageInputDistance;
+
+        if (totalInputDistance <= Mathf.Epsilon)
+        {
+            currentVerticalPan = safeBackgroundLimit;
+            ClearSecondStageForPurePan();
+            ApplyCameraTransform();
+            return;
+        }
+
+        float targetInputDistance = progress * totalInputDistance;
+        if (targetInputDistance <= purePanInputDistance ||
+            secondStageInputDistance <= Mathf.Epsilon)
+        {
+            currentVerticalPan = panSensitivity > Mathf.Epsilon
+                ? Mathf.Min(
+                    safeBackgroundLimit,
+                    targetInputDistance * panSensitivity
+                )
+                : safeBackgroundLimit;
+            ClearSecondStageForPurePan();
+            ApplyCameraTransform();
+            return;
+        }
+
+        currentVerticalPan = safeBackgroundLimit;
+        if (!EnsureSecondStageStarted(safeBackgroundLimit))
+        {
+            ApplyCameraTransform();
+            return;
+        }
+
+        float activeSecondStageSensitivity =
+            GetSecondStageProgressSensitivity();
+        secondStageProgress = activeSecondStageSensitivity > Mathf.Epsilon
+            ? Mathf.Clamp01(
+                (targetInputDistance - purePanInputDistance)
+                * activeSecondStageSensitivity
+            )
+            : 0f;
+        UpdateSecondStageAnglesFromProgress();
         ApplyCameraTransform();
     }
 
@@ -1052,8 +1168,17 @@ public class GrayboxBattleCameraController : MonoBehaviour
 
     private float GetSecondStageProgressSensitivity()
     {
+        return GetSecondStageProgressSensitivity(
+            secondStageStartOrbitAngle
+        );
+    }
+
+    private float GetSecondStageProgressSensitivity(
+        float startOrbitAngle
+    )
+    {
         float referenceAngleRange = Mathf.Abs(
-            finalOrbitAngle - secondStageStartOrbitAngle
+            finalOrbitAngle - startOrbitAngle
         );
         if (referenceAngleRange <= Mathf.Epsilon)
         {
@@ -1065,6 +1190,92 @@ public class GrayboxBattleCameraController : MonoBehaviour
         return referenceAngleRange > Mathf.Epsilon
             ? Mathf.Abs(orbitSensitivity) / referenceAngleRange
             : 0f;
+    }
+
+    private float GetCinematicSecondStageProgressSensitivity(
+        float backgroundThreshold
+    )
+    {
+        if (isInSecondStage)
+        {
+            return GetSecondStageProgressSensitivity();
+        }
+
+        if (orbitPivot == null)
+            return 0f;
+
+        float angleRad = defaultOrbitAngle * Mathf.Deg2Rad;
+        Vector3 thresholdOffset =
+            Vector3.up * backgroundThreshold
+            + new Vector3(
+                0f,
+                Mathf.Sin(angleRad) * currentOrbitRadius,
+                -Mathf.Cos(angleRad) * currentOrbitRadius
+            );
+        float thresholdStartOrbitAngle = Mathf.Atan2(
+            thresholdOffset.y,
+            -thresholdOffset.z
+        ) * Mathf.Rad2Deg;
+
+        return GetSecondStageProgressSensitivity(
+            thresholdStartOrbitAngle
+        );
+    }
+
+    private float GetCurrentCinematicVerticalViewProgress()
+    {
+        float safeFloorLimit = Mathf.Max(0f, floorPanLimit);
+        if (currentVerticalPan < 0f)
+        {
+            return safeFloorLimit > Mathf.Epsilon
+                ? Mathf.Clamp(
+                    currentVerticalPan / safeFloorLimit,
+                    -1f,
+                    0f
+                )
+                : 0f;
+        }
+
+        if (currentVerticalPan <= Mathf.Epsilon &&
+            !isInSecondStage)
+        {
+            return 0f;
+        }
+
+        float safeBackgroundLimit = Mathf.Max(0f, backgroundPanLimit);
+        float panSensitivity = Mathf.Abs(verticalPanSensitivity);
+        float purePanInputDistance = panSensitivity > Mathf.Epsilon
+            ? safeBackgroundLimit / panSensitivity
+            : 0f;
+        float secondStageSensitivity =
+            GetCinematicSecondStageProgressSensitivity(
+                safeBackgroundLimit
+            );
+        float secondStageInputDistance =
+            secondStageSensitivity > Mathf.Epsilon
+                ? 1f / secondStageSensitivity
+                : 0f;
+        float totalInputDistance =
+            purePanInputDistance + secondStageInputDistance;
+        if (totalInputDistance <= Mathf.Epsilon)
+            return 0f;
+
+        float traveledPurePanInput = panSensitivity > Mathf.Epsilon
+            ? Mathf.Clamp(
+                currentVerticalPan,
+                0f,
+                safeBackgroundLimit
+            ) / panSensitivity
+            : 0f;
+        float traveledSecondStageInput =
+            isInSecondStage && secondStageSensitivity > Mathf.Epsilon
+                ? secondStageProgress / secondStageSensitivity
+                : 0f;
+
+        return Mathf.Clamp01(
+            (traveledPurePanInput + traveledSecondStageInput)
+            / totalInputDistance
+        );
     }
 
     private void UpdateSecondStageAnglesFromProgress()
