@@ -579,7 +579,7 @@ public static class BattleExecutionPlanExecutor
             return handledBeforeResolver && preResolveResult;
         }
 
-        if (PrepareLongRangeResponseAttempt(item))
+        if (PrepareShootResponseAttempt(item))
         {
             return ExecuteUnavailableResourceResponseSynchronously(item);
         }
@@ -622,7 +622,7 @@ public static class BattleExecutionPlanExecutor
             return preResolveResult;
         }
 
-        if (PrepareLongRangeResponseAttempt(item))
+        if (PrepareShootResponseAttempt(item))
         {
             if (!RestoreUnavailableResponseOriginalTarget(item))
             {
@@ -873,10 +873,10 @@ public static class BattleExecutionPlanExecutor
         return item.isCompleted;
     }
 
-    static bool PrepareLongRangeResponseAttempt(BattleExecutionItem item)
+    static bool PrepareShootResponseAttempt(BattleExecutionItem item)
     {
         if (item == null ||
-            !BattleResolver.TryCaptureLongRangeResponseResourceSnapshot(
+            !BattleResolver.TryCaptureShootResponseResourceSnapshot(
                 item.actionSlot,
                 item.enemyIntent,
                 out BattleClashResourceSnapshot resourceSnapshot

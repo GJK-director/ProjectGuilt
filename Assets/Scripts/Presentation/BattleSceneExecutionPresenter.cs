@@ -76,6 +76,10 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public bool LongRangeShotImpactFinished;
         public long LongRangeShotImpactRequestId;
 
+        public bool UnavailableShootResponseIsLongRange;
+        public BattleCharacterPresentationController
+            UnavailableShootResponderPresentation;
+
         public long LastRequestId;
         public bool Cancelled;
     }
@@ -237,14 +241,17 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     {
         BattleActionRollPanelHost.HideImmediate();
         activeContext = CreateContext(request);
-        bool unavailableLongRangeResponse =
-            TryResolveUnavailableLongRangeResponse(activeContext);
+        bool unavailableShootResponse =
+            TryResolveUnavailableShootResponse(activeContext);
         LogRequest(request, activeContext);
 
-        if (unavailableLongRangeResponse)
+        if (unavailableShootResponse)
         {
             PrepareLongRangeEngagement(activeContext);
-            activeContext.LongRangeShooterPresentation?.SetAim();
+            if (activeContext.UnavailableShootResponseIsLongRange)
+            {
+                activeContext.UnavailableShootResponderPresentation?.SetAim();
+            }
             activeContext.LongRangeMeleePresentation?.SetSprint();
             CompleteRequest(request, completion);
             return;
@@ -435,7 +442,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         return true;
     }
 
-    private bool TryResolveUnavailableLongRangeResponse(
+    private bool TryResolveUnavailableShootResponse(
         ActionPresentationContext context
     )
     {
@@ -448,16 +455,30 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             item.responseAttemptState !=
                 BattleResponseAttemptState.UnavailableResource ||
             actionSlot == null || actionSlot.cardState == null ||
-            !actionSlot.cardState.IsLongRangeShoot() ||
             enemyIntent == null || enemyIntent.enemyCardState == null ||
             !enemyIntent.enemyCardState.IsMeleeAttack())
         {
             return false;
         }
 
+        bool isLongRangeShoot = actionSlot.cardState.IsLongRangeShoot();
+        if (!isLongRangeShoot &&
+            !actionSlot.cardState.IsCloseRangeShoot())
+        {
+            return false;
+        }
+
         context.LongRangeShooterSide = null;
         context.LongRangeMeleeSide = null;
-        context.LongRangeShooter = actionSlot.actor;
+        context.UnavailableShootResponseIsLongRange = isLongRangeShoot;
+        ResolvePresentation(
+            actionSlot.actor,
+            out _,
+            out context.UnavailableShootResponderPresentation
+        );
+
+        // 资源不足后敌方目标已经由Core恢复，表现必须跟随恢复后的正式目标。
+        context.LongRangeShooter = enemyIntent.actualTargetCharacter;
         context.LongRangeMeleeActor = enemyIntent.enemy;
         ResolvePresentation(
             context.LongRangeShooter,
@@ -469,9 +490,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             out context.LongRangeMeleeHandle,
             out context.LongRangeMeleePresentation
         );
-        context.SideAActor = context.LongRangeShooter;
-        context.SideAHandle = context.LongRangeShooterHandle;
-        context.SideAPresentation = context.LongRangeShooterPresentation;
+        context.SideAActor = actionSlot.actor;
+        ResolvePresentation(
+            context.SideAActor,
+            out context.SideAHandle,
+            out context.SideAPresentation
+        );
         context.SideBActor = context.LongRangeMeleeActor;
         context.SideBHandle = context.LongRangeMeleeHandle;
         context.SideBPresentation = context.LongRangeMeleePresentation;
@@ -1203,10 +1227,10 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             out context.CurrentTargetPresentation
         );
 
-        bool unavailableLongRangeResponse =
-            TryResolveUnavailableLongRangeResponse(context);
+        bool unavailableShootResponse =
+            TryResolveUnavailableShootResponse(context);
         LogRequest(request, context);
-        if (unavailableLongRangeResponse)
+        if (unavailableShootResponse)
         {
             if (!HasCompleteLongRangePresentationMapping(context) ||
                 !object.ReferenceEquals(

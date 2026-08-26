@@ -16,7 +16,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &820000000000000002
 Transform:
   m_ObjectHideFlags: 0
@@ -107,7 +107,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &820000000000000012
 Transform:
   m_ObjectHideFlags: 0
@@ -198,7 +198,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &830000000000000002
 Transform:
   m_ObjectHideFlags: 0
@@ -354,9 +354,9 @@ SpriteRenderer:
   m_SortingLayer: 3
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 21300000, guid: a908652e7af5f39429d0685f4f1b3524, type: 3}
+  m_Sprite: {fileID: 21300000, guid: 6ac4a9e2023429f4b98af80cae346458, type: 3}
   m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_FlipX: 1
+  m_FlipX: 0
   m_FlipY: 0
   m_DrawMode: 0
   m_Size: {x: 5, y: 10}
@@ -447,12 +447,20 @@ MonoBehaviour:
   presentationKey: enemy_default
   characterSprite: {fileID: 7026447746880092567}
   bodyVisualRoot: {fileID: 3272499011285696981}
-  idleSprite: {fileID: 21300000, guid: 27c534e09be133c4fa5f157117cf2310, type: 3}
-  sprintSprite: {fileID: 21300000, guid: f0743090b03bec2438d0c61c8301fc54, type: 3}
-  slashSprite: {fileID: 21300000, guid: 9686a7892217e4142b2be5bd7d3ab330, type: 3}
-  hitSprite: {fileID: 21300000, guid: 71695127325899a4e9268be1389cd4fb, type: 3}
-  guardSprite: {fileID: 21300000, guid: c36a385fd5745344d9cd65bac205621b, type: 3}
-  dodgeSprite: {fileID: 21300000, guid: 71695127325899a4e9268be1389cd4fb, type: 3}
+  idleSprite: {fileID: 21300000, guid: 6ac4a9e2023429f4b98af80cae346458, type: 3}
+  sprintSprite: {fileID: 21300000, guid: a397090fcb942c246899d819534cdda3, type: 3}
+  slashSprite: {fileID: 21300000, guid: 81fa7ce210d63f446aeb37186a9d86c0, type: 3}
+  aimSprite: {fileID: 0}
+  shootSprite: {fileID: 0}
+  closeRangeShootSprite: {fileID: 0}
+  hitSprite: {fileID: 21300000, guid: 265739e95b113424183df63f7e55c8d3, type: 3}
+  guardSprite: {fileID: 21300000, guid: 5b01382161df4964cbdd0463c3f44bca, type: 3}
+  dodgeSprite: {fileID: 0}
+  muzzleFlashAnchor: {fileID: 0}
+  muzzleFlashEffect: {fileID: 0}
+  closeRangeMuzzleFlashAnchor: {fileID: 0}
+  closeRangeMuzzleFlashEffect: {fileID: 0}
+  muzzleFlashDuration: 0.08
   perfectGuardEffect: {fileID: 830000000000000003}
   slashBackEffect: {fileID: 820000000000000003}
   slashFrontEffect: {fileID: 820000000000000013}
@@ -540,7 +548,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 0.73, y: 0.73, z: 0.73}
+  m_LocalScale: {x: 0.8, y: 0.8, z: 0.8}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1567369060456008799}

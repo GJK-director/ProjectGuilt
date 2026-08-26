@@ -549,8 +549,8 @@ public static class BattleResolver
         );
     }
 
-    // LongRange响应Melee时，在ClashSession创建前锁定本次执行的资源状态。
-    internal static bool TryCaptureLongRangeResponseResourceSnapshot(
+    // Shoot响应Melee时，在ClashSession创建前锁定本次执行的资源状态。
+    internal static bool TryCaptureShootResponseResourceSnapshot(
         BattleActionSlot actionSlot,
         BattleEnemyIntent enemyIntent,
         out BattleClashResourceSnapshot resourceSnapshot
@@ -559,7 +559,8 @@ public static class BattleResolver
         resourceSnapshot = null;
         if (actionSlot == null || actionSlot.actor == null ||
             actionSlot.cardState == null ||
-            !actionSlot.cardState.IsLongRangeShoot() ||
+            (!actionSlot.cardState.IsLongRangeShoot() &&
+                !actionSlot.cardState.IsCloseRangeShoot()) ||
             enemyIntent == null || enemyIntent.enemy == null ||
             enemyIntent.enemyCardState == null ||
             !enemyIntent.enemyCardState.IsMeleeAttack() ||

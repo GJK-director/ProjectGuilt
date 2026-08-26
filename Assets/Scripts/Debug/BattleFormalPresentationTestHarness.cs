@@ -17,6 +17,7 @@ public enum BattleFormalPresentationTestScenario
     CloseRangeShootVsAttackShooterWin,
     CloseRangeShootVsAttackShooterLose,
     CloseRangeShootVsAttackTieThenShooterWin,
+    CloseRangeShootVsAttackNoBullet,
     CloseRangeShootVsGuardFullBlock,
     CloseRangeShootVsGuardReducedDamage,
     CloseRangeShootVsDodgeSuccess,
@@ -201,6 +202,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             case BattleFormalPresentationTestScenario.CloseRangeShootVsAttackShooterWin:
             case BattleFormalPresentationTestScenario.CloseRangeShootVsAttackShooterLose:
             case BattleFormalPresentationTestScenario.CloseRangeShootVsAttackTieThenShooterWin:
+            case BattleFormalPresentationTestScenario.CloseRangeShootVsAttackNoBullet:
                 return TryPrepareShootVsAttack(
                     runtimeState,
                     scenario,
@@ -382,7 +384,9 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             testScenario == BattleFormalPresentationTestScenario
                 .CloseRangeShootVsAttackShooterLose ||
             testScenario == BattleFormalPresentationTestScenario
-                .CloseRangeShootVsAttackTieThenShooterWin;
+                .CloseRangeShootVsAttackTieThenShooterWin ||
+            testScenario == BattleFormalPresentationTestScenario
+                .CloseRangeShootVsAttackNoBullet;
         bool shooterWins = testScenario ==
                 BattleFormalPresentationTestScenario
                     .LongRangeShootVsAttackShooterWin ||
@@ -393,9 +397,12 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                     .LongRangeShootVsAttackTieThenShooterWin ||
             testScenario == BattleFormalPresentationTestScenario
                 .CloseRangeShootVsAttackTieThenShooterWin;
-        bool hasBullet = testScenario !=
-            BattleFormalPresentationTestScenario
-                .LongRangeShootVsAttackNoBullet;
+        bool isNoBullet = testScenario ==
+                BattleFormalPresentationTestScenario
+                    .LongRangeShootVsAttackNoBullet ||
+            testScenario == BattleFormalPresentationTestScenario
+                .CloseRangeShootVsAttackNoBullet;
+        bool hasBullet = !isNoBullet;
         string shooterCardID = isCloseRange
             ? CloseRangeShooterCardID
             : LongRangeShooterCardID;
