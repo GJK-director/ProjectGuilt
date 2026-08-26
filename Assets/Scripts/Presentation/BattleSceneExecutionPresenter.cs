@@ -244,6 +244,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         bool unavailableShootResponse =
             TryResolveUnavailableShootResponse(activeContext);
         LogRequest(request, activeContext);
+        BattleActionRollPanelHost.ShowForActionBegin(request);
 
         if (unavailableShootResponse)
         {
