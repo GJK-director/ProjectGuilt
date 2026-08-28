@@ -1018,7 +1018,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3d78fe29911843aaab0fd225c1ec010c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleFormalPresentationTestHarness
-  scenario: 0
+  scenario: 1
 --- !u!1 &293728785
 GameObject:
   m_ObjectHideFlags: 0
@@ -3266,6 +3266,7 @@ MonoBehaviour:
   attackVsDodgePresentationPlayer: {fileID: 833021974}
   longRangeShootVsAttackPresentationPlayer: {fileID: 0}
   clashEngagementProfile: {fileID: 11400000, guid: b9f30c692f87489f94c2b784d6e5ed65, type: 2}
+  battleCameraDirector: {fileID: 0}
   verboseLogging: 1
 --- !u!4 &833021970
 Transform:

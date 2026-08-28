@@ -35,6 +35,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
     private BattleCharacterPresentationController loser;
     private Transform loserWorldRoot;
     private Action onVisualImpact;
+    private Action onTieCollision;
     private Action onFinished;
     private Coroutine playbackCoroutine;
     private Coroutine loserHitCoroutine;
@@ -50,6 +51,9 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
     private bool firstTieSlashCompleted;
     private bool secondTieSlashCompleted;
     private bool tieRecoilCompleted;
+    private Vector3 firstTiePreRecoilPosition;
+    private Vector3 secondTiePreRecoilPosition;
+    private bool hasTiePreRecoilPositions;
     private int playbackVersion;
     private float attackDirectionSign;
     private float tieDirectionSign;
@@ -275,6 +279,27 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         Action finishedCallback
     )
     {
+        return TryPlayTieResult(
+            sideA,
+            sideAWorldRoot,
+            sideB,
+            sideBWorldRoot,
+            engagementResult,
+            null,
+            finishedCallback
+        );
+    }
+
+    public bool TryPlayTieResult(
+        BattleCharacterPresentationController sideA,
+        Transform sideAWorldRoot,
+        BattleCharacterPresentationController sideB,
+        Transform sideBWorldRoot,
+        BattleClashEngagementResult engagementResult,
+        Action collisionCallback,
+        Action finishedCallback
+    )
+    {
         if (!ValidatePresentationProfile(nameof(TryPlayTieResult)))
         {
             return false;
@@ -293,6 +318,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         firstWorldRoot = sideAWorldRoot;
         secondWorldRoot = sideBWorldRoot;
         clashEngagementResult = engagementResult;
+        onTieCollision = collisionCallback;
         onFinished = finishedCallback;
         ResetTiePlaybackState();
         IsRunning = true;
@@ -424,13 +450,13 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             yield break;
         }
 
-        // 同一帧清理双方Slash本地状态，再从当前Recoil位置重新接敌。
+        // 同一帧清理双方Slash本地状态，再对称返回本次碰撞位置。
         firstActor.ClearSlashEffect();
         secondActor.ClearSlashEffect();
         firstActor.FinishSlashPresentation();
         secondActor.FinishSlashPresentation();
 
-        yield return RunApproachMovement(version);
+        yield return RunTieReengagementMovement(version);
         if (IsCurrentPlayback(version))
         {
             FinishTieResult(version);
@@ -488,6 +514,9 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             secondTieImpactReached;
         if (tieCollisionReached)
         {
+            Action collisionCallback = onTieCollision;
+            onTieCollision = null;
+            collisionCallback?.Invoke();
             tieRecoilCoroutine = StartCoroutine(
                 RunTieRecoil(version, tieDirectionSign)
             );
@@ -502,8 +531,11 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             yield break;
         }
 
-        Vector3 firstStart = firstWorldRoot.position;
-        Vector3 secondStart = secondWorldRoot.position;
+        firstTiePreRecoilPosition = firstWorldRoot.position;
+        secondTiePreRecoilPosition = secondWorldRoot.position;
+        hasTiePreRecoilPositions = true;
+        Vector3 firstStart = firstTiePreRecoilPosition;
+        Vector3 secondStart = secondTiePreRecoilPosition;
         float distance = presentationProfile.TieRecoilDistance;
         float duration = presentationProfile.TieRecoilDuration;
         Vector3 firstTarget = firstStart -
@@ -544,6 +576,71 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             secondWorldRoot.position = secondTarget;
             tieRecoilCompleted = true;
             tieRecoilCoroutine = null;
+        }
+    }
+
+    private IEnumerator RunTieReengagementMovement(int version)
+    {
+        if (!HasValidApproachActors() || !hasTiePreRecoilPositions)
+        {
+            yield break;
+        }
+
+        Vector3 firstStart = firstWorldRoot.position;
+        Vector3 secondStart = secondWorldRoot.position;
+        Vector3 firstTarget = firstTiePreRecoilPosition;
+        Vector3 secondTarget = secondTiePreRecoilPosition;
+        float duration = SprintDuration;
+
+        firstActor.SetSprint();
+        secondActor.SetSprint();
+        if (duration <= 0f)
+        {
+            firstWorldRoot.position = firstTarget;
+            secondWorldRoot.position = secondTarget;
+            yield break;
+        }
+
+        firstActor.SpawnAfterimage();
+        secondActor.SpawnAfterimage();
+        float elapsed = 0f;
+        float afterimageElapsed = 0f;
+        float afterimageInterval = presentationProfile.AfterimageSpawnInterval;
+        bool spawnRepeatedAfterimages = afterimageInterval > 0f;
+        while (elapsed < duration && IsCurrentPlayback(version))
+        {
+            if (!HasValidApproachActors())
+            {
+                yield break;
+            }
+
+            elapsed += Time.deltaTime;
+            float linearT = Mathf.Clamp01(elapsed / duration);
+            float easedT = BattlePresentationEasing.EaseOutQuad(linearT);
+            firstWorldRoot.position = firstStart +
+                (firstTarget - firstStart) * easedT;
+            secondWorldRoot.position = secondStart +
+                (secondTarget - secondStart) * easedT;
+
+            if (spawnRepeatedAfterimages)
+            {
+                afterimageElapsed += Time.deltaTime;
+                if (afterimageElapsed >= afterimageInterval &&
+                    elapsed < duration)
+                {
+                    firstActor.SpawnAfterimage();
+                    secondActor.SpawnAfterimage();
+                    afterimageElapsed = 0f;
+                }
+            }
+
+            yield return null;
+        }
+
+        if (IsCurrentPlayback(version) && HasValidApproachActors())
+        {
+            firstWorldRoot.position = firstTarget;
+            secondWorldRoot.position = secondTarget;
         }
     }
 
@@ -824,6 +921,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         loser = null;
         loserWorldRoot = null;
         onVisualImpact = null;
+        onTieCollision = null;
         onFinished = null;
         playbackCoroutine = null;
         loserHitCoroutine = null;
@@ -849,6 +947,9 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         firstTieSlashCompleted = false;
         secondTieSlashCompleted = false;
         tieRecoilCompleted = false;
+        firstTiePreRecoilPosition = Vector3.zero;
+        secondTiePreRecoilPosition = Vector3.zero;
+        hasTiePreRecoilPositions = false;
         tieDirectionSign = 1f;
     }
 

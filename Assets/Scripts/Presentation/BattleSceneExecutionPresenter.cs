@@ -1408,6 +1408,10 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.SideBPresentation,
             context.SideBHandle.WorldRoot.transform,
             context.ClashEngagement,
+            () => HandleAttackTieCollisionCamera(
+                context,
+                executionItem
+            ),
             () => CompleteAttackTieResult(
                 context,
                 executionItem,
@@ -1425,6 +1429,23 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             activePresentationRequestId = 0L;
         }
         return false;
+    }
+
+    private void HandleAttackTieCollisionCamera(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem
+    )
+    {
+        if (context == null ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem) ||
+            context.Cancelled ||
+            !context.CameraCinematicOwned)
+        {
+            return;
+        }
+
+        ResolveBattleCameraDirector()?.TryPlayGenericClashImpact();
     }
 
     private void CompleteAttackTieResult(
