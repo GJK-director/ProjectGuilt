@@ -301,6 +301,7 @@ public class GrayboxBattleCameraController : MonoBehaviour
 
     public bool IsCinematicControlActive => isCinematicControlActive;
     public float DefaultOrbitRadius => defaultOrbitRadius;
+    public float DefaultHorizontalWorldX => basePivotPosition.x;
     public float CurrentOrbitRadius => currentOrbitRadius;
     public float CurrentHorizontalWorldX =>
         basePivotPosition.x + currentX;

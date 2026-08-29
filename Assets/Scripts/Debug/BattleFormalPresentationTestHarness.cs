@@ -21,7 +21,9 @@ public enum BattleFormalPresentationTestScenario
     CloseRangeShootVsGuardFullBlock,
     CloseRangeShootVsGuardReducedDamage,
     CloseRangeShootVsDodgeSuccess,
-    CloseRangeShootVsDodgeFailed
+    CloseRangeShootVsDodgeFailed,
+    AttackVsAttackAllyWin,
+    AttackVsAttackEnemyWin
 }
 
 // 正式BattleScene的开发测试输入入口；只准备规则数据，不驱动执行或表现。
@@ -30,6 +32,18 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
     private const string AllyCardID = "[TEST]_FORMAL_TIE_ALLY_ATTACK";
     private const string EnemyCardID = "[TEST]_FORMAL_TIE_ENEMY_ATTACK";
     private const string IntentID = "[TEST]_FORMAL_TIE_ENEMY_INTENT";
+    private const string AllyWinAllyCardID =
+        "[TEST]_FORMAL_ALLY_WIN_ALLY_ATTACK";
+    private const string AllyWinEnemyCardID =
+        "[TEST]_FORMAL_ALLY_WIN_ENEMY_ATTACK";
+    private const string AllyWinIntentID =
+        "[TEST]_FORMAL_ALLY_WIN_ENEMY_INTENT";
+    private const string EnemyWinAllyCardID =
+        "[TEST]_FORMAL_ENEMY_WIN_ALLY_ATTACK";
+    private const string EnemyWinEnemyCardID =
+        "[TEST]_FORMAL_ENEMY_WIN_ENEMY_ATTACK";
+    private const string EnemyWinIntentID =
+        "[TEST]_FORMAL_ENEMY_WIN_ENEMY_INTENT";
     private const string FullDefenseCardID =
         "[TEST]_FORMAL_GUARD_FULL_DEFENSE";
     private const string FullAttackCardID =
@@ -142,7 +156,13 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         switch (scenario)
         {
             case BattleFormalPresentationTestScenario.AttackTie:
-                return TryPrepareAttackTie(runtimeState, out failureMessage);
+            case BattleFormalPresentationTestScenario.AttackVsAttackAllyWin:
+            case BattleFormalPresentationTestScenario.AttackVsAttackEnemyWin:
+                return TryPrepareAttackVsAttack(
+                    runtimeState,
+                    scenario,
+                    out failureMessage
+                );
             case BattleFormalPresentationTestScenario.AttackVsGuardFullBlock:
                 return TryPrepareAttackVsGuard(
                     runtimeState,
@@ -230,8 +250,9 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
     }
 
 #if UNITY_EDITOR || DEVELOPMENT_BUILD
-    private bool TryPrepareAttackTie(
+    private bool TryPrepareAttackVsAttack(
         BattleRuntimeState runtimeState,
+        BattleFormalPresentationTestScenario testScenario,
         out string failureMessage
     )
     {
@@ -239,7 +260,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         CharacterData enemy;
         BattleActionSlot allySlot;
 
-        if (!TryValidateAttackTiePrerequisites(
+        if (!TryValidateAttackVsAttackPrerequisites(
                 runtimeState,
                 out ally,
                 out enemy,
@@ -253,17 +274,56 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         BattleCardState allyCard = null;
         BattleCardState enemyCard = null;
 
+        string allyCardID = AllyCardID;
+        string enemyCardID = EnemyCardID;
+        string intentID = IntentID;
+        string scenarioName = "AttackTie";
+        int allyCardPoint = 4;
+        int enemyCardPoint = 5;
+        string expectedResult = "Tie (Ally 4+1=5, Enemy 5+0=5)";
+
+        if (testScenario ==
+            BattleFormalPresentationTestScenario.AttackVsAttackAllyWin)
+        {
+            allyCardID = AllyWinAllyCardID;
+            enemyCardID = AllyWinEnemyCardID;
+            intentID = AllyWinIntentID;
+            scenarioName = "AttackVsAttackAllyWin";
+            allyCardPoint = 6;
+            enemyCardPoint = 4;
+            expectedResult = "AllyWin (Ally 6+1=7, Enemy 4+0=4)";
+        }
+        else if (testScenario ==
+            BattleFormalPresentationTestScenario.AttackVsAttackEnemyWin)
+        {
+            allyCardID = EnemyWinAllyCardID;
+            enemyCardID = EnemyWinEnemyCardID;
+            intentID = EnemyWinIntentID;
+            scenarioName = "AttackVsAttackEnemyWin";
+            allyCardPoint = 3;
+            enemyCardPoint = 7;
+            expectedResult = "EnemyWin (Ally 3+1=4, Enemy 7+0=7)";
+        }
+
         try
         {
             allyCard = BattleCardManager.CreateBattleCard(
                 ally,
-                CreateTestAttackCard(AllyCardID, "[TEST] Tie Attack A", 4),
-                AllyCardID + "_INSTANCE"
+                CreateTestAttackCard(
+                    allyCardID,
+                    "[TEST] " + scenarioName + " Ally Attack",
+                    allyCardPoint
+                ),
+                allyCardID + "_INSTANCE"
             );
             enemyCard = BattleCardManager.CreateBattleCard(
                 enemy,
-                CreateTestAttackCard(EnemyCardID, "[TEST] Tie Attack B", 5),
-                EnemyCardID + "_INSTANCE"
+                CreateTestAttackCard(
+                    enemyCardID,
+                    "[TEST] " + scenarioName + " Enemy Attack",
+                    enemyCardPoint
+                ),
+                enemyCardID + "_INSTANCE"
             );
 
             if (!IsOwnedCard(allyCard, ally) || !IsOwnedCard(enemyCard, enemy))
@@ -281,7 +341,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             }
 
             BattleEnemyIntent testIntent = new BattleEnemyIntent(
-                IntentID,
+                intentID,
                 enemy,
                 enemyCard,
                 ally,
@@ -334,9 +394,8 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             hasPreparedScenario = true;
             preparedRuntimeState = runtimeState;
             Debug.Log(
-                "[FormalPresentationTest] AttackTie scenario prepared. " +
-                "Ally Slot1: fixed 4 (+1 = 5), " +
-                "Enemy Slot1: fixed 5 (+0 = 5)",
+                "[FormalPresentationTest] " + scenarioName +
+                " scenario prepared. Expected=" + expectedResult,
                 this
             );
             return true;
@@ -353,7 +412,8 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                 enemyCard
             );
             return Fail(
-                "准备AttackTie场景时发生异常，已回滚：" + exception.Message,
+                "准备" + scenarioName + "场景时发生异常，已回滚：" +
+                exception.Message,
                 out failureMessage
             );
         }
@@ -671,7 +731,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         return true;
     }
 
-    private bool TryValidateAttackTiePrerequisites(
+    private bool TryValidateAttackVsAttackPrerequisites(
         BattleRuntimeState runtimeState,
         out CharacterData ally,
         out CharacterData enemy,
@@ -692,7 +752,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             runtimeState.currentExecutionPlan != null)
         {
             return Fail(
-                "AttackTie只能在Prepare且尚未创建ExecutionPlan时准备。当前Phase=" +
+                "AttackVsAttack测试只能在Prepare且尚未创建ExecutionPlan时准备。当前Phase=" +
                 runtimeState.LifecyclePhase +
                 "，ExecutionPlan为空=" + (runtimeState.currentExecutionPlan == null),
                 out failureMessage
@@ -721,7 +781,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         if (!AreAllActionSlotsEmpty(runtimeState.actionSlots))
         {
             return Fail(
-                "AttackTie准备前要求当前正式行动槽位全部为空，拒绝覆盖已有安排。",
+                "AttackVsAttack测试准备前要求当前正式行动槽位全部为空，拒绝覆盖已有安排。",
                 out failureMessage
             );
         }
@@ -752,7 +812,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         if (!modifiersMatch)
         {
             return Fail(
-                "AttackTie前置点数不成立。期望 Ally Attack/Clash/Card=1/0/0，" +
+                "AttackVsAttack测试前置点数不成立。期望 Ally Attack/Clash/Card=1/0/0，" +
                 "Enemy=0/0/0，双方NextClashPointUp/NextCardPointUp=0；实际 Ally=" +
                 allyAttackModifier + "/" + allyClashModifier + "/" + allyCardModifier +
                 "，Enemy=" + enemyAttackModifier + "/" + enemyClashModifier + "/" +

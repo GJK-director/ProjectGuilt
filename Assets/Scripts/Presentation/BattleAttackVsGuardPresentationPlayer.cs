@@ -16,6 +16,9 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
 
     public bool IsRunning { get; private set; }
     public bool IsFinished { get; private set; }
+    public float GuardApproachSeparation => presentationProfile != null
+        ? presentationProfile.GuardApproachSeparation
+        : 0f;
 
     private BattleCharacterPresentationController attacker;
     private BattleCharacterPresentationController defender;
@@ -46,6 +49,27 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         Action completion
     )
     {
+        return TryPlayClashReadyApproach(
+            defenseSide,
+            defenseWorldRoot,
+            attackSide,
+            attackWorldRoot,
+            engagementResult,
+            false,
+            completion
+        );
+    }
+
+    public bool TryPlayClashReadyApproach(
+        BattleCharacterPresentationController defenseSide,
+        Transform defenseWorldRoot,
+        BattleCharacterPresentationController attackSide,
+        Transform attackWorldRoot,
+        BattleClashEngagementResult engagementResult,
+        bool useRealApproach,
+        Action completion
+    )
+    {
         if (IsRunning || !isActiveAndEnabled || defenseSide == null ||
             attackSide == null || defenseWorldRoot == null ||
             attackWorldRoot == null || engagementResult == null ||
@@ -54,11 +78,73 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
             return false;
         }
 
-        // Defense保留当前Pose；Attack只进入Sprint拼点等待Pose。
-        attackSide.SetSprint();
-        IsFinished = true;
-        completion?.Invoke();
+        if (!useRealApproach)
+        {
+            // CloseRange等旧路径继续只进入Sprint等待Pose，不改变WorldRoot。
+            attackSide.SetSprint();
+            IsFinished = true;
+            completion?.Invoke();
+            return true;
+        }
+
+        float currentSeparation = Mathf.Abs(
+            attackWorldRoot.position.x - defenseWorldRoot.position.x
+        );
+        if (currentSeparation <=
+            presentationProfile.GuardApproachSeparation + 0.0001f)
+        {
+            IsFinished = true;
+            completion?.Invoke();
+            return true;
+        }
+
+        playbackVersion++;
+        attacker = attackSide;
+        defender = defenseSide;
+        onFinished = completion;
+        IsRunning = true;
+        IsFinished = false;
+        playbackCoroutine = StartCoroutine(
+            RunClashReadyApproach(
+                playbackVersion,
+                attackSide,
+                attackWorldRoot,
+                defenseSide,
+                defenseWorldRoot
+            )
+        );
         return true;
+    }
+
+    private IEnumerator RunClashReadyApproach(
+        int version,
+        BattleCharacterPresentationController attackSide,
+        Transform attackWorldRoot,
+        BattleCharacterPresentationController defenseSide,
+        Transform defenseWorldRoot
+    )
+    {
+        yield return BattleClashReadyApproachMotion.PlaySingleActorApproach(
+            attackSide,
+            attackWorldRoot,
+            defenseSide,
+            defenseWorldRoot,
+            presentationProfile.GuardApproachSeparation,
+            presentationProfile.SprintDuration,
+            presentationProfile.AfterimageSpawnInterval,
+            () => IsCurrentPlayback(version)
+        );
+
+        if (!IsCurrentPlayback(version))
+        {
+            yield break;
+        }
+
+        Action callback = onFinished;
+        ClearPlaybackReferences();
+        IsRunning = false;
+        IsFinished = true;
+        callback?.Invoke();
     }
 
     public bool TryPlayGuardImpact(

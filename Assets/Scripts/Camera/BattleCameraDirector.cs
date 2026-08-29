@@ -14,6 +14,22 @@ public sealed class BattleCameraDirector : MonoBehaviour
         SmoothStep
     }
 
+    private enum BattleActionEffectType
+    {
+        None,
+        ClashImpact,
+        HitImpact,
+        GuardImpact
+    }
+
+    private enum TurnEndRecoveryPhase
+    {
+        None,
+        Closing,
+        WaitingForNewTurn,
+        Opening
+    }
+
     [SerializeField]
     private GrayboxBattleCameraController cameraController;
 
@@ -52,11 +68,13 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
     [Header("Turn End Recovery")]
     [SerializeField, Range(0f, 1f)]
-    private float recoveryStartOverlayAlpha = 0.65f;
+    private float recoveryStartOverlayAlpha = 0.85f;
 
     [SerializeField]
     private float recoveryStartOrbitRadius = 8.5f;
 
+    // 当前正式Opening固定零Delay；保留旧字段，避免丢失既有Inspector数据。
+#pragma warning disable CS0414
     [SerializeField, Min(0f)]
     private float recoveryCameraDelay = 0.10f;
 
@@ -65,12 +83,29 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
     [SerializeField, Min(0f)]
     private float recoveryFadeDelay = 0.05f;
+#pragma warning restore CS0414
 
     [SerializeField, Min(0.01f)]
     private float recoveryFadeDuration = 1.00f;
 
     [SerializeField, Min(0f)]
     private float recoveryInteractionUnlockDelay = 0.5f;
+
+    [Header("Turn End Closing")]
+    [SerializeField, Range(0f, 1f)]
+    private float turnEndClosingOverlayAlpha = 0.95f;
+
+    [SerializeField, Min(0f)]
+    private float turnEndClosingCameraDelay = 0f;
+
+    [SerializeField, Min(0.01f)]
+    private float turnEndClosingCameraDuration = 0.5f;
+
+    [SerializeField, Min(0f)]
+    private float turnEndClosingFadeDelay = 0f;
+
+    [SerializeField, Min(0.01f)]
+    private float turnEndClosingFadeDuration = 0.5f;
 
     [Header("Generic Battle Focus")]
     [SerializeField, Tooltip(
@@ -88,37 +123,95 @@ public sealed class BattleCameraDirector : MonoBehaviour
     [SerializeField, Range(-1f, 1f)]
     private float twoUnitFocusVerticalViewProgress = 0.35f;
 
+    [Header("Anchored Two Unit Approach")]
+    [SerializeField, Range(0f, 0.5f)]
+    private float anchoredApproachAttackerFramingWeight = 0.30f;
+
+    [SerializeField, Min(0f)]
+    private float anchoredApproachFarRadius = 9.5f;
+
+    [SerializeField, Min(0f)]
+    private float anchoredApproachNearRadius = 8.5f;
+
     [Header("Generic Clash Impact")]
     [SerializeField, Min(0f)]
-    private float genericClashImpactDuration = 0.18f;
+    private float genericClashImpactDuration = 0.16f;
 
     [SerializeField, Min(0f)]
     private float genericClashImpactPushInRadiusAmount = 0.30f;
 
     [SerializeField, Min(0f)]
-    private float genericClashImpactHorizontalShakeAmplitude = 0.06f;
+    private float genericClashImpactHorizontalShakeAmplitude = 0.09f;
 
     [SerializeField, Min(0f)]
-    private float genericClashImpactShakeCycles = 2.0f;
+    private float genericClashImpactShakeCycles = 1.0f;
+
+    [Header("Generic Hit Impact")]
+    [SerializeField, Min(0f)]
+    private float genericHitImpactDuration = 0.16f;
+
+    [SerializeField, Min(0f)]
+    private float genericHitImpactPushInRadiusAmount = 0.38f;
+
+    [SerializeField, Min(0f)]
+    private float genericHitImpactHorizontalKickAmount = 0.12f;
+
+    [Header("Generic Guard Impact")]
+    [SerializeField, Min(0f)]
+    private float fullBlockGuardImpactDuration = 0.14f;
+
+    [SerializeField, Min(0f)]
+    private float fullBlockGuardImpactPushInRadiusAmount = 0.22f;
+
+    [SerializeField, Min(0f)]
+    private float fullBlockGuardImpactHorizontalShakeAmplitude = 0.055f;
+
+    [SerializeField, Min(0f)]
+    private float fullBlockGuardImpactShakeCycles = 1.0f;
+
+    [SerializeField, Min(0f)]
+    private float reducedDamageGuardImpactDuration = 0.16f;
+
+    [SerializeField, Min(0f)]
+    private float reducedDamageGuardImpactPushInRadiusAmount = 0.30f;
+
+    [SerializeField, Min(0f)]
+    private float reducedDamageGuardImpactHorizontalShakeAmplitude = 0.045f;
+
+    [SerializeField, Min(0f)]
+    private float reducedDamageGuardImpactShakeCycles = 1.0f;
 
     private GameObject overlayRoot;
     private CanvasGroup overlayGroup;
     private Coroutine activePresentationCoroutine;
     private Coroutine activeBattleActionEffectCoroutine;
+    private Coroutine anchoredApproachCoroutine;
     private bool isIntroPlaying;
-    private bool isTurnEndRecoveryPlaying;
+    private TurnEndRecoveryPhase turnEndRecoveryPhase;
     private bool isTwoUnitFocusPlaying;
-    private bool isGenericClashImpactPlaying;
+    private bool isAnchoredApproachPlaying;
+    private BattleActionEffectType activeBattleActionEffectType;
     private bool presentationInteractionUnlocked;
-    private float genericClashImpactBaseWorldX;
-    private float genericClashImpactBaseRadius;
+    private float battleActionEffectBaseWorldX;
+    private float battleActionEffectBaseRadius;
+    private Transform anchoredApproachAttackerWorldRoot;
+    private Transform anchoredApproachDefenderWorldRoot;
+    private float anchoredApproachNearSeparation;
+    private float anchoredApproachStartSeparation;
+    private float anchoredApproachStartWorldX;
+    private float anchoredApproachStartRadius;
 
     public bool IsIntroPlaying => isIntroPlaying;
 
     private bool IsPresentationPlaying =>
         isIntroPlaying ||
-        isTurnEndRecoveryPlaying ||
-        isTwoUnitFocusPlaying;
+        turnEndRecoveryPhase != TurnEndRecoveryPhase.None ||
+        isTwoUnitFocusPlaying ||
+        isAnchoredApproachPlaying;
+
+    private bool IsBattleActionEffectPlaying =>
+        activeBattleActionEffectType != BattleActionEffectType.None ||
+        activeBattleActionEffectCoroutine != null;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void RegisterDevelopmentRuntimeDirector()
@@ -177,18 +270,19 @@ public sealed class BattleCameraDirector : MonoBehaviour
             activePresentationCoroutine = null;
         }
 
-        CancelGenericClashImpact();
+        CancelAnchoredTwoUnitApproach(false);
+        CancelBattleActionEffect();
 
         HideOverlay();
         cameraController?.SetCinematicControl(false);
         isIntroPlaying = false;
-        isTurnEndRecoveryPlaying = false;
+        turnEndRecoveryPhase = TurnEndRecoveryPhase.None;
         isTwoUnitFocusPlaying = false;
     }
 
     public void PlayBattleIntro()
     {
-        if (IsPresentationPlaying || isGenericClashImpactPlaying)
+        if (IsPresentationPlaying || IsBattleActionEffectPlaying)
         {
             return;
         }
@@ -225,27 +319,78 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
     public void PlayTurnEndRecovery()
     {
-        if (IsPresentationPlaying || isGenericClashImpactPlaying)
+        TryPlayTurnEndTransition(
+            () => TryPlayNewTurnStart(null)
+        );
+    }
+
+    public bool TryPlayTurnEndTransition(System.Action completion)
+    {
+        if (IsPresentationPlaying || IsBattleActionEffectPlaying)
         {
-            return;
+            return false;
         }
 
         ResolveReferences();
         if (cameraController == null)
         {
-            Debug.LogError(
-                "BattleCameraDirector找不到GrayboxBattleCameraController，" +
-                "Turn End Recovery已取消。",
-                this
-            );
+            return false;
+        }
+
+        turnEndRecoveryPhase = TurnEndRecoveryPhase.Closing;
+        cameraController.SetCinematicControl(true);
+        ShowOverlay(0f);
+        activePresentationCoroutine = StartCoroutine(
+            PlayTurnEndTransitionSequence(completion)
+        );
+        return true;
+    }
+
+    public bool TryPlayNewTurnStart(System.Action completion)
+    {
+        if (turnEndRecoveryPhase !=
+                TurnEndRecoveryPhase.WaitingForNewTurn ||
+            activePresentationCoroutine != null)
+        {
+            return false;
+        }
+
+        ResolveReferences();
+        if (cameraController == null)
+        {
+            return false;
+        }
+
+        turnEndRecoveryPhase = TurnEndRecoveryPhase.Opening;
+        presentationInteractionUnlocked = false;
+        if (overlayGroup != null)
+        {
+            overlayGroup.interactable = true;
+            overlayGroup.blocksRaycasts = true;
+        }
+
+        activePresentationCoroutine = StartCoroutine(
+            PlayNewTurnStartSequence(completion)
+        );
+        return true;
+    }
+
+    public void CancelTurnEndRecovery()
+    {
+        if (turnEndRecoveryPhase == TurnEndRecoveryPhase.None)
+        {
             return;
         }
 
-        isTurnEndRecoveryPlaying = true;
-        cameraController.SetCinematicControl(true);
-        ShowOverlay(recoveryStartOverlayAlpha);
-        activePresentationCoroutine =
-            StartCoroutine(PlayTurnEndRecoverySequence());
+        if (activePresentationCoroutine != null)
+        {
+            StopCoroutine(activePresentationCoroutine);
+            activePresentationCoroutine = null;
+        }
+
+        turnEndRecoveryPhase = TurnEndRecoveryPhase.None;
+        HideOverlay();
+        cameraController?.SetCinematicControl(false);
     }
 
     public bool TryPlayTwoUnitFocus(
@@ -255,7 +400,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         System.Action completion = null
     )
     {
-        if (IsPresentationPlaying || isGenericClashImpactPlaying)
+        if (IsPresentationPlaying || IsBattleActionEffectPlaying)
         {
             return false;
         }
@@ -331,9 +476,106 @@ public sealed class BattleCameraDirector : MonoBehaviour
         return true;
     }
 
+    public bool TryPlayAnchoredTwoUnitApproach(
+        BattleUnitViewHandle attacker,
+        BattleUnitViewHandle defender,
+        float nearSeparation
+    )
+    {
+        if (IsPresentationPlaying || IsBattleActionEffectPlaying ||
+            attacker == null || defender == null ||
+            attacker.WorldRoot == null || defender.WorldRoot == null)
+        {
+            return false;
+        }
+
+        ResolveReferences();
+        if (cameraController == null)
+        {
+            return false;
+        }
+
+        anchoredApproachAttackerWorldRoot =
+            attacker.WorldRoot.transform;
+        anchoredApproachDefenderWorldRoot =
+            defender.WorldRoot.transform;
+        anchoredApproachNearSeparation = Mathf.Max(0f, nearSeparation);
+        anchoredApproachStartSeparation = Mathf.Max(
+            anchoredApproachNearSeparation,
+            Mathf.Abs(
+                anchoredApproachAttackerWorldRoot.position.x -
+                anchoredApproachDefenderWorldRoot.position.x
+            )
+        );
+        anchoredApproachStartWorldX =
+            cameraController.CurrentHorizontalWorldX;
+        anchoredApproachStartRadius =
+            cameraController.CurrentOrbitRadius;
+        isAnchoredApproachPlaying = true;
+        cameraController.SetCinematicControl(true);
+
+        ApplyAnchoredTwoUnitApproachFraming();
+        anchoredApproachCoroutine = StartCoroutine(
+            PlayAnchoredTwoUnitApproachSequence()
+        );
+        return true;
+    }
+
+    public bool FinishAnchoredTwoUnitApproachTracking()
+    {
+        if (!isAnchoredApproachPlaying)
+        {
+            return false;
+        }
+
+        // Approach结束时用最终WorldRoot再计算一次，随后保留该构图。
+        ApplyAnchoredTwoUnitApproachFraming();
+        if (anchoredApproachCoroutine != null)
+        {
+            StopCoroutine(anchoredApproachCoroutine);
+        }
+
+        ClearAnchoredTwoUnitApproachState();
+        return true;
+    }
+
+    public bool CancelAnchoredTwoUnitApproach(
+        bool releaseCinematicControl = true
+    )
+    {
+        if (!isAnchoredApproachPlaying)
+        {
+            return false;
+        }
+
+        if (anchoredApproachCoroutine != null)
+        {
+            StopCoroutine(anchoredApproachCoroutine);
+        }
+
+        if (cameraController != null)
+        {
+            cameraController.SetCinematicHorizontalWorldX(
+                anchoredApproachStartWorldX
+            );
+            cameraController.SetCinematicOrbitRadius(
+                anchoredApproachStartRadius
+            );
+        }
+
+        ClearAnchoredTwoUnitApproachState();
+        if (releaseCinematicControl)
+        {
+            cameraController?.SetCinematicControl(false);
+        }
+
+        return true;
+    }
+
     public void ReleaseBattleActionCinematicControl()
     {
-        CancelGenericClashImpact();
+        CancelAnchoredTwoUnitApproach(false);
+        CancelBattleActionEffect();
         if (IsPresentationPlaying)
         {
             return;
@@ -345,25 +587,40 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
     public bool TryPlayGenericClashImpact()
     {
-        if (IsPresentationPlaying || isGenericClashImpactPlaying)
+        if (!TryBeginBattleActionEffect(BattleActionEffectType.ClashImpact))
         {
             return false;
         }
 
-        ResolveReferences();
-        if (cameraController == null ||
-            !cameraController.IsCinematicControlActive)
-        {
-            return false;
-        }
-
-        genericClashImpactBaseWorldX =
-            cameraController.CurrentHorizontalWorldX;
-        genericClashImpactBaseRadius =
-            cameraController.CurrentOrbitRadius;
-        isGenericClashImpactPlaying = true;
         activeBattleActionEffectCoroutine = StartCoroutine(
             PlayGenericClashImpactSequence()
+        );
+        return true;
+    }
+
+    public bool TryPlayGenericHitImpact(float directionSign)
+    {
+        if (!TryBeginBattleActionEffect(BattleActionEffectType.HitImpact))
+        {
+            return false;
+        }
+
+        float normalizedDirection = directionSign >= 0f ? 1f : -1f;
+        activeBattleActionEffectCoroutine = StartCoroutine(
+            PlayGenericHitImpactSequence(normalizedDirection)
+        );
+        return true;
+    }
+
+    public bool TryPlayGenericGuardImpact(bool isFullBlock)
+    {
+        if (!TryBeginBattleActionEffect(BattleActionEffectType.GuardImpact))
+        {
+            return false;
+        }
+
+        activeBattleActionEffectCoroutine = StartCoroutine(
+            PlayGenericGuardImpactSequence(isFullBlock)
         );
         return true;
     }
@@ -446,20 +703,93 @@ public sealed class BattleCameraDirector : MonoBehaviour
         FinishPresentation(true);
     }
 
-    private IEnumerator PlayTurnEndRecoverySequence()
+    private IEnumerator PlayTurnEndTransitionSequence(
+        System.Action completion
+    )
     {
-        cameraController.ResetToDefault();
-        cameraController.SetCinematicControl(true);
-
-        float defaultRadius = cameraController.DefaultOrbitRadius;
-        cameraController.SetCinematicOrbitRadius(
-            recoveryStartOrbitRadius
-        );
+        float startWorldX = cameraController.CurrentHorizontalWorldX;
+        float defaultWorldX = cameraController.DefaultHorizontalWorldX;
         float startRadius = cameraController.CurrentOrbitRadius;
+        float startVerticalProgress =
+            cameraController.CurrentCinematicVerticalViewProgress;
 
-        float cameraDelay = Mathf.Max(0f, recoveryCameraDelay);
+        float cameraDelay = Mathf.Max(0f, turnEndClosingCameraDelay);
+        float cameraDuration = Mathf.Max(0f, turnEndClosingCameraDuration);
+        float fadeDelay = Mathf.Max(0f, turnEndClosingFadeDelay);
+        float fadeDuration = Mathf.Max(0f, turnEndClosingFadeDuration);
+        float totalDuration = Mathf.Max(
+            cameraDelay + cameraDuration,
+            fadeDelay + fadeDuration
+        );
+        float elapsed = 0f;
+
+        while (elapsed < totalDuration)
+        {
+            float cameraProgress = GetTimelineProgress(
+                elapsed,
+                cameraDelay,
+                cameraDuration
+            );
+            float fadeProgress = GetTimelineProgress(
+                elapsed,
+                fadeDelay,
+                fadeDuration
+            );
+            float easedCameraProgress = Mathf.Pow(cameraProgress, 3f);
+            float easedFadeProgress = Mathf.Pow(fadeProgress, 3f);
+
+            cameraController.SetCinematicHorizontalWorldX(
+                Mathf.Lerp(
+                    startWorldX,
+                    defaultWorldX,
+                    easedCameraProgress
+                )
+            );
+            cameraController.SetCinematicOrbitRadius(
+                Mathf.Lerp(
+                    startRadius,
+                    recoveryStartOrbitRadius,
+                    easedCameraProgress
+                )
+            );
+            cameraController.SetCinematicVerticalViewProgress(
+                Mathf.Lerp(
+                    startVerticalProgress,
+                    0f,
+                    easedCameraProgress
+                )
+            );
+            SetOverlayAlpha(Mathf.Lerp(
+                0f,
+                turnEndClosingOverlayAlpha,
+                easedFadeProgress
+            ));
+
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        cameraController.SetCinematicHorizontalWorldX(defaultWorldX);
+        cameraController.SetCinematicOrbitRadius(recoveryStartOrbitRadius);
+        cameraController.SetCinematicVerticalViewProgress(0f);
+        SetOverlayAlpha(turnEndClosingOverlayAlpha);
+        activePresentationCoroutine = null;
+        turnEndRecoveryPhase = TurnEndRecoveryPhase.WaitingForNewTurn;
+        completion?.Invoke();
+    }
+
+    private IEnumerator PlayNewTurnStartSequence(System.Action completion)
+    {
+        float startRadius = cameraController.CurrentOrbitRadius;
+        float startOverlayAlpha = overlayGroup != null
+            ? overlayGroup.alpha
+            : recoveryStartOverlayAlpha;
+        float defaultRadius = cameraController.DefaultOrbitRadius;
+        float defaultWorldX = cameraController.DefaultHorizontalWorldX;
+        // Opening从midpoint立即启动，不复用Closing的起步Delay。
+        float cameraDelay = 0f;
         float cameraDuration = Mathf.Max(0f, recoveryCameraDuration);
-        float fadeDelay = Mathf.Max(0f, recoveryFadeDelay);
+        float fadeDelay = 0f;
         float fadeDuration = Mathf.Max(0f, recoveryFadeDuration);
         float totalDuration = Mathf.Max(
             cameraDelay + cameraDuration,
@@ -484,11 +814,13 @@ public sealed class BattleCameraDirector : MonoBehaviour
             float easedFadeProgress =
                 1f - Mathf.Pow(1f - fadeProgress, 3f);
 
+            cameraController.SetCinematicHorizontalWorldX(defaultWorldX);
             cameraController.SetCinematicOrbitRadius(
                 Mathf.Lerp(startRadius, defaultRadius, easedCameraProgress)
             );
+            cameraController.SetCinematicVerticalViewProgress(0f);
             SetOverlayAlpha(Mathf.Lerp(
-                recoveryStartOverlayAlpha,
+                startOverlayAlpha,
                 0f,
                 easedFadeProgress
             ));
@@ -501,9 +833,12 @@ public sealed class BattleCameraDirector : MonoBehaviour
             yield return null;
         }
 
+        cameraController.SetCinematicHorizontalWorldX(defaultWorldX);
         cameraController.SetCinematicOrbitRadius(defaultRadius);
+        cameraController.SetCinematicVerticalViewProgress(0f);
         SetOverlayAlpha(0f);
         FinishPresentation(true);
+        completion?.Invoke();
     }
 
     private IEnumerator PlayTwoUnitFocusSequence(
@@ -559,11 +894,85 @@ public sealed class BattleCameraDirector : MonoBehaviour
         );
     }
 
+    private IEnumerator PlayAnchoredTwoUnitApproachSequence()
+    {
+        while (isAnchoredApproachPlaying)
+        {
+            if (anchoredApproachAttackerWorldRoot == null ||
+                anchoredApproachDefenderWorldRoot == null)
+            {
+                if (cameraController != null)
+                {
+                    cameraController.SetCinematicHorizontalWorldX(
+                        anchoredApproachStartWorldX
+                    );
+                    cameraController.SetCinematicOrbitRadius(
+                        anchoredApproachStartRadius
+                    );
+                }
+
+                ClearAnchoredTwoUnitApproachState();
+                yield break;
+            }
+
+            ApplyAnchoredTwoUnitApproachFraming();
+            yield return null;
+        }
+    }
+
+    private void ApplyAnchoredTwoUnitApproachFraming()
+    {
+        if (cameraController == null ||
+            anchoredApproachAttackerWorldRoot == null ||
+            anchoredApproachDefenderWorldRoot == null)
+        {
+            return;
+        }
+
+        float attackerX = anchoredApproachAttackerWorldRoot.position.x;
+        float defenderX = anchoredApproachDefenderWorldRoot.position.x;
+        float framingWeight = Mathf.Clamp(
+            anchoredApproachAttackerFramingWeight,
+            0f,
+            0.5f
+        );
+        float targetWorldX = Mathf.Lerp(defenderX, attackerX, framingWeight);
+        float separation = Mathf.Abs(attackerX - defenderX);
+        float separationRange = anchoredApproachStartSeparation -
+            anchoredApproachNearSeparation;
+        float farProgress = separationRange > Mathf.Epsilon
+            ? Mathf.Clamp01(
+                (separation - anchoredApproachNearSeparation) /
+                separationRange
+            )
+            : 0f;
+        float nearRadius = Mathf.Max(0f, anchoredApproachNearRadius);
+        float farRadius = Mathf.Max(
+            nearRadius,
+            anchoredApproachFarRadius
+        );
+
+        cameraController.SetCinematicHorizontalWorldX(targetWorldX);
+        cameraController.SetCinematicOrbitRadius(
+            Mathf.Lerp(nearRadius, farRadius, farProgress)
+        );
+    }
+
+    private void ClearAnchoredTwoUnitApproachState()
+    {
+        anchoredApproachCoroutine = null;
+        isAnchoredApproachPlaying = false;
+        anchoredApproachAttackerWorldRoot = null;
+        anchoredApproachDefenderWorldRoot = null;
+        anchoredApproachNearSeparation = 0f;
+        anchoredApproachStartSeparation = 0f;
+    }
+
     private IEnumerator PlayGenericClashImpactSequence()
     {
         float duration = Mathf.Max(0f, genericClashImpactDuration);
         float elapsed = 0f;
-        float pushInRadius = genericClashImpactBaseRadius -
+        float pushInRadius = battleActionEffectBaseRadius -
             Mathf.Max(0f, genericClashImpactPushInRadiusAmount);
 
         while (elapsed < duration)
@@ -580,7 +989,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
                     progress / 0.3f
                 );
                 radius = Mathf.Lerp(
-                    genericClashImpactBaseRadius,
+                    battleActionEffectBaseRadius,
                     pushInRadius,
                     pushProgress
                 );
@@ -594,7 +1003,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
                 );
                 radius = Mathf.Lerp(
                     pushInRadius,
-                    genericClashImpactBaseRadius,
+                    battleActionEffectBaseRadius,
                     returnProgress
                 );
             }
@@ -606,16 +1015,132 @@ public sealed class BattleCameraDirector : MonoBehaviour
                 (1f - progress);
             cameraController.SetCinematicOrbitRadius(radius);
             cameraController.SetCinematicHorizontalWorldX(
-                genericClashImpactBaseWorldX + shake
+                battleActionEffectBaseWorldX + shake
             );
 
             elapsed += Time.unscaledDeltaTime;
             yield return null;
         }
 
-        RestoreGenericClashImpactSnapshot();
-        activeBattleActionEffectCoroutine = null;
-        isGenericClashImpactPlaying = false;
+        CompleteBattleActionEffect();
+    }
+
+    private IEnumerator PlayGenericHitImpactSequence(float directionSign)
+    {
+        float duration = Mathf.Max(0f, genericHitImpactDuration);
+        float elapsed = 0f;
+        float pushInRadius = battleActionEffectBaseRadius -
+            Mathf.Max(0f, genericHitImpactPushInRadiusAmount);
+        float fullKick = directionSign *
+            Mathf.Max(0f, genericHitImpactHorizontalKickAmount);
+
+        while (elapsed < duration)
+        {
+            float progress = duration > Mathf.Epsilon
+                ? Mathf.Clamp01(elapsed / duration)
+                : 1f;
+            float radius = EvaluateImpactRadius(
+                progress,
+                battleActionEffectBaseRadius,
+                pushInRadius
+            );
+            float kickProgress = progress <= 0.2f
+                ? Mathf.SmoothStep(0f, 1f, progress / 0.2f)
+                : Mathf.SmoothStep(
+                    1f,
+                    0f,
+                    (progress - 0.2f) / 0.8f
+                );
+
+            cameraController.SetCinematicOrbitRadius(radius);
+            cameraController.SetCinematicHorizontalWorldX(
+                battleActionEffectBaseWorldX + fullKick * kickProgress
+            );
+
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        CompleteBattleActionEffect();
+    }
+
+    private IEnumerator PlayGenericGuardImpactSequence(bool isFullBlock)
+    {
+        float duration = Mathf.Max(
+            0f,
+            isFullBlock
+                ? fullBlockGuardImpactDuration
+                : reducedDamageGuardImpactDuration
+        );
+        float pushInAmount = Mathf.Max(
+            0f,
+            isFullBlock
+                ? fullBlockGuardImpactPushInRadiusAmount
+                : reducedDamageGuardImpactPushInRadiusAmount
+        );
+        float shakeAmplitude = Mathf.Max(
+            0f,
+            isFullBlock
+                ? fullBlockGuardImpactHorizontalShakeAmplitude
+                : reducedDamageGuardImpactHorizontalShakeAmplitude
+        );
+        float shakeCycles = Mathf.Max(
+            0f,
+            isFullBlock
+                ? fullBlockGuardImpactShakeCycles
+                : reducedDamageGuardImpactShakeCycles
+        );
+        float pushInRadius = battleActionEffectBaseRadius - pushInAmount;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            float progress = duration > Mathf.Epsilon
+                ? Mathf.Clamp01(elapsed / duration)
+                : 1f;
+            float radius = EvaluateImpactRadius(
+                progress,
+                battleActionEffectBaseRadius,
+                pushInRadius
+            );
+            float shake = Mathf.Sin(
+                progress * Mathf.PI * 2f * shakeCycles
+            ) * shakeAmplitude * (1f - progress);
+
+            cameraController.SetCinematicOrbitRadius(radius);
+            cameraController.SetCinematicHorizontalWorldX(
+                battleActionEffectBaseWorldX + shake
+            );
+
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        CompleteBattleActionEffect();
+    }
+
+    private static float EvaluateImpactRadius(
+        float progress,
+        float baseRadius,
+        float pushInRadius
+    )
+    {
+        if (progress <= 0.3f)
+        {
+            float pushProgress = Mathf.SmoothStep(
+                0f,
+                1f,
+                progress / 0.3f
+            );
+            return Mathf.Lerp(baseRadius, pushInRadius, pushProgress);
+        }
+
+        float returnProgress = Mathf.SmoothStep(
+            0f,
+            1f,
+            (progress - 0.3f) / 0.7f
+        );
+        return Mathf.Lerp(pushInRadius, baseRadius, returnProgress);
     }
 
     private void ResolveReferences()
@@ -739,7 +1264,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         cameraController?.SetCinematicControl(false);
         activePresentationCoroutine = null;
         isIntroPlaying = false;
-        isTurnEndRecoveryPlaying = false;
+        turnEndRecoveryPhase = TurnEndRecoveryPhase.None;
         isTwoUnitFocusPlaying = false;
     }
 
@@ -759,10 +1284,38 @@ public sealed class BattleCameraDirector : MonoBehaviour
         completion?.Invoke();
     }
 
-    private void CancelGenericClashImpact()
+    private bool TryBeginBattleActionEffect(BattleActionEffectType effectType)
     {
-        if (!isGenericClashImpactPlaying &&
-            activeBattleActionEffectCoroutine == null)
+        if (IsPresentationPlaying || IsBattleActionEffectPlaying)
+        {
+            return false;
+        }
+
+        ResolveReferences();
+        if (cameraController == null ||
+            !cameraController.IsCinematicControlActive)
+        {
+            return false;
+        }
+
+        battleActionEffectBaseWorldX =
+            cameraController.CurrentHorizontalWorldX;
+        battleActionEffectBaseRadius =
+            cameraController.CurrentOrbitRadius;
+        activeBattleActionEffectType = effectType;
+        return true;
+    }
+
+    private void CompleteBattleActionEffect()
+    {
+        RestoreBattleActionEffectSnapshot();
+        activeBattleActionEffectCoroutine = null;
+        activeBattleActionEffectType = BattleActionEffectType.None;
+    }
+
+    private void CancelBattleActionEffect()
+    {
+        if (!IsBattleActionEffectPlaying)
         {
             return;
         }
@@ -772,12 +1325,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
             StopCoroutine(activeBattleActionEffectCoroutine);
         }
 
-        RestoreGenericClashImpactSnapshot();
-        activeBattleActionEffectCoroutine = null;
-        isGenericClashImpactPlaying = false;
+        CompleteBattleActionEffect();
     }
 
-    private void RestoreGenericClashImpactSnapshot()
+    private void RestoreBattleActionEffectSnapshot()
     {
         if (cameraController == null)
         {
@@ -785,10 +1336,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
 
         cameraController.SetCinematicHorizontalWorldX(
-            genericClashImpactBaseWorldX
+            battleActionEffectBaseWorldX
         );
         cameraController.SetCinematicOrbitRadius(
-            genericClashImpactBaseRadius
+            battleActionEffectBaseRadius
         );
     }
 

@@ -35,6 +35,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
     private BattleCharacterPresentationController loser;
     private Transform loserWorldRoot;
     private Action onVisualImpact;
+    private Action onTrueVisualImpact;
     private Action onTieCollision;
     private Action onFinished;
     private Coroutine playbackCoroutine;
@@ -195,12 +196,34 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         Action finishedCallback
     )
     {
+        return TryPlayResolvedWinnerAttack(
+            winnerController,
+            loserController,
+            loserRoot,
+            directionSign,
+            null,
+            visualImpactCallback,
+            finishedCallback
+        );
+    }
+
+    public bool TryPlayResolvedWinnerAttack(
+        BattleCharacterPresentationController winnerController,
+        BattleCharacterPresentationController loserController,
+        Transform loserRoot,
+        float directionSign,
+        Action trueVisualImpactCallback,
+        Action visualImpactCallback,
+        Action finishedCallback
+    )
+    {
         return TryStartResolvedWinnerAttack(
             winnerController,
             loserController,
             loserRoot,
             directionSign,
             false,
+            trueVisualImpactCallback,
             visualImpactCallback,
             finishedCallback,
             nameof(TryPlayResolvedWinnerAttack)
@@ -222,6 +245,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             loserRoot,
             directionSign,
             true,
+            null,
             visualImpactCallback,
             finishedCallback,
             nameof(TryPlayResolvedWinnerCloseRangeShoot)
@@ -234,6 +258,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         Transform loserRoot,
         float directionSign,
         bool useCloseRangeShoot,
+        Action trueVisualImpactCallback,
         Action visualImpactCallback,
         Action finishedCallback,
         string requestName
@@ -256,6 +281,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         loserWorldRoot = loserRoot;
         attackDirectionSign = directionSign >= 0f ? 1f : -1f;
         resolvedWinnerUsesCloseRangeShoot = useCloseRangeShoot;
+        onTrueVisualImpact = trueVisualImpactCallback;
         onVisualImpact = visualImpactCallback;
         onFinished = finishedCallback;
         visualImpactInvoked = false;
@@ -730,9 +756,12 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             );
         }
 
-        Action callback = onVisualImpact;
+        Action trueImpactCallback = onTrueVisualImpact;
+        Action completionCallback = onVisualImpact;
+        onTrueVisualImpact = null;
         onVisualImpact = null;
-        callback?.Invoke();
+        trueImpactCallback?.Invoke();
+        completionCallback?.Invoke();
     }
 
     private IEnumerator RunLoserSustainedHit(int version)
@@ -921,6 +950,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         loser = null;
         loserWorldRoot = null;
         onVisualImpact = null;
+        onTrueVisualImpact = null;
         onTieCollision = null;
         onFinished = null;
         playbackCoroutine = null;

@@ -5,13 +5,18 @@ using UnityEngine;
 // 协调整回合结束后的表现等待，不参与战斗结算或下一回合数据准备。
 public sealed class BattleTurnTransitionPresentationCoordinator : MonoBehaviour
 {
-    [SerializeField, Min(0f)] private float turnEndHoldDuration = 0.60f;
+    [SerializeField, Min(0f), Tooltip(
+        "Legacy fallback：仅在找不到BattleCameraDirector时使用。"
+    )]
+    private float turnEndHoldDuration = 0.60f;
+    [SerializeField] private BattleCameraDirector battleCameraDirector;
 
     private Coroutine turnEndPresentationCoroutine;
     private Action turnEndPresentationCompletion;
+    private bool isPlaying;
     private int playbackVersion;
 
-    public bool IsPlaying => turnEndPresentationCoroutine != null;
+    public bool IsPlaying => isPlaying;
     public float TurnEndHoldDuration => Mathf.Max(0f, turnEndHoldDuration);
 
     public bool TryPlayTurnEndPresentation(Action completion)
@@ -22,8 +27,60 @@ public sealed class BattleTurnTransitionPresentationCoordinator : MonoBehaviour
         }
 
         int version = ++playbackVersion;
+        isPlaying = true;
         turnEndPresentationCompletion = completion;
         LogDevelopment("[TurnTransition] TurnEnd Presentation Start");
+
+        ResolveBattleCameraDirector();
+        if (battleCameraDirector != null &&
+            battleCameraDirector.TryPlayTurnEndTransition(
+                () => CompletePresentation(
+                    version,
+                    "[TurnTransition] TurnEnd Presentation Complete"
+                )
+            ))
+        {
+            return true;
+        }
+
+        turnEndPresentationCoroutine = StartCoroutine(
+            RunTurnEndPresentation(version)
+        );
+        return true;
+    }
+
+    public bool TryPlayNewTurnPresentation(Action completion)
+    {
+        if (!isActiveAndEnabled || IsPlaying)
+        {
+            return false;
+        }
+
+        int version = ++playbackVersion;
+        isPlaying = true;
+        turnEndPresentationCompletion = completion;
+        LogDevelopment("[TurnTransition] NewTurn Presentation Start");
+
+        ResolveBattleCameraDirector();
+        if (battleCameraDirector != null)
+        {
+            if (battleCameraDirector.TryPlayNewTurnStart(
+                    () => CompletePresentation(
+                        version,
+                        "[TurnTransition] NewTurn Presentation Complete"
+                    )))
+            {
+                return true;
+            }
+
+            // Director存在却拒绝Opening时立即安全解锁，不制造可见Hold。
+            battleCameraDirector.CancelTurnEndRecovery();
+            isPlaying = false;
+            turnEndPresentationCompletion = null;
+            return false;
+        }
+
+        // 无Director的旧场景才保留原固定等待回退。
         turnEndPresentationCoroutine = StartCoroutine(
             RunTurnEndPresentation(version)
         );
@@ -39,6 +96,8 @@ public sealed class BattleTurnTransitionPresentationCoordinator : MonoBehaviour
             turnEndPresentationCoroutine = null;
         }
 
+        battleCameraDirector?.CancelTurnEndRecovery();
+        isPlaying = false;
         turnEndPresentationCompletion = null;
     }
 
@@ -72,11 +131,34 @@ public sealed class BattleTurnTransitionPresentationCoordinator : MonoBehaviour
             yield break;
         }
 
+        CompletePresentation(
+            version,
+            "[TurnTransition] Presentation Fallback Complete"
+        );
+    }
+
+    private void CompletePresentation(int version, string logMessage)
+    {
+        if (version != playbackVersion)
+        {
+            return;
+        }
+
         turnEndPresentationCoroutine = null;
+        isPlaying = false;
         Action completion = turnEndPresentationCompletion;
         turnEndPresentationCompletion = null;
-        LogDevelopment("[TurnTransition] TurnEnd Presentation Complete");
+        LogDevelopment(logMessage);
         completion?.Invoke();
+    }
+
+    private void ResolveBattleCameraDirector()
+    {
+        if (battleCameraDirector == null)
+        {
+            battleCameraDirector =
+                FindFirstObjectByType<BattleCameraDirector>();
+        }
     }
 
     [System.Diagnostics.Conditional("UNITY_EDITOR")]

@@ -129,6 +129,8 @@ public class BattleSimpleUIController : MonoBehaviour
     private BattleAutomaticTurnCycleResult scenePresentedTurnCycleResult;
     private bool hasStartedTurnEndPresentation;
     private bool hasCompletedTurnEndPresentation;
+    private bool hasStartedNewTurnPresentation;
+    private bool hasCompletedNewTurnPresentation;
     private int scenePresentedTurnCycleVersion;
     private bool terminalInteractionStateCleared;
     private readonly BattleCardSelectionController cardSelectionController =
@@ -2352,6 +2354,15 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void AdvanceScenePresentedTurnCycle()
     {
+        if (hasStartedNewTurnPresentation)
+        {
+            if (hasCompletedNewTurnPresentation)
+            {
+                CompleteScenePresentedTurnCycle();
+            }
+            return;
+        }
+
         BattleExecutionRunner runner = lifecycleController != null
             ? lifecycleController.ExecutionRunner
             : null;
@@ -2456,7 +2467,7 @@ public class BattleSimpleUIController : MonoBehaviour
                 enemy02,
                 enemy02AttackCardState
             );
-        CompleteScenePresentedTurnCycle(result);
+        BeginNewTurnPresentation(result);
     }
 
     private static int GetCurrentHitPoints(CharacterData character)
@@ -2503,13 +2514,10 @@ public class BattleSimpleUIController : MonoBehaviour
         hasCompletedTurnEndPresentation = true;
     }
 
-    private void CompleteScenePresentedTurnCycle(
+    private void BeginNewTurnPresentation(
         BattleAutomaticTurnCycleResult result
     )
     {
-        isScenePresentedTurnCycleRunning = false;
-        scenePresentedTurnCycleResult = null;
-        isRunningCompleteTurnCycle = false;
         lastLog = result != null
             ? result.message
             : "完整回合收尾失败：结果为空";
@@ -2535,7 +2543,53 @@ public class BattleSimpleUIController : MonoBehaviour
             LogTurnTransitionDevelopment(
                 "[TurnTransition] Planning Restored"
             );
+
+            hasStartedNewTurnPresentation = true;
+            int cycleVersion = scenePresentedTurnCycleVersion;
+            if (turnTransitionPresentationCoordinator != null &&
+                turnTransitionPresentationCoordinator
+                    .TryPlayNewTurnPresentation(
+                        () => CompleteNewTurnPresentation(cycleVersion)
+                    ))
+            {
+                return;
+            }
+
+            Debug.LogWarning(
+                "[TurnTransition] Coordinator不可用，已安全跳过NewTurn表现。",
+                this
+            );
         }
+        else
+        {
+            // BattleEnded或Prepare失败时不得停留在midpoint黑幕与镜头锁。
+            turnTransitionPresentationCoordinator?
+                .CancelTurnEndPresentation();
+        }
+
+        CompleteScenePresentedTurnCycle();
+    }
+
+    private void CompleteNewTurnPresentation(
+        int cycleVersion
+    )
+    {
+        if (cycleVersion != scenePresentedTurnCycleVersion ||
+            !isScenePresentedTurnCycleRunning ||
+            !hasStartedNewTurnPresentation)
+        {
+            return;
+        }
+
+        // completion只开放下一帧完成资格，避免协程回调重入Turn Cycle。
+        hasCompletedNewTurnPresentation = true;
+    }
+
+    private void CompleteScenePresentedTurnCycle()
+    {
+        isScenePresentedTurnCycleRunning = false;
+        scenePresentedTurnCycleResult = null;
+        isRunningCompleteTurnCycle = false;
 
         scenePresentedTurnCycleVersion++;
         ResetTurnEndPresentationState(false);
@@ -2564,6 +2618,8 @@ public class BattleSimpleUIController : MonoBehaviour
 
         hasStartedTurnEndPresentation = false;
         hasCompletedTurnEndPresentation = false;
+        hasStartedNewTurnPresentation = false;
+        hasCompletedNewTurnPresentation = false;
     }
 
     [System.Diagnostics.Conditional("UNITY_EDITOR")]
