@@ -2,9 +2,12 @@ using System.Collections;
 using UnityEngine;
 
 // 动态生成的行动 Roll 面板宿主。仅负责表现，不参与拼点规则与随机数生成。
+[DefaultExecutionOrder(300)]
 public sealed class BattleActionRollPanelHost : MonoBehaviour
 {
     const string ResourcePath = "UI/BattleActionRollPanel";
+    const string BehindCharacterSortingLayer = "Battle_Environment";
+    const int BehindCharacterSortingOrder = 32765;
 
     static BattleActionRollPanelHost instance;
     static bool missingPrefabLogged;
@@ -19,10 +22,24 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
     [Header("生成表现")]
     [SerializeField, Min(0f)] float fadeInDuration = 0.2f;
 
+    [Header("角色跟随")]
+    [SerializeField, Min(0f)] float followHorizontalGap = 24f;
+    [SerializeField, Min(0f)] float followVerticalGap = 18f;
+    [SerializeField, Min(0f)] float topHudReservedHeight = 112f;
+    [SerializeField] bool clampToSafeArea = true;
+
     Coroutine fadeCoroutine;
     bool visible;
     Rect lastSafeArea;
     Vector2Int lastScreenSize;
+    RectTransform allySideRect;
+    RectTransform enemySideRect;
+    CharacterData allyFollowActor;
+    CharacterData enemyFollowActor;
+    BattleUnitViewHandle allyFollowHandle;
+    BattleUnitViewHandle enemyFollowHandle;
+    BattleUnitViewSpawner unitViewSpawner;
+    Camera worldCamera;
 
     public static void ShowForActionBegin(BattlePresentationRequest request)
     {
@@ -74,10 +91,21 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         if (overlayCanvas != null)
         {
             overlayCanvas.overrideSorting = true;
+            overlayCanvas.sortingOrder = BehindCharacterSortingOrder;
         }
+        CacheSideRects();
+        ApplyFallbackLayout();
         SetCanvasState(0f);
         SetSideViewsActive(false);
         ApplySafeArea(true);
+    }
+
+    void LateUpdate()
+    {
+        if (visible)
+        {
+            RefreshFollowLayout();
+        }
     }
 
     void OnDestroy()
@@ -96,6 +124,10 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
     void ShowSession(BattleClashSession session, bool hasRolledPoint)
     {
         ApplySafeArea(false);
+        BindFollowActors(
+            session.SideA != null ? session.SideA.actor : null,
+            session.SideB != null ? session.SideB.actor : null
+        );
 
         CharacterData allyTarget = session.SideB != null
             ? session.SideB.actor
@@ -122,6 +154,8 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
             HideInternal();
             return;
         }
+
+        RefreshFollowLayout();
 
         // 平点重投时只刷新卡牌和点数，不重新播放淡入。
         if (visible)
@@ -182,6 +216,10 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         }
 
         visible = false;
+        allyFollowActor = null;
+        enemyFollowActor = null;
+        allyFollowHandle = null;
+        enemyFollowHandle = null;
         SetCanvasState(0f);
         SetSideViewsActive(false);
     }
@@ -236,6 +274,278 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         );
         safeAreaRoot.offsetMin = Vector2.zero;
         safeAreaRoot.offsetMax = Vector2.zero;
+
+        if (visible)
+        {
+            RefreshFollowLayout();
+        }
+    }
+
+    void CacheSideRects()
+    {
+        allySideRect = allySideView != null
+            ? allySideView.transform as RectTransform
+            : null;
+        enemySideRect = enemySideView != null
+            ? enemySideView.transform as RectTransform
+            : null;
+    }
+
+    void BindFollowActors(CharacterData allyActor, CharacterData enemyActor)
+    {
+        bool allyChanged = !object.ReferenceEquals(
+            allyFollowActor,
+            allyActor
+        );
+        bool enemyChanged = !object.ReferenceEquals(
+            enemyFollowActor,
+            enemyActor
+        );
+        allyFollowActor = allyActor;
+        enemyFollowActor = enemyActor;
+
+        ResolveFollowContext();
+        if (allyChanged || allyFollowHandle == null)
+        {
+            allyFollowHandle = unitViewSpawner != null
+                ? unitViewSpawner.GetHandle(allyFollowActor)
+                : null;
+        }
+        if (enemyChanged || enemyFollowHandle == null)
+        {
+            enemyFollowHandle = unitViewSpawner != null
+                ? unitViewSpawner.GetHandle(enemyFollowActor)
+                : null;
+        }
+    }
+
+    void ResolveFollowContext()
+    {
+        if (unitViewSpawner == null)
+        {
+            unitViewSpawner = FindFirstObjectByType<BattleUnitViewSpawner>();
+        }
+
+        Camera resolvedCamera = unitViewSpawner != null &&
+            unitViewSpawner.WorldCamera != null
+                ? unitViewSpawner.WorldCamera
+                : Camera.main;
+        if (worldCamera != resolvedCamera)
+        {
+            worldCamera = resolvedCamera;
+            ConfigureCanvasLayering();
+        }
+    }
+
+    void ConfigureCanvasLayering()
+    {
+        if (overlayCanvas == null)
+        {
+            return;
+        }
+
+        overlayCanvas.overrideSorting = true;
+        overlayCanvas.sortingOrder = BehindCharacterSortingOrder;
+
+        int sortingLayerID = SortingLayer.NameToID(
+            BehindCharacterSortingLayer
+        );
+        if (worldCamera == null || !SortingLayer.IsValid(sortingLayerID))
+        {
+            overlayCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            overlayCanvas.worldCamera = null;
+            return;
+        }
+
+        overlayCanvas.renderMode = RenderMode.ScreenSpaceCamera;
+        overlayCanvas.worldCamera = worldCamera;
+        overlayCanvas.sortingLayerID = sortingLayerID;
+        float minimumPlaneDistance = worldCamera.nearClipPlane + 0.01f;
+        float maximumPlaneDistance = Mathf.Max(
+            minimumPlaneDistance,
+            worldCamera.farClipPlane - 0.01f
+        );
+        overlayCanvas.planeDistance = Mathf.Clamp(
+            100f,
+            minimumPlaneDistance,
+            maximumPlaneDistance
+        );
+    }
+
+    void RefreshFollowLayout()
+    {
+        if (safeAreaRoot == null)
+        {
+            return;
+        }
+
+        ResolveFollowContext();
+        if (unitViewSpawner != null)
+        {
+            if (allyFollowHandle == null && allyFollowActor != null)
+            {
+                allyFollowHandle = unitViewSpawner.GetHandle(allyFollowActor);
+            }
+            if (enemyFollowHandle == null && enemyFollowActor != null)
+            {
+                enemyFollowHandle = unitViewSpawner.GetHandle(enemyFollowActor);
+            }
+        }
+
+        if (!TryPositionSide(allySideRect, allyFollowHandle, false))
+        {
+            ApplyFallbackLayout(allySideRect, false);
+        }
+        if (!TryPositionSide(enemySideRect, enemyFollowHandle, true))
+        {
+            ApplyFallbackLayout(enemySideRect, true);
+        }
+    }
+
+    bool TryPositionSide(
+        RectTransform sideRect,
+        BattleUnitViewHandle handle,
+        bool enemySide
+    )
+    {
+        if (sideRect == null || handle == null || worldCamera == null ||
+            !TryGetOuterTopWorldPoint(handle, enemySide, out Vector3 worldPoint))
+        {
+            return false;
+        }
+
+        Vector3 screenPoint = worldCamera.WorldToScreenPoint(worldPoint);
+        Camera canvasCamera = overlayCanvas != null &&
+            overlayCanvas.renderMode != RenderMode.ScreenSpaceOverlay
+                ? overlayCanvas.worldCamera
+                : null;
+        if (screenPoint.z <= 0f ||
+            !RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                safeAreaRoot,
+                screenPoint,
+                canvasCamera,
+                out Vector2 localPoint))
+        {
+            return false;
+        }
+
+        sideRect.anchorMin = new Vector2(0.5f, 0.5f);
+        sideRect.anchorMax = sideRect.anchorMin;
+        sideRect.pivot = new Vector2(enemySide ? 0f : 1f, 0f);
+
+        Vector2 desiredPosition = localPoint + new Vector2(
+            enemySide ? followHorizontalGap : -followHorizontalGap,
+            followVerticalGap
+        );
+        Rect availableRect = GetAvailableFollowRect();
+        sideRect.anchoredPosition = clampToSafeArea
+            ? ClampPanelPivotToRect(
+                availableRect,
+                sideRect.rect.size,
+                sideRect.pivot,
+                desiredPosition
+            )
+            : desiredPosition;
+        return true;
+    }
+
+    Rect GetAvailableFollowRect()
+    {
+        Rect availableRect = safeAreaRoot.rect;
+        float reservedHeight = Mathf.Clamp(
+            topHudReservedHeight,
+            0f,
+            availableRect.height
+        );
+        availableRect.yMax -= reservedHeight;
+        return availableRect;
+    }
+
+    static bool TryGetOuterTopWorldPoint(
+        BattleUnitViewHandle handle,
+        bool enemySide,
+        out Vector3 worldPoint
+    )
+    {
+        worldPoint = Vector3.zero;
+        if (handle == null)
+        {
+            return false;
+        }
+
+        SpriteRenderer renderer = handle.WorldRenderer;
+        if (renderer != null && renderer.sprite != null)
+        {
+            Bounds bounds = renderer.bounds;
+            worldPoint = new Vector3(
+                enemySide ? bounds.max.x : bounds.min.x,
+                bounds.max.y,
+                bounds.center.z
+            );
+            return true;
+        }
+
+        Transform anchor = handle.HeadUIAnchor != null
+            ? handle.HeadUIAnchor
+            : handle.CenterAnchor;
+        if (anchor == null && handle.WorldRoot != null)
+        {
+            anchor = handle.WorldRoot.transform;
+        }
+        if (anchor == null)
+        {
+            return false;
+        }
+
+        worldPoint = anchor.position;
+        return true;
+    }
+
+    internal static Vector2 ClampPanelPivotToRect(
+        Rect containerRect,
+        Vector2 panelSize,
+        Vector2 pivot,
+        Vector2 desiredPosition
+    )
+    {
+        float minX = containerRect.xMin + panelSize.x * pivot.x;
+        float maxX = containerRect.xMax - panelSize.x * (1f - pivot.x);
+        float minY = containerRect.yMin + panelSize.y * pivot.y;
+        float maxY = containerRect.yMax - panelSize.y * (1f - pivot.y);
+
+        return new Vector2(
+            ClampOrCenter(desiredPosition.x, minX, maxX),
+            ClampOrCenter(desiredPosition.y, minY, maxY)
+        );
+    }
+
+    static float ClampOrCenter(float value, float minimum, float maximum)
+    {
+        return minimum <= maximum
+            ? Mathf.Clamp(value, minimum, maximum)
+            : (minimum + maximum) * 0.5f;
+    }
+
+    void ApplyFallbackLayout()
+    {
+        ApplyFallbackLayout(allySideRect, false);
+        ApplyFallbackLayout(enemySideRect, true);
+    }
+
+    void ApplyFallbackLayout(RectTransform sideRect, bool enemySide)
+    {
+        if (sideRect == null)
+        {
+            return;
+        }
+
+        sideRect.anchorMin = new Vector2(enemySide ? 0.75f : 0.25f, 1f);
+        sideRect.anchorMax = sideRect.anchorMin;
+        sideRect.pivot = new Vector2(0.5f, 1f);
+        sideRect.anchoredPosition = new Vector2(
+            0f,
+            -Mathf.Max(36f, topHudReservedHeight)
+        );
     }
 
     static BattleActionRollPanelHost ResolveOrCreateInstance()

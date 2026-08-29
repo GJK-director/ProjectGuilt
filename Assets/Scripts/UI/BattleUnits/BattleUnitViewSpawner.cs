@@ -51,6 +51,7 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
     private bool isClearing;
 
     public bool IsSpawned => isSpawned;
+    public Camera WorldCamera => worldCamera;
     public IReadOnlyList<BattleUnitViewHandle> GeneratedHandles =>
         generatedHandles;
     public event Action SpawnCompleted;
