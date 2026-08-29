@@ -63,7 +63,12 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
                 "BattleSceneBootstrap已启用显式Debug测试初始化。",
                 this
             );
-            return battleUIController.InitializeDebugTestBattle();
+            bool initialized = battleUIController.InitializeDebugTestBattle();
+            if (initialized)
+            {
+                BattleEndPanelController.Bind(battleUIController.RuntimeState);
+            }
+            return initialized;
         }
 
         BattleDefinitionBootstrapResult bootstrapResult =
@@ -120,6 +125,8 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
             );
             return false;
         }
+
+        BattleEndPanelController.Bind(bootstrapResult.runtimeState);
 
         BattleRuntimeState runtimeState = bootstrapResult.runtimeState;
         Debug.Log(

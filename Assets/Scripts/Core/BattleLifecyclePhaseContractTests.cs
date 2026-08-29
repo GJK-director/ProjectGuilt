@@ -5,7 +5,7 @@ public static class BattleLifecyclePhaseContractTests
 {
     public static bool Run()
     {
-        bool[] results = new bool[14];
+        bool[] results = new bool[15];
 
         BattleRuntimeState initPrepare = new BattleRuntimeState();
         results[0] = Transition(initPrepare, BattleLifecyclePhase.Prepare) &&
@@ -86,6 +86,7 @@ public static class BattleLifecyclePhaseContractTests
 
         results[12] = VerifyAutomaticFullTurnCycle();
         results[13] = VerifyVictoryAndDefeatTransitions();
+        results[14] = VerifySinglePlayerDeathTransitionsToDefeat();
 
         string[] names =
         {
@@ -102,7 +103,8 @@ public static class BattleLifecyclePhaseContractTests
             "currentPhase兼容文本映射正确",
             "ClearCurrentTurnRuntimeObjects不修改阶段",
             "自动完整回合进入下一回合Prepare",
-            "Victory与Defeat均进入BattleEnded"
+            "Victory与Defeat均进入BattleEnded",
+            "单人战斗中玩家死亡进入Defeat与BattleEnded"
         };
 
         bool allPassed = true;
@@ -114,7 +116,7 @@ public static class BattleLifecyclePhaseContractTests
             );
             allPassed &= results[index];
         }
-        Debug.Log("模式76 14项聚合结果：" + allPassed);
+        Debug.Log("模式76 15项聚合结果：" + allPassed);
         return allPassed;
     }
 
@@ -350,6 +352,34 @@ public static class BattleLifecyclePhaseContractTests
             new BattleLifecycleController(defeat).EvaluateBattleEnd() ==
                 BattleResult.Defeat &&
             defeat.LifecyclePhase == BattleLifecyclePhase.BattleEnded;
+    }
+
+    private static bool VerifySinglePlayerDeathTransitionsToDefeat()
+    {
+        CharacterData player = new CharacterData(
+            "lifecycle76_single_player",
+            30,
+            1,
+            1
+        );
+        CharacterData enemy = new CharacterData(
+            "lifecycle76_single_enemy",
+            30,
+            1,
+            1
+        );
+        player.currentHP = 0;
+
+        BattleRuntimeState runtimeState = CreateAtPhase(
+            BattleLifecyclePhase.Executing
+        );
+        runtimeState.SetCharacters(player, null, enemy);
+
+        BattleResult result =
+            new BattleLifecycleController(runtimeState).EvaluateBattleEnd();
+        return result == BattleResult.Defeat &&
+            runtimeState.battleResult == BattleResult.Defeat &&
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.BattleEnded;
     }
 
     private static BattleRuntimeState CreateBattleEndRuntime(bool defeat)
