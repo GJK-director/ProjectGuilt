@@ -808,8 +808,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return true;
         }
 
-        if (!director.CancelTwoUnitFocus(true) &&
-            !director.CancelAnchoredTwoUnitApproach(true))
+        if (!director.CancelTwoUnitFocus(true))
         {
             director.ReleaseBattleActionCinematicControl();
         }
@@ -3034,7 +3033,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        if (!director.CancelTwoUnitFocus(true))
+        if (!director.CancelTwoUnitFocus(true) &&
+            !director.CancelAnchoredTwoUnitApproach(true))
         {
             director.ReleaseBattleActionCinematicControl();
         }
