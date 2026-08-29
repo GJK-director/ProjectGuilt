@@ -13,7 +13,7 @@ public sealed class MainMenuController : MonoBehaviour
     [SerializeField] private GameObject settingsPanel;
     [SerializeField] private CanvasGroup mainMenuCanvasGroup;
     [SerializeField] private Button newGameButton;
-    [SerializeField] private string newGameSceneName = "NewGameText";
+    [SerializeField] private string newGameSceneName = "BattleScene";
 
     private bool isLoadingNewGame;
 

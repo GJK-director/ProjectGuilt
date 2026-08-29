@@ -4653,7 +4653,7 @@ MonoBehaviour:
   settingsPanel: {fileID: 749288399}
   mainMenuCanvasGroup: {fileID: 1491413267}
   newGameButton: {fileID: 523231848}
-  newGameSceneName: NewGameText
+  newGameSceneName: BattleScene
 --- !u!1 &1903353240
 GameObject:
   m_ObjectHideFlags: 0

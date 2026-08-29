@@ -10896,3 +10896,77 @@ Project Guilt/UI/重新生成行动槽位卡牌详情预设体
 - 取消表现、开始下一行动或 Presenter 停用时继续清理残留面板。
 
 本次只调整 UI 表现时序，没有修改位移动画、拼点随机数、胜负、伤害、卡牌消耗或行动计划规则。
+
+## 一百零一、战斗结束提示面板与返回开始界面
+
+战斗场景已接入第一版终局提示面板。
+
+当前规则：
+
+- 面板只读取现有 `BattleRuntimeState.IsBattleEnded` 与 `battleResult`，不参与胜负判定。
+- 正式战斗和显式 Debug 测试初始化都会绑定同一套终局面板。
+- 最后一个行动完成 `ActionComplete` 并进入 `BattleEnded` 后，面板淡入显示。
+- `Victory` 显示“战斗胜利”，`Defeat` 显示“战斗失败”。
+- 面板显示时会关闭行动 Roll 面板与行动槽位卡牌详情，并通过全屏遮罩阻止继续操作战斗 UI。
+- 点击“返回开始界面”后异步加载 `Menu` 场景，加载期间按钮不可重复点击。
+- 返回场景前恢复 `Time.timeScale = 1`，避免战斗表现的时间缩放影响主菜单。
+- 面板会根据 `Screen.safeArea` 和当前分辨率保持居中。
+
+场景配置同步：
+
+- `Assets/Scenes/Menu.unity` 已加入 Build Settings。
+- `Menu` 已放在 Scene List 第一项，作为游戏开始场景。
+- 保留原有 `SampleScene` 与 `NewGameText` 场景项。
+
+改动边界与验证：
+
+- 未修改伤害、死亡、胜负优先级或 `BattleEnded` 转换规则。
+- 检查确认终局状态只会在行动表现 `ActionComplete` 完成后被面板观察到。
+- 新脚本加入当前 Unity 项目引用集后完整编译通过，0 警告、0 错误。
+- Build Settings 中 `Menu` 路径与场景 GUID 校验一致。
+- `git diff --check` 通过。
+
+## 一百零二、玩家死亡面板与主菜单直达战斗
+
+### 一、单人战斗玩家死亡
+
+正式 `BattleScene` 当前启用 `useSingleUnitDemo`，运行时只登记一名玩家角色。
+
+当前规则：
+
+- 玩家角色死亡后，现有生命周期会在行动 `ActionComplete` 收尾后判定我方全灭。
+- 战斗进入 `BattleEnded / Defeat`，继续复用同一个 `BattleEndPanelController`。
+- 失败面板显示“战斗失败”和“玩家已经死亡，本场战斗结束”。
+- 面板继续提供“返回开始界面”按钮，目标为 `Menu`。
+- 双角色兼容模式仍保持“单名友方死亡不等于 Defeat”，没有修改既有多人战斗规则。
+
+`BattleLifecyclePhaseContractTests` 已从 14 项扩展为 15 项，新增验证：
+
+- 单人 Runtime 只登记一名玩家。
+- 玩家 HP 为 0 后评估战斗结束。
+- 结果为 `Defeat`。
+- 生命周期进入 `BattleEnded`。
+
+### 二、开始场景直达战斗
+
+主菜单“新游戏”按钮不再进入 `NewGameText`，改为直接异步加载：
+
+```text
+BattleScene
+```
+
+同步修改：
+
+- `MainMenuController.newGameSceneName` 默认值改为 `BattleScene`。
+- `Menu.unity` 中已有控制器实例的序列化值改为 `BattleScene`。
+- `BattleScene.unity` 已加入 Build Settings，并校验场景 GUID 一致。
+- `Menu` 继续保持 Scene List 第一项。
+- `SampleScene` 与 `NewGameText` 暂时保留在 Scene List，但新游戏按钮不再进入它们。
+
+### 三、改动边界与验证
+
+- 未修改伤害计算、死亡判定、胜负优先级或行动表现时序。
+- `ProjectGuilt.sln` 完整编译通过，0 警告、0 错误。
+- 主菜单脚本默认值、场景序列化值与 Build Settings 目标均为 `BattleScene`。
+- `BattleScene` 路径与场景 GUID 校验一致。
+- `git diff --check` 通过。
