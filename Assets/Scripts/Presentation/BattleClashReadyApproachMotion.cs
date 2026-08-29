@@ -132,6 +132,33 @@ public static class BattleClashReadyApproachMotion
         Func<bool> shouldContinue
     )
     {
+        return PlaySingleActorApproach(
+            movingActor,
+            movingWorldRoot,
+            stationaryActor,
+            stationaryWorldRoot,
+            finalGap,
+            sprintDuration,
+            afterimageSpawnInterval,
+            0f,
+            1f,
+            shouldContinue
+        );
+    }
+
+    public static IEnumerator PlaySingleActorApproach(
+        BattleCharacterPresentationController movingActor,
+        Transform movingWorldRoot,
+        BattleCharacterPresentationController stationaryActor,
+        Transform stationaryWorldRoot,
+        float finalGap,
+        float sprintDuration,
+        float afterimageSpawnInterval,
+        float engagementTriggerSeparation,
+        float engagementFinalMoveSpeedScale,
+        Func<bool> shouldContinue
+    )
+    {
         if (!HasValidActors(
                 movingActor,
                 movingWorldRoot,
@@ -187,7 +214,17 @@ public static class BattleClashReadyApproachMotion
                 yield break;
             }
 
-            elapsed += Time.deltaTime;
+            float currentSeparation = Mathf.Abs(
+                stationaryWorldRoot.position.x -
+                movingWorldRoot.position.x
+            );
+            float speedScale = GetEngagementMoveSpeedScale(
+                currentSeparation,
+                safeFinalGap,
+                engagementTriggerSeparation,
+                engagementFinalMoveSpeedScale
+            );
+            elapsed += Time.deltaTime * speedScale;
             float linearT = Mathf.Clamp01(elapsed / safeDuration);
             float easedT = BattlePresentationEasing.EaseOutQuad(linearT);
             movingWorldRoot.position = movingStart +
@@ -216,6 +253,36 @@ public static class BattleClashReadyApproachMotion
         {
             movingWorldRoot.position = movingTarget;
         }
+    }
+
+    private static float GetEngagementMoveSpeedScale(
+        float currentSeparation,
+        float finalGap,
+        float engagementTriggerSeparation,
+        float engagementFinalMoveSpeedScale
+    )
+    {
+        float safeTrigger = Mathf.Max(finalGap, engagementTriggerSeparation);
+        if (safeTrigger - finalGap <= HorizontalDistanceTolerance ||
+            currentSeparation >= safeTrigger)
+        {
+            return 1f;
+        }
+
+        float engagementProgress = Mathf.Clamp01(
+            (safeTrigger - currentSeparation) /
+            (safeTrigger - finalGap)
+        );
+        float easedProgress = Mathf.SmoothStep(
+            0f,
+            1f,
+            engagementProgress
+        );
+        return Mathf.Lerp(
+            1f,
+            Mathf.Clamp(engagementFinalMoveSpeedScale, 0.01f, 1f),
+            easedProgress
+        );
     }
 
     private static bool HasValidActors(

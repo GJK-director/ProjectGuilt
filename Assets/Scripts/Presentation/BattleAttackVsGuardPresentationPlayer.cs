@@ -14,11 +14,19 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
     [SerializeField]
     private BattleAttackVsGuardPresentationProfile presentationProfile;
 
+    [SerializeField, Min(0.01f), Tooltip(
+        "普通近战Guard接敌移动速度倍率；1表示使用基础SprintDuration。"
+    )]
+    private float guardApproachMoveSpeedMultiplier = 1.00f;
+
     public bool IsRunning { get; private set; }
     public bool IsFinished { get; private set; }
     public float GuardApproachSeparation => presentationProfile != null
         ? presentationProfile.GuardApproachSeparation
         : 0f;
+    public float EngagementFinalMoveSpeedScale => presentationProfile != null
+        ? presentationProfile.EngagementFinalMoveSpeedScale
+        : 0.50f;
 
     private BattleCharacterPresentationController attacker;
     private BattleCharacterPresentationController defender;
@@ -70,6 +78,29 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         Action completion
     )
     {
+        return TryPlayClashReadyApproach(
+            defenseSide,
+            defenseWorldRoot,
+            attackSide,
+            attackWorldRoot,
+            engagementResult,
+            useRealApproach,
+            0f,
+            completion
+        );
+    }
+
+    public bool TryPlayClashReadyApproach(
+        BattleCharacterPresentationController defenseSide,
+        Transform defenseWorldRoot,
+        BattleCharacterPresentationController attackSide,
+        Transform attackWorldRoot,
+        BattleClashEngagementResult engagementResult,
+        bool useRealApproach,
+        float engagementTriggerSeparation,
+        Action completion
+    )
+    {
         if (IsRunning || !isActiveAndEnabled || defenseSide == null ||
             attackSide == null || defenseWorldRoot == null ||
             attackWorldRoot == null || engagementResult == null ||
@@ -110,7 +141,8 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
                 attackSide,
                 attackWorldRoot,
                 defenseSide,
-                defenseWorldRoot
+                defenseWorldRoot,
+                engagementTriggerSeparation
             )
         );
         return true;
@@ -121,17 +153,26 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         BattleCharacterPresentationController attackSide,
         Transform attackWorldRoot,
         BattleCharacterPresentationController defenseSide,
-        Transform defenseWorldRoot
+        Transform defenseWorldRoot,
+        float engagementTriggerSeparation
     )
     {
+        float moveSpeedMultiplier = Mathf.Max(
+            0.01f,
+            guardApproachMoveSpeedMultiplier
+        );
+        float approachDuration =
+            presentationProfile.SprintDuration / moveSpeedMultiplier;
         yield return BattleClashReadyApproachMotion.PlaySingleActorApproach(
             attackSide,
             attackWorldRoot,
             defenseSide,
             defenseWorldRoot,
             presentationProfile.GuardApproachSeparation,
-            presentationProfile.SprintDuration,
+            approachDuration,
             presentationProfile.AfterimageSpawnInterval,
+            engagementTriggerSeparation,
+            presentationProfile.EngagementFinalMoveSpeedScale,
             () => IsCurrentPlayback(version)
         );
 
@@ -284,7 +325,9 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         else
         {
             guardRecoilCoroutine = StartCoroutine(
-                RunGuardRecoil(version)
+                attackerUsesCloseRangeShoot
+                    ? RunGuardRecoil(version)
+                    : RunReducedGuardShake(version)
             );
         }
 
@@ -334,6 +377,20 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         if (defender != null)
         {
             yield return defender.PlayGuardRecoil(attackDirectionSign);
+        }
+
+        if (IsCurrentPlayback(version))
+        {
+            guardRecoilCoroutine = null;
+        }
+    }
+
+    private IEnumerator RunReducedGuardShake(int version)
+    {
+        if (defender != null)
+        {
+            // 普通近战的不完美防御只震动视觉，不增加任何后退位移。
+            yield return defender.PlayGuardShake();
         }
 
         if (IsCurrentPlayback(version))

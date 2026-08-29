@@ -58,7 +58,7 @@ public class GrayboxBattleCameraController : MonoBehaviour
 
     [Header("镜头范围：水平")]
 
-    [Tooltip("Camera 左右最大移动距离")]
+    [Tooltip("玩家手动拖拽时Camera左右最大移动距离")]
     [SerializeField]
     private float horizontalLimit = 1.2f;
 
@@ -289,6 +289,8 @@ public class GrayboxBattleCameraController : MonoBehaviour
     private bool isInteractiveUiPressActive;
     private bool ignoreCameraDragUntilPointerRelease;
     private bool isCinematicControlActive;
+    private bool isReturningToManualHorizontalRange;
+    private float manualHorizontalReturnVelocity;
     private EventSystem pointerEventSystem;
     private PointerEventData pointerEventData;
     private readonly List<RaycastResult> pointerRaycastResults =
@@ -304,9 +306,25 @@ public class GrayboxBattleCameraController : MonoBehaviour
     public float DefaultHorizontalWorldX => basePivotPosition.x;
     public float CurrentOrbitRadius => currentOrbitRadius;
     public float CurrentHorizontalWorldX =>
-        basePivotPosition.x + currentX;
+        basePivotPosition.x + GetDisplayedHorizontalOffset();
     public float CurrentCinematicVerticalViewProgress =>
         GetCurrentCinematicVerticalViewProgress();
+
+    public bool TryProjectWorldPointToViewport(
+        Vector3 worldPoint,
+        out Vector3 viewportPoint
+    )
+    {
+        Camera currentCamera = GetComponent<Camera>();
+        if (currentCamera == null)
+        {
+            viewportPoint = Vector3.zero;
+            return false;
+        }
+
+        viewportPoint = currentCamera.WorldToViewportPoint(worldPoint);
+        return true;
+    }
 
     public float GetPerspectiveScaleRelativeToDefault(Vector3 worldPoint)
     {
@@ -362,6 +380,15 @@ public class GrayboxBattleCameraController : MonoBehaviour
         if (isCinematicControlActive == active)
             return;
 
+        if (active)
+        {
+            // 吸收当前可见的Idle Sway，Cinematic接管帧保持同一画面位置。
+            currentX = GetDisplayedHorizontalOffset();
+            ClearIdleHorizontalSway();
+            isReturningToManualHorizontalRange = false;
+            manualHorizontalReturnVelocity = 0f;
+        }
+
         isCinematicControlActive = active;
         if (active)
         {
@@ -377,6 +404,12 @@ public class GrayboxBattleCameraController : MonoBehaviour
         Mouse mouse = Mouse.current;
         ignoreCameraDragUntilPointerRelease =
             mouse != null && mouse.leftButton.isPressed;
+        ClearIdleHorizontalSway();
+
+        float manualLimit = Mathf.Abs(horizontalLimit);
+        isReturningToManualHorizontalRange =
+            currentX < -manualLimit || currentX > manualLimit;
+        manualHorizontalReturnVelocity = 0f;
     }
 
     public void SetCinematicOrbitRadius(float radius)
@@ -412,12 +445,8 @@ public class GrayboxBattleCameraController : MonoBehaviour
         if (!isCinematicControlActive)
             return;
 
-        float safeLimit = Mathf.Abs(horizontalLimit);
-        currentX = Mathf.Clamp(
-            worldX - basePivotPosition.x,
-            -safeLimit,
-            safeLimit
-        );
+        // Battle Cinematic使用完整舞台World X，不受玩家手动拖拽范围限制。
+        currentX = worldX - basePivotPosition.x;
         ApplyCameraTransform();
     }
 
@@ -528,6 +557,8 @@ public class GrayboxBattleCameraController : MonoBehaviour
         ClearCameraDragState();
         ClearPointerPressOwnership();
         ClearIdleHorizontalSway();
+        isReturningToManualHorizontalRange = false;
+        manualHorizontalReturnVelocity = 0f;
     }
 
     private void Update()
@@ -540,10 +571,16 @@ public class GrayboxBattleCameraController : MonoBehaviour
             return;
         }
 
+        UpdateManualHorizontalRangeReturn();
+
         Mouse mouse = Mouse.current;
 
         if (mouse == null)
+        {
+            UpdateIdleHorizontalSway(true);
+            ApplyCameraTransform();
             return;
+        }
 
 
         Vector2 pointerPosition = mouse.position.ReadValue();
@@ -592,7 +629,10 @@ public class GrayboxBattleCameraController : MonoBehaviour
 
         UpdateZoom(blockCameraZoom ? 0f : scrollY);
 
-        UpdateIdleHorizontalSway(isPointerOverInteractiveUi);
+        UpdateIdleHorizontalSway(
+            isPointerOverInteractiveUi ||
+            isReturningToManualHorizontalRange
+        );
 
 
         // -----------------------------------------------------
@@ -890,9 +930,9 @@ public class GrayboxBattleCameraController : MonoBehaviour
             * direction;
         float safeLimit = Mathf.Abs(horizontalLimit);
 
-        currentX = Mathf.Clamp(
+        currentX = ClampManualHorizontalMovement(
+            currentX,
             requestedX,
-            -safeLimit,
             safeLimit
         );
 
@@ -930,9 +970,9 @@ public class GrayboxBattleCameraController : MonoBehaviour
         float safeLimit = Mathf.Abs(horizontalLimit);
         float requestedX = currentX
             + horizontalVelocity * deltaTime;
-        currentX = Mathf.Clamp(
+        currentX = ClampManualHorizontalMovement(
+            currentX,
             requestedX,
-            -safeLimit,
             safeLimit
         );
 
@@ -961,6 +1001,51 @@ public class GrayboxBattleCameraController : MonoBehaviour
         {
             horizontalVelocity = 0f;
         }
+    }
+
+    private void UpdateManualHorizontalRangeReturn()
+    {
+        if (!isReturningToManualHorizontalRange)
+            return;
+
+        float safeLimit = Mathf.Abs(horizontalLimit);
+        float targetX = Mathf.Clamp(currentX, -safeLimit, safeLimit);
+        float deltaTime = Time.unscaledDeltaTime;
+        if (deltaTime <= Mathf.Epsilon)
+            return;
+
+        currentX = Mathf.SmoothDamp(
+            currentX,
+            targetX,
+            ref manualHorizontalReturnVelocity,
+            Mathf.Max(0.01f, cameraDragFollowTime),
+            Mathf.Infinity,
+            deltaTime
+        );
+
+        if (Mathf.Abs(currentX - targetX) <= HorizontalVelocityStopThreshold &&
+            Mathf.Abs(manualHorizontalReturnVelocity) <=
+                HorizontalVelocityStopThreshold)
+        {
+            currentX = targetX;
+            manualHorizontalReturnVelocity = 0f;
+            isReturningToManualHorizontalRange = false;
+        }
+    }
+
+    private static float ClampManualHorizontalMovement(
+        float current,
+        float requested,
+        float limit
+    )
+    {
+        if (current > limit)
+            return Mathf.Clamp(requested, limit, current);
+
+        if (current < -limit)
+            return Mathf.Clamp(requested, current, -limit);
+
+        return Mathf.Clamp(requested, -limit, limit);
     }
 
 
@@ -1595,12 +1680,7 @@ public class GrayboxBattleCameraController : MonoBehaviour
 
         // Horizontal 继续让 Camera 与 Pivot 一起沿世界 X 平移；
         // Pivot 的 Y/Z 始终保持启动时记录的舞台空间基准。
-        float safeHorizontalLimit = Mathf.Abs(horizontalLimit);
-        float displayedX = Mathf.Clamp(
-            currentX + idleSwayOffset,
-            -safeHorizontalLimit,
-            safeHorizontalLimit
-        );
+        float displayedX = GetDisplayedHorizontalOffset();
         orbitPivot.position =
             basePivotPosition
             + Vector3.right * displayedX;
@@ -1648,6 +1728,22 @@ public class GrayboxBattleCameraController : MonoBehaviour
         transform.rotation = cameraRotation;
     }
 
+    private float GetDisplayedHorizontalOffset()
+    {
+        if (isCinematicControlActive ||
+            isReturningToManualHorizontalRange)
+        {
+            return currentX;
+        }
+
+        float safeHorizontalLimit = Mathf.Abs(horizontalLimit);
+        return Mathf.Clamp(
+            currentX + idleSwayOffset,
+            -safeHorizontalLimit,
+            safeHorizontalLimit
+        );
+    }
+
     // =========================================================
     // Reset
     // =========================================================
@@ -1662,6 +1758,8 @@ public class GrayboxBattleCameraController : MonoBehaviour
     public void ResetToDefault()
     {
         currentX = 0f;
+        isReturningToManualHorizontalRange = false;
+        manualHorizontalReturnVelocity = 0f;
         ClearCameraDragState();
         ClearIdleHorizontalSway();
         currentVerticalPan = 0f;

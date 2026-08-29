@@ -65,6 +65,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public bool AttackVsAttackFocusFinished;
         public bool AttackVsAttackApproachFinished;
         public bool DefenseVsAttackAnchoredApproachActive;
+        public bool DefenseVsAttackEngagementBegun;
+        public bool DefenseVsAttackCameraEntryFinished;
+        public bool DefenseVsAttackApproachFinished;
 
         public BattleClashSideState LongRangeShooterSide;
         public BattleClashSideState LongRangeMeleeSide;
@@ -1020,21 +1023,40 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             GetPresentationSpeed(context.DefenseDefender),
             GetPresentationSpeed(context.DefenseAttacker)
         );
+        context.DefenseVsAttackAnchoredApproachActive = true;
+        context.DefenseVsAttackEngagementBegun = false;
+        context.DefenseVsAttackCameraEntryFinished = false;
+        context.DefenseVsAttackApproachFinished = false;
         activePresentationRequestId = requestId;
+        float engagementTriggerSeparation =
+            director.EngagementBlendStartSeparation;
 
-        bool cameraStarted = director.TryPlayAnchoredTwoUnitApproach(
+        bool cameraStarted = director
+            .TryPlayImmediateSingleActorApproachFollow(
             context.DefenseAttackerHandle,
             context.DefenseDefenderHandle,
-            attackVsGuardPresentationPlayer.GuardApproachSeparation
+            attackVsGuardPresentationPlayer.GuardApproachSeparation,
+            () => MarkDefenseVsAttackEngagementBegun(
+                context,
+                executionItem,
+                requestId
+            ),
+            success => MarkDefenseVsAttackCameraEntryFinished(
+                context,
+                executionItem,
+                requestId,
+                completion,
+                success
+            )
         );
         if (!cameraStarted)
         {
+            ClearDefenseVsAttackApproachState(context);
             activePresentationRequestId = 0L;
             return false;
         }
 
         context.CameraCinematicOwned = true;
-        context.DefenseVsAttackAnchoredApproachActive = true;
         LogApproachStarted(requestId, context);
         bool approachStarted = attackVsGuardPresentationPlayer
             .TryPlayClashReadyApproach(
@@ -1044,7 +1066,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 context.DefenseAttackerHandle.WorldRoot.transform,
                 context.ClashEngagement,
                 true,
-                () => CompleteDefenseVsAttackAnchoredApproach(
+                engagementTriggerSeparation,
+                () => MarkDefenseVsAttackApproachFinished(
                     context,
                     executionItem,
                     requestId,
@@ -1056,9 +1079,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return true;
         }
 
-        director.CancelAnchoredTwoUnitApproach(true);
+        ResolveBattleCameraDirector()?.CancelAnchoredTwoUnitApproach(true);
         context.CameraCinematicOwned = false;
-        context.DefenseVsAttackAnchoredApproachActive = false;
+        ClearDefenseVsAttackApproachState(context);
         if (activePresentationRequestId == requestId)
         {
             activePresentationRequestId = 0L;
@@ -1067,7 +1090,62 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         return false;
     }
 
-    private void CompleteDefenseVsAttackAnchoredApproach(
+    private void MarkDefenseVsAttackEngagementBegun(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem) ||
+            !context.DefenseVsAttackAnchoredApproachActive ||
+            context.DefenseVsAttackEngagementBegun)
+        {
+            return;
+        }
+
+        // 单一Engagement Begin边界，后续二级拼点UI可绑定在这里。
+        context.DefenseVsAttackEngagementBegun = true;
+    }
+
+    private void MarkDefenseVsAttackCameraEntryFinished(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion,
+        bool success
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem) ||
+            !context.DefenseVsAttackAnchoredApproachActive)
+        {
+            return;
+        }
+
+        if (!success)
+        {
+            attackVsGuardPresentationPlayer?.CancelAndReset();
+            context.CameraCinematicOwned = false;
+            ClearDefenseVsAttackApproachState(context);
+            activePresentationRequestId = 0L;
+            LogApproachFallback(requestId, "Guard Camera Entry启动失败");
+            completion.TryComplete(requestId);
+            return;
+        }
+
+        context.DefenseVsAttackCameraEntryFinished = true;
+        TryCompleteDefenseVsAttackAnchoredApproach(
+            context,
+            executionItem,
+            requestId,
+            completion
+        );
+    }
+
+    private void MarkDefenseVsAttackApproachFinished(
         ActionPresentationContext context,
         BattleExecutionItem executionItem,
         long requestId,
@@ -1082,12 +1160,53 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
+        context.DefenseVsAttackApproachFinished = true;
+        TryCompleteDefenseVsAttackAnchoredApproach(
+            context,
+            executionItem,
+            requestId,
+            completion
+        );
+    }
+
+    private void TryCompleteDefenseVsAttackAnchoredApproach(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!context.DefenseVsAttackCameraEntryFinished ||
+            !context.DefenseVsAttackApproachFinished ||
+            !IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem) ||
+            !context.DefenseVsAttackAnchoredApproachActive)
+        {
+            return;
+        }
+
         ResolveBattleCameraDirector()?
             .FinishAnchoredTwoUnitApproachTracking();
-        context.DefenseVsAttackAnchoredApproachActive = false;
+        ClearDefenseVsAttackApproachState(context);
         activePresentationRequestId = 0L;
         LogApproachCompleted(requestId);
         completion.TryComplete(requestId);
+    }
+
+    private static void ClearDefenseVsAttackApproachState(
+        ActionPresentationContext context
+    )
+    {
+        if (context == null)
+        {
+            return;
+        }
+
+        context.DefenseVsAttackAnchoredApproachActive = false;
+        context.DefenseVsAttackEngagementBegun = false;
+        context.DefenseVsAttackCameraEntryFinished = false;
+        context.DefenseVsAttackApproachFinished = false;
     }
 
     private bool TryStartDefenseVsAttackApproach(
@@ -3007,7 +3126,13 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ActionPresentationContext context
     )
     {
-        if (context == null || !context.CameraCinematicOwned)
+        if (context == null)
+        {
+            return;
+        }
+
+        ClearDefenseVsAttackApproachState(context);
+        if (!context.CameraCinematicOwned)
         {
             return;
         }
@@ -3021,7 +3146,13 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ActionPresentationContext context
     )
     {
-        if (context == null || !context.CameraCinematicOwned)
+        if (context == null)
+        {
+            return;
+        }
+
+        ClearDefenseVsAttackApproachState(context);
+        if (!context.CameraCinematicOwned)
         {
             return;
         }

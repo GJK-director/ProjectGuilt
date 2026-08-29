@@ -720,6 +720,51 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         ApplyBodyVisualOffset();
     }
 
+    public IEnumerator PlayGuardShake()
+    {
+        SetGuard();
+        bodyMotionOffset = Vector3.zero;
+        bodyShakeOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+
+        float shakeDuration = Mathf.Max(0f, guardShakeDuration);
+        float shakeElapsed = 0f;
+        while (shakeElapsed < shakeDuration)
+        {
+            if (!isActiveAndEnabled)
+            {
+                FinishGuardPresentation();
+                yield break;
+            }
+
+            if (presentationPaused)
+            {
+                yield return null;
+                continue;
+            }
+
+            shakeElapsed = Mathf.Min(
+                shakeDuration,
+                shakeElapsed + Time.deltaTime
+            );
+            float shakeT = shakeElapsed / shakeDuration;
+            float currentAmplitude = Mathf.Max(0f, guardShakeAmplitude) *
+                (1f - BattlePresentationEasing.EaseOutQuad(shakeT));
+            Vector2 randomDirection = UnityEngine.Random.insideUnitCircle;
+            bodyShakeOffset = new Vector3(
+                randomDirection.x,
+                randomDirection.y,
+                0f
+            ) * currentAmplitude;
+            ApplyBodyVisualOffset();
+            yield return null;
+        }
+
+        bodyMotionOffset = Vector3.zero;
+        bodyShakeOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+    }
+
     public IEnumerator PlayPerfectGuardEffect()
     {
         CachePerfectGuardEffectState();

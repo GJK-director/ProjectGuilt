@@ -123,6 +123,32 @@ public sealed class BattleCameraDirector : MonoBehaviour
     [SerializeField, Range(-1f, 1f)]
     private float twoUnitFocusVerticalViewProgress = 0.35f;
 
+    [Header("Single Actor Approach Follow")]
+    [SerializeField, Min(0f)]
+    private float singleActorApproachRadius = 8.5f;
+
+    [SerializeField, Min(0f)]
+    private float engagementBlendStartSeparation = 4.5f;
+
+    [SerializeField, Min(0f)]
+    private float engagementBlendDuration = 0.20f;
+
+    [SerializeField, Min(0f)]
+    private float engagementHorizontalFollowTime = 0.15f;
+
+    [SerializeField, Min(0f)]
+    private float engagementFinalFramingSnapTolerance = 0.05f;
+
+    [Header("Battle Action Camera Entry")]
+    [SerializeField, Min(0f)]
+    private float battleActionEntryDuration = 0.10f;
+
+    [SerializeField, Min(0f)]
+    private float battleActionEstablishingRadiusOffset = 1.5f;
+
+    [SerializeField, Min(0f)]
+    private float battleActionEstablishingDuration = 0.14f;
+
     [Header("Anchored Two Unit Approach")]
     [SerializeField, Range(0f, 0.5f)]
     private float anchoredApproachAttackerFramingWeight = 0.30f;
@@ -197,11 +223,18 @@ public sealed class BattleCameraDirector : MonoBehaviour
     private Transform anchoredApproachAttackerWorldRoot;
     private Transform anchoredApproachDefenderWorldRoot;
     private float anchoredApproachNearSeparation;
+    private float anchoredApproachInitialSeparation;
     private float anchoredApproachStartSeparation;
     private float anchoredApproachStartWorldX;
     private float anchoredApproachStartRadius;
+    private float anchoredApproachStartVerticalProgress;
+    private bool anchoredApproachUsesContinuousFraming;
+    private float anchoredApproachHorizontalVelocity;
+    private float anchoredApproachRadiusVelocity;
 
     public bool IsIntroPlaying => isIntroPlaying;
+    public float EngagementBlendStartSeparation =>
+        Mathf.Max(0f, engagementBlendStartSeparation);
 
     private bool IsPresentationPlaying =>
         isIntroPlaying ||
@@ -482,6 +515,98 @@ public sealed class BattleCameraDirector : MonoBehaviour
         float nearSeparation
     )
     {
+        if (!TryBeginAnchoredTwoUnitApproach(
+                attacker,
+                defender,
+                nearSeparation
+            ))
+        {
+            return false;
+        }
+
+        ApplyAnchoredTwoUnitApproachFraming();
+        anchoredApproachCoroutine = StartCoroutine(
+            PlayAnchoredTwoUnitApproachSequence()
+        );
+        return true;
+    }
+
+    public bool TryPlaySingleActorApproachFollow(
+        BattleUnitViewHandle attacker,
+        BattleUnitViewHandle defender,
+        float nearSeparation,
+        System.Action<bool> approachReady,
+        System.Action engagementBegan,
+        System.Action<bool> engagementReady
+    )
+    {
+        return TryPlaySingleActorApproachFollow(
+            attacker,
+            defender,
+            nearSeparation,
+            true,
+            approachReady,
+            engagementBegan,
+            engagementReady
+        );
+    }
+
+    public bool TryPlayImmediateSingleActorApproachFollow(
+        BattleUnitViewHandle attacker,
+        BattleUnitViewHandle defender,
+        float nearSeparation,
+        System.Action engagementBegan,
+        System.Action<bool> engagementReady
+    )
+    {
+        return TryPlaySingleActorApproachFollow(
+            attacker,
+            defender,
+            nearSeparation,
+            false,
+            null,
+            engagementBegan,
+            engagementReady
+        );
+    }
+
+    private bool TryPlaySingleActorApproachFollow(
+        BattleUnitViewHandle attacker,
+        BattleUnitViewHandle defender,
+        float nearSeparation,
+        bool useBattleActionEntry,
+        System.Action<bool> approachReady,
+        System.Action engagementBegan,
+        System.Action<bool> engagementReady
+    )
+    {
+        if (!TryBeginAnchoredTwoUnitApproach(
+                attacker,
+                defender,
+                nearSeparation
+            ))
+        {
+            return false;
+        }
+
+        anchoredApproachUsesContinuousFraming = true;
+        anchoredApproachCoroutine = StartCoroutine(
+            PlaySingleActorApproachFollowSequence(
+                useBattleActionEntry,
+                approachReady,
+                engagementBegan,
+                engagementReady
+            )
+        );
+        return true;
+    }
+
+    private bool TryBeginAnchoredTwoUnitApproach(
+        BattleUnitViewHandle attacker,
+        BattleUnitViewHandle defender,
+        float nearSeparation
+    )
+    {
         if (IsPresentationPlaying || IsBattleActionEffectPlaying ||
             attacker == null || defender == null ||
             attacker.WorldRoot == null || defender.WorldRoot == null)
@@ -500,24 +625,24 @@ public sealed class BattleCameraDirector : MonoBehaviour
         anchoredApproachDefenderWorldRoot =
             defender.WorldRoot.transform;
         anchoredApproachNearSeparation = Mathf.Max(0f, nearSeparation);
+        anchoredApproachInitialSeparation = Mathf.Abs(
+            anchoredApproachAttackerWorldRoot.position.x -
+            anchoredApproachDefenderWorldRoot.position.x
+        );
         anchoredApproachStartSeparation = Mathf.Max(
             anchoredApproachNearSeparation,
-            Mathf.Abs(
-                anchoredApproachAttackerWorldRoot.position.x -
-                anchoredApproachDefenderWorldRoot.position.x
-            )
+            anchoredApproachInitialSeparation
         );
+        cameraController.SetCinematicControl(true);
         anchoredApproachStartWorldX =
             cameraController.CurrentHorizontalWorldX;
         anchoredApproachStartRadius =
             cameraController.CurrentOrbitRadius;
+        anchoredApproachStartVerticalProgress =
+            cameraController.CurrentCinematicVerticalViewProgress;
+        anchoredApproachHorizontalVelocity = 0f;
+        anchoredApproachRadiusVelocity = 0f;
         isAnchoredApproachPlaying = true;
-        cameraController.SetCinematicControl(true);
-
-        ApplyAnchoredTwoUnitApproachFraming();
-        anchoredApproachCoroutine = StartCoroutine(
-            PlayAnchoredTwoUnitApproachSequence()
-        );
         return true;
     }
 
@@ -529,7 +654,15 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
 
         // Approach结束时用最终WorldRoot再计算一次，随后保留该构图。
-        ApplyAnchoredTwoUnitApproachFraming();
+        if (anchoredApproachUsesContinuousFraming)
+        {
+            ApplyContinuousEngagementFraming();
+            ApplyFinalEngagementFramingCorrectionWithinTolerance();
+        }
+        else
+        {
+            ApplyAnchoredTwoUnitApproachFraming();
+        }
         if (anchoredApproachCoroutine != null)
         {
             StopCoroutine(anchoredApproachCoroutine);
@@ -560,6 +693,9 @@ public sealed class BattleCameraDirector : MonoBehaviour
             );
             cameraController.SetCinematicOrbitRadius(
                 anchoredApproachStartRadius
+            );
+            cameraController.SetCinematicVerticalViewProgress(
+                anchoredApproachStartVerticalProgress
             );
         }
 
@@ -707,8 +843,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
         System.Action completion
     )
     {
-        float startWorldX = cameraController.CurrentHorizontalWorldX;
-        float defaultWorldX = cameraController.DefaultHorizontalWorldX;
+        float turnEndClosingStartHorizontalX =
+            cameraController.CurrentHorizontalWorldX;
         float startRadius = cameraController.CurrentOrbitRadius;
         float startVerticalProgress =
             cameraController.CurrentCinematicVerticalViewProgress;
@@ -739,11 +875,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
             float easedFadeProgress = Mathf.Pow(fadeProgress, 3f);
 
             cameraController.SetCinematicHorizontalWorldX(
-                Mathf.Lerp(
-                    startWorldX,
-                    defaultWorldX,
-                    easedCameraProgress
-                )
+                turnEndClosingStartHorizontalX
             );
             cameraController.SetCinematicOrbitRadius(
                 Mathf.Lerp(
@@ -769,7 +901,9 @@ public sealed class BattleCameraDirector : MonoBehaviour
             yield return null;
         }
 
-        cameraController.SetCinematicHorizontalWorldX(defaultWorldX);
+        cameraController.SetCinematicHorizontalWorldX(
+            turnEndClosingStartHorizontalX
+        );
         cameraController.SetCinematicOrbitRadius(recoveryStartOrbitRadius);
         cameraController.SetCinematicVerticalViewProgress(0f);
         SetOverlayAlpha(turnEndClosingOverlayAlpha);
@@ -920,24 +1054,520 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
     }
 
-    private void ApplyAnchoredTwoUnitApproachFraming()
+    private IEnumerator PlaySingleActorApproachFollowSequence(
+        bool useBattleActionEntry,
+        System.Action<bool> approachReady,
+        System.Action engagementBegan,
+        System.Action<bool> engagementReady
+    )
     {
-        if (cameraController == null ||
-            anchoredApproachAttackerWorldRoot == null ||
-            anchoredApproachDefenderWorldRoot == null)
+        float blendTrigger = Mathf.Max(
+            anchoredApproachNearSeparation,
+            engagementBlendStartSeparation
+        );
+        bool startsInEngagement =
+            anchoredApproachInitialSeparation <= blendTrigger;
+        float elapsed = 0f;
+
+        if (useBattleActionEntry && !startsInEngagement)
+        {
+            float entryStartWorldX =
+                cameraController.CurrentHorizontalWorldX;
+            float entryStartRadius = cameraController.CurrentOrbitRadius;
+            float entryStartVerticalProgress =
+                cameraController.CurrentCinematicVerticalViewProgress;
+            float defaultWorldX = cameraController.DefaultHorizontalWorldX;
+            float defaultRadius = cameraController.DefaultOrbitRadius;
+            float safeEntryDuration = Mathf.Max(
+                0f,
+                battleActionEntryDuration
+            );
+
+            while (elapsed < safeEntryDuration && isAnchoredApproachPlaying)
+            {
+            if (!HasValidAnchoredApproachTargets())
+            {
+                AbortAnchoredTwoUnitApproach(approachReady);
+                yield break;
+            }
+
+            elapsed = Mathf.Min(
+                safeEntryDuration,
+                elapsed + Time.unscaledDeltaTime
+            );
+            float progress = safeEntryDuration > Mathf.Epsilon
+                ? elapsed / safeEntryDuration
+                : 1f;
+            float easedProgress = Mathf.SmoothStep(0f, 1f, progress);
+            cameraController.SetCinematicHorizontalWorldX(
+                Mathf.Lerp(
+                    entryStartWorldX,
+                    defaultWorldX,
+                    easedProgress
+                )
+            );
+            cameraController.SetCinematicOrbitRadius(
+                Mathf.Lerp(
+                    entryStartRadius,
+                    defaultRadius,
+                    easedProgress
+                )
+            );
+            cameraController.SetCinematicVerticalViewProgress(
+                Mathf.Lerp(
+                    entryStartVerticalProgress,
+                    0f,
+                    easedProgress
+                )
+            );
+                yield return null;
+            }
+
+            if (!isAnchoredApproachPlaying)
+            {
+                yield break;
+            }
+
+            cameraController.SetCinematicHorizontalWorldX(defaultWorldX);
+            cameraController.SetCinematicOrbitRadius(defaultRadius);
+            cameraController.SetCinematicVerticalViewProgress(0f);
+
+            float establishingStartRadius =
+                cameraController.CurrentOrbitRadius;
+            float establishingTargetRadius = defaultRadius +
+                Mathf.Max(0f, battleActionEstablishingRadiusOffset);
+            float safeEstablishingDuration = Mathf.Max(
+                0f,
+                battleActionEstablishingDuration
+            );
+            elapsed = 0f;
+            while (elapsed < safeEstablishingDuration &&
+                isAnchoredApproachPlaying)
+            {
+            if (!HasValidAnchoredApproachTargets())
+            {
+                AbortAnchoredTwoUnitApproach(approachReady);
+                yield break;
+            }
+
+            elapsed = Mathf.Min(
+                safeEstablishingDuration,
+                elapsed + Time.unscaledDeltaTime
+            );
+            float progress = safeEstablishingDuration > Mathf.Epsilon
+                ? elapsed / safeEstablishingDuration
+                : 1f;
+            float easedProgress = Mathf.SmoothStep(0f, 1f, progress);
+            cameraController.SetCinematicHorizontalWorldX(defaultWorldX);
+            cameraController.SetCinematicOrbitRadius(
+                Mathf.Lerp(
+                    establishingStartRadius,
+                    establishingTargetRadius,
+                    easedProgress
+                )
+            );
+            cameraController.SetCinematicVerticalViewProgress(0f);
+                yield return null;
+            }
+
+            if (!isAnchoredApproachPlaying)
+            {
+                yield break;
+            }
+
+            cameraController.SetCinematicHorizontalWorldX(defaultWorldX);
+            cameraController.SetCinematicOrbitRadius(
+                establishingTargetRadius
+            );
+            cameraController.SetCinematicVerticalViewProgress(0f);
+
+            if (safeEntryDuration <= Mathf.Epsilon &&
+                safeEstablishingDuration <= Mathf.Epsilon)
+            {
+                // 避免零时长配置在StartCoroutine返回前同步重入Presenter。
+                yield return null;
+            }
+
+            approachReady?.Invoke(true);
+            if (!isAnchoredApproachPlaying)
+            {
+                yield break;
+            }
+        }
+        else
+        {
+            if (approachReady != null)
+            {
+                // 避免跳过Entry时在StartCoroutine返回前同步重入调用方。
+                yield return null;
+                approachReady.Invoke(true);
+                if (!isAnchoredApproachPlaying)
+                {
+                    yield break;
+                }
+            }
+        }
+
+        while (isAnchoredApproachPlaying)
+        {
+            if (!TryGetAnchoredTwoUnitApproachFraming(
+                    out _,
+                    out _,
+                    out float separation
+                ))
+            {
+                AbortAnchoredTwoUnitApproach(engagementReady);
+                yield break;
+            }
+
+            if (separation <= blendTrigger)
+            {
+                break;
+            }
+
+            ApplySingleActorFollowFraming();
+            yield return null;
+        }
+
+        if (!isAnchoredApproachPlaying)
+        {
+            yield break;
+        }
+
+        engagementBegan?.Invoke();
+        if (!isAnchoredApproachPlaying)
+        {
+            yield break;
+        }
+
+        float blendStartRadius = cameraController.CurrentOrbitRadius;
+        float safeBlendDuration = Mathf.Max(0f, engagementBlendDuration);
+        elapsed = 0f;
+
+        if (safeBlendDuration <= Mathf.Epsilon)
+        {
+            // 保证StartCoroutine已返回后再通知Presenter，避免同步回调重入。
+            yield return null;
+        }
+
+        while (elapsed < safeBlendDuration && isAnchoredApproachPlaying)
+        {
+            if (!TryGetAnchoredTwoUnitApproachFraming(
+                    out float targetWorldX,
+                    out float targetRadius,
+                    out float separation,
+                    true
+                ))
+            {
+                AbortAnchoredTwoUnitApproach(engagementReady);
+                yield break;
+            }
+
+            elapsed = Mathf.Min(
+                safeBlendDuration,
+                elapsed + Time.unscaledDeltaTime
+            );
+            float blendProgress = Mathf.SmoothStep(
+                0f,
+                1f,
+                elapsed / safeBlendDuration
+            );
+            // 横向目标由实时屏幕构图驱动，并继承当前Camera X平滑追踪。
+            ApplyContinuousHorizontalFraming(
+                targetWorldX,
+                separation,
+                false
+            );
+            cameraController.SetCinematicOrbitRadius(
+                Mathf.Lerp(
+                    blendStartRadius,
+                    targetRadius,
+                    blendProgress
+                )
+            );
+            yield return null;
+        }
+
+        if (!isAnchoredApproachPlaying)
+        {
+            yield break;
+        }
+
+        ApplyContinuousEngagementFraming();
+        engagementReady?.Invoke(true);
+
+        // Blend后由同一Coroutine继续现有Anchored tracking，避免写入竞争。
+        while (isAnchoredApproachPlaying)
+        {
+            if (!TryGetAnchoredTwoUnitApproachFraming(
+                    out _,
+                    out _,
+                    out _
+                ))
+            {
+                AbortAnchoredTwoUnitApproach(null);
+                yield break;
+            }
+
+            ApplyContinuousEngagementFraming();
+            yield return null;
+        }
+    }
+
+    private bool HasValidAnchoredApproachTargets()
+    {
+        return cameraController != null &&
+            anchoredApproachAttackerWorldRoot != null &&
+            anchoredApproachDefenderWorldRoot != null;
+    }
+
+    private void ApplySingleActorFollowFraming()
+    {
+        float followTime = Mathf.Max(0f, engagementHorizontalFollowTime);
+        float deltaTime = Time.unscaledDeltaTime;
+        float currentWorldX = cameraController.CurrentHorizontalWorldX;
+        float targetWorldX = anchoredApproachAttackerWorldRoot.position.x;
+        float nextWorldX = followTime > Mathf.Epsilon
+            ? Mathf.SmoothDamp(
+                currentWorldX,
+                targetWorldX,
+                ref anchoredApproachHorizontalVelocity,
+                followTime,
+                Mathf.Infinity,
+                deltaTime
+            )
+            : targetWorldX;
+
+        float currentRadius = cameraController.CurrentOrbitRadius;
+        float targetRadius = Mathf.Max(0f, singleActorApproachRadius);
+        float nextRadius = followTime > Mathf.Epsilon
+            ? Mathf.SmoothDamp(
+                currentRadius,
+                targetRadius,
+                ref anchoredApproachRadiusVelocity,
+                followTime,
+                Mathf.Infinity,
+                deltaTime
+            )
+            : targetRadius;
+
+        cameraController.SetCinematicHorizontalWorldX(nextWorldX);
+        cameraController.SetCinematicOrbitRadius(nextRadius);
+    }
+
+    private void ApplyContinuousEngagementFraming(bool snapHorizontal = false)
+    {
+        if (!TryGetAnchoredTwoUnitApproachFraming(
+                out float targetWorldX,
+                out float targetRadius,
+                out float separation,
+                true
+            ))
         {
             return;
         }
 
+        ApplyContinuousHorizontalFraming(
+            targetWorldX,
+            separation,
+            snapHorizontal
+        );
+        cameraController.SetCinematicOrbitRadius(targetRadius);
+    }
+
+    private void ApplyFinalEngagementFramingCorrectionWithinTolerance()
+    {
+        if (!TryGetAnchoredTwoUnitApproachFraming(
+                out float fallbackWorldX,
+                out float targetRadius,
+                out float separation,
+                true
+            ))
+        {
+            return;
+        }
+
+        float targetWorldX = GetScreenSpaceEngagementWorldX(
+            fallbackWorldX,
+            separation
+        );
+        float currentWorldX = cameraController.CurrentHorizontalWorldX;
+        float currentRadius = cameraController.CurrentOrbitRadius;
+        float tolerance = Mathf.Max(
+            0f,
+            engagementFinalFramingSnapTolerance
+        );
+        if (Mathf.Abs(targetWorldX - currentWorldX) > tolerance ||
+            Mathf.Abs(targetRadius - currentRadius) > tolerance)
+        {
+            // 可见误差不强制跳变；最终接敌减速阶段负责让Camera自然追上。
+            return;
+        }
+
+        cameraController.SetCinematicHorizontalWorldX(targetWorldX);
+        cameraController.SetCinematicOrbitRadius(targetRadius);
+    }
+
+    private void ApplyContinuousHorizontalFraming(
+        float fallbackWorldX,
+        float separation,
+        bool snap
+    )
+    {
+        float desiredWorldX = GetScreenSpaceEngagementWorldX(
+            fallbackWorldX,
+            separation
+        );
+        float currentWorldX = cameraController.CurrentHorizontalWorldX;
+        if (snap)
+        {
+            anchoredApproachHorizontalVelocity = 0f;
+            cameraController.SetCinematicHorizontalWorldX(desiredWorldX);
+            return;
+        }
+
+        float followTime = Mathf.Max(0f, engagementHorizontalFollowTime);
+        float nextWorldX = followTime > Mathf.Epsilon
+            ? Mathf.SmoothDamp(
+                currentWorldX,
+                desiredWorldX,
+                ref anchoredApproachHorizontalVelocity,
+                followTime,
+                Mathf.Infinity,
+                Time.unscaledDeltaTime
+            )
+            : desiredWorldX;
+        cameraController.SetCinematicHorizontalWorldX(nextWorldX);
+    }
+
+    private float GetScreenSpaceEngagementWorldX(
+        float fallbackWorldX,
+        float separation
+    )
+    {
+        if (cameraController == null ||
+            anchoredApproachAttackerWorldRoot == null ||
+            anchoredApproachDefenderWorldRoot == null ||
+            !cameraController.TryProjectWorldPointToViewport(
+                anchoredApproachAttackerWorldRoot.position,
+                out Vector3 attackerViewport
+            ) ||
+            !cameraController.TryProjectWorldPointToViewport(
+                anchoredApproachDefenderWorldRoot.position,
+                out Vector3 defenderViewport
+            ))
+        {
+            return fallbackWorldX;
+        }
+
+        float screenMid = (attackerViewport.x + defenderViewport.x) * 0.5f;
+        float framingWeight = GetContinuousEngagementFramingWeight(
+            separation
+        );
+        float blendProgress = Mathf.Clamp01(framingWeight / 0.5f);
+        float currentScreenX = Mathf.Lerp(
+            attackerViewport.x,
+            screenMid,
+            blendProgress
+        );
+        float currentWorldX = cameraController.CurrentHorizontalWorldX;
+        const float projectionProbeDistance = 0.01f;
+        cameraController.SetCinematicHorizontalWorldX(
+            currentWorldX + projectionProbeDistance
+        );
+        float actualProbeDistance =
+            cameraController.CurrentHorizontalWorldX - currentWorldX;
+        if (Mathf.Abs(actualProbeDistance) <= Mathf.Epsilon)
+        {
+            cameraController.SetCinematicHorizontalWorldX(
+                currentWorldX - projectionProbeDistance
+            );
+            actualProbeDistance =
+                cameraController.CurrentHorizontalWorldX - currentWorldX;
+        }
+
+        if (Mathf.Abs(actualProbeDistance) <= Mathf.Epsilon ||
+            !cameraController.TryProjectWorldPointToViewport(
+                anchoredApproachAttackerWorldRoot.position,
+                out Vector3 probeAttackerViewport
+            ) ||
+            !cameraController.TryProjectWorldPointToViewport(
+                anchoredApproachDefenderWorldRoot.position,
+                out Vector3 probeDefenderViewport
+            ))
+        {
+            cameraController.SetCinematicHorizontalWorldX(currentWorldX);
+            return fallbackWorldX;
+        }
+
+        float probeScreenMid =
+            (probeAttackerViewport.x + probeDefenderViewport.x) * 0.5f;
+        float probeScreenX = Mathf.Lerp(
+            probeAttackerViewport.x,
+            probeScreenMid,
+            blendProgress
+        );
+        float screenDerivative =
+            (probeScreenX - currentScreenX) / actualProbeDistance;
+        cameraController.SetCinematicHorizontalWorldX(currentWorldX);
+        if (Mathf.Abs(screenDerivative) <= Mathf.Epsilon ||
+            float.IsNaN(screenDerivative) ||
+            float.IsInfinity(screenDerivative))
+        {
+            return fallbackWorldX;
+        }
+
+        float correctedWorldX = currentWorldX +
+            (0.5f - currentScreenX) / screenDerivative;
+        return float.IsNaN(correctedWorldX) ||
+            float.IsInfinity(correctedWorldX)
+            ? fallbackWorldX
+            : correctedWorldX;
+    }
+
+    private void ApplyAnchoredTwoUnitApproachFraming()
+    {
+        if (!TryGetAnchoredTwoUnitApproachFraming(
+                out float targetWorldX,
+                out float targetRadius,
+                out _
+            ))
+        {
+            return;
+        }
+
+        cameraController.SetCinematicHorizontalWorldX(targetWorldX);
+        cameraController.SetCinematicOrbitRadius(targetRadius);
+    }
+
+    private bool TryGetAnchoredTwoUnitApproachFraming(
+        out float targetWorldX,
+        out float targetRadius,
+        out float separation,
+        bool useContinuousFraming = false
+    )
+    {
+        targetWorldX = 0f;
+        targetRadius = 0f;
+        separation = 0f;
+        if (cameraController == null ||
+            anchoredApproachAttackerWorldRoot == null ||
+            anchoredApproachDefenderWorldRoot == null)
+        {
+            return false;
+        }
+
         float attackerX = anchoredApproachAttackerWorldRoot.position.x;
         float defenderX = anchoredApproachDefenderWorldRoot.position.x;
-        float framingWeight = Mathf.Clamp(
-            anchoredApproachAttackerFramingWeight,
-            0f,
-            0.5f
-        );
-        float targetWorldX = Mathf.Lerp(defenderX, attackerX, framingWeight);
-        float separation = Mathf.Abs(attackerX - defenderX);
+        separation = Mathf.Abs(attackerX - defenderX);
+        float framingWeight = useContinuousFraming
+            ? GetContinuousEngagementFramingWeight(separation)
+            : Mathf.Clamp(
+                anchoredApproachAttackerFramingWeight,
+                0f,
+                0.5f
+            );
+        targetWorldX = Mathf.Lerp(attackerX, defenderX, framingWeight);
         float separationRange = anchoredApproachStartSeparation -
             anchoredApproachNearSeparation;
         float farProgress = separationRange > Mathf.Epsilon
@@ -952,10 +1582,48 @@ public sealed class BattleCameraDirector : MonoBehaviour
             anchoredApproachFarRadius
         );
 
-        cameraController.SetCinematicHorizontalWorldX(targetWorldX);
-        cameraController.SetCinematicOrbitRadius(
-            Mathf.Lerp(nearRadius, farRadius, farProgress)
+        targetRadius = Mathf.Lerp(nearRadius, farRadius, farProgress);
+        return true;
+    }
+
+    private float GetContinuousEngagementFramingWeight(float separation)
+    {
+        float finalGap = Mathf.Max(0f, anchoredApproachNearSeparation);
+        float transitionSeparation = Mathf.Max(
+            finalGap,
+            Mathf.Max(0f, engagementBlendStartSeparation)
         );
+        float progress = transitionSeparation - finalGap > Mathf.Epsilon
+            ? Mathf.InverseLerp(
+                transitionSeparation,
+                finalGap,
+                separation
+            )
+            : separation <= finalGap + Mathf.Epsilon ? 1f : 0f;
+        float easedProgress = Mathf.SmoothStep(0f, 1f, progress);
+        return Mathf.Lerp(0f, 0.5f, easedProgress);
+    }
+
+    private void AbortAnchoredTwoUnitApproach(
+        System.Action<bool> completion
+    )
+    {
+        if (cameraController != null)
+        {
+            cameraController.SetCinematicHorizontalWorldX(
+                anchoredApproachStartWorldX
+            );
+            cameraController.SetCinematicOrbitRadius(
+                anchoredApproachStartRadius
+            );
+            cameraController.SetCinematicVerticalViewProgress(
+                anchoredApproachStartVerticalProgress
+            );
+        }
+
+        ClearAnchoredTwoUnitApproachState();
+        cameraController?.SetCinematicControl(false);
+        completion?.Invoke(false);
     }
 
     private void ClearAnchoredTwoUnitApproachState()
@@ -965,7 +1633,12 @@ public sealed class BattleCameraDirector : MonoBehaviour
         anchoredApproachAttackerWorldRoot = null;
         anchoredApproachDefenderWorldRoot = null;
         anchoredApproachNearSeparation = 0f;
+        anchoredApproachInitialSeparation = 0f;
         anchoredApproachStartSeparation = 0f;
+        anchoredApproachStartVerticalProgress = 0f;
+        anchoredApproachUsesContinuousFraming = false;
+        anchoredApproachHorizontalVelocity = 0f;
+        anchoredApproachRadiusVelocity = 0f;
     }
 
     private IEnumerator PlayGenericClashImpactSequence()
