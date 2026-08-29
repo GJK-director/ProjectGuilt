@@ -151,6 +151,7 @@ public static class BattleActionRollPanelPrefabGenerator
             Canvas canvas = root.GetComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.overrideSorting = true;
+            canvas.sortingLayerName = "Battle_Environment";
             canvas.sortingOrder = 32765;
 
             CanvasScaler scaler = root.GetComponent<CanvasScaler>();
@@ -205,6 +206,10 @@ public static class BattleActionRollPanelPrefabGenerator
             );
             SetObjectReference(serializedHost, "allySideView", allySideView);
             SetObjectReference(serializedHost, "enemySideView", enemySideView);
+            SetFloat(serializedHost, "followHorizontalGap", 24f);
+            SetFloat(serializedHost, "followVerticalGap", 18f);
+            SetFloat(serializedHost, "topHudReservedHeight", 112f);
+            SetBool(serializedHost, "clampToSafeArea", true);
             serializedHost.ApplyModifiedPropertiesWithoutUndo();
 
             PrefabUtility.SaveAsPrefabAsset(root, PrefabPath);
@@ -233,10 +238,13 @@ public static class BattleActionRollPanelPrefabGenerator
         );
         RectTransform sideRect = sideObject.GetComponent<RectTransform>();
         sideRect.SetParent(parent, false);
-        sideRect.anchorMin = new Vector2(enemySide ? 0.75f : 0.25f, 1f);
+        sideRect.anchorMin = new Vector2(0.5f, 0.5f);
         sideRect.anchorMax = sideRect.anchorMin;
-        sideRect.pivot = new Vector2(0.5f, 1f);
-        sideRect.anchoredPosition = new Vector2(0f, -36f);
+        sideRect.pivot = new Vector2(enemySide ? 0f : 1f, 0f);
+        sideRect.anchoredPosition = new Vector2(
+            enemySide ? 24f : -24f,
+            18f
+        );
         sideRect.sizeDelta = new Vector2(440f, 340f);
 
         RectTransform cardViewport = CreateRect(
@@ -423,6 +431,42 @@ public static class BattleActionRollPanelPrefabGenerator
         }
 
         property.objectReferenceValue = value;
+    }
+
+    static void SetFloat(
+        SerializedObject serializedObject,
+        string propertyName,
+        float value
+    )
+    {
+        SerializedProperty property =
+            serializedObject.FindProperty(propertyName);
+        if (property == null)
+        {
+            throw new InvalidOperationException(
+                "找不到序列化字段：" + propertyName
+            );
+        }
+
+        property.floatValue = value;
+    }
+
+    static void SetBool(
+        SerializedObject serializedObject,
+        string propertyName,
+        bool value
+    )
+    {
+        SerializedProperty property =
+            serializedObject.FindProperty(propertyName);
+        if (property == null)
+        {
+            throw new InvalidOperationException(
+                "找不到序列化字段：" + propertyName
+            );
+        }
+
+        property.boolValue = value;
     }
 
     static void ValidateReferences(

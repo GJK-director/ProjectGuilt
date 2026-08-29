@@ -10970,3 +10970,44 @@ BattleScene
 - 主菜单脚本默认值、场景序列化值与 Build Settings 目标均为 `BattleScene`。
 - `BattleScene` 路径与场景 GUID 校验一致。
 - `git diff --check` 通过。
+
+## 一百零三、行动 Roll 面板绑定角色外侧跟随
+
+行动 Roll 面板不再固定在屏幕顶部四分位，而是绑定本次拼点双方的运行时角色视图：
+
+- 友方面板以角色实际视觉边界的左上角为锚点，向左上方展开。
+- 敌方面板以角色实际视觉边界的右上角为锚点，向右上方展开。
+- 面板运行时改用世界摄像机渲染，并处于 `Battle_Environment` 与 `Battle_Character` 排序层之间；即使安全区约束造成局部重叠，人物仍会显示在面板前方。
+- 面板在 `LateUpdate` 中逐帧投影角色当前的 `SpriteRenderer` 边界，因此能同时跟随角色根节点位移和仅发生在精灵本体上的动画位移。
+- 面板与角色之间保留水平、垂直间距，并继续约束在 `Screen.safeArea` 内。
+- 未找到运行时角色 View 或世界摄像机时，自动回退到原有顶部四分位布局，不影响拼点流程。
+
+同步更新：
+
+- `BattleActionRollPanelHost` 的角色绑定、世界坐标投影和安全区约束。
+- `BattleUnitViewSpawner` 提供只读世界摄像机引用。
+- `BattleActionRollPanelPrefabGenerator` 与 `BattleActionRollPanel.prefab` 的默认锚点和跟随参数。
+
+改动边界与验证：
+
+- 未修改拼点、随机数、伤害、行动安排或动画时序。
+- `ProjectGuilt.sln` 完整编译通过，0 警告、0 错误。
+- 当前 Unity 编辑器成功完成脚本编译与程序集重载，没有 C# 编译错误。
+- `git diff --check` 通过。
+
+## 一百零四、行动 Roll 面板避让顶部常驻 HUD
+
+角色跟随面板在靠近屏幕顶边时，不再只按 `Screen.safeArea` 进行钳制，而是在安全区顶部额外保留 `112` 个 Canvas 参考单位：
+
+- 左侧面板避开负罪感/资源进度栏。
+- 右侧面板避开回合数字标记。
+- 顶部保留带包含现有 HUD 高度和额外间距，面板不会再被常驻 HUD 覆盖。
+- 只有面板尝试越过顶部保留带时才会被下移，其余位置继续跟随角色实际视觉边界。
+- 找不到角色 View 时使用的固定回退位置也遵循同一顶部保留带。
+
+本次未修改角色跟随、人物前景渲染、拼点规则、动画时序或其他战斗 UI 布局。
+
+验证记录：
+
+- `ProjectGuilt.sln` 完整编译通过，0 警告、0 错误。
+- `git diff --check` 通过。
