@@ -352,7 +352,8 @@ public static class BattleResolver
     }
 
     // ResolveRespondedEnemyIntent = 正式结算已响应敌人意图
-    // 当前支持玩家 Attack / Defense / Dodge 指定响应敌人 Attack。
+    // 当前支持玩家 Attack / Defense / Dodge 指定响应敌人 Attack；
+    // LongRangeShoot 另支持与敌人 Defense / Dodge 进行 AttackVsAttack 式拼点。
     public static BattleResolveResult ResolveRespondedEnemyIntent(
         BattleActionSlot actionSlot,
         BattleEnemyIntent enemyIntent
@@ -443,7 +444,12 @@ public static class BattleResolver
         CardTestData playerCard = actionSlot.cardState.cardData;
         CardTestData enemyCard = enemyIntent.enemyCardState.cardData;
 
-        if (enemyCard.cardType != CardType.Attack)
+        bool isLongRangeShootVsResponse =
+            actionSlot.cardState.IsLongRangeShoot() &&
+            (enemyCard.cardType == CardType.Defense ||
+                enemyCard.cardType == CardType.Dodge);
+        if (enemyCard.cardType != CardType.Attack &&
+            !isLongRangeShootVsResponse)
         {
             return CreateUnsupportedResolveResult(
                 "ResolveRespondedEnemyIntent 暂不支持该卡牌对抗类型：玩家 " +
@@ -685,17 +691,50 @@ public static class BattleResolver
             ? session.SideA.cardState
             : session.SideB.cardState;
         int winnerPoint = playerWon ? session.SideAPoint : session.SideBPoint;
-        plan.impacts.Add(new BattleImpact(
-            0,
-            plan.attacker,
-            plan.target,
-            plan.sourceCardState,
-            winnerPoint,
-            winnerPoint,
-            ClashResult.Win,
-            true,
-            true
-        ));
+        // LongRange Shoot vs Guard/Dodge 由拼点胜者决定结果表现。
+        // 响应卡胜出时仍建立一个不可伤害的Presentation Impact，
+        // 让正式表现拥有真实的结果边界，但不伪造Hit或伤害。
+        bool winnerIsAttack = plan.sourceCardState != null &&
+            plan.sourceCardState.cardData != null &&
+            plan.sourceCardState.cardData.cardType == CardType.Attack;
+        bool isLongRangeResponse = IsLongRangeShootResponse(session);
+        if (winnerIsAttack || isLongRangeResponse)
+        {
+            plan.impacts.Add(new BattleImpact(
+                0,
+                plan.attacker,
+                plan.target,
+                plan.sourceCardState,
+                winnerPoint,
+                winnerPoint,
+                ClashResult.Win,
+                winnerIsAttack,
+                winnerIsAttack
+            ));
+        }
+    }
+
+    static bool IsLongRangeShootResponse(BattleClashSession session)
+    {
+        if (session == null || session.SideA == null || session.SideB == null ||
+            session.SideA.cardState == null || session.SideB.cardState == null ||
+            session.SideA.cardState.cardData == null ||
+            session.SideB.cardState.cardData == null)
+        {
+            return false;
+        }
+
+        return session.SideA.cardState.IsLongRangeShoot() &&
+            IsLongRangeResponseCard(session.SideB.cardState) ||
+            session.SideB.cardState.IsLongRangeShoot() &&
+            IsLongRangeResponseCard(session.SideA.cardState);
+    }
+
+    static bool IsLongRangeResponseCard(BattleCardState cardState)
+    {
+        return cardState != null && cardState.cardData != null &&
+            (cardState.cardData.cardType == CardType.Defense ||
+                cardState.cardData.cardType == CardType.Dodge);
     }
 
     static void BuildDefenseResolutionPlan(BattleResolutionPlan plan)
@@ -1007,6 +1046,8 @@ public static class BattleResolver
 
         ConsumeSuccessfulPointCardBuffs(winner.actor, winner.pointSnapshot);
         PayDefaultResourceCostOnSuccessfulUse(winner.actor, winner.resourceSnapshot);
+        // LongRangeShoot无论拼点胜负都代表实际开火；只有资源支付随终局发生，
+        // 不因此改变胜负卡牌、Damage或事件归属。
         PayLongRangeShootResourceOnTerminalUse(loser);
         TriggerBattleEvent(BattleTiming.ClashWin, winner.actor, defender,
             winner.cardState, winnerPoint, 0, false, false, ClashResult.Win);

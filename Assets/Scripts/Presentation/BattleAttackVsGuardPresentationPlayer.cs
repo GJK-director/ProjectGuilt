@@ -101,6 +101,59 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         Action completion
     )
     {
+        return TryPlaySingleActorClashReadyApproach(
+            defenseSide,
+            defenseWorldRoot,
+            attackSide,
+            attackWorldRoot,
+            engagementResult,
+            useRealApproach,
+            presentationProfile != null
+                ? presentationProfile.GuardApproachSeparation
+                : 0f,
+            engagementTriggerSeparation,
+            false,
+            completion
+        );
+    }
+
+    public bool TryPlayCloseRangeClashReadyApproach(
+        BattleCharacterPresentationController defenseSide,
+        Transform defenseWorldRoot,
+        BattleCharacterPresentationController attackSide,
+        Transform attackWorldRoot,
+        BattleClashEngagementResult engagementResult,
+        float engagementTriggerSeparation,
+        Action completion
+    )
+    {
+        return TryPlaySingleActorClashReadyApproach(
+            defenseSide,
+            defenseWorldRoot,
+            attackSide,
+            attackWorldRoot,
+            engagementResult,
+            true,
+            engagementResult != null ? engagementResult.FinalGap : 0f,
+            engagementTriggerSeparation,
+            true,
+            completion
+        );
+    }
+
+    private bool TryPlaySingleActorClashReadyApproach(
+        BattleCharacterPresentationController defenseSide,
+        Transform defenseWorldRoot,
+        BattleCharacterPresentationController attackSide,
+        Transform attackWorldRoot,
+        BattleClashEngagementResult engagementResult,
+        bool useRealApproach,
+        float finalGap,
+        float engagementTriggerSeparation,
+        bool setSprintWhenAlreadyReady,
+        Action completion
+    )
+    {
         if (IsRunning || !isActiveAndEnabled || defenseSide == null ||
             attackSide == null || defenseWorldRoot == null ||
             attackWorldRoot == null || engagementResult == null ||
@@ -111,7 +164,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
 
         if (!useRealApproach)
         {
-            // CloseRange等旧路径继续只进入Sprint等待Pose，不改变WorldRoot。
+            // 兼容旧调用：只进入Sprint等待Pose，不改变WorldRoot。
             attackSide.SetSprint();
             IsFinished = true;
             completion?.Invoke();
@@ -121,9 +174,14 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         float currentSeparation = Mathf.Abs(
             attackWorldRoot.position.x - defenseWorldRoot.position.x
         );
-        if (currentSeparation <=
-            presentationProfile.GuardApproachSeparation + 0.0001f)
+        float safeFinalGap = Mathf.Max(0f, finalGap);
+        if (currentSeparation <= safeFinalGap + 0.0001f)
         {
+            if (setSprintWhenAlreadyReady)
+            {
+                attackSide.SetSprint();
+            }
+
             IsFinished = true;
             completion?.Invoke();
             return true;
@@ -142,6 +200,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
                 attackWorldRoot,
                 defenseSide,
                 defenseWorldRoot,
+                safeFinalGap,
                 engagementTriggerSeparation
             )
         );
@@ -154,6 +213,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         Transform attackWorldRoot,
         BattleCharacterPresentationController defenseSide,
         Transform defenseWorldRoot,
+        float finalGap,
         float engagementTriggerSeparation
     )
     {
@@ -168,7 +228,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
             attackWorldRoot,
             defenseSide,
             defenseWorldRoot,
-            presentationProfile.GuardApproachSeparation,
+            finalGap,
             approachDuration,
             presentationProfile.AfterimageSpawnInterval,
             engagementTriggerSeparation,

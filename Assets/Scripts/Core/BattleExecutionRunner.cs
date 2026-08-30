@@ -633,7 +633,9 @@ public sealed class BattleExecutionRunner
             CurrentClashSession,
             CurrentResolutionPlan,
             impact,
-            outcome
+            outcome,
+            cue == BattlePresentationCue.ActionComplete &&
+                ShouldCarryBattleActionCameraToNextItem()
         );
         CurrentPresentationCompletion = new BattlePresentationCompletion(
             requestId
@@ -648,6 +650,45 @@ public sealed class BattleExecutionRunner
 
         // 即使Presenter同步完成，本次调用也必须停在新建的表现边界。
         return true;
+    }
+
+    bool ShouldCarryBattleActionCameraToNextItem()
+    {
+        if (CurrentItem == null || CurrentActionSlot == null ||
+            CurrentClashSession == null || CurrentResolutionPlan == null ||
+            CurrentClashSession.ClashType != BattleClashType.DodgeVsAttack ||
+            CurrentClashSession.FinalResult !=
+                BattleClashFinalResult.DodgeSuccess ||
+            CurrentResolutionPlan.playerCardUseDisposition !=
+                BattleCardUseDisposition.DeferForContinuousDodge)
+        {
+            return false;
+        }
+
+        BattleRuntimeState runtimeState = lifecycleController != null
+            ? lifecycleController.RuntimeState
+            : null;
+        BattleExecutionPlan plan = runtimeState != null
+            ? runtimeState.currentExecutionPlan
+            : null;
+        BattleExecutionItem nextItem = FindNextPendingItemAfter(
+            plan,
+            CurrentItem
+        );
+        if (nextItem == null ||
+            nextItem.executionType !=
+                BattleExecutionItemType.UnrespondedEnemyIntent ||
+            nextItem.enemyIntent == null)
+        {
+            return false;
+        }
+
+        return BattleGuardSelectionManager
+            .WouldSelectContinuousDodgeForEnemyIntent(
+                runtimeState.actionSlots,
+                nextItem.enemyIntent,
+                CurrentActionSlot
+            );
     }
 
     void ClearPresentationReferences()
@@ -719,6 +760,36 @@ public sealed class BattleExecutionRunner
             }
 
             if (!item.isCompleted && item.status == BattleExecutionItemStatus.Pending)
+            {
+                return item;
+            }
+        }
+
+        return null;
+    }
+
+    static BattleExecutionItem FindNextPendingItemAfter(
+        BattleExecutionPlan plan,
+        BattleExecutionItem currentItem
+    )
+    {
+        if (plan == null || plan.executionItems == null ||
+            currentItem == null)
+        {
+            return null;
+        }
+
+        bool foundCurrent = false;
+        foreach (BattleExecutionItem item in plan.executionItems)
+        {
+            if (!foundCurrent)
+            {
+                foundCurrent = object.ReferenceEquals(item, currentItem);
+                continue;
+            }
+
+            if (item != null && !item.isCompleted &&
+                item.status == BattleExecutionItemStatus.Pending)
             {
                 return item;
             }

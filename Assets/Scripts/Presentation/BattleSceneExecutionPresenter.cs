@@ -68,6 +68,10 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public bool DefenseVsAttackEngagementBegun;
         public bool DefenseVsAttackCameraEntryFinished;
         public bool DefenseVsAttackApproachFinished;
+        public bool DodgeVsAttackAnchoredApproachActive;
+        public bool DodgeVsAttackEngagementBegun;
+        public bool DodgeVsAttackCameraEntryFinished;
+        public bool DodgeVsAttackApproachFinished;
 
         public BattleClashSideState LongRangeShooterSide;
         public BattleClashSideState LongRangeMeleeSide;
@@ -83,6 +87,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public bool LongRangeShotImpactReached;
         public bool LongRangeShotImpactFinished;
         public long LongRangeShotImpactRequestId;
+        public bool LongRangeResponseImpactStarted;
+        public long LongRangeResponseImpactRequestId;
+        public bool LongRangeCameraFocusActive;
 
         public bool UnavailableShootResponseIsLongRange;
         public BattleCharacterPresentationController
@@ -113,6 +120,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     private ActionPresentationContext activeContext;
     private Coroutine activePresentationCoroutine;
     private long activePresentationRequestId;
+    private bool battleActionCameraCarryPending;
 
     void Awake()
     {
@@ -148,6 +156,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             ClearAttackVsAttackParallelBeginState(activeContext);
             CancelOrReleaseCameraForContext(activeContext);
         }
+        ReleasePendingBattleActionCamera();
 
         attackVsAttackPresentationPlayer?.CancelAndReset();
         attackVsGuardPresentationPlayer?.CancelAndReset();
@@ -211,6 +220,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             ClearAttackVsAttackParallelBeginState(cancellingContext);
             CancelOrReleaseCameraForContext(cancellingContext);
         }
+        ReleasePendingBattleActionCamera();
 
         if (activePresentationRequestId == request.RequestId)
         {
@@ -254,6 +264,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             {
                 longRangeShootVsAttackPresentationPlayer.CancelAndReset();
             }
+            if (activeContext.LongRangeResponseImpactStarted &&
+                longRangeShootVsAttackPresentationPlayer != null)
+            {
+                longRangeShootVsAttackPresentationPlayer.CancelAndReset();
+            }
             activeContext = null;
         }
 
@@ -267,6 +282,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     {
         BattleActionRollPanelHost.HideImmediate();
         activeContext = CreateContext(request);
+        if (battleActionCameraCarryPending &&
+            !IsContinuousDodgeContinuation(request))
+        {
+            ReleasePendingBattleActionCamera();
+        }
         bool unavailableShootResponse =
             TryResolveUnavailableShootResponse(activeContext);
         LogRequest(request, activeContext);
@@ -295,10 +315,16 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                         activeContext.LongRangeShooterPresentation,
                         true
                     );
-                activeContext.LongRangeMeleePresentation?.SetSprint();
             }
 
-            CompleteRequest(request, completion);
+            if (!TryStartLongRangeCameraGrammar(
+                    request,
+                    completion,
+                    activeContext
+                ))
+            {
+                CompleteRequest(request, completion);
+            }
             return;
         }
 
@@ -315,8 +341,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         if (ShouldPlayAttackVsAttackApproach(request))
         {
-            if (ShouldPlayGenericMeleeAttackVsAttackFocus(request) &&
-                TryStartAttackVsAttackFocusAndApproach(
+            if (ShouldUseClashCameraGrammar(request) &&
+                TryStartClashCameraAndApproach(
                     request,
                     completion,
                     activeContext
@@ -338,7 +364,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         if (ShouldPlayDefenseVsAttackApproach(request))
         {
-            if (ShouldPlayGenericMeleeDefenseVsAttackCamera(request) &&
+            if (ShouldUseOneSidedAttackCameraGrammar(request) &&
                 TryStartDefenseVsAttackAnchoredApproach(
                     request,
                     completion,
@@ -361,6 +387,18 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         if (ShouldPlayDodgeVsAttackApproach(request))
         {
+            if (ShouldUseOneSidedAttackCameraGrammar(request) &&
+                TryStartDodgeVsAttackAnchoredApproach(
+                    request,
+                    completion,
+                    activeContext
+                ))
+            {
+                return;
+            }
+
+            ReleasePendingBattleActionCamera();
+
             if (!TryStartDodgeVsAttackApproach(
                     request,
                     completion,
@@ -428,7 +466,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 session.SideA.cardState.IsMeleeAttack();
     }
 
-    private bool ShouldPlayGenericMeleeAttackVsAttackFocus(
+    private bool ShouldUseClashCameraGrammar(
         BattlePresentationRequest request
     )
     {
@@ -437,13 +475,59 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             : null;
         return ShouldPlayAttackVsAttackApproach(request) &&
             !IsAnyLongRangeAttackVsAttack(request) &&
-            !IsCloseRangeShootVsMelee(request) &&
             session != null &&
             session.SideA != null && session.SideB != null &&
-            session.SideA.cardState != null &&
-            session.SideB.cardState != null &&
-            session.SideA.cardState.IsMeleeAttack() &&
-            session.SideB.cardState.IsMeleeAttack();
+            IsNearRangeAttack(session.SideA.cardState) &&
+            IsNearRangeAttack(session.SideB.cardState);
+    }
+
+    private static bool ShouldUseOneSidedAttackCameraGrammar(
+        BattlePresentationRequest request
+    )
+    {
+        if (ShouldPlayDefenseVsAttackApproach(request))
+        {
+            return IsNearRangeAttack(
+                GetDefenseAttackCardState(request.ClashSession)
+            );
+        }
+
+        if (!ShouldPlayDodgeVsAttackApproach(request) ||
+            (request.ExecutionItem.executionType !=
+                BattleExecutionItemType.RespondedEnemyIntent &&
+                !IsContinuousDodgeContinuation(request)))
+        {
+            return false;
+        }
+
+        return IsNearRangeAttack(
+            GetDodgeAttackCardState(request.ClashSession)
+        );
+    }
+
+    private static bool IsNearRangeAttack(BattleCardState cardState)
+    {
+        return cardState != null &&
+            (cardState.IsMeleeAttack() || cardState.IsCloseRangeShoot());
+    }
+
+    private static bool TryStartOneSidedAttackCameraGrammar(
+        BattleCameraDirector director,
+        BattleUnitViewHandle attacker,
+        BattleUnitViewHandle target,
+        float finalGap,
+        System.Action engagementBegun,
+        System.Action<bool> completion
+    )
+    {
+        return director != null &&
+            director.TryPlayImmediateSingleActorApproachFollow(
+                attacker,
+                target,
+                finalGap,
+                engagementBegun,
+                completion
+            );
     }
 
     private bool TryResolveLongRangeShootVsMelee(
@@ -463,7 +547,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         if (session.SideA.cardState.IsLongRangeShoot() &&
-            session.SideB.cardState.IsMeleeAttack())
+            IsLongRangeOpponentCard(session.SideB.cardState))
         {
             context.LongRangeShooterSide = session.SideA;
             context.LongRangeMeleeSide = session.SideB;
@@ -475,7 +559,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.LongRangeMeleePresentation = context.SideBPresentation;
         }
         else if (session.SideB.cardState.IsLongRangeShoot() &&
-            session.SideA.cardState.IsMeleeAttack())
+            IsLongRangeOpponentCard(session.SideA.cardState))
         {
             context.LongRangeShooterSide = session.SideB;
             context.LongRangeMeleeSide = session.SideA;
@@ -505,6 +589,21 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 session.SideB) &&
                 session.FinalResult == BattleClashFinalResult.SideBWin;
         return true;
+    }
+
+    private static bool IsLongRangeOpponentCard(BattleCardState cardState)
+    {
+        return cardState != null && cardState.cardData != null &&
+            (cardState.IsMeleeAttack() ||
+                cardState.cardData.cardType == CardType.Defense ||
+                cardState.cardData.cardType == CardType.Dodge);
+    }
+
+    private static bool IsLongRangeResponseWinnerCard(BattleCardState cardState)
+    {
+        return cardState != null && cardState.cardData != null &&
+            (cardState.cardData.cardType == CardType.Defense ||
+                cardState.cardData.cardType == CardType.Dodge);
     }
 
     private bool TryResolveUnavailableShootResponse(
@@ -601,6 +700,74 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         );
     }
 
+    private bool TryStartLongRangeCameraGrammar(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (!HasCompleteLongRangePresentationMapping(context))
+        {
+            return false;
+        }
+
+        BattleCameraDirector director = ResolveBattleCameraDirector();
+        if (director == null)
+        {
+            return false;
+        }
+
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        context.LongRangeCameraFocusActive = true;
+        context.CameraCinematicOwned = true;
+        activePresentationRequestId = requestId;
+
+        bool started = director.TryPlayTwoUnitFocus(
+            context.LongRangeShooterHandle,
+            context.LongRangeMeleeHandle,
+            false,
+            () => CompleteLongRangeCameraFocus(
+                context,
+                executionItem,
+                requestId,
+                completion
+            )
+        );
+        if (started)
+        {
+            return true;
+        }
+
+        context.LongRangeCameraFocusActive = false;
+        context.CameraCinematicOwned = false;
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        return false;
+    }
+
+    private void CompleteLongRangeCameraFocus(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem) ||
+            !context.LongRangeCameraFocusActive)
+        {
+            return;
+        }
+
+        context.LongRangeCameraFocusActive = false;
+        activePresentationRequestId = 0L;
+        completion.TryComplete(requestId);
+    }
+
     private void HandleLongRangeRollResult(
         BattlePresentationRequest request,
         BattlePresentationCompletion completion,
@@ -635,11 +802,14 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         long requestId = request.RequestId;
         BattleExecutionItem executionItem = request.ExecutionItem;
         activePresentationRequestId = requestId;
+        bool playDeflectionSlash = !context.LongRangeShooterWon &&
+            context.LongRangeMeleeSide.cardState != null &&
+            context.LongRangeMeleeSide.cardState.IsMeleeAttack();
         bool started = longRangeShootVsAttackPresentationPlayer
             .TryPlayTerminalClash(
                 context.LongRangeShooterPresentation,
                 context.LongRangeMeleePresentation,
-                !context.LongRangeShooterWon,
+                playDeflectionSlash,
                 () => CompleteLongRangeTerminalClash(
                     context,
                     executionItem,
@@ -734,7 +904,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         return false;
     }
 
-    private bool TryStartAttackVsAttackFocusAndApproach(
+    private bool TryStartClashCameraAndApproach(
         BattlePresentationRequest request,
         BattlePresentationCompletion completion,
         ActionPresentationContext context
@@ -899,6 +1069,28 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         completion.TryComplete(requestId);
     }
 
+    private void CompleteLongRangeResponseImpact(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem) ||
+            !context.LongRangeResponseImpactStarted ||
+            context.LongRangeResponseImpactRequestId != requestId)
+        {
+            return;
+        }
+
+        context.LongRangeResponseImpactStarted = false;
+        context.LongRangeResponseImpactRequestId = 0L;
+        activePresentationRequestId = 0L;
+        completion.TryComplete(requestId);
+    }
+
     private bool IsOwnedAttackVsAttackParallelBegin(
         ActionPresentationContext context,
         BattleExecutionItem executionItem,
@@ -969,23 +1161,31 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             request.ClashSession.ClashType == BattleClashType.DefenseVsAttack;
     }
 
-    private static bool ShouldPlayGenericMeleeDefenseVsAttackCamera(
-        BattlePresentationRequest request
+    private static BattleCardState GetDefenseAttackCardState(
+        BattleClashSession session
     )
     {
-        BattleClashSession session = request != null
-            ? request.ClashSession
-            : null;
-        if (!ShouldPlayDefenseVsAttackApproach(request) || session == null ||
-            session.SideA == null || session.SideB == null ||
-            session.SideA.cardState == null ||
-            session.SideB.cardState == null)
+        if (session == null ||
+            session.ClashType != BattleClashType.DefenseVsAttack)
         {
-            return false;
+            return null;
         }
 
-        return session.SideA.cardState.IsMeleeAttack() ||
-            session.SideB.cardState.IsMeleeAttack();
+        if (session.SideA != null && session.SideA.cardState != null &&
+            session.SideA.cardState.cardData != null &&
+            session.SideA.cardState.cardData.cardType == CardType.Attack)
+        {
+            return session.SideA.cardState;
+        }
+
+        if (session.SideB != null && session.SideB.cardState != null &&
+            session.SideB.cardState.cardData != null &&
+            session.SideB.cardState.cardData.cardType == CardType.Attack)
+        {
+            return session.SideB.cardState;
+        }
+
+        return null;
     }
 
     private bool TryStartDefenseVsAttackAnchoredApproach(
@@ -1023,6 +1223,17 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             GetPresentationSpeed(context.DefenseDefender),
             GetPresentationSpeed(context.DefenseAttacker)
         );
+        if (context.ClashEngagement == null)
+        {
+            return false;
+        }
+
+        BattleCardState attackCardState = GetDefenseAttackCardState(
+            request.ClashSession
+        );
+        bool useCloseRangeShoot = attackCardState != null &&
+            attackCardState.IsCloseRangeShoot();
+        float finalGap = context.ClashEngagement.FinalGap;
         context.DefenseVsAttackAnchoredApproachActive = true;
         context.DefenseVsAttackEngagementBegun = false;
         context.DefenseVsAttackCameraEntryFinished = false;
@@ -1031,11 +1242,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         float engagementTriggerSeparation =
             director.EngagementBlendStartSeparation;
 
-        bool cameraStarted = director
-            .TryPlayImmediateSingleActorApproachFollow(
+        bool cameraStarted = TryStartOneSidedAttackCameraGrammar(
+            director,
             context.DefenseAttackerHandle,
             context.DefenseDefenderHandle,
-            attackVsGuardPresentationPlayer.GuardApproachSeparation,
+            finalGap,
             () => MarkDefenseVsAttackEngagementBegun(
                 context,
                 executionItem,
@@ -1058,8 +1269,23 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         context.CameraCinematicOwned = true;
         LogApproachStarted(requestId, context);
-        bool approachStarted = attackVsGuardPresentationPlayer
-            .TryPlayClashReadyApproach(
+        bool approachStarted = useCloseRangeShoot
+            ? attackVsGuardPresentationPlayer
+                .TryPlayCloseRangeClashReadyApproach(
+                    context.DefenseDefenderPresentation,
+                    context.DefenseDefenderHandle.WorldRoot.transform,
+                    context.DefenseAttackerPresentation,
+                    context.DefenseAttackerHandle.WorldRoot.transform,
+                    context.ClashEngagement,
+                    engagementTriggerSeparation,
+                    () => MarkDefenseVsAttackApproachFinished(
+                        context,
+                        executionItem,
+                        requestId,
+                        completion
+                    )
+                )
+            : attackVsGuardPresentationPlayer.TryPlayClashReadyApproach(
                 context.DefenseDefenderPresentation,
                 context.DefenseDefenderHandle.WorldRoot.transform,
                 context.DefenseAttackerPresentation,
@@ -1240,9 +1466,29 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         long requestId = request.RequestId;
         BattleExecutionItem executionItem = request.ExecutionItem;
+        BattleCardState attackCardState = GetDefenseAttackCardState(
+            request.ClashSession
+        );
+        bool useCloseRangeShoot = attackCardState != null &&
+            attackCardState.IsCloseRangeShoot();
         activePresentationRequestId = requestId;
-        bool started = attackVsGuardPresentationPlayer
-            .TryPlayClashReadyApproach(
+        bool started = useCloseRangeShoot
+            ? attackVsGuardPresentationPlayer
+                .TryPlayCloseRangeClashReadyApproach(
+                    context.DefenseDefenderPresentation,
+                    context.DefenseDefenderHandle.WorldRoot.transform,
+                    context.DefenseAttackerPresentation,
+                    context.DefenseAttackerHandle.WorldRoot.transform,
+                    context.ClashEngagement,
+                    0f,
+                    () => CompleteDefenseVsAttackApproach(
+                        context,
+                        executionItem,
+                        requestId,
+                        completion
+                    )
+                )
+            : attackVsGuardPresentationPlayer.TryPlayClashReadyApproach(
                 context.DefenseDefenderPresentation,
                 context.DefenseDefenderHandle.WorldRoot.transform,
                 context.DefenseAttackerPresentation,
@@ -1294,6 +1540,17 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         return request.ExecutionItem != null &&
             request.ClashSession != null &&
             request.ClashSession.ClashType == BattleClashType.DodgeVsAttack;
+    }
+
+    private static bool IsContinuousDodgeContinuation(
+        BattlePresentationRequest request
+    )
+    {
+        return request != null && request.ExecutionItem != null &&
+            request.ExecutionItem.executionType ==
+                BattleExecutionItemType.UnrespondedEnemyIntent &&
+            request.ClashSession != null &&
+            request.ClashSession.IsContinuousDodgeContinuation;
     }
 
     private static BattleCardState GetDodgeAttackCardState(
@@ -1356,17 +1613,32 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         BattleCardState attackCardState = GetDodgeAttackCardState(
             request.ClashSession
         );
-        bool useRealApproach = attackCardState != null &&
+        bool useCloseRangeShoot = attackCardState != null &&
             attackCardState.IsCloseRangeShoot();
         activePresentationRequestId = requestId;
-        bool started = attackVsDodgePresentationPlayer
-            .TryPlayClashReadyApproach(
+        bool started = useCloseRangeShoot
+            ? attackVsDodgePresentationPlayer
+                .TryPlaySingleActorClashReadyApproach(
+                    context.DodgeDefenderPresentation,
+                    context.DodgeDefenderHandle.WorldRoot.transform,
+                    context.DodgeAttackerPresentation,
+                    context.DodgeAttackerHandle.WorldRoot.transform,
+                    context.ClashEngagement,
+                    0f,
+                    () => CompleteDodgeVsAttackApproach(
+                        context,
+                        executionItem,
+                        requestId,
+                        completion
+                    )
+                )
+            : attackVsDodgePresentationPlayer.TryPlayClashReadyApproach(
                 context.DodgeDefenderPresentation,
                 context.DodgeDefenderHandle.WorldRoot.transform,
                 context.DodgeAttackerPresentation,
                 context.DodgeAttackerHandle.WorldRoot.transform,
                 context.ClashEngagement,
-                useRealApproach,
+                false,
                 () => CompleteDodgeVsAttackApproach(
                     context,
                     executionItem,
@@ -1685,6 +1957,253 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         return false;
     }
 
+    private bool TryStartDodgeVsAttackAnchoredApproach(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (clashEngagementProfile == null)
+        {
+            LogApproachFallback(request, "接敌Profile未配置");
+            return false;
+        }
+
+        if (!TryResolveDodgePresentationActors(context) ||
+            attackVsDodgePresentationPlayer == null ||
+            !attackVsDodgePresentationPlayer.isActiveAndEnabled)
+        {
+            LogApproachFallback(request, "Dodge角色表现映射不完整");
+            return false;
+        }
+
+        BattleCameraDirector director = ResolveBattleCameraDirector();
+        if (director == null)
+        {
+            return false;
+        }
+
+        context.ClashEngagement = BattleClashEngagementResolver.Resolve(
+            clashEngagementProfile,
+            context.DodgeDefenderPresentation.PresentationKey,
+            context.DodgeAttackerPresentation.PresentationKey,
+            GetPresentationSpeed(context.DodgeDefender),
+            GetPresentationSpeed(context.DodgeAttacker)
+        );
+        if (context.ClashEngagement == null)
+        {
+            return false;
+        }
+
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        float engagementTriggerSeparation =
+            director.EngagementBlendStartSeparation;
+        float finalGap = context.ClashEngagement.FinalGap;
+        context.DodgeVsAttackAnchoredApproachActive = true;
+        context.DodgeVsAttackEngagementBegun = false;
+        context.DodgeVsAttackCameraEntryFinished = false;
+        context.DodgeVsAttackApproachFinished = false;
+        activePresentationRequestId = requestId;
+
+        bool cameraStarted = TryStartOneSidedAttackCameraGrammar(
+            director,
+            context.DodgeAttackerHandle,
+            context.DodgeDefenderHandle,
+            finalGap,
+            () => MarkDodgeVsAttackEngagementBegun(
+                context,
+                executionItem,
+                requestId
+            ),
+            success => MarkDodgeVsAttackCameraEntryFinished(
+                context,
+                executionItem,
+                requestId,
+                completion,
+                success
+            )
+        );
+        if (!cameraStarted)
+        {
+            ClearDodgeVsAttackApproachState(context);
+            activePresentationRequestId = 0L;
+            return false;
+        }
+
+        battleActionCameraCarryPending = false;
+        context.CameraCinematicOwned = true;
+        LogApproachStarted(requestId, context);
+        BattleCardState attackCardState = GetDodgeAttackCardState(
+            request.ClashSession
+        );
+        bool useCloseRangeShoot = attackCardState != null &&
+            attackCardState.IsCloseRangeShoot();
+        bool approachStarted = useCloseRangeShoot
+            ? attackVsDodgePresentationPlayer
+                .TryPlaySingleActorClashReadyApproach(
+                    context.DodgeDefenderPresentation,
+                    context.DodgeDefenderHandle.WorldRoot.transform,
+                    context.DodgeAttackerPresentation,
+                    context.DodgeAttackerHandle.WorldRoot.transform,
+                    context.ClashEngagement,
+                    engagementTriggerSeparation,
+                    () => MarkDodgeVsAttackApproachFinished(
+                        context,
+                        executionItem,
+                        requestId,
+                        completion
+                    )
+                )
+            : attackVsDodgePresentationPlayer.TryPlayMeleeClashReadyApproach(
+                context.DodgeDefenderPresentation,
+                context.DodgeDefenderHandle.WorldRoot.transform,
+                context.DodgeAttackerPresentation,
+                context.DodgeAttackerHandle.WorldRoot.transform,
+                context.ClashEngagement,
+                engagementTriggerSeparation,
+                () => MarkDodgeVsAttackApproachFinished(
+                    context,
+                    executionItem,
+                    requestId,
+                    completion
+                )
+            );
+        if (approachStarted)
+        {
+            return true;
+        }
+
+        director.CancelAnchoredTwoUnitApproach(true);
+        context.CameraCinematicOwned = false;
+        ClearDodgeVsAttackApproachState(context);
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        LogApproachFallback(requestId, "普通近战Dodge Approach启动失败");
+        return false;
+    }
+
+    private void MarkDodgeVsAttackEngagementBegun(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem) ||
+            !context.DodgeVsAttackAnchoredApproachActive ||
+            context.DodgeVsAttackEngagementBegun)
+        {
+            return;
+        }
+
+        // 单一Dodge Engagement Begin边界；后续Roll Panel和专属镜头可绑定在这里。
+        context.DodgeVsAttackEngagementBegun = true;
+    }
+
+    private void MarkDodgeVsAttackCameraEntryFinished(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion,
+        bool success
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem) ||
+            !context.DodgeVsAttackAnchoredApproachActive)
+        {
+            return;
+        }
+
+        if (!success)
+        {
+            attackVsDodgePresentationPlayer?.CancelAndReset();
+            context.CameraCinematicOwned = false;
+            ClearDodgeVsAttackApproachState(context);
+            activePresentationRequestId = 0L;
+            LogApproachFallback(requestId, "Dodge Camera Entry启动失败");
+            completion.TryComplete(requestId);
+            return;
+        }
+
+        context.DodgeVsAttackCameraEntryFinished = true;
+        TryCompleteDodgeVsAttackAnchoredApproach(
+            context,
+            executionItem,
+            requestId,
+            completion
+        );
+    }
+
+    private void MarkDodgeVsAttackApproachFinished(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem) ||
+            !context.DodgeVsAttackAnchoredApproachActive)
+        {
+            return;
+        }
+
+        context.DodgeVsAttackApproachFinished = true;
+        TryCompleteDodgeVsAttackAnchoredApproach(
+            context,
+            executionItem,
+            requestId,
+            completion
+        );
+    }
+
+    private void TryCompleteDodgeVsAttackAnchoredApproach(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (!context.DodgeVsAttackCameraEntryFinished ||
+            !context.DodgeVsAttackApproachFinished ||
+            !IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem) ||
+            !context.DodgeVsAttackAnchoredApproachActive)
+        {
+            return;
+        }
+
+        ResolveBattleCameraDirector()?
+            .FinishAnchoredTwoUnitApproachTracking();
+        ClearDodgeVsAttackApproachState(context);
+        activePresentationRequestId = 0L;
+        LogApproachCompleted(requestId);
+        completion.TryComplete(requestId);
+    }
+
+    private static void ClearDodgeVsAttackApproachState(
+        ActionPresentationContext context
+    )
+    {
+        if (context == null)
+        {
+            return;
+        }
+
+        context.DodgeVsAttackAnchoredApproachActive = false;
+        context.DodgeVsAttackEngagementBegun = false;
+        context.DodgeVsAttackCameraEntryFinished = false;
+        context.DodgeVsAttackApproachFinished = false;
+    }
+
     private void HandleAttackTieCollisionCamera(
         ActionPresentationContext context,
         BattleExecutionItem executionItem
@@ -1839,6 +2358,21 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
+        if (IsLongRangeResponseWinnerCard(
+                context.LongRangeMeleeSide.cardState
+            ))
+        {
+            if (!TryStartLongRangeResponseImpact(
+                    request,
+                    completion,
+                    context
+                ))
+            {
+                CompleteRequest(request, completion);
+            }
+            return;
+        }
+
         if (!object.ReferenceEquals(
                 context.CurrentAttacker,
                 context.LongRangeMeleeActor) ||
@@ -1849,6 +2383,80 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         {
             CompleteRequest(request, completion);
         }
+    }
+
+    private bool TryStartLongRangeResponseImpact(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        if (longRangeShootVsAttackPresentationPlayer == null ||
+            !longRangeShootVsAttackPresentationPlayer.isActiveAndEnabled)
+        {
+            return false;
+        }
+
+        long requestId = request.RequestId;
+        BattleExecutionItem executionItem = request.ExecutionItem;
+        float directionSign = GetAttackDirectionSign(
+            context.LongRangeShooterHandle,
+            context.LongRangeMeleeHandle
+        );
+        activePresentationRequestId = requestId;
+        context.LongRangeResponseImpactStarted = true;
+        context.LongRangeResponseImpactRequestId = requestId;
+
+        bool isGuardResponse = context.LongRangeMeleeSide.cardState.cardData
+            .cardType == CardType.Defense;
+        bool started = isGuardResponse
+            ? longRangeShootVsAttackPresentationPlayer.TryPlayGuardWinner(
+                context.LongRangeMeleePresentation,
+                () => CompleteLongRangeResponseImpact(
+                    context,
+                    executionItem,
+                    requestId,
+                    completion
+                )
+            )
+            : longRangeShootVsAttackPresentationPlayer.TryPlayDodgeWinner(
+                context.LongRangeMeleePresentation,
+                directionSign,
+                () => CompleteLongRangeResponseImpact(
+                    context,
+                    executionItem,
+                    requestId,
+                    completion
+                )
+            );
+        if (!started)
+        {
+            context.LongRangeResponseImpactStarted = false;
+            context.LongRangeResponseImpactRequestId = 0L;
+            if (activePresentationRequestId == requestId)
+            {
+                activePresentationRequestId = 0L;
+            }
+            return false;
+        }
+
+        // 响应胜利复用既有结果镜头；镜头失败不阻塞角色反馈与正式结算。
+        BattleCameraDirector director = ResolveBattleCameraDirector();
+        if (context.CameraCinematicOwned && director != null)
+        {
+            if (isGuardResponse)
+            {
+                director.TryPlayGenericGuardImpact(true);
+            }
+            else
+            {
+                director.TryPlayDodgeCameraSway(
+                    directionSign,
+                    context.LongRangeMeleePresentation.DodgeMotionDuration
+                );
+            }
+        }
+        return true;
     }
 
     private bool TryStartLongRangeShotImpact(
@@ -1880,6 +2488,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.LongRangeMeleePresentation,
             context.LongRangeMeleeHandle.WorldRoot.transform,
             directionSign,
+            () => HandleLongRangeShotTrueVisualImpact(
+                context,
+                executionItem,
+                directionSign
+            ),
             () => CompleteLongRangeShotImpact(
                 context,
                 executionItem,
@@ -1900,6 +2513,22 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             activePresentationRequestId = 0L;
         }
         return false;
+    }
+
+    private void HandleLongRangeShotTrueVisualImpact(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        float directionSign
+    )
+    {
+        if (!IsOwnedLongRangeShotImpact(context, executionItem) ||
+            !context.CameraCinematicOwned ||
+            !context.LongRangeShotAvailable)
+        {
+            return;
+        }
+
+        ResolveBattleCameraDirector()?.TryPlayGenericHitImpact(directionSign);
     }
 
     private void CompleteLongRangeShotImpact(
@@ -2020,6 +2649,27 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         BattlePresentationCompletion completion
     )
     {
+        BattleCameraDirector director = ResolveBattleCameraDirector();
+        bool cameraReady = false;
+        bool cameraSucceeded = false;
+        bool cameraStarted = TryStartOneSidedAttackCameraGrammar(
+            director,
+            context.LongRangeMeleeHandle,
+            context.LongRangeShooterHandle,
+            context.ClashEngagement.FinalGap,
+            null,
+            success =>
+            {
+                cameraSucceeded = success;
+                cameraReady = true;
+            }
+        );
+        if (cameraStarted)
+        {
+            // LongRange Focus直接交给One-Sided tracking，不释放控制权。
+            context.CameraCinematicOwned = true;
+        }
+
         yield return BattleClashReadyApproachMotion.PlaySingleActorApproach(
             context.LongRangeMeleePresentation,
             context.LongRangeMeleeHandle.WorldRoot.transform,
@@ -2033,11 +2683,31 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 object.ReferenceEquals(context.ExecutionItem, executionItem)
         );
 
+        while (cameraStarted && !cameraReady &&
+            IsCurrentPresentationRequest(requestId) &&
+            object.ReferenceEquals(activeContext, context) &&
+            object.ReferenceEquals(context.ExecutionItem, executionItem))
+        {
+            yield return null;
+        }
+
         if (!IsCurrentPresentationRequest(requestId) ||
             !object.ReferenceEquals(activeContext, context) ||
             !object.ReferenceEquals(context.ExecutionItem, executionItem))
         {
             yield break;
+        }
+
+        if (cameraStarted)
+        {
+            if (cameraSucceeded)
+            {
+                director?.FinishAnchoredTwoUnitApproachTracking();
+            }
+            else
+            {
+                director?.CancelAnchoredTwoUnitApproach(false);
+            }
         }
 
         activePresentationCoroutine = null;
@@ -2101,6 +2771,14 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.LongRangeShooterPresentation,
             context.LongRangeShooterHandle.WorldRoot.transform,
             directionSign,
+            () => HandleDefaultAttackTrueVisualImpact(
+                context,
+                executionItem,
+                context.LongRangeMeleeSide != null
+                    ? context.LongRangeMeleeSide.cardState
+                    : null,
+                directionSign
+            ),
             () => CompleteDefaultAttackImpact(
                 context,
                 executionItem,
@@ -2179,6 +2857,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (context.DodgeTailFinished)
         {
             BattleActionRollPanelHost.HideImmediate();
+            FinishDodgeActionCamera(request, context);
             CompleteRequest(request, completion);
             activeContext = null;
             return;
@@ -2199,6 +2878,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (context.LongRangeShotImpactFinished)
         {
             BattleActionRollPanelHost.HideImmediate();
+            ReleaseCameraForContext(context);
             CompleteRequest(request, completion);
             activeContext = null;
             return;
@@ -2291,6 +2971,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         activePresentationCoroutine = null;
         activePresentationRequestId = 0L;
         BattleActionRollPanelHost.HideImmediate();
+        FinishDodgeActionCamera(request, context);
         completion.TryComplete(requestId);
         activeContext = null;
     }
@@ -2305,6 +2986,26 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             object.ReferenceEquals(context.ExecutionItem, executionItem) &&
             context.DodgeRollStarted &&
             !context.Cancelled;
+    }
+
+    private void FinishDodgeActionCamera(
+        BattlePresentationRequest request,
+        ActionPresentationContext context
+    )
+    {
+        ResolveBattleCameraDirector()?.FinishDodgeCameraSway();
+
+        if (request != null &&
+            request.ContinueBattleActionCameraToNextItem &&
+            context != null && context.CameraCinematicOwned)
+        {
+            ClearDodgeVsAttackApproachState(context);
+            context.CameraCinematicOwned = false;
+            battleActionCameraCarryPending = true;
+            return;
+        }
+
+        ReleaseCameraForContext(context);
     }
 
     private bool ShouldPlayDefenseGuardImpact(
@@ -2408,7 +3109,23 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 BattleGuardPresentationResult.FullBlock;
             BattleCameraDirector director = ResolveBattleCameraDirector();
             director?.FinishAnchoredTwoUnitApproachTracking();
-            director?.TryPlayGenericGuardImpact(isFullBlock);
+            bool cameraImpactStarted = director != null &&
+                director.TryPlayGenericGuardImpact(
+                    isFullBlock,
+                    () => LogDefenseGuardCoordinateDiagnostic(
+                        "GuardImpactEnd",
+                        context,
+                        executionItem
+                    )
+                );
+            if (cameraImpactStarted)
+            {
+                LogDefenseGuardCoordinateDiagnostic(
+                    "GuardImpactStart",
+                    context,
+                    executionItem
+                );
+            }
         }
 
         CompleteDefenseGuardImpact(
@@ -2632,6 +3349,18 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             );
         if (started)
         {
+            if (context.DodgePresentationResult ==
+                    BattleDodgePresentationResult.DodgeSuccess &&
+                attackCardState != null &&
+                attackCardState.IsMeleeAttack() &&
+                context.CameraCinematicOwned)
+            {
+                ResolveBattleCameraDirector()?.TryPlayDodgeCameraSway(
+                    directionSign,
+                    context.DodgeDefenderPresentation.DodgeMotionDuration
+                );
+            }
+
             return true;
         }
 
@@ -2684,6 +3413,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (context.GuardTailFinished)
         {
             BattleActionRollPanelHost.HideImmediate();
+            LogDefenseGuardCoordinateDiagnostic(
+                "ActionCompleteBeforeCameraRelease",
+                context,
+                context.ExecutionItem
+            );
             ReleaseCameraForContext(context);
             CompleteRequest(request, completion);
             activeContext = null;
@@ -2728,6 +3462,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         activePresentationCoroutine = null;
         activePresentationRequestId = 0L;
         BattleActionRollPanelHost.HideImmediate();
+        LogDefenseGuardCoordinateDiagnostic(
+            "ActionCompleteBeforeCameraRelease",
+            context,
+            executionItem
+        );
         ReleaseCameraForContext(context);
         completion.TryComplete(requestId);
         activeContext = null;
@@ -2743,6 +3482,26 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             object.ReferenceEquals(context.ExecutionItem, executionItem) &&
             context.GuardPresentationStarted &&
             !context.Cancelled;
+    }
+
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    private void LogDefenseGuardCoordinateDiagnostic(
+        string stage,
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem
+    )
+    {
+        if (!IsOwnedGuardPresentationContext(context, executionItem))
+        {
+            return;
+        }
+
+        ResolveBattleCameraDirector()?.LogBattleActionCoordinateDiagnostic(
+            stage,
+            context.DefenseAttackerHandle,
+            context.DefenseDefenderHandle
+        );
     }
 
     private bool ShouldPlayDefaultAttackImpact(
@@ -2798,6 +3557,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                     context.CurrentTargetPresentation,
                     context.CurrentTargetHandle.WorldRoot.transform,
                     directionSign,
+                    () => HandleDefaultAttackTrueVisualImpact(
+                        context,
+                        executionItem,
+                        request.Impact.sourceCardState,
+                        directionSign
+                    ),
                     () => CompleteDefaultAttackImpact(
                         context,
                         executionItem,
@@ -2855,7 +3620,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.Cancelled ||
             !context.CameraCinematicOwned ||
             sourceCardState == null ||
-            !sourceCardState.IsMeleeAttack())
+            !IsNearRangeAttack(sourceCardState))
         {
             return;
         }
@@ -3132,6 +3897,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         ClearDefenseVsAttackApproachState(context);
+        ClearDodgeVsAttackApproachState(context);
+        context.LongRangeCameraFocusActive = false;
         if (!context.CameraCinematicOwned)
         {
             return;
@@ -3152,6 +3919,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         ClearDefenseVsAttackApproachState(context);
+        ClearDodgeVsAttackApproachState(context);
+        context.LongRangeCameraFocusActive = false;
         if (!context.CameraCinematicOwned)
         {
             return;
@@ -3169,6 +3938,18 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         {
             director.ReleaseBattleActionCinematicControl();
         }
+    }
+
+    private void ReleasePendingBattleActionCamera()
+    {
+        if (!battleActionCameraCarryPending)
+        {
+            return;
+        }
+
+        battleActionCameraCarryPending = false;
+        ResolveBattleCameraDirector()?
+            .ReleaseBattleActionCinematicControl();
     }
 
     private static void ClearAttackVsAttackParallelBeginState(

@@ -14,6 +14,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
 
     [SerializeField] private string presentationKey;
     [SerializeField] private bool sourceFacesRight = true;
+    [SerializeField] private Vector3 cameraFramingOffset = Vector3.zero;
     [SerializeField] private SpriteRenderer characterSprite;
     [SerializeField] private Transform bodyVisualRoot;
     [SerializeField] private Sprite idleSprite;
@@ -86,6 +87,32 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     public string PresentationKey => presentationKey ?? string.Empty;
     public bool SourceFacesRight => sourceFacesRight;
     public SpriteRenderer CharacterSpriteRenderer => characterSprite;
+    public float DodgeMotionDuration => Mathf.Max(0f, dodgeDuration);
+
+    public bool TryGetCameraFramingWorldPosition(out Vector3 worldPosition)
+    {
+        // Offset是显式world-space构图修正，不受Sprite、Pose或Flip影响。
+        worldPosition = transform.position + cameraFramingOffset;
+        return true;
+    }
+
+    public bool TryGetStableVisualRootWorldPosition(
+        out Vector3 worldPosition
+    )
+    {
+        CacheBodyVisualState();
+        if (!bodyBaseStateCached || bodyVisualRoot == null)
+        {
+            worldPosition = transform.position;
+            return false;
+        }
+
+        Transform parent = bodyVisualRoot.parent;
+        worldPosition = parent != null
+            ? parent.TransformPoint(bodyBaseLocalPosition)
+            : bodyBaseLocalPosition;
+        return true;
+    }
 
     void Awake()
     {

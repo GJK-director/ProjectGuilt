@@ -963,9 +963,39 @@ public static class BattleGuardSelectionManager
         return new BattleGuardSelectionResult(selectionType, selectedSlot);
     }
 
+    public static bool WouldSelectContinuousDodgeForEnemyIntent(
+        IReadOnlyList<BattleActionSlot> actionSlots,
+        BattleEnemyIntent enemyIntent,
+        BattleActionSlot anticipatedActiveSlot
+    )
+    {
+        BattleActionSlot selectedSlot = SelectContinuousDodgeForEnemyIntent(
+            actionSlots,
+            enemyIntent,
+            anticipatedActiveSlot
+        );
+        return selectedSlot != null && object.ReferenceEquals(
+            selectedSlot,
+            anticipatedActiveSlot
+        );
+    }
+
     static BattleActionSlot SelectContinuousDodgeForEnemyIntent(
         IReadOnlyList<BattleActionSlot> actionSlots,
         BattleEnemyIntent enemyIntent
+    )
+    {
+        return SelectContinuousDodgeForEnemyIntent(
+            actionSlots,
+            enemyIntent,
+            null
+        );
+    }
+
+    static BattleActionSlot SelectContinuousDodgeForEnemyIntent(
+        IReadOnlyList<BattleActionSlot> actionSlots,
+        BattleEnemyIntent enemyIntent,
+        BattleActionSlot anticipatedActiveSlot
     )
     {
         if (actionSlots == null || enemyIntent == null)
@@ -977,7 +1007,15 @@ public static class BattleGuardSelectionManager
 
         foreach (BattleActionSlot slot in actionSlots)
         {
-            if (!IsValidContinuousDodgeSlot(slot, enemyIntent))
+            bool isAnticipatedActive = object.ReferenceEquals(
+                slot,
+                anticipatedActiveSlot
+            );
+            if (!IsValidContinuousDodgeSlot(
+                    slot,
+                    enemyIntent,
+                    isAnticipatedActive
+                ))
             {
                 continue;
             }
@@ -993,14 +1031,15 @@ public static class BattleGuardSelectionManager
 
     static bool IsValidContinuousDodgeSlot(
         BattleActionSlot slot,
-        BattleEnemyIntent enemyIntent
+        BattleEnemyIntent enemyIntent,
+        bool isAnticipatedActive = false
     )
     {
         if (slot == null ||
             enemyIntent == null ||
             enemyIntent.enemy == null ||
             enemyIntent.actualTargetCharacter == null ||
-            !slot.isContinuousDodgeActive ||
+            (!slot.isContinuousDodgeActive && !isAnticipatedActive) ||
             slot.isCardUseFinalized ||
             slot.isUsed ||
             slot.owner == null ||

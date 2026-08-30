@@ -17,6 +17,7 @@ public sealed class BattlePresentationRequest
     public BattleImpact Impact { get; private set; }
     public int ImpactIndex { get; private set; }
     public string Outcome { get; private set; }
+    public bool ContinueBattleActionCameraToNextItem { get; private set; }
 
     public BattlePresentationRequest(
         long requestId,
@@ -25,7 +26,8 @@ public sealed class BattlePresentationRequest
         BattleClashSession clashSession,
         BattleResolutionPlan resolutionPlan,
         BattleImpact impact,
-        string outcome
+        string outcome,
+        bool continueBattleActionCameraToNextItem = false
     )
     {
         RequestId = requestId;
@@ -36,6 +38,8 @@ public sealed class BattlePresentationRequest
         Impact = impact;
         ImpactIndex = impact != null ? impact.impactIndex : -1;
         Outcome = outcome ?? string.Empty;
+        ContinueBattleActionCameraToNextItem =
+            continueBattleActionCameraToNextItem;
     }
 }
 

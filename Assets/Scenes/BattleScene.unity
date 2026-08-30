@@ -1019,7 +1019,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 3d78fe29911843aaab0fd225c1ec010c, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleFormalPresentationTestHarness
-  scenario: 3
+  scenario: 4
 --- !u!1 &293728785
 GameObject:
   m_ObjectHideFlags: 0
@@ -3327,6 +3327,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsGuardPresentationPlayer
   presentationProfile: {fileID: 11400000, guid: 3e7f0ac0a07f45988bb686e371a01415, type: 2}
+  guardApproachMoveSpeedMultiplier: 1
 --- !u!114 &833021974
 MonoBehaviour:
   m_ObjectHideFlags: 0

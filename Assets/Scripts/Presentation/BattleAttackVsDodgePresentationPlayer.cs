@@ -127,6 +127,78 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         return true;
     }
 
+    public bool TryPlayMeleeClashReadyApproach(
+        BattleCharacterPresentationController dodgeSide,
+        Transform dodgeWorldRoot,
+        BattleCharacterPresentationController attackSide,
+        Transform attackWorldRoot,
+        BattleClashEngagementResult engagementResult,
+        float engagementTriggerSeparation,
+        Action completion
+    )
+    {
+        return TryPlaySingleActorClashReadyApproach(
+            dodgeSide,
+            dodgeWorldRoot,
+            attackSide,
+            attackWorldRoot,
+            engagementResult,
+            engagementTriggerSeparation,
+            completion
+        );
+    }
+
+    public bool TryPlaySingleActorClashReadyApproach(
+        BattleCharacterPresentationController dodgeSide,
+        Transform dodgeWorldRoot,
+        BattleCharacterPresentationController attackSide,
+        Transform attackWorldRoot,
+        BattleClashEngagementResult engagementResult,
+        float engagementTriggerSeparation,
+        Action completion
+    )
+    {
+        if (!CanStartPlayback() || dodgeSide == null || attackSide == null ||
+            dodgeWorldRoot == null || attackWorldRoot == null ||
+            engagementResult == null)
+        {
+            return false;
+        }
+
+        float finalGap = Mathf.Max(0f, engagementResult.FinalGap);
+        float currentSeparation = Mathf.Abs(
+            attackWorldRoot.position.x - dodgeWorldRoot.position.x
+        );
+        if (currentSeparation <= finalGap + 0.0001f)
+        {
+            // 即使无需位移，也要进入下一次攻击的准备Pose。
+            attackSide.SetSprint();
+            IsFinished = true;
+            completion?.Invoke();
+            return true;
+        }
+
+        playbackVersion++;
+        playbackStage = PlaybackStage.ClashReadyApproach;
+        attacker = attackSide;
+        defender = dodgeSide;
+        onClashReadyFinished = completion;
+        IsRunning = true;
+        IsFinished = false;
+        playbackCoroutine = StartCoroutine(
+            RunSingleActorClashReadyApproach(
+                playbackVersion,
+                dodgeSide,
+                dodgeWorldRoot,
+                attackSide,
+                attackWorldRoot,
+                engagementResult,
+                engagementTriggerSeparation
+            )
+        );
+        return true;
+    }
+
     private IEnumerator RunClashReadyApproach(
         int version,
         BattleCharacterPresentationController dodgeSide,
@@ -144,6 +216,41 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
             engagementResult,
             presentationProfile.SprintDuration,
             presentationProfile.AfterimageSpawnInterval,
+            () => IsCurrentPlayback(version)
+        );
+
+        if (!IsCurrentPlayback(version))
+        {
+            yield break;
+        }
+
+        Action callback = onClashReadyFinished;
+        ClearPlaybackReferences();
+        IsRunning = false;
+        IsFinished = true;
+        callback?.Invoke();
+    }
+
+    private IEnumerator RunSingleActorClashReadyApproach(
+        int version,
+        BattleCharacterPresentationController dodgeSide,
+        Transform dodgeWorldRoot,
+        BattleCharacterPresentationController attackSide,
+        Transform attackWorldRoot,
+        BattleClashEngagementResult engagementResult,
+        float engagementTriggerSeparation
+    )
+    {
+        yield return BattleClashReadyApproachMotion.PlaySingleActorApproach(
+            attackSide,
+            attackWorldRoot,
+            dodgeSide,
+            dodgeWorldRoot,
+            engagementResult.FinalGap,
+            presentationProfile.SprintDuration,
+            presentationProfile.AfterimageSpawnInterval,
+            engagementTriggerSeparation,
+            1f,
             () => IsCurrentPlayback(version)
         );
 

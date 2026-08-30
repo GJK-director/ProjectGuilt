@@ -2,14 +2,15 @@ using System;
 using System.Collections;
 using UnityEngine;
 
-// 只编排LongRangeShoot对Melee Attack的视觉阶段，不读取或修改战斗规则与资源。
+// 只编排LongRangeShoot正式视觉阶段，不读取或修改战斗规则与资源。
 public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehaviour
 {
     private enum PlaybackStage
     {
         None,
         TerminalClash,
-        ShotHit
+        ShotHit,
+        ResponseWinner
     }
 
     public bool IsRunning { get; private set; }
@@ -19,16 +20,20 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
     private BattleCharacterPresentationController shooter;
     private BattleCharacterPresentationController meleeActor;
     private BattleCharacterPresentationController hitTarget;
+    private BattleCharacterPresentationController responseWinner;
     private Transform hitTargetWorldRoot;
+    private Action onTrueVisualImpact;
     private Action onVisualImpact;
     private Action onFinished;
     private Coroutine playbackCoroutine;
     private Coroutine deflectionSlashCoroutine;
     private Coroutine hitReactionCoroutine;
+    private Coroutine responseEffectCoroutine;
     private bool muzzleFlashFinished;
     private bool deflectionSlashFinished;
     private bool hitReactionFinished;
     private bool visualImpactInvoked;
+    private bool responseMotionFinished;
     private int playbackVersion;
     private float attackDirectionSign;
 
@@ -130,6 +135,27 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         Action finishedCallback
     )
     {
+        return TryPlayShotHit(
+            shooterController,
+            targetController,
+            targetWorldRoot,
+            directionSign,
+            null,
+            visualImpactCallback,
+            finishedCallback
+        );
+    }
+
+    public bool TryPlayShotHit(
+        BattleCharacterPresentationController shooterController,
+        BattleCharacterPresentationController targetController,
+        Transform targetWorldRoot,
+        float directionSign,
+        Action trueVisualImpactCallback,
+        Action visualImpactCallback,
+        Action finishedCallback
+    )
+    {
         if (IsRunning || shooterController == null ||
             targetController == null || targetWorldRoot == null)
         {
@@ -141,6 +167,7 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         hitTarget = targetController;
         hitTargetWorldRoot = targetWorldRoot;
         attackDirectionSign = directionSign >= 0f ? 1f : -1f;
+        onTrueVisualImpact = trueVisualImpactCallback;
         onVisualImpact = visualImpactCallback;
         onFinished = finishedCallback;
         hitReactionFinished = false;
@@ -155,6 +182,47 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         {
             playbackCoroutine = startedPlayback;
         }
+        return true;
+    }
+
+    public bool TryPlayGuardWinner(
+        BattleCharacterPresentationController guardController,
+        Action finishedCallback
+    )
+    {
+        if (IsRunning || guardController == null)
+        {
+            return false;
+        }
+
+        BeginResponseWinner(guardController, finishedCallback);
+        int version = playbackVersion;
+        responseWinner.SetGuard();
+        responseMotionFinished = false;
+        responseEffectCoroutine = StartCoroutine(RunGuardWinnerEffect(version));
+        playbackCoroutine = StartCoroutine(RunResponseWinner(version, true));
+        return true;
+    }
+
+    public bool TryPlayDodgeWinner(
+        BattleCharacterPresentationController dodgeController,
+        float directionSign,
+        Action finishedCallback
+    )
+    {
+        if (IsRunning || dodgeController == null)
+        {
+            return false;
+        }
+
+        BeginResponseWinner(dodgeController, finishedCallback);
+        int version = playbackVersion;
+        responseWinner.SetDodge();
+        responseMotionFinished = !responseWinner.PlayDodgeMotion(
+            directionSign,
+            () => MarkResponseMotionFinished(version)
+        );
+        playbackCoroutine = StartCoroutine(RunResponseWinner(version, false));
         return true;
     }
 
@@ -239,6 +307,68 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         hitReactionCoroutine = null;
     }
 
+    private IEnumerator RunResponseWinner(int version, bool isGuard)
+    {
+        // Guard至少保留到下一帧；Dodge等待角色层真实Motion结束。
+        yield return null;
+        while (IsCurrentPlayback(version) && !responseMotionFinished)
+        {
+            yield return null;
+        }
+
+        if (!IsCurrentPlayback(version))
+        {
+            yield break;
+        }
+
+        if (isGuard)
+        {
+            responseWinner?.FinishGuardPresentation();
+        }
+        else
+        {
+            responseWinner?.FinishDodgePresentation();
+        }
+        FinishNormally(version);
+    }
+
+    private IEnumerator RunGuardWinnerEffect(int version)
+    {
+        if (responseWinner != null)
+        {
+            // 复用Guard成功结果的现有效果，但不启动近战攻击方反冲。
+            yield return responseWinner.PlayPerfectGuardEffect();
+        }
+
+        if (IsCurrentPlayback(version))
+        {
+            responseMotionFinished = true;
+            responseEffectCoroutine = null;
+        }
+    }
+
+    private void BeginResponseWinner(
+        BattleCharacterPresentationController winnerController,
+        Action finishedCallback
+    )
+    {
+        playbackStage = PlaybackStage.ResponseWinner;
+        responseWinner = winnerController;
+        onFinished = finishedCallback;
+        responseMotionFinished = false;
+        IsRunning = true;
+        IsFinished = false;
+        playbackVersion++;
+    }
+
+    private void MarkResponseMotionFinished(int version)
+    {
+        if (IsCurrentPlayback(version))
+        {
+            responseMotionFinished = true;
+        }
+    }
+
     private void MarkMuzzleFlashFinished(int version)
     {
         if (IsCurrentPlayback(version))
@@ -255,8 +385,11 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         }
 
         visualImpactInvoked = true;
+        Action trueImpactCallback = onTrueVisualImpact;
         Action callback = onVisualImpact;
+        onTrueVisualImpact = null;
         onVisualImpact = null;
+        trueImpactCallback?.Invoke();
         callback?.Invoke();
     }
 
@@ -284,6 +417,7 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         shooter?.ResetToStableIdlePresentation();
         meleeActor?.ResetToStableIdlePresentation();
         hitTarget?.ResetToStableIdlePresentation();
+        responseWinner?.ResetToStableIdlePresentation();
     }
 
     private void StopOwnedCoroutines()
@@ -302,6 +436,11 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         {
             StopCoroutine(hitReactionCoroutine);
         }
+
+        if (responseEffectCoroutine != null)
+        {
+            StopCoroutine(responseEffectCoroutine);
+        }
     }
 
     private void ClearPlaybackReferences()
@@ -310,16 +449,20 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         shooter = null;
         meleeActor = null;
         hitTarget = null;
+        responseWinner = null;
         hitTargetWorldRoot = null;
+        onTrueVisualImpact = null;
         onVisualImpact = null;
         onFinished = null;
         playbackCoroutine = null;
         deflectionSlashCoroutine = null;
         hitReactionCoroutine = null;
+        responseEffectCoroutine = null;
         muzzleFlashFinished = false;
         deflectionSlashFinished = false;
         hitReactionFinished = false;
         visualImpactInvoked = false;
+        responseMotionFinished = false;
     }
 
     private bool IsCurrentPlayback(int version)

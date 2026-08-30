@@ -14,6 +14,10 @@ public enum BattleFormalPresentationTestScenario
     LongRangeShootVsAttackShooterLose,
     LongRangeShootVsAttackTieThenShooterWin,
     LongRangeShootVsAttackNoBullet,
+    LongRangeShootVsGuardShooterWin,
+    LongRangeShootVsGuardGuardWin,
+    LongRangeShootVsDodgeShooterWin,
+    LongRangeShootVsDodgeDodgeWin,
     CloseRangeShootVsAttackShooterWin,
     CloseRangeShootVsAttackShooterLose,
     CloseRangeShootVsAttackTieThenShooterWin,
@@ -102,6 +106,14 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         "[TEST]_FORMAL_LONG_RANGE_MELEE";
     private const string LongRangeIntentID =
         "[TEST]_FORMAL_LONG_RANGE_INTENT";
+    private const string LongRangeGuardCardID =
+        "[TEST]_FORMAL_LONG_RANGE_GUARD";
+    private const string LongRangeGuardIntentID =
+        "[TEST]_FORMAL_LONG_RANGE_GUARD_INTENT";
+    private const string LongRangeDodgeCardID =
+        "[TEST]_FORMAL_LONG_RANGE_DODGE";
+    private const string LongRangeDodgeIntentID =
+        "[TEST]_FORMAL_LONG_RANGE_DODGE_INTENT";
     private const string CloseRangeShooterCardID =
         "[TEST]_FORMAL_CLOSE_RANGE_SHOOTER";
     private const string CloseRangeMeleeCardID =
@@ -219,6 +231,10 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
             case BattleFormalPresentationTestScenario.LongRangeShootVsAttackShooterLose:
             case BattleFormalPresentationTestScenario.LongRangeShootVsAttackTieThenShooterWin:
             case BattleFormalPresentationTestScenario.LongRangeShootVsAttackNoBullet:
+            case BattleFormalPresentationTestScenario.LongRangeShootVsGuardShooterWin:
+            case BattleFormalPresentationTestScenario.LongRangeShootVsGuardGuardWin:
+            case BattleFormalPresentationTestScenario.LongRangeShootVsDodgeShooterWin:
+            case BattleFormalPresentationTestScenario.LongRangeShootVsDodgeDodgeWin:
             case BattleFormalPresentationTestScenario.CloseRangeShootVsAttackShooterWin:
             case BattleFormalPresentationTestScenario.CloseRangeShootVsAttackShooterLose:
             case BattleFormalPresentationTestScenario.CloseRangeShootVsAttackTieThenShooterWin:
@@ -447,9 +463,23 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                 .CloseRangeShootVsAttackTieThenShooterWin ||
             testScenario == BattleFormalPresentationTestScenario
                 .CloseRangeShootVsAttackNoBullet;
+        bool isLongRangeGuard =
+            testScenario == BattleFormalPresentationTestScenario
+                .LongRangeShootVsGuardShooterWin ||
+            testScenario == BattleFormalPresentationTestScenario
+                .LongRangeShootVsGuardGuardWin;
+        bool isLongRangeDodge =
+            testScenario == BattleFormalPresentationTestScenario
+                .LongRangeShootVsDodgeShooterWin ||
+            testScenario == BattleFormalPresentationTestScenario
+                .LongRangeShootVsDodgeDodgeWin;
         bool shooterWins = testScenario ==
                 BattleFormalPresentationTestScenario
                     .LongRangeShootVsAttackShooterWin ||
+            testScenario == BattleFormalPresentationTestScenario
+                .LongRangeShootVsGuardShooterWin ||
+            testScenario == BattleFormalPresentationTestScenario
+                .LongRangeShootVsDodgeShooterWin ||
             testScenario == BattleFormalPresentationTestScenario
                 .CloseRangeShootVsAttackShooterWin;
         bool tieThenShooterWins = testScenario ==
@@ -466,12 +496,20 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         string shooterCardID = isCloseRange
             ? CloseRangeShooterCardID
             : LongRangeShooterCardID;
-        string meleeCardID = isCloseRange
-            ? CloseRangeMeleeCardID
-            : LongRangeMeleeCardID;
         string intentID = isCloseRange
             ? CloseRangeIntentID
-            : LongRangeIntentID;
+            : isLongRangeGuard
+                ? LongRangeGuardIntentID
+                : isLongRangeDodge
+                    ? LongRangeDodgeIntentID
+                    : LongRangeIntentID;
+        string opponentCardID = isLongRangeGuard
+            ? LongRangeGuardCardID
+            : isLongRangeDodge
+                ? LongRangeDodgeCardID
+                : isCloseRange
+                    ? CloseRangeMeleeCardID
+                    : LongRangeMeleeCardID;
         int shooterMinPoint = shooterWins ? 7 : 4;
         int shooterMaxPoint = shooterMinPoint;
         int meleeMinPoint = shooterWins ? 4 : 7;
@@ -551,15 +589,28 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                     ),
                 shooterCardID + "_INSTANCE"
             );
-            meleeCard = BattleCardManager.CreateBattleCard(
-                enemy,
-                CreateTestAttackCardRange(
-                    meleeCardID,
+            CardTestData opponentCardData = isLongRangeGuard
+                ? CreateTestDefenseCard(
+                    opponentCardID,
+                    "[TEST] Long Range Guard",
+                    meleeMinPoint
+                )
+                : isLongRangeDodge
+                    ? CreateTestDodgeCard(
+                        opponentCardID,
+                        "[TEST] Long Range Dodge",
+                        meleeMinPoint
+                    )
+                : CreateTestAttackCardRange(
+                    opponentCardID,
                     "[TEST] Melee Attack",
                     meleeMinPoint,
                     meleeMaxPoint
-                ),
-                meleeCardID + "_INSTANCE"
+                );
+            meleeCard = BattleCardManager.CreateBattleCard(
+                enemy,
+                opponentCardData,
+                opponentCardID + "_INSTANCE"
             );
 
             if (!IsOwnedCard(shooterCard, ally) ||

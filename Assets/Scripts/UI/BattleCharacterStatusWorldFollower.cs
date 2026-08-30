@@ -189,6 +189,13 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
         RefreshNow();
     }
 
+    public bool TryGetFootProjectionWorldPointForDiagnostic(
+        out Vector3 worldPoint
+    )
+    {
+        return TryGetFootProjectionWorldPoint(out worldPoint);
+    }
+
     public void SetWorldAnchors(
         Transform headAnchor,
         Transform footAnchor,
@@ -424,30 +431,19 @@ public sealed class BattleCharacterStatusWorldFollower : MonoBehaviour
     private bool TryGetFootProjectionWorldPoint(out Vector3 worldPoint)
     {
         worldPoint = default;
-        if (visualBodyRenderer != null &&
-            visualBodyRenderer.sprite != null)
+        if (footWorldAnchor != null)
         {
-            Sprite sprite = visualBodyRenderer.sprite;
-            Vector3 spriteLocalFoot = new Vector3(
-                sprite.bounds.center.x,
-                sprite.bounds.min.y,
-                sprite.bounds.center.z
-            );
-
-            // 当前Bridge只验证真实视觉脚底投影，不代表最终表现层架构。
-            worldPoint = visualBodyRenderer.transform.TransformPoint(
-                spriteLocalFoot
-            );
+            worldPoint = footWorldAnchor.position;
             return true;
         }
 
-        if (footWorldAnchor == null)
+        if (centerWorldAnchor != null)
         {
-            return false;
+            worldPoint = centerWorldAnchor.position;
+            return true;
         }
 
-        worldPoint = footWorldAnchor.position;
-        return true;
+        return false;
     }
 
     private void UpdateGroupFromProjectedPoint(

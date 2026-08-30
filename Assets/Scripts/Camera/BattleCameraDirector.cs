@@ -19,7 +19,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
         None,
         ClashImpact,
         HitImpact,
-        GuardImpact
+        GuardImpact,
+        DodgeSway
     }
 
     private enum TurnEndRecoveryPhase
@@ -139,6 +140,9 @@ public sealed class BattleCameraDirector : MonoBehaviour
     [SerializeField, Min(0f)]
     private float engagementFinalFramingSnapTolerance = 0.05f;
 
+    [SerializeField, Range(0f, 0.05f)]
+    private float engagementViewportCenterTolerance = 0.005f;
+
     [Header("Battle Action Camera Entry")]
     [SerializeField, Min(0f)]
     private float battleActionEntryDuration = 0.10f;
@@ -207,6 +211,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
     [SerializeField, Min(0f)]
     private float reducedDamageGuardImpactShakeCycles = 1.0f;
 
+    [Header("Dodge Camera Sway")]
+    [SerializeField, Min(0f)]
+    private float dodgeSwayHorizontalAmplitude = 0.05f;
+
     private GameObject overlayRoot;
     private CanvasGroup overlayGroup;
     private Coroutine activePresentationCoroutine;
@@ -220,8 +228,14 @@ public sealed class BattleCameraDirector : MonoBehaviour
     private bool presentationInteractionUnlocked;
     private float battleActionEffectBaseWorldX;
     private float battleActionEffectBaseRadius;
+    private BattleUnitViewHandle anchoredApproachAttackerHandle;
+    private BattleUnitViewHandle anchoredApproachDefenderHandle;
     private Transform anchoredApproachAttackerWorldRoot;
     private Transform anchoredApproachDefenderWorldRoot;
+    private BattleCharacterPresentationController
+        anchoredApproachAttackerPresentation;
+    private BattleCharacterPresentationController
+        anchoredApproachDefenderPresentation;
     private float anchoredApproachNearSeparation;
     private float anchoredApproachInitialSeparation;
     private float anchoredApproachStartSeparation;
@@ -620,10 +634,16 @@ public sealed class BattleCameraDirector : MonoBehaviour
             return false;
         }
 
+        anchoredApproachAttackerHandle = attacker;
+        anchoredApproachDefenderHandle = defender;
         anchoredApproachAttackerWorldRoot =
             attacker.WorldRoot.transform;
         anchoredApproachDefenderWorldRoot =
             defender.WorldRoot.transform;
+        anchoredApproachAttackerPresentation =
+            attacker.PresentationController;
+        anchoredApproachDefenderPresentation =
+            defender.PresentationController;
         anchoredApproachNearSeparation = Mathf.Max(0f, nearSeparation);
         anchoredApproachInitialSeparation = Mathf.Abs(
             anchoredApproachAttackerWorldRoot.position.x -
@@ -748,7 +768,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
         return true;
     }
 
-    public bool TryPlayGenericGuardImpact(bool isFullBlock)
+    public bool TryPlayGenericGuardImpact(
+        bool isFullBlock,
+        System.Action completion = null
+    )
     {
         if (!TryBeginBattleActionEffect(BattleActionEffectType.GuardImpact))
         {
@@ -756,9 +779,44 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
 
         activeBattleActionEffectCoroutine = StartCoroutine(
-            PlayGenericGuardImpactSequence(isFullBlock)
+            PlayGenericGuardImpactSequence(isFullBlock, completion)
         );
         return true;
+    }
+
+    public bool TryPlayDodgeCameraSway(
+        float directionSign,
+        float duration
+    )
+    {
+        if (!TryBeginBattleActionEffect(BattleActionEffectType.DodgeSway))
+        {
+            return false;
+        }
+
+        float safeDuration = Mathf.Max(0f, duration);
+        if (safeDuration <= Mathf.Epsilon)
+        {
+            CompleteBattleActionEffect();
+            return true;
+        }
+
+        float normalizedDirection = directionSign >= 0f ? 1f : -1f;
+        activeBattleActionEffectCoroutine = StartCoroutine(
+            PlayDodgeCameraSwaySequence(
+                normalizedDirection,
+                safeDuration
+            )
+        );
+        return true;
+    }
+
+    public void FinishDodgeCameraSway()
+    {
+        if (activeBattleActionEffectType == BattleActionEffectType.DodgeSway)
+        {
+            CancelBattleActionEffect();
+        }
     }
 
     private IEnumerator PlayBattleIntroSequence()
@@ -1255,7 +1313,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
             if (!TryGetAnchoredTwoUnitApproachFraming(
                     out float targetWorldX,
                     out float targetRadius,
-                    out float separation,
+                    out _,
                     true
                 ))
             {
@@ -1275,7 +1333,6 @@ public sealed class BattleCameraDirector : MonoBehaviour
             // 横向目标由实时屏幕构图驱动，并继承当前Camera X平滑追踪。
             ApplyContinuousHorizontalFraming(
                 targetWorldX,
-                separation,
                 false
             );
             cameraController.SetCinematicOrbitRadius(
@@ -1293,10 +1350,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
             yield break;
         }
 
-        ApplyContinuousEngagementFraming();
-        engagementReady?.Invoke(true);
-
         // Blend后由同一Coroutine继续现有Anchored tracking，避免写入竞争。
+        bool engagementReadySignaled = false;
         while (isAnchoredApproachPlaying)
         {
             if (!TryGetAnchoredTwoUnitApproachFraming(
@@ -1310,6 +1365,27 @@ public sealed class BattleCameraDirector : MonoBehaviour
             }
 
             ApplyContinuousEngagementFraming();
+            if (!engagementReadySignaled)
+            {
+                if (!TryIsContinuousEngagementFramingReady(
+                        out bool framingReady
+                    ))
+                {
+                    AbortAnchoredTwoUnitApproach(engagementReady);
+                    yield break;
+                }
+
+                if (framingReady)
+                {
+                    engagementReadySignaled = true;
+                    engagementReady?.Invoke(true);
+                    if (!isAnchoredApproachPlaying)
+                    {
+                        yield break;
+                    }
+                }
+            }
+
             yield return null;
         }
     }
@@ -1321,12 +1397,84 @@ public sealed class BattleCameraDirector : MonoBehaviour
             anchoredApproachDefenderWorldRoot != null;
     }
 
+    private bool TryIsContinuousEngagementFramingReady(out bool ready)
+    {
+        ready = false;
+        if (!HasValidAnchoredApproachTargets())
+        {
+            return false;
+        }
+
+        float separation = Mathf.Abs(
+            anchoredApproachAttackerWorldRoot.position.x -
+            anchoredApproachDefenderWorldRoot.position.x
+        );
+        const float separationTolerance = 0.0001f;
+        if (float.IsNaN(separation) || float.IsInfinity(separation))
+        {
+            return false;
+        }
+
+        if (separation >
+            anchoredApproachNearSeparation + separationTolerance)
+        {
+            return true;
+        }
+
+        Vector3 attackerFramingPosition =
+            GetAnchoredApproachFramingWorldPosition(
+                anchoredApproachAttackerPresentation,
+                anchoredApproachAttackerWorldRoot
+            );
+        Vector3 defenderFramingPosition =
+            GetAnchoredApproachFramingWorldPosition(
+                anchoredApproachDefenderPresentation,
+                anchoredApproachDefenderWorldRoot
+            );
+        if (!cameraController.TryProjectWorldPointToViewport(
+                attackerFramingPosition,
+                out Vector3 attackerViewport
+            ) ||
+            !cameraController.TryProjectWorldPointToViewport(
+                defenderFramingPosition,
+                out Vector3 defenderViewport
+            ) ||
+            float.IsNaN(attackerViewport.x) ||
+            float.IsInfinity(attackerViewport.x) ||
+            float.IsNaN(defenderViewport.x) ||
+            float.IsInfinity(defenderViewport.x))
+        {
+            return false;
+        }
+
+        float screenMid =
+            (attackerViewport.x + defenderViewport.x) * 0.5f;
+        float centerError = Mathf.Abs(screenMid - 0.5f);
+        ready = centerError <= Mathf.Max(
+            0f,
+            engagementViewportCenterTolerance
+        );
+        if (ready)
+        {
+            LogBattleActionCoordinateDiagnostic(
+                "EngagementReady",
+                anchoredApproachAttackerHandle,
+                anchoredApproachDefenderHandle,
+                centerError
+            );
+        }
+        return true;
+    }
+
     private void ApplySingleActorFollowFraming()
     {
         float followTime = Mathf.Max(0f, engagementHorizontalFollowTime);
         float deltaTime = Time.unscaledDeltaTime;
         float currentWorldX = cameraController.CurrentHorizontalWorldX;
-        float targetWorldX = anchoredApproachAttackerWorldRoot.position.x;
+        float targetWorldX = GetAnchoredApproachFramingWorldPosition(
+            anchoredApproachAttackerPresentation,
+            anchoredApproachAttackerWorldRoot
+        ).x;
         float nextWorldX = followTime > Mathf.Epsilon
             ? Mathf.SmoothDamp(
                 currentWorldX,
@@ -1360,7 +1508,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         if (!TryGetAnchoredTwoUnitApproachFraming(
                 out float targetWorldX,
                 out float targetRadius,
-                out float separation,
+                out _,
                 true
             ))
         {
@@ -1369,7 +1517,6 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
         ApplyContinuousHorizontalFraming(
             targetWorldX,
-            separation,
             snapHorizontal
         );
         cameraController.SetCinematicOrbitRadius(targetRadius);
@@ -1380,7 +1527,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         if (!TryGetAnchoredTwoUnitApproachFraming(
                 out float fallbackWorldX,
                 out float targetRadius,
-                out float separation,
+                out _,
                 true
             ))
         {
@@ -1388,8 +1535,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
 
         float targetWorldX = GetScreenSpaceEngagementWorldX(
-            fallbackWorldX,
-            separation
+            fallbackWorldX
         );
         float currentWorldX = cameraController.CurrentHorizontalWorldX;
         float currentRadius = cameraController.CurrentOrbitRadius;
@@ -1410,13 +1556,11 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
     private void ApplyContinuousHorizontalFraming(
         float fallbackWorldX,
-        float separation,
         bool snap
     )
     {
         float desiredWorldX = GetScreenSpaceEngagementWorldX(
-            fallbackWorldX,
-            separation
+            fallbackWorldX
         );
         float currentWorldX = cameraController.CurrentHorizontalWorldX;
         if (snap)
@@ -1441,19 +1585,28 @@ public sealed class BattleCameraDirector : MonoBehaviour
     }
 
     private float GetScreenSpaceEngagementWorldX(
-        float fallbackWorldX,
-        float separation
+        float fallbackWorldX
     )
     {
+        Vector3 attackerFramingPosition =
+            GetAnchoredApproachFramingWorldPosition(
+                anchoredApproachAttackerPresentation,
+                anchoredApproachAttackerWorldRoot
+            );
+        Vector3 defenderFramingPosition =
+            GetAnchoredApproachFramingWorldPosition(
+                anchoredApproachDefenderPresentation,
+                anchoredApproachDefenderWorldRoot
+            );
         if (cameraController == null ||
             anchoredApproachAttackerWorldRoot == null ||
             anchoredApproachDefenderWorldRoot == null ||
             !cameraController.TryProjectWorldPointToViewport(
-                anchoredApproachAttackerWorldRoot.position,
+                attackerFramingPosition,
                 out Vector3 attackerViewport
             ) ||
             !cameraController.TryProjectWorldPointToViewport(
-                anchoredApproachDefenderWorldRoot.position,
+                defenderFramingPosition,
                 out Vector3 defenderViewport
             ))
         {
@@ -1461,15 +1614,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
 
         float screenMid = (attackerViewport.x + defenderViewport.x) * 0.5f;
-        float framingWeight = GetContinuousEngagementFramingWeight(
-            separation
-        );
-        float blendProgress = Mathf.Clamp01(framingWeight / 0.5f);
-        float currentScreenX = Mathf.Lerp(
-            attackerViewport.x,
-            screenMid,
-            blendProgress
-        );
+        float currentScreenX = screenMid;
         float currentWorldX = cameraController.CurrentHorizontalWorldX;
         const float projectionProbeDistance = 0.01f;
         cameraController.SetCinematicHorizontalWorldX(
@@ -1488,11 +1633,11 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
         if (Mathf.Abs(actualProbeDistance) <= Mathf.Epsilon ||
             !cameraController.TryProjectWorldPointToViewport(
-                anchoredApproachAttackerWorldRoot.position,
+                attackerFramingPosition,
                 out Vector3 probeAttackerViewport
             ) ||
             !cameraController.TryProjectWorldPointToViewport(
-                anchoredApproachDefenderWorldRoot.position,
+                defenderFramingPosition,
                 out Vector3 probeDefenderViewport
             ))
         {
@@ -1502,13 +1647,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
         float probeScreenMid =
             (probeAttackerViewport.x + probeDefenderViewport.x) * 0.5f;
-        float probeScreenX = Mathf.Lerp(
-            probeAttackerViewport.x,
-            probeScreenMid,
-            blendProgress
-        );
         float screenDerivative =
-            (probeScreenX - currentScreenX) / actualProbeDistance;
+            (probeScreenMid - currentScreenX) / actualProbeDistance;
         cameraController.SetCinematicHorizontalWorldX(currentWorldX);
         if (Mathf.Abs(screenDerivative) <= Mathf.Epsilon ||
             float.IsNaN(screenDerivative) ||
@@ -1557,17 +1697,31 @@ public sealed class BattleCameraDirector : MonoBehaviour
             return false;
         }
 
-        float attackerX = anchoredApproachAttackerWorldRoot.position.x;
-        float defenderX = anchoredApproachDefenderWorldRoot.position.x;
-        separation = Mathf.Abs(attackerX - defenderX);
+        float attackerWorldRootX =
+            anchoredApproachAttackerWorldRoot.position.x;
+        float defenderWorldRootX =
+            anchoredApproachDefenderWorldRoot.position.x;
+        separation = Mathf.Abs(attackerWorldRootX - defenderWorldRootX);
+        float attackerFramingX = GetAnchoredApproachFramingWorldPosition(
+            anchoredApproachAttackerPresentation,
+            anchoredApproachAttackerWorldRoot
+        ).x;
+        float defenderFramingX = GetAnchoredApproachFramingWorldPosition(
+            anchoredApproachDefenderPresentation,
+            anchoredApproachDefenderWorldRoot
+        ).x;
         float framingWeight = useContinuousFraming
-            ? GetContinuousEngagementFramingWeight(separation)
+            ? 0.5f
             : Mathf.Clamp(
                 anchoredApproachAttackerFramingWeight,
                 0f,
                 0.5f
             );
-        targetWorldX = Mathf.Lerp(attackerX, defenderX, framingWeight);
+        targetWorldX = Mathf.Lerp(
+            attackerFramingX,
+            defenderFramingX,
+            framingWeight
+        );
         float separationRange = anchoredApproachStartSeparation -
             anchoredApproachNearSeparation;
         float farProgress = separationRange > Mathf.Epsilon
@@ -1586,22 +1740,129 @@ public sealed class BattleCameraDirector : MonoBehaviour
         return true;
     }
 
-    private float GetContinuousEngagementFramingWeight(float separation)
+    private static Vector3 GetAnchoredApproachFramingWorldPosition(
+        BattleCharacterPresentationController presentation,
+        Transform worldRoot
+    )
     {
-        float finalGap = Mathf.Max(0f, anchoredApproachNearSeparation);
-        float transitionSeparation = Mathf.Max(
-            finalGap,
-            Mathf.Max(0f, engagementBlendStartSeparation)
+        if (presentation != null &&
+            presentation.TryGetCameraFramingWorldPosition(
+                out Vector3 framingPosition
+            ))
+        {
+            return framingPosition;
+        }
+
+        return worldRoot != null ? worldRoot.position : Vector3.zero;
+    }
+
+    [System.Diagnostics.Conditional("UNITY_EDITOR")]
+    [System.Diagnostics.Conditional("DEVELOPMENT_BUILD")]
+    public void LogBattleActionCoordinateDiagnostic(
+        string stage,
+        BattleUnitViewHandle attacker,
+        BattleUnitViewHandle defender,
+        float centerError = float.NaN
+    )
+    {
+        ResolveReferences();
+        if (cameraController == null || attacker == null || defender == null ||
+            attacker.WorldRoot == null || defender.WorldRoot == null)
+        {
+            return;
+        }
+
+        Vector3 attackerRoot = attacker.WorldRoot.transform.position;
+        Vector3 defenderRoot = defender.WorldRoot.transform.position;
+        Vector3 attackerStableVisual = GetStableVisualRootPosition(attacker);
+        Vector3 defenderStableVisual = GetStableVisualRootPosition(defender);
+        Vector3 attackerHpAnchor = GetHpAnchorPosition(attacker);
+        Vector3 defenderHpAnchor = GetHpAnchorPosition(defender);
+
+        float attackerRootViewportX = GetViewportX(attackerRoot);
+        float defenderRootViewportX = GetViewportX(defenderRoot);
+        float attackerStableViewportX = GetViewportX(attackerStableVisual);
+        float defenderStableViewportX = GetViewportX(defenderStableVisual);
+        float attackerHpViewportX = GetViewportX(attackerHpAnchor);
+        float defenderHpViewportX = GetViewportX(defenderHpAnchor);
+        float rootScreenMid =
+            (attackerRootViewportX + defenderRootViewportX) * 0.5f;
+        float stableVisualScreenMid =
+            (attackerStableViewportX + defenderStableViewportX) * 0.5f;
+        float hpAnchorScreenMid =
+            (attackerHpViewportX + defenderHpViewportX) * 0.5f;
+        string centerErrorText = float.IsNaN(centerError)
+            ? string.Empty
+            : " / CenterError=" + centerError;
+
+        Debug.Log(
+            "[BattleCamera Coordinate Probe]" +
+            " / Stage=" + stage +
+            " / AttackerRootWorldX=" + attackerRoot.x +
+            " / AttackerRootViewportX=" + attackerRootViewportX +
+            " / AttackerStableVisualWorldX=" + attackerStableVisual.x +
+            " / AttackerStableVisualViewportX=" +
+                attackerStableViewportX +
+            " / AttackerHpAnchorWorldX=" + attackerHpAnchor.x +
+            " / AttackerHpAnchorViewportX=" + attackerHpViewportX +
+            " / DefenderRootWorldX=" + defenderRoot.x +
+            " / DefenderRootViewportX=" + defenderRootViewportX +
+            " / DefenderStableVisualWorldX=" + defenderStableVisual.x +
+            " / DefenderStableVisualViewportX=" +
+                defenderStableViewportX +
+            " / DefenderHpAnchorWorldX=" + defenderHpAnchor.x +
+            " / DefenderHpAnchorViewportX=" + defenderHpViewportX +
+            " / RootScreenMid=" + rootScreenMid +
+            " / StableVisualScreenMid=" + stableVisualScreenMid +
+            " / HpAnchorScreenMid=" + hpAnchorScreenMid +
+            " / CameraWorldX=" +
+                cameraController.CurrentHorizontalWorldX +
+            " / OrbitRadius=" + cameraController.CurrentOrbitRadius +
+            " / CinematicControl=" +
+                cameraController.IsCinematicControlActive +
+            centerErrorText,
+            this
         );
-        float progress = transitionSeparation - finalGap > Mathf.Epsilon
-            ? Mathf.InverseLerp(
-                transitionSeparation,
-                finalGap,
-                separation
-            )
-            : separation <= finalGap + Mathf.Epsilon ? 1f : 0f;
-        float easedProgress = Mathf.SmoothStep(0f, 1f, progress);
-        return Mathf.Lerp(0f, 0.5f, easedProgress);
+    }
+
+    private static Vector3 GetStableVisualRootPosition(
+        BattleUnitViewHandle handle
+    )
+    {
+        if (handle.PresentationController != null &&
+            handle.PresentationController.TryGetStableVisualRootWorldPosition(
+                out Vector3 stableVisualPosition
+            ))
+        {
+            return stableVisualPosition;
+        }
+
+        return handle.WorldRoot.transform.position;
+    }
+
+    private static Vector3 GetHpAnchorPosition(BattleUnitViewHandle handle)
+    {
+        if (handle.WorldFollower != null &&
+            handle.WorldFollower.TryGetFootProjectionWorldPointForDiagnostic(
+                out Vector3 hpAnchorPosition
+            ))
+        {
+            return hpAnchorPosition;
+        }
+
+        return handle.FootUIAnchor != null
+            ? handle.FootUIAnchor.position
+            : handle.WorldRoot.transform.position;
+    }
+
+    private float GetViewportX(Vector3 worldPosition)
+    {
+        return cameraController.TryProjectWorldPointToViewport(
+            worldPosition,
+            out Vector3 viewportPosition
+        )
+            ? viewportPosition.x
+            : float.NaN;
     }
 
     private void AbortAnchoredTwoUnitApproach(
@@ -1630,8 +1891,12 @@ public sealed class BattleCameraDirector : MonoBehaviour
     {
         anchoredApproachCoroutine = null;
         isAnchoredApproachPlaying = false;
+        anchoredApproachAttackerHandle = null;
+        anchoredApproachDefenderHandle = null;
         anchoredApproachAttackerWorldRoot = null;
         anchoredApproachDefenderWorldRoot = null;
+        anchoredApproachAttackerPresentation = null;
+        anchoredApproachDefenderPresentation = null;
         anchoredApproachNearSeparation = 0f;
         anchoredApproachInitialSeparation = 0f;
         anchoredApproachStartSeparation = 0f;
@@ -1698,6 +1963,58 @@ public sealed class BattleCameraDirector : MonoBehaviour
         CompleteBattleActionEffect();
     }
 
+    private IEnumerator PlayDodgeCameraSwaySequence(
+        float directionSign,
+        float duration
+    )
+    {
+        float baseWorldX = battleActionEffectBaseWorldX;
+        float amplitude = Mathf.Max(0f, dodgeSwayHorizontalAmplitude);
+        float firstSideWorldX = baseWorldX - directionSign * amplitude;
+        float oppositeSideWorldX = baseWorldX + directionSign * amplitude;
+        float segmentDuration = duration / 3f;
+
+        yield return RunDodgeCameraSwaySegment(
+            baseWorldX,
+            firstSideWorldX,
+            segmentDuration
+        );
+        yield return RunDodgeCameraSwaySegment(
+            firstSideWorldX,
+            oppositeSideWorldX,
+            segmentDuration
+        );
+        yield return RunDodgeCameraSwaySegment(
+            oppositeSideWorldX,
+            baseWorldX,
+            segmentDuration
+        );
+
+        CompleteBattleActionEffect();
+    }
+
+    private IEnumerator RunDodgeCameraSwaySegment(
+        float startWorldX,
+        float targetWorldX,
+        float duration
+    )
+    {
+        float elapsed = 0f;
+        while (elapsed < duration)
+        {
+            elapsed = Mathf.Min(duration, elapsed + Time.deltaTime);
+            float easedProgress = BattlePresentationEasing.EaseOutQuad(
+                elapsed / duration
+            );
+            cameraController.SetCinematicHorizontalWorldX(
+                Mathf.Lerp(startWorldX, targetWorldX, easedProgress)
+            );
+            yield return null;
+        }
+
+        cameraController.SetCinematicHorizontalWorldX(targetWorldX);
+    }
+
     private IEnumerator PlayGenericHitImpactSequence(float directionSign)
     {
         float duration = Mathf.Max(0f, genericHitImpactDuration);
@@ -1737,7 +2054,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
         CompleteBattleActionEffect();
     }
 
-    private IEnumerator PlayGenericGuardImpactSequence(bool isFullBlock)
+    private IEnumerator PlayGenericGuardImpactSequence(
+        bool isFullBlock,
+        System.Action completion
+    )
     {
         float duration = Mathf.Max(
             0f,
@@ -1790,6 +2110,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
 
         CompleteBattleActionEffect();
+        completion?.Invoke();
     }
 
     private static float EvaluateImpactRadius(
@@ -2011,9 +2332,12 @@ public sealed class BattleCameraDirector : MonoBehaviour
         cameraController.SetCinematicHorizontalWorldX(
             battleActionEffectBaseWorldX
         );
-        cameraController.SetCinematicOrbitRadius(
-            battleActionEffectBaseRadius
-        );
+        if (activeBattleActionEffectType != BattleActionEffectType.DodgeSway)
+        {
+            cameraController.SetCinematicOrbitRadius(
+                battleActionEffectBaseRadius
+            );
+        }
     }
 
     private static float GetTimelineProgress(

@@ -239,13 +239,34 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         Action finishedCallback
     )
     {
+        return TryPlayResolvedWinnerCloseRangeShoot(
+            winnerController,
+            loserController,
+            loserRoot,
+            directionSign,
+            null,
+            visualImpactCallback,
+            finishedCallback
+        );
+    }
+
+    public bool TryPlayResolvedWinnerCloseRangeShoot(
+        BattleCharacterPresentationController winnerController,
+        BattleCharacterPresentationController loserController,
+        Transform loserRoot,
+        float directionSign,
+        Action trueVisualImpactCallback,
+        Action visualImpactCallback,
+        Action finishedCallback
+    )
+    {
         return TryStartResolvedWinnerAttack(
             winnerController,
             loserController,
             loserRoot,
             directionSign,
             true,
-            null,
+            trueVisualImpactCallback,
             visualImpactCallback,
             finishedCallback,
             nameof(TryPlayResolvedWinnerCloseRangeShoot)
