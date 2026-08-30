@@ -1,5 +1,6 @@
 ﻿// 脚本中文说明：卡牌读取和战斗测试入口。负责在 Unity 场景启动时创建测试角色、读取卡牌并运行指定测试流程。
 using System.Collections.Generic;
+using Newtonsoft.Json;
 using UnityEngine;
 using UnityEngine.EventSystems;
 
@@ -69,7 +70,8 @@ public enum BattleTestMode
     BattleResolutionPlanBasic = 82,
     BattlePresentationProtocolBasic = 83,
     BattleClashEngagementBasic = 84,
-    BattleLongRangeShootResourceContractBasic = 85
+    BattleLongRangeShootResourceContractBasic = 85,
+    BattleFirstStrikeExecutionPlanBasic = 86
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -426,6 +428,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleLongRangeShootResourceContractBasic)
         {
             BattleLongRangeShootResourceContractTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleFirstStrikeExecutionPlanBasic)
+        {
+            RunBattleFirstStrikeExecutionPlanBasicTestSequence();
             return;
         }
 
@@ -15374,6 +15382,318 @@ public class CardLoadTest : MonoBehaviour
             "模式58 M 执行时跳过失效第一守备并选择后续有效槽位：" +
             (!invalidFirst.isUsed && validSecond.isUsed && invalidDefense.currentCooldown == 1)
         );
+    }
+
+    void RunBattleFirstStrikeExecutionPlanBasicTestSequence()
+    {
+        Debug.Log("===== BattleFirstStrikeExecutionPlanBasic 聚合测试开始 =====");
+
+        bool jsonTrait = VerifyFirstStrikeJsonTraitContract();
+        bool normalRegression = VerifyFirstStrikeNormalOrderingRegression();
+        bool priorityOverSpeed = VerifyFirstStrikePriorityOverSpeed();
+        bool sameTierSpeed = VerifyFirstStrikeSameTierKeepsSpeedOrdering();
+        bool pairing = VerifyFirstStrikeKeepsRespondedPairing();
+        bool longRangeIndependent = VerifyLongRangeShootDoesNotImplyFirstStrike();
+        bool executingCardSource = VerifyFirstStrikeExecutingCardSourceRule();
+
+        Debug.Log("模式86 FirstStrike A JSON Trait读取与缺省兼容：" + jsonTrait);
+        Debug.Log("模式86 FirstStrike B Normal排序回归：" + normalRegression);
+        Debug.Log("模式86 FirstStrike C 低速FirstStrike压过高速Normal：" + priorityOverSpeed);
+        Debug.Log("模式86 FirstStrike D 同Tier保持速度排序：" + sameTierSpeed);
+        Debug.Log("模式86 FirstStrike E Responded Pairing引用保持不变：" + pairing);
+        Debug.Log("模式86 FirstStrike F LongRangeShoot不自动先攻：" + longRangeIndependent);
+        Debug.Log("模式86 FirstStrike G executing card来源规则：" + executingCardSource);
+        Debug.Log(
+            "模式86 FirstStrike 聚合结果：" +
+            (jsonTrait &&
+             normalRegression &&
+             priorityOverSpeed &&
+             sameTierSpeed &&
+             pairing &&
+             longRangeIndependent &&
+             executingCardSource)
+        );
+
+        Debug.Log("===== BattleFirstStrikeExecutionPlanBasic 聚合测试结束 =====");
+    }
+
+    bool VerifyFirstStrikeJsonTraitContract()
+    {
+        try
+        {
+            CardTestData firstStrikeData = JsonConvert.DeserializeObject<CardTestData>(
+                "{\"cardID\":\"firststrike86_json\",\"traits\":[\"FirstStrike\"]}"
+            );
+            CardTestData missingTraitsData = JsonConvert.DeserializeObject<CardTestData>(
+                "{\"cardID\":\"firststrike86_missing\"}"
+            );
+            CardTestData nullTraitsData = JsonConvert.DeserializeObject<CardTestData>(
+                "{\"cardID\":\"firststrike86_null\",\"traits\":null}"
+            );
+            CardTestData emptyTraitsData = JsonConvert.DeserializeObject<CardTestData>(
+                "{\"cardID\":\"firststrike86_empty\",\"traits\":[]}"
+            );
+            BattleCardState runtimeCard = new BattleCardState(
+                null,
+                firstStrikeData,
+                "firststrike86_json_state"
+            );
+
+            return firstStrikeData != null &&
+                firstStrikeData.traits != null &&
+                firstStrikeData.traits.Length == 1 &&
+                firstStrikeData.traits[0] == BattleCardTrait.FirstStrike &&
+                firstStrikeData.HasTrait(BattleCardTrait.FirstStrike) &&
+                runtimeCard.HasTrait(BattleCardTrait.FirstStrike) &&
+                missingTraitsData != null &&
+                !missingTraitsData.HasTrait(BattleCardTrait.FirstStrike) &&
+                nullTraitsData != null &&
+                !nullTraitsData.HasTrait(BattleCardTrait.FirstStrike) &&
+                emptyTraitsData != null &&
+                !emptyTraitsData.HasTrait(BattleCardTrait.FirstStrike);
+        }
+        catch (System.Exception exception)
+        {
+            Debug.LogWarning("模式86 FirstStrike JSON Trait测试异常：" + exception.Message);
+            return false;
+        }
+    }
+
+    bool VerifyFirstStrikeNormalOrderingRegression()
+    {
+        BattleEndedTestContext context =
+            CreateBattleEndedTestContext("firststrike86_b", 30, 30, 50, 10, 1, 1);
+        BattleActionSlot fastSlot = CreateMode58FreeSlot(
+            context.allyA,
+            1,
+            CreateMode86AttackCard(context.allyA, "firststrike86_b_fast", 5, false),
+            context.enemy
+        );
+        BattleActionSlot slowSlot = CreateMode58FreeSlot(
+            context.allyB,
+            1,
+            CreateMode86AttackCard(context.allyB, "firststrike86_b_slow", 5, false),
+            context.enemy
+        );
+        BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot> { slowSlot, fastSlot },
+            new List<BattleEnemyIntent>(),
+            context.runtimeState
+        );
+
+        return plan.executionItems.Count == 2 &&
+            object.ReferenceEquals(plan.executionItems[0].actionSlot, fastSlot) &&
+            object.ReferenceEquals(plan.executionItems[1].actionSlot, slowSlot) &&
+            plan.executionItems[0].priorityTier == BattleExecutionPriorityTier.Normal &&
+            plan.executionItems[1].priorityTier == BattleExecutionPriorityTier.Normal &&
+            plan.executionItems[0].effectiveSpeed > plan.executionItems[1].effectiveSpeed;
+    }
+
+    bool VerifyFirstStrikePriorityOverSpeed()
+    {
+        BattleEndedTestContext context =
+            CreateBattleEndedTestContext("firststrike86_c", 30, 30, 50, 10, 1, 1);
+        BattleActionSlot fastNormalSlot = CreateMode58FreeSlot(
+            context.allyA,
+            1,
+            CreateMode86AttackCard(context.allyA, "firststrike86_c_normal", 5, false),
+            context.enemy
+        );
+        BattleActionSlot slowFirstStrikeSlot = CreateMode58FreeSlot(
+            context.allyB,
+            1,
+            CreateMode86AttackCard(context.allyB, "firststrike86_c_first", 5, true),
+            context.enemy
+        );
+        BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot> { fastNormalSlot, slowFirstStrikeSlot },
+            new List<BattleEnemyIntent>(),
+            context.runtimeState
+        );
+
+        return plan.executionItems.Count == 2 &&
+            object.ReferenceEquals(plan.executionItems[0].actionSlot, slowFirstStrikeSlot) &&
+            plan.executionItems[0].priorityTier == BattleExecutionPriorityTier.FirstStrike &&
+            plan.executionItems[0].effectiveSpeed < plan.executionItems[1].effectiveSpeed &&
+            object.ReferenceEquals(plan.executionItems[1].actionSlot, fastNormalSlot) &&
+            plan.executionItems[1].priorityTier == BattleExecutionPriorityTier.Normal;
+    }
+
+    bool VerifyFirstStrikeSameTierKeepsSpeedOrdering()
+    {
+        BattleEndedTestContext context =
+            CreateBattleEndedTestContext("firststrike86_d", 30, 30, 50, 10, 1, 1);
+        BattleActionSlot fastSlot = CreateMode58FreeSlot(
+            context.allyA,
+            1,
+            CreateMode86AttackCard(context.allyA, "firststrike86_d_fast", 5, true),
+            context.enemy
+        );
+        BattleActionSlot slowSlot = CreateMode58FreeSlot(
+            context.allyB,
+            1,
+            CreateMode86AttackCard(context.allyB, "firststrike86_d_slow", 5, true),
+            context.enemy
+        );
+        BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot> { slowSlot, fastSlot },
+            new List<BattleEnemyIntent>(),
+            context.runtimeState
+        );
+
+        return plan.executionItems.Count == 2 &&
+            plan.executionItems[0].priorityTier == BattleExecutionPriorityTier.FirstStrike &&
+            plan.executionItems[1].priorityTier == BattleExecutionPriorityTier.FirstStrike &&
+            object.ReferenceEquals(plan.executionItems[0].actionSlot, fastSlot) &&
+            object.ReferenceEquals(plan.executionItems[1].actionSlot, slowSlot) &&
+            plan.executionItems[0].effectiveSpeed > plan.executionItems[1].effectiveSpeed;
+    }
+
+    bool VerifyFirstStrikeKeepsRespondedPairing()
+    {
+        BattleEndedTestContext context =
+            CreateBattleEndedTestContext("firststrike86_e", 30, 30, 50, 10, 2, 1);
+        BattleEnemyIntent intentA = new BattleEnemyIntent(
+            "firststrike86_e_intent_a",
+            context.enemy,
+            CreateMode86AttackCard(context.enemy, "firststrike86_e_enemy_a", 5, false),
+            context.allyA,
+            1,
+            1,
+            1
+        );
+        BattleEnemyIntent intentB = new BattleEnemyIntent(
+            "firststrike86_e_intent_b",
+            context.enemy,
+            CreateMode86AttackCard(context.enemy, "firststrike86_e_enemy_b", 5, false),
+            context.allyB,
+            1,
+            2,
+            2
+        );
+        BattleActionSlot responseSlotA = CreateMode58ResponseSlot(
+            context.allyA,
+            1,
+            CreateMode86AttackCard(context.allyA, "firststrike86_e_player_a", 5, false),
+            intentA
+        );
+        BattleActionSlot responseSlotB = CreateMode58ResponseSlot(
+            context.allyB,
+            1,
+            CreateMode86AttackCard(context.allyB, "firststrike86_e_player_b", 5, true),
+            intentB
+        );
+        BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot> { responseSlotA, responseSlotB },
+            new List<BattleEnemyIntent> { intentA, intentB },
+            context.runtimeState
+        );
+
+        return plan.executionItems.Count == 2 &&
+            object.ReferenceEquals(plan.executionItems[0].actionSlot, responseSlotB) &&
+            object.ReferenceEquals(plan.executionItems[0].enemyIntent, intentB) &&
+            plan.executionItems[0].priorityTier == BattleExecutionPriorityTier.FirstStrike &&
+            object.ReferenceEquals(plan.executionItems[1].actionSlot, responseSlotA) &&
+            object.ReferenceEquals(plan.executionItems[1].enemyIntent, intentA) &&
+            plan.executionItems[1].priorityTier == BattleExecutionPriorityTier.Normal;
+    }
+
+    bool VerifyLongRangeShootDoesNotImplyFirstStrike()
+    {
+        BattleEndedTestContext context =
+            CreateBattleEndedTestContext("firststrike86_f", 30, 30, 50, 10, 1, 1);
+        BattleCardState longRangeCard = CreateMode86AttackCard(
+            context.allyA,
+            "firststrike86_f_long_range",
+            5,
+            false,
+            AttackDeliveryMode.LongRangeShoot
+        );
+        longRangeCard.cardData.traits = new BattleCardTrait[0];
+        BattleActionSlot longRangeSlot = CreateMode58FreeSlot(
+            context.allyA,
+            1,
+            longRangeCard,
+            context.enemy
+        );
+        BattleExecutionPlan plan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot> { longRangeSlot },
+            new List<BattleEnemyIntent>(),
+            context.runtimeState
+        );
+
+        return longRangeCard.IsLongRangeShoot() &&
+            !longRangeCard.HasTrait(BattleCardTrait.FirstStrike) &&
+            plan.executionItems.Count == 1 &&
+            plan.executionItems[0].priorityTier == BattleExecutionPriorityTier.Normal;
+    }
+
+    bool VerifyFirstStrikeExecutingCardSourceRule()
+    {
+        BattleEndedTestContext context =
+            CreateBattleEndedTestContext("firststrike86_g", 30, 30, 50, 10, 1, 1);
+        BattleEnemyIntent respondedIntent = new BattleEnemyIntent(
+            "firststrike86_g_responded",
+            context.enemy,
+            CreateMode86AttackCard(context.enemy, "firststrike86_g_enemy_first", 5, true),
+            context.allyA,
+            1,
+            1
+        );
+        BattleActionSlot normalResponseSlot = CreateMode58ResponseSlot(
+            context.allyA,
+            1,
+            CreateMode86AttackCard(context.allyA, "firststrike86_g_player_normal", 5, false),
+            respondedIntent
+        );
+        BattleExecutionPlan respondedPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot> { normalResponseSlot },
+            BattleEnemyIntentManager.CreateIntentQueue(respondedIntent),
+            context.runtimeState
+        );
+
+        BattleEnemyIntent unrespondedIntent = new BattleEnemyIntent(
+            "firststrike86_g_unresponded",
+            context.enemy,
+            CreateMode86AttackCard(context.enemy, "firststrike86_g_enemy_fallback", 5, true),
+            context.allyB,
+            1,
+            2
+        );
+        BattleExecutionPlan unrespondedPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot>(),
+            BattleEnemyIntentManager.CreateIntentQueue(unrespondedIntent),
+            context.runtimeState
+        );
+
+        return respondedPlan.executionItems.Count == 1 &&
+            respondedPlan.executionItems[0].priorityTier == BattleExecutionPriorityTier.Normal &&
+            object.ReferenceEquals(respondedPlan.executionItems[0].actionSlot, normalResponseSlot) &&
+            unrespondedPlan.executionItems.Count == 1 &&
+            unrespondedPlan.executionItems[0].priorityTier == BattleExecutionPriorityTier.FirstStrike &&
+            unrespondedPlan.executionItems[0].actionSlot == null &&
+            object.ReferenceEquals(unrespondedPlan.executionItems[0].enemyIntent, unrespondedIntent);
+    }
+
+    BattleCardState CreateMode86AttackCard(
+        CharacterData owner,
+        string instanceID,
+        int point,
+        bool firstStrike,
+        string attackDeliveryMode = AttackDeliveryMode.Melee
+    )
+    {
+        CardTestData cardData = CreateFixedAttackCardData(
+            instanceID + "_data",
+            "模式86固定攻击",
+            point
+        );
+        cardData.attackDeliveryMode = attackDeliveryMode;
+        cardData.traits = firstStrike
+            ? new[] { BattleCardTrait.FirstStrike }
+            : null;
+
+        return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
     }
 
     void RunBattleContinuousDodgeLifecycleBasicTestSequence()

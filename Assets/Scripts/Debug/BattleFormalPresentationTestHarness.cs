@@ -27,7 +27,8 @@ public enum BattleFormalPresentationTestScenario
     CloseRangeShootVsDodgeSuccess,
     CloseRangeShootVsDodgeFailed,
     AttackVsAttackAllyWin,
-    AttackVsAttackEnemyWin
+    AttackVsAttackEnemyWin,
+    DualSlotFirstStrikeSequence
 }
 
 // 正式BattleScene的开发测试输入入口；只准备规则数据，不驱动执行或表现。
@@ -100,6 +101,18 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         "[TEST]_FORMAL_CONTINUOUS_DODGE_SUCCESS_FAILED_INTENT_1";
     private const string ContinuousSuccessFailedIntentTwoID =
         "[TEST]_FORMAL_CONTINUOUS_DODGE_SUCCESS_FAILED_INTENT_2";
+    private const string DualSlotNormalMeleeCardID =
+        "[TEST]_FORMAL_DUAL_SLOT_NORMAL_MELEE";
+    private const string DualSlotFirstStrikeLongRangeCardID =
+        "[TEST]_FORMAL_DUAL_SLOT_FIRST_STRIKE_LONG_RANGE";
+    private const string DualSlotEnemyMeleeOneCardID =
+        "[TEST]_FORMAL_DUAL_SLOT_ENEMY_MELEE_1";
+    private const string DualSlotEnemyMeleeTwoCardID =
+        "[TEST]_FORMAL_DUAL_SLOT_ENEMY_MELEE_2";
+    private const string DualSlotIntentOneID =
+        "[TEST]_FORMAL_DUAL_SLOT_INTENT_1";
+    private const string DualSlotIntentTwoID =
+        "[TEST]_FORMAL_DUAL_SLOT_INTENT_2";
     private const string LongRangeShooterCardID =
         "[TEST]_FORMAL_LONG_RANGE_SHOOTER";
     private const string LongRangeMeleeCardID =
@@ -121,6 +134,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
     private const string CloseRangeIntentID =
         "[TEST]_FORMAL_CLOSE_RANGE_INTENT";
     private const int TestSlotIndex = 1;
+    private const int SecondTestSlotIndex = 2;
 
     [SerializeField]
     private BattleFormalPresentationTestScenario scenario =
@@ -225,6 +239,11 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                 return TryPrepareContinuousDodge(
                     runtimeState,
                     false,
+                    out failureMessage
+                );
+            case BattleFormalPresentationTestScenario.DualSlotFirstStrikeSequence:
+                return TryPrepareDualSlotFirstStrikeSequence(
+                    runtimeState,
                     out failureMessage
                 );
             case BattleFormalPresentationTestScenario.LongRangeShootVsAttackShooterWin:
@@ -1683,6 +1702,624 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         }
     }
 
+    private bool TryPrepareDualSlotFirstStrikeSequence(
+        BattleRuntimeState runtimeState,
+        out string failureMessage
+    )
+    {
+        CharacterData ally;
+        CharacterData enemy;
+        BattleActionSlot slotOne;
+        BattleActionSlot slotTwo;
+        if (!TryValidateDualSlotFirstStrikePrerequisites(
+                runtimeState,
+                out ally,
+                out enemy,
+                out slotOne,
+                out slotTwo,
+                out failureMessage))
+        {
+            return false;
+        }
+
+        const int normalMeleePoint = 6;
+        const int firstStrikeLongRangePoint = 7;
+        const int enemyMeleeOnePoint = 3;
+        const int enemyMeleeTwoPoint = 4;
+        const int expectedMaximumDamage =
+            normalMeleePoint + firstStrikeLongRangePoint;
+
+        List<BattleEnemyIntent> originalIntentQueue = runtimeState.intentQueue;
+        List<BuffData> originalAllyBuffs = ally.buffs != null
+            ? new List<BuffData>(ally.buffs)
+            : new List<BuffData>();
+        BattleCardState normalMeleeCard = null;
+        BattleCardState firstStrikeLongRangeCard = null;
+        BattleCardState enemyMeleeOneCard = null;
+        BattleCardState enemyMeleeTwoCard = null;
+
+        try
+        {
+            // LongRange资源属于实际射手；本场景的射手是Ally A。
+            ConfigureLongRangeTestBuffs(ally, 1);
+            if (!HasNeutralLongRangePointModifiers(ally, enemy))
+            {
+                RollbackDualSlotFirstStrikeSequence(
+                    runtimeState,
+                    originalIntentQueue,
+                    slotOne,
+                    slotTwo,
+                    ally,
+                    normalMeleeCard,
+                    firstStrikeLongRangeCard,
+                    originalAllyBuffs,
+                    enemy,
+                    enemyMeleeOneCard,
+                    enemyMeleeTwoCard
+                );
+                return Fail(
+                    "Dual-Slot场景清理点数修正后仍存在非中性修正。",
+                    out failureMessage
+                );
+            }
+
+            if (enemy.currentHP <= expectedMaximumDamage)
+            {
+                RollbackDualSlotFirstStrikeSequence(
+                    runtimeState,
+                    originalIntentQueue,
+                    slotOne,
+                    slotTwo,
+                    ally,
+                    normalMeleeCard,
+                    firstStrikeLongRangeCard,
+                    originalAllyBuffs,
+                    enemy,
+                    enemyMeleeOneCard,
+                    enemyMeleeTwoCard
+                );
+                return Fail(
+                    "Enemy当前HP不足以安全完成两个确定性Item。HP=" +
+                    enemy.currentHP + "，要求>" + expectedMaximumDamage,
+                    out failureMessage
+                );
+            }
+
+            CardTestData firstStrikeLongRangeData =
+                CreateLongRangeTestAttackCard(
+                    DualSlotFirstStrikeLongRangeCardID,
+                    "[TEST] FirstStrike Long Range Shoot",
+                    firstStrikeLongRangePoint,
+                    firstStrikeLongRangePoint
+                );
+            firstStrikeLongRangeData.traits =
+                new[] { BattleCardTrait.FirstStrike };
+
+            normalMeleeCard = BattleCardManager.CreateBattleCard(
+                ally,
+                CreateTestAttackCardRange(
+                    DualSlotNormalMeleeCardID,
+                    "[TEST] Normal Melee",
+                    normalMeleePoint,
+                    normalMeleePoint
+                ),
+                DualSlotNormalMeleeCardID + "_INSTANCE"
+            );
+            firstStrikeLongRangeCard = BattleCardManager.CreateBattleCard(
+                ally,
+                firstStrikeLongRangeData,
+                DualSlotFirstStrikeLongRangeCardID + "_INSTANCE"
+            );
+            enemyMeleeOneCard = BattleCardManager.CreateBattleCard(
+                enemy,
+                CreateTestAttackCardRange(
+                    DualSlotEnemyMeleeOneCardID,
+                    "[TEST] Enemy Melee 1",
+                    enemyMeleeOnePoint,
+                    enemyMeleeOnePoint
+                ),
+                DualSlotEnemyMeleeOneCardID + "_INSTANCE"
+            );
+            enemyMeleeTwoCard = BattleCardManager.CreateBattleCard(
+                enemy,
+                CreateTestAttackCardRange(
+                    DualSlotEnemyMeleeTwoCardID,
+                    "[TEST] Enemy Melee 2",
+                    enemyMeleeTwoPoint,
+                    enemyMeleeTwoPoint
+                ),
+                DualSlotEnemyMeleeTwoCardID + "_INSTANCE"
+            );
+
+            if (!IsOwnedCard(normalMeleeCard, ally) ||
+                !IsOwnedCard(firstStrikeLongRangeCard, ally) ||
+                !IsOwnedCard(enemyMeleeOneCard, enemy) ||
+                !IsOwnedCard(enemyMeleeTwoCard, enemy))
+            {
+                RollbackDualSlotFirstStrikeSequence(
+                    runtimeState,
+                    originalIntentQueue,
+                    slotOne,
+                    slotTwo,
+                    ally,
+                    normalMeleeCard,
+                    firstStrikeLongRangeCard,
+                    originalAllyBuffs,
+                    enemy,
+                    enemyMeleeOneCard,
+                    enemyMeleeTwoCard
+                );
+                return Fail(
+                    "Dual-Slot测试卡创建或Owner绑定失败。",
+                    out failureMessage
+                );
+            }
+
+            string eligibilityFailure;
+            if (!AreDualSlotCardsEligible(
+                    ally,
+                    enemy,
+                    normalMeleeCard,
+                    firstStrikeLongRangeCard,
+                    enemyMeleeOneCard,
+                    enemyMeleeTwoCard,
+                    out eligibilityFailure))
+            {
+                RollbackDualSlotFirstStrikeSequence(
+                    runtimeState,
+                    originalIntentQueue,
+                    slotOne,
+                    slotTwo,
+                    ally,
+                    normalMeleeCard,
+                    firstStrikeLongRangeCard,
+                    originalAllyBuffs,
+                    enemy,
+                    enemyMeleeOneCard,
+                    enemyMeleeTwoCard
+                );
+                return Fail(eligibilityFailure, out failureMessage);
+            }
+
+            BattleEnemyIntent intentOne = new BattleEnemyIntent(
+                DualSlotIntentOneID,
+                enemy,
+                enemyMeleeOneCard,
+                ally,
+                TestSlotIndex,
+                1,
+                1
+            );
+            BattleEnemyIntent intentTwo = new BattleEnemyIntent(
+                DualSlotIntentTwoID,
+                enemy,
+                enemyMeleeTwoCard,
+                ally,
+                SecondTestSlotIndex,
+                2,
+                2
+            );
+            runtimeState.SetIntentQueue(
+                new List<BattleEnemyIntent> { intentOne, intentTwo }
+            );
+
+            BattleActionAssignmentResult assignmentOne;
+            bool assignedOne = BattleActionSlotManager.TryAssignToEnemyIntent(
+                runtimeState,
+                ally,
+                TestSlotIndex,
+                normalMeleeCard,
+                intentOne,
+                out assignmentOne
+            );
+            BattleActionAssignmentResult assignmentTwo;
+            bool assignedTwo = BattleActionSlotManager.TryAssignToEnemyIntent(
+                runtimeState,
+                ally,
+                SecondTestSlotIndex,
+                firstStrikeLongRangeCard,
+                intentTwo,
+                out assignmentTwo
+            );
+
+            string relationFailure = "Assignment未成功";
+            if (!assignedOne || !assignedTwo ||
+                !IsValidDualSlotFirstStrikeRelations(
+                    runtimeState,
+                    ally,
+                    enemy,
+                    slotOne,
+                    slotTwo,
+                    normalMeleeCard,
+                    firstStrikeLongRangeCard,
+                    enemyMeleeOneCard,
+                    enemyMeleeTwoCard,
+                    intentOne,
+                    intentTwo,
+                    assignmentOne,
+                    assignmentTwo,
+                    out relationFailure))
+            {
+                RollbackDualSlotFirstStrikeSequence(
+                    runtimeState,
+                    originalIntentQueue,
+                    slotOne,
+                    slotTwo,
+                    ally,
+                    normalMeleeCard,
+                    firstStrikeLongRangeCard,
+                    originalAllyBuffs,
+                    enemy,
+                    enemyMeleeOneCard,
+                    enemyMeleeTwoCard
+                );
+                return Fail(
+                    "未能建立Dual-Slot正式Pairing：" + relationFailure,
+                    out failureMessage
+                );
+            }
+
+            BattleExecutionPlan previewPlan;
+            string planFailure;
+            if (!HasExpectedDualSlotFirstStrikeExecutionOrder(
+                    runtimeState,
+                    slotOne,
+                    slotTwo,
+                    intentOne,
+                    intentTwo,
+                    out previewPlan,
+                    out planFailure))
+            {
+                RollbackDualSlotFirstStrikeSequence(
+                    runtimeState,
+                    originalIntentQueue,
+                    slotOne,
+                    slotTwo,
+                    ally,
+                    normalMeleeCard,
+                    firstStrikeLongRangeCard,
+                    originalAllyBuffs,
+                    enemy,
+                    enemyMeleeOneCard,
+                    enemyMeleeTwoCard
+                );
+                return Fail(planFailure, out failureMessage);
+            }
+
+            BattleExecutionItem firstItem = previewPlan.executionItems[0];
+            BattleExecutionItem secondItem = previewPlan.executionItems[1];
+            hasPreparedScenario = true;
+            preparedRuntimeState = runtimeState;
+            Debug.Log(
+                "[FormalPresentationTest] " +
+                "DualSlotFirstStrikeSequence prepared.\n" +
+                "Ally:\n" +
+                "Slot1 = Normal Melee\n" +
+                "Slot2 = FirstStrike LongRangeShoot\n" +
+                "Enemy:\n" +
+                "Intent1 = Melee\n" +
+                "Intent2 = Melee\n" +
+                "ExecutionPlan:\n" +
+                "#1 = Slot2 FirstStrike LongRange <-> Intent2" +
+                " [Tier=" + firstItem.priorityTier +
+                ", Speed=" + firstItem.effectiveSpeed + "]\n" +
+                "#2 = Slot1 Normal Melee <-> Intent1" +
+                " [Tier=" + secondItem.priorityTier +
+                ", Speed=" + secondItem.effectiveSpeed + "]\n" +
+                "Expected Presentation:\n" +
+                "LongRange -> ActionComplete -> Melee -> " +
+                "ActionComplete -> Runner Completed\n" +
+                "BulletBefore = " + ally.GetBuffStack("Bullet"),
+                this
+            );
+            return true;
+        }
+        catch (Exception exception)
+        {
+            RollbackDualSlotFirstStrikeSequence(
+                runtimeState,
+                originalIntentQueue,
+                slotOne,
+                slotTwo,
+                ally,
+                normalMeleeCard,
+                firstStrikeLongRangeCard,
+                originalAllyBuffs,
+                enemy,
+                enemyMeleeOneCard,
+                enemyMeleeTwoCard
+            );
+            return Fail(
+                "准备DualSlotFirstStrikeSequence时发生异常，已回滚：" +
+                exception.Message,
+                out failureMessage
+            );
+        }
+    }
+
+    private bool TryValidateDualSlotFirstStrikePrerequisites(
+        BattleRuntimeState runtimeState,
+        out CharacterData ally,
+        out CharacterData enemy,
+        out BattleActionSlot slotOne,
+        out BattleActionSlot slotTwo,
+        out string failureMessage
+    )
+    {
+        ally = runtimeState != null ? runtimeState.allyA : null;
+        enemy = runtimeState != null ? runtimeState.enemy : null;
+        slotOne = null;
+        slotTwo = null;
+
+        if (runtimeState == null)
+        {
+            return Fail("BattleRuntimeState为空。", out failureMessage);
+        }
+
+        if (runtimeState.LifecyclePhase != BattleLifecyclePhase.Prepare ||
+            runtimeState.currentExecutionPlan != null)
+        {
+            return Fail(
+                "Dual-Slot场景只能在Prepare且尚未创建ExecutionPlan时准备。当前Phase=" +
+                runtimeState.LifecyclePhase + "，ExecutionPlan为空=" +
+                (runtimeState.currentExecutionPlan == null),
+                out failureMessage
+            );
+        }
+
+        if (ally == null || enemy == null || ally.IsDead() || enemy.IsDead())
+        {
+            return Fail(
+                "Dual-Slot场景缺少存活的Ally A或Enemy。",
+                out failureMessage
+            );
+        }
+
+        slotOne = BattleActionSlotManager.GetSlot(
+            runtimeState.actionSlots,
+            ally,
+            TestSlotIndex
+        );
+        slotTwo = BattleActionSlotManager.GetSlot(
+            runtimeState.actionSlots,
+            ally,
+            SecondTestSlotIndex
+        );
+        if (slotOne == null || slotTwo == null ||
+            ReferenceEquals(slotOne, slotTwo) ||
+            !ReferenceEquals(slotOne.owner, ally) ||
+            !ReferenceEquals(slotTwo.owner, ally))
+        {
+            return Fail(
+                "Dual-Slot场景要求Ally A拥有两个独立正式ActionSlot。",
+                out failureMessage
+            );
+        }
+
+        if (!AreAllActionSlotsEmpty(runtimeState.actionSlots))
+        {
+            return Fail(
+                "Dual-Slot场景准备前要求全部正式行动槽位为空。",
+                out failureMessage
+            );
+        }
+
+        failureMessage = string.Empty;
+        return true;
+    }
+
+    private static bool AreDualSlotCardsEligible(
+        CharacterData ally,
+        CharacterData enemy,
+        BattleCardState normalMeleeCard,
+        BattleCardState firstStrikeLongRangeCard,
+        BattleCardState enemyMeleeOneCard,
+        BattleCardState enemyMeleeTwoCard,
+        out string failureMessage
+    )
+    {
+        CardEligibilityResult normalMelee =
+            BattleCardManager.EvaluateCardEligibility(
+                ally,
+                enemy,
+                normalMeleeCard
+            );
+        CardEligibilityResult longRange =
+            BattleCardManager.EvaluateCardEligibility(
+                ally,
+                enemy,
+                firstStrikeLongRangeCard
+            );
+        CardEligibilityResult enemyMeleeOne =
+            BattleCardManager.EvaluateCardEligibility(
+                enemy,
+                ally,
+                enemyMeleeOneCard
+            );
+        CardEligibilityResult enemyMeleeTwo =
+            BattleCardManager.EvaluateCardEligibility(
+                enemy,
+                ally,
+                enemyMeleeTwoCard
+            );
+
+        if (normalMelee == null || !normalMelee.isEligible ||
+            longRange == null || !longRange.isEligible ||
+            enemyMeleeOne == null || !enemyMeleeOne.isEligible ||
+            enemyMeleeTwo == null || !enemyMeleeTwo.isEligible)
+        {
+            failureMessage =
+                "Dual-Slot卡牌资格不成立。Normal=" +
+                GetEligibilityFailure(normalMelee) +
+                "，LongRange=" + GetEligibilityFailure(longRange) +
+                "，Enemy1=" + GetEligibilityFailure(enemyMeleeOne) +
+                "，Enemy2=" + GetEligibilityFailure(enemyMeleeTwo);
+            return false;
+        }
+
+        failureMessage = string.Empty;
+        return true;
+    }
+
+    private static bool IsValidDualSlotFirstStrikeRelations(
+        BattleRuntimeState runtimeState,
+        CharacterData ally,
+        CharacterData enemy,
+        BattleActionSlot slotOne,
+        BattleActionSlot slotTwo,
+        BattleCardState normalMeleeCard,
+        BattleCardState firstStrikeLongRangeCard,
+        BattleCardState enemyMeleeOneCard,
+        BattleCardState enemyMeleeTwoCard,
+        BattleEnemyIntent intentOne,
+        BattleEnemyIntent intentTwo,
+        BattleActionAssignmentResult assignmentOne,
+        BattleActionAssignmentResult assignmentTwo,
+        out string failureMessage
+    )
+    {
+        bool firstAssignmentValid = assignmentOne != null &&
+            assignmentOne.isSuccess &&
+            !assignmentOne.wasAutoDowngraded &&
+            assignmentOne.effectiveSlotType ==
+                BattleActionSlotType.RespondToEnemyIntent;
+        bool secondAssignmentValid = assignmentTwo != null &&
+            assignmentTwo.isSuccess &&
+            !assignmentTwo.wasAutoDowngraded &&
+            assignmentTwo.effectiveSlotType ==
+                BattleActionSlotType.RespondToEnemyIntent;
+
+        bool firstPairValid = slotOne != null &&
+            ReferenceEquals(slotOne.owner, ally) &&
+            ReferenceEquals(slotOne.actor, ally) &&
+            ReferenceEquals(slotOne.cardState, normalMeleeCard) &&
+            ReferenceEquals(slotOne.enemyIntent, intentOne) &&
+            intentOne != null &&
+            intentOne.isResponded &&
+            ReferenceEquals(intentOne.enemy, enemy) &&
+            ReferenceEquals(intentOne.enemyCardState, enemyMeleeOneCard) &&
+            ReferenceEquals(intentOne.actualTargetCharacter, ally) &&
+            intentOne.actualTargetSlotIndex == TestSlotIndex;
+
+        bool secondPairValid = slotTwo != null &&
+            ReferenceEquals(slotTwo.owner, ally) &&
+            ReferenceEquals(slotTwo.actor, ally) &&
+            ReferenceEquals(slotTwo.cardState, firstStrikeLongRangeCard) &&
+            ReferenceEquals(slotTwo.enemyIntent, intentTwo) &&
+            intentTwo != null &&
+            intentTwo.isResponded &&
+            ReferenceEquals(intentTwo.enemy, enemy) &&
+            ReferenceEquals(intentTwo.enemyCardState, enemyMeleeTwoCard) &&
+            ReferenceEquals(intentTwo.actualTargetCharacter, ally) &&
+            intentTwo.actualTargetSlotIndex == SecondTestSlotIndex;
+
+        bool cardsValid = normalMeleeCard != null &&
+            normalMeleeCard.IsMeleeAttack() &&
+            !normalMeleeCard.HasTrait(BattleCardTrait.FirstStrike) &&
+            firstStrikeLongRangeCard != null &&
+            firstStrikeLongRangeCard.IsLongRangeShoot() &&
+            firstStrikeLongRangeCard.HasTrait(BattleCardTrait.FirstStrike);
+
+        bool queueValid = runtimeState != null &&
+            runtimeState.intentQueue != null &&
+            runtimeState.intentQueue.Count == 2 &&
+            ReferenceEquals(runtimeState.intentQueue[0], intentOne) &&
+            ReferenceEquals(runtimeState.intentQueue[1], intentTwo);
+
+        if (!firstAssignmentValid || !secondAssignmentValid ||
+            !firstPairValid || !secondPairValid ||
+            !cardsValid || !queueValid)
+        {
+            failureMessage =
+                "Assignment1=" + firstAssignmentValid +
+                "，Assignment2=" + secondAssignmentValid +
+                "，Pair1=" + firstPairValid +
+                "，Pair2=" + secondPairValid +
+                "，Cards=" + cardsValid +
+                "，Queue=" + queueValid;
+            return false;
+        }
+
+        failureMessage = string.Empty;
+        return true;
+    }
+
+    private static bool HasExpectedDualSlotFirstStrikeExecutionOrder(
+        BattleRuntimeState runtimeState,
+        BattleActionSlot slotOne,
+        BattleActionSlot slotTwo,
+        BattleEnemyIntent intentOne,
+        BattleEnemyIntent intentTwo,
+        out BattleExecutionPlan previewPlan,
+        out string failureMessage
+    )
+    {
+        previewPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            runtimeState.actionSlots,
+            runtimeState.intentQueue,
+            runtimeState
+        );
+        bool hasTwoItems = previewPlan != null &&
+            previewPlan.executionItems != null &&
+            previewPlan.executionItems.Count == 2;
+        BattleExecutionItem firstItem = hasTwoItems
+            ? previewPlan.executionItems[0]
+            : null;
+        BattleExecutionItem secondItem = hasTwoItems
+            ? previewPlan.executionItems[1]
+            : null;
+
+        bool firstValid = firstItem != null &&
+            firstItem.order == 1 &&
+            firstItem.executionType ==
+                BattleExecutionItemType.RespondedEnemyIntent &&
+            firstItem.priorityTier ==
+                BattleExecutionPriorityTier.FirstStrike &&
+            ReferenceEquals(firstItem.actionSlot, slotTwo) &&
+            ReferenceEquals(firstItem.enemyIntent, intentTwo) &&
+            firstItem.actionSlot.cardState != null &&
+            firstItem.actionSlot.cardState.IsLongRangeShoot() &&
+            firstItem.actionSlot.cardState.HasTrait(
+                BattleCardTrait.FirstStrike
+            );
+        bool secondValid = secondItem != null &&
+            secondItem.order == 2 &&
+            secondItem.executionType ==
+                BattleExecutionItemType.RespondedEnemyIntent &&
+            secondItem.priorityTier == BattleExecutionPriorityTier.Normal &&
+            ReferenceEquals(secondItem.actionSlot, slotOne) &&
+            ReferenceEquals(secondItem.enemyIntent, intentOne) &&
+            secondItem.actionSlot.cardState != null &&
+            secondItem.actionSlot.cardState.IsMeleeAttack() &&
+            !secondItem.actionSlot.cardState.HasTrait(
+                BattleCardTrait.FirstStrike
+            );
+
+        // 同一1v1双方的Responded Item共享角色速度；无Trait时Slot1会由既有槽位顺序领先。
+        bool firstStrikeChangedOrder = firstItem != null &&
+            secondItem != null &&
+            firstItem.effectiveSpeed == secondItem.effectiveSpeed &&
+            secondItem.actionSlotOrder < firstItem.actionSlotOrder;
+
+        if (!hasTwoItems || !firstValid || !secondValid ||
+            !firstStrikeChangedOrder)
+        {
+            failureMessage =
+                "Dual-Slot ExecutionPlan不符合FirstStrike完整Item重排。" +
+                "Count=" +
+                (previewPlan != null && previewPlan.executionItems != null
+                    ? previewPlan.executionItems.Count
+                    : 0) +
+                "，First=" + firstValid +
+                "，Second=" + secondValid +
+                "，FirstStrikeChangedOrder=" + firstStrikeChangedOrder;
+            return false;
+        }
+
+        failureMessage = string.Empty;
+        return true;
+    }
+
     private bool TryValidateContinuousDodgePrerequisites(
         BattleRuntimeState runtimeState,
         bool expectSecondSuccess,
@@ -2536,6 +3173,50 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         RemoveTestCard(ally, dodgeCard);
         RemoveTestCard(enemy, attackOneCard);
         RemoveTestCard(enemy, attackTwoCard);
+    }
+
+    private static void RollbackDualSlotFirstStrikeSequence(
+        BattleRuntimeState runtimeState,
+        List<BattleEnemyIntent> originalIntentQueue,
+        BattleActionSlot slotOne,
+        BattleActionSlot slotTwo,
+        CharacterData ally,
+        BattleCardState normalMeleeCard,
+        BattleCardState firstStrikeLongRangeCard,
+        List<BuffData> originalAllyBuffs,
+        CharacterData enemy,
+        BattleCardState enemyMeleeOneCard,
+        BattleCardState enemyMeleeTwoCard
+    )
+    {
+        if (slotOne != null)
+        {
+            slotOne.Clear();
+        }
+
+        if (slotTwo != null)
+        {
+            slotTwo.Clear();
+        }
+
+        if (runtimeState != null)
+        {
+            runtimeState.SetIntentQueue(originalIntentQueue);
+        }
+
+        RemoveTestCard(ally, normalMeleeCard);
+        RemoveTestCard(ally, firstStrikeLongRangeCard);
+        RemoveTestCard(enemy, enemyMeleeOneCard);
+        RemoveTestCard(enemy, enemyMeleeTwoCard);
+
+        if (ally != null && ally.buffs != null)
+        {
+            ally.buffs.Clear();
+            if (originalAllyBuffs != null)
+            {
+                ally.buffs.AddRange(originalAllyBuffs);
+            }
+        }
     }
 
     private static void RollbackCloseRangeShootVsDodge(
