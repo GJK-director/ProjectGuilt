@@ -27,6 +27,14 @@ public enum BattleExecutionItemStatus
     Failed
 }
 
+// BattleExecutionPriorityTier = 执行计划优先级层级。
+// 同一层级内继续使用原有速度、响应和稳定顺序。
+public enum BattleExecutionPriorityTier
+{
+    FirstStrike,
+    Normal
+}
+
 // BattleExecutionItemOutcomeReason = 战斗执行项结果原因
 public enum BattleExecutionItemOutcomeReason
 {
@@ -58,6 +66,9 @@ public class BattleExecutionItem
     // order = 执行顺序
     // 数字越小，越先处理。
     public int order;
+
+    // FirstStrike 卡牌先于 Normal 执行，但不改变 Item 已建立的配对关系。
+    public BattleExecutionPriorityTier priorityTier;
 
     // 以下字段保存计划生成时使用的稳定排序键，便于日志和测试直接核对顺序。
     public int effectiveSpeed;
@@ -124,6 +135,7 @@ public class BattleExecutionItem
     )
     {
         this.order = order;
+        priorityTier = BattleExecutionPriorityTier.Normal;
         effectiveSpeed = 0;
         responsePriority = 1;
         actionSlotOrder = int.MaxValue;

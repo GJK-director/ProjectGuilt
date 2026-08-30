@@ -98,6 +98,12 @@ public class BattleCardState
         return cardData != null && cardData.IsCloseRangeShoot();
     }
 
+    // HasTrait = 查询这张战斗卡实例对应的卡牌固有词条。
+    public bool HasTrait(BattleCardTrait trait)
+    {
+        return cardData != null && cardData.HasTrait(trait);
+    }
+
     // GetSinCardUseRule = 获取罪卡使用规则
     public string GetSinCardUseRule()
     {

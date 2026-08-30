@@ -1,6 +1,12 @@
 // 脚本中文说明：卡牌测试数据。负责承接 CardsTest.json 里读取出来的一张卡牌模板数据。
 using System.Collections.Generic;
 
+// BattleCardTrait = 卡牌固有词条，不属于角色运行时 Buff。
+public enum BattleCardTrait
+{
+    FirstStrike
+}
+
 // CardResourceRuleData = 卡牌软资源规则
 // 软资源规则不会阻止卡牌安排或执行。
 // 资源不足时选择降级基础点数，而不是返回ActionUnavailable。
@@ -62,6 +68,26 @@ public class CardTestData
 
     public List<CardEffectData> effects; // 卡牌效果列表
     public CardKeywordData[] keywords;   // 本卡描述中涉及的词条说明，由策划手写
+    // traits = 卡牌固有词条；字段缺省或为空时表示没有特殊词条。
+    public BattleCardTrait[] traits;
+
+    public bool HasTrait(BattleCardTrait trait)
+    {
+        if (traits == null)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < traits.Length; index++)
+        {
+            if (traits[index] == trait)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public string GetAttackDeliveryMode()
     {

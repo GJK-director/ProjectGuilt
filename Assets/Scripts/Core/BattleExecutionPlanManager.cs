@@ -150,6 +150,7 @@ public static class BattleExecutionPlanManager
                     GetBattlePositionIndex(runtimeState, fallbackBattleOrder, orderingActor),
                     stableOrder
                 );
+                item.priorityTier = GetPriorityTier(item);
                 candidates.Add(item);
                 stableOrder++;
             }
@@ -181,6 +182,7 @@ public static class BattleExecutionPlanManager
                     GetBattlePositionIndex(runtimeState, fallbackBattleOrder, slot.actor),
                     stableOrder
                 );
+                item.priorityTier = GetPriorityTier(item);
                 candidates.Add(item);
                 stableOrder++;
             }
@@ -573,7 +575,13 @@ public static class BattleExecutionPlanManager
 
     static int CompareExecutionItems(BattleExecutionItem left, BattleExecutionItem right)
     {
-        int result = right.effectiveSpeed.CompareTo(left.effectiveSpeed);
+        int result = left.priorityTier.CompareTo(right.priorityTier);
+        if (result != 0)
+        {
+            return result;
+        }
+
+        result = right.effectiveSpeed.CompareTo(left.effectiveSpeed);
         if (result != 0)
         {
             return result;
@@ -598,6 +606,29 @@ public static class BattleExecutionPlanManager
         }
 
         return left.stableOrder.CompareTo(right.stableOrder);
+    }
+
+    static BattleExecutionPriorityTier GetPriorityTier(BattleExecutionItem item)
+    {
+        BattleCardState executingCard = GetExecutingCardState(item);
+        return executingCard != null && executingCard.HasTrait(BattleCardTrait.FirstStrike)
+            ? BattleExecutionPriorityTier.FirstStrike
+            : BattleExecutionPriorityTier.Normal;
+    }
+
+    static BattleCardState GetExecutingCardState(BattleExecutionItem item)
+    {
+        if (item == null)
+        {
+            return null;
+        }
+
+        if (item.actionSlot != null && item.actionSlot.cardState != null)
+        {
+            return item.actionSlot.cardState;
+        }
+
+        return item.enemyIntent != null ? item.enemyIntent.enemyCardState : null;
     }
 
     static int GetSpeed(CharacterData character)
