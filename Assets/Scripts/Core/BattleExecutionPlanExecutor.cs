@@ -661,6 +661,78 @@ public static class BattleExecutionPlanExecutor
         return completed;
     }
 
+    internal static bool IsPausableMeleeFreeAttack(
+        BattleExecutionItem item
+    )
+    {
+        return item != null &&
+            item.executionType == BattleExecutionItemType.FreeAction &&
+            item.actionSlot != null &&
+            item.actionSlot.slotType == BattleActionSlotType.FreeAction &&
+            item.actionSlot.cardState != null &&
+            item.actionSlot.cardState.IsMeleeAttack();
+    }
+
+    internal static bool TryBeginPausableFreeMeleeAttack(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        out BattleResolutionPlan plan,
+        out bool itemCompleted,
+        out string failureMessage
+    )
+    {
+        plan = null;
+        itemCompleted = false;
+        failureMessage = string.Empty;
+        if (item == null || runtimeState == null ||
+            !IsPausableMeleeFreeAttack(item))
+        {
+            failureMessage =
+                "Pausable FreeAction Melee启动失败：Item语义不匹配";
+            return false;
+        }
+
+        if (item.actionSlot.actor == null || item.actionSlot.actor.IsDead())
+        {
+            item.MarkSkipped(BattleExecutionItemOutcomeReason.ActorDead);
+            itemCompleted = true;
+            return true;
+        }
+
+        BattleResolveResult failureResult;
+        plan = BattleResolver.BuildFreeAttackResolutionPlan(
+            item,
+            item.actionSlot,
+            out failureResult
+        );
+        if (plan != null)
+        {
+            Debug.Log(
+                "[FreeAction Melee] ActionBegin / Item=" + item.order
+            );
+            return true;
+        }
+
+        if (TryMarkResolveFailure(item, failureResult, true))
+        {
+            failureMessage = failureResult != null
+                ? failureResult.message
+                : "FreeAttack ResolutionPlan建立失败";
+            return false;
+        }
+
+        if (failureResult != null && !failureResult.isSuccess &&
+            failureResult.shouldCompleteItem)
+        {
+            item.MarkSkipped(BattleExecutionItemOutcomeReason.ActionUnavailable);
+            itemCompleted = true;
+            return true;
+        }
+
+        failureMessage = "FreeAttack ResolutionPlan建立失败";
+        return false;
+    }
+
     // Unresponded Item仍由正式守备选择器决定；只有ContinuousDodge转入Pausable。
     internal static bool TryBeginPausableUnrespondedEnemyIntent(
         BattleExecutionItem item,
@@ -777,7 +849,7 @@ public static class BattleExecutionPlanExecutor
         );
     }
 
-    internal static bool TryCommitPausableEnemyIntentResolutionStep(
+    internal static bool TryCommitPausableResolutionStep(
         BattleExecutionItem item,
         BattleRuntimeState runtimeState,
         BattleResolutionPlan plan,
@@ -803,6 +875,37 @@ public static class BattleExecutionPlanExecutor
 
         resolutionCompleted = plan.State == BattleResolutionPlanState.Completed;
         return true;
+    }
+
+    internal static bool CompletePausableFreeAction(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        BattleResolutionPlan plan
+    )
+    {
+        if (item == null || runtimeState == null || plan == null ||
+            plan.planKind != BattleResolutionPlanKind.FreeActionAttack ||
+            plan.State != BattleResolutionPlanState.Completed ||
+            plan.CompletedResult == null)
+        {
+            return false;
+        }
+
+        if (!plan.IsActionCompleted)
+        {
+            if (plan.CompletedResult.playerCardUsed && item.actionSlot != null)
+            {
+                item.actionSlot.MarkUsed();
+            }
+
+            item.MarkExecuted();
+            plan.MarkActionCompleted();
+            Debug.Log(
+                "[FreeAction Melee] ActionComplete / Item=" + item.order
+            );
+        }
+
+        return item.isCompleted;
     }
 
     // ActionComplete表现结束后才提交槽位与ExecutionItem状态。

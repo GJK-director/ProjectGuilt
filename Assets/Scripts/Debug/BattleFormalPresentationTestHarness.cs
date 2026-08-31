@@ -28,7 +28,8 @@ public enum BattleFormalPresentationTestScenario
     CloseRangeShootVsDodgeFailed,
     AttackVsAttackAllyWin,
     AttackVsAttackEnemyWin,
-    DualSlotFirstStrikeSequence
+    DualSlotFirstStrikeSequence,
+    OneSidedMeleeFreeAction
 }
 
 // 正式BattleScene的开发测试输入入口；只准备规则数据，不驱动执行或表现。
@@ -113,6 +114,8 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         "[TEST]_FORMAL_DUAL_SLOT_INTENT_1";
     private const string DualSlotIntentTwoID =
         "[TEST]_FORMAL_DUAL_SLOT_INTENT_2";
+    private const string OneSidedMeleeFreeActionCardID =
+        "[TEST]_FORMAL_ONE_SIDED_MELEE_FREE_ACTION";
     private const string LongRangeShooterCardID =
         "[TEST]_FORMAL_LONG_RANGE_SHOOTER";
     private const string LongRangeMeleeCardID =
@@ -243,6 +246,11 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                 );
             case BattleFormalPresentationTestScenario.DualSlotFirstStrikeSequence:
                 return TryPrepareDualSlotFirstStrikeSequence(
+                    runtimeState,
+                    out failureMessage
+                );
+            case BattleFormalPresentationTestScenario.OneSidedMeleeFreeAction:
+                return TryPrepareOneSidedMeleeFreeAction(
                     runtimeState,
                     out failureMessage
                 );
@@ -2037,6 +2045,173 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         }
     }
 
+    private bool TryPrepareOneSidedMeleeFreeAction(
+        BattleRuntimeState runtimeState,
+        out string failureMessage
+    )
+    {
+        failureMessage = string.Empty;
+        CharacterData ally = runtimeState != null ? runtimeState.allyA : null;
+        CharacterData enemy = runtimeState != null ? runtimeState.enemy : null;
+        BattleActionSlot expectedSlot = null;
+        BattleCardState attackCard = null;
+        List<BattleEnemyIntent> originalIntentQueue = runtimeState != null
+            ? runtimeState.intentQueue
+            : null;
+
+        if (runtimeState == null ||
+            runtimeState.LifecyclePhase != BattleLifecyclePhase.Prepare ||
+            runtimeState.currentExecutionPlan != null ||
+            ally == null || enemy == null || ally.IsDead() || enemy.IsDead())
+        {
+            return Fail(
+                "OneSidedMeleeFreeAction要求Prepare阶段存在存活的Ally A与Enemy，且尚未创建ExecutionPlan。",
+                out failureMessage
+            );
+        }
+
+        if (!AreAllActionSlotsEmpty(runtimeState.actionSlots))
+        {
+            return Fail(
+                "OneSidedMeleeFreeAction准备前要求正式行动槽位全部为空。",
+                out failureMessage
+            );
+        }
+
+        expectedSlot = BattleActionSlotManager.GetSlot(
+            runtimeState.actionSlots,
+            ally,
+            TestSlotIndex
+        );
+        if (expectedSlot == null)
+        {
+            return Fail("找不到Ally A Slot1。", out failureMessage);
+        }
+
+        try
+        {
+            attackCard = BattleCardManager.CreateBattleCard(
+                ally,
+                CreateTestAttackCardRange(
+                    OneSidedMeleeFreeActionCardID,
+                    "[TEST] One-Sided Melee FreeAction",
+                    6,
+                    6
+                ),
+                OneSidedMeleeFreeActionCardID + "_INSTANCE"
+            );
+            if (!IsOwnedCard(attackCard, ally) ||
+                !attackCard.IsMeleeAttack())
+            {
+                RollbackOneSidedMeleeFreeAction(
+                    runtimeState,
+                    originalIntentQueue,
+                    expectedSlot,
+                    ally,
+                    attackCard
+                );
+                return Fail(
+                    "OneSidedMeleeFreeAction测试卡创建或Melee绑定失败。",
+                    out failureMessage
+                );
+            }
+
+            runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+            BattleActionAssignmentResult assignmentResult;
+            bool assigned = BattleActionSlotManager.TryAssignToEnemy(
+                runtimeState,
+                ally,
+                TestSlotIndex,
+                attackCard,
+                enemy,
+                out assignmentResult
+            );
+            if (!assigned || assignmentResult == null ||
+                !assignmentResult.isSuccess ||
+                assignmentResult.wasAutoDowngraded ||
+                expectedSlot.slotType != BattleActionSlotType.FreeAction ||
+                !ReferenceEquals(expectedSlot.actor, ally) ||
+                !ReferenceEquals(expectedSlot.target, enemy) ||
+                !ReferenceEquals(expectedSlot.cardState, attackCard))
+            {
+                RollbackOneSidedMeleeFreeAction(
+                    runtimeState,
+                    originalIntentQueue,
+                    expectedSlot,
+                    ally,
+                    attackCard
+                );
+                return Fail(
+                    "OneSidedMeleeFreeAction未能建立正式FreeAction槽位：" +
+                    (assignmentResult != null
+                        ? assignmentResult.message
+                        : "无安排结果"),
+                    out failureMessage
+                );
+            }
+
+            BattleExecutionPlan productionPlan =
+                BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+                    runtimeState.actionSlots,
+                    runtimeState.intentQueue,
+                    runtimeState
+                );
+            bool validPlan = productionPlan != null &&
+                productionPlan.executionItems != null &&
+                productionPlan.executionItems.Count == 1;
+            BattleExecutionItem item = validPlan
+                ? productionPlan.executionItems[0]
+                : null;
+            validPlan = validPlan && item != null &&
+                item.executionType == BattleExecutionItemType.FreeAction &&
+                ReferenceEquals(item.actionSlot, expectedSlot) &&
+                ReferenceEquals(item.actionSlot.actor, ally) &&
+                ReferenceEquals(item.actionSlot.target, enemy) &&
+                item.actionSlot.cardState != null &&
+                item.actionSlot.cardState.IsMeleeAttack();
+            if (!validPlan)
+            {
+                RollbackOneSidedMeleeFreeAction(
+                    runtimeState,
+                    originalIntentQueue,
+                    expectedSlot,
+                    ally,
+                    attackCard
+                );
+                return Fail(
+                    "OneSidedMeleeFreeAction生产ExecutionPlan校验失败。",
+                    out failureMessage
+                );
+            }
+
+            hasPreparedScenario = true;
+            preparedRuntimeState = runtimeState;
+            Debug.Log(
+                "[FormalPresentationTest] OneSidedMeleeFreeAction prepared. " +
+                "ExecutionItems=1, FreeAction=Melee, Ally=" +
+                ally.characterName + ", Target=" + enemy.characterName +
+                ". Runtime应等待Space生成单方Roll，再进入共享Winner Attack。",
+                this
+            );
+            return true;
+        }
+        catch (Exception exception)
+        {
+            RollbackOneSidedMeleeFreeAction(
+                runtimeState,
+                originalIntentQueue,
+                expectedSlot,
+                ally,
+                attackCard
+            );
+            return Fail(
+                "准备OneSidedMeleeFreeAction时发生异常，已回滚：" +
+                exception.Message,
+                out failureMessage
+            );
+        }
+    }
+
     private bool TryValidateDualSlotFirstStrikePrerequisites(
         BattleRuntimeState runtimeState,
         out CharacterData ally,
@@ -3217,6 +3392,27 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
                 ally.buffs.AddRange(originalAllyBuffs);
             }
         }
+    }
+
+    private static void RollbackOneSidedMeleeFreeAction(
+        BattleRuntimeState runtimeState,
+        List<BattleEnemyIntent> originalIntentQueue,
+        BattleActionSlot allySlot,
+        CharacterData ally,
+        BattleCardState attackCard
+    )
+    {
+        if (allySlot != null)
+        {
+            allySlot.Clear();
+        }
+
+        if (runtimeState != null)
+        {
+            runtimeState.SetIntentQueue(originalIntentQueue);
+        }
+
+        RemoveTestCard(ally, attackCard);
     }
 
     private static void RollbackCloseRangeShootVsDodge(

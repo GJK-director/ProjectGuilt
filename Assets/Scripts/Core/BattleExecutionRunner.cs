@@ -26,6 +26,7 @@ enum BattlePresentationContinuation
 {
     None,
     AfterActionBegin,
+    AfterFreeActionBegin,
     AfterUnavailableResponseActionBegin,
     AfterRollResult,
     AfterImpact,
@@ -200,7 +201,8 @@ public sealed class BattleExecutionRunner
         }
 
         if (Phase != BattleExecutionRunnerPhase.WaitingForRoll ||
-            CurrentClashSession == null)
+            (CurrentClashSession == null &&
+                !CanRollOneSidedFreeAttack()))
         {
             // 提前请求直接拒绝且不缓存，ReadyPause结束后必须重新请求。
             failureMessage = "Manual Roll请求失败：当前尚未进入WaitingForRoll";
@@ -236,8 +238,11 @@ public sealed class BattleExecutionRunner
             return Fail("Pausable执行失败：没有可推进的ExecutionItem", out failureMessage);
         }
 
+        bool pausableFreeMelee = BattleExecutionPlanExecutor
+            .IsPausableMeleeFreeAttack(CurrentItem);
         if (runtimeState.IsBattleEnded ||
-            CurrentItem.executionType == BattleExecutionItemType.FreeAction)
+            (CurrentItem.executionType == BattleExecutionItemType.FreeAction &&
+                !pausableFreeMelee))
         {
             bool executed = BattleExecutionPlanExecutor
                 .ExecuteNextItemFromLifecycle(lifecycleController);
@@ -247,6 +252,36 @@ public sealed class BattleExecutionRunner
             }
 
             return FinishCurrentItem(out failureMessage);
+        }
+
+        if (pausableFreeMelee)
+        {
+            bool freeBegan = BattleExecutionPlanExecutor
+                .TryBeginPausableFreeMeleeAttack(
+                    CurrentItem,
+                    runtimeState,
+                    out BattleResolutionPlan freePlan,
+                    out bool freeItemCompleted,
+                    out failureMessage
+                );
+            if (!freeBegan)
+            {
+                return Fail(failureMessage, out failureMessage);
+            }
+
+            if (freeItemCompleted)
+            {
+                return FinishCurrentItem(out failureMessage);
+            }
+
+            CurrentActionSlot = CurrentItem.actionSlot;
+            CurrentResolutionPlan = freePlan;
+            return BeginPresentation(
+                BattlePresentationCue.ActionBegin,
+                BattlePresentationContinuation.AfterFreeActionBegin,
+                null,
+                "FreeAttack"
+            );
         }
 
         bool itemCompleted;
@@ -360,6 +395,11 @@ public sealed class BattleExecutionRunner
     bool RollOneAttempt(out string failureMessage)
     {
         failureMessage = string.Empty;
+        if (CurrentClashSession == null)
+        {
+            return RollOneSidedFreeAttack(out failureMessage);
+        }
+
         if (CurrentClashSession == null || CurrentClashSession.IsFinalized)
         {
             return Fail("Roll失败：当前ClashSession无效或已完成", out failureMessage);
@@ -406,6 +446,48 @@ public sealed class BattleExecutionRunner
             null,
             CurrentClashSession.AttemptResult.ToString()
         );
+    }
+
+    bool RollOneSidedFreeAttack(out string failureMessage)
+    {
+        failureMessage = string.Empty;
+        if (!CanRollOneSidedFreeAttack())
+        {
+            return Fail(
+                "Roll失败：当前不是合法的One-Sided FreeAttack",
+                out failureMessage
+            );
+        }
+
+        Phase = BattleExecutionRunnerPhase.Rolling;
+        if (!BattleResolver.TryRollFreeAttackResolutionPlan(
+                CurrentResolutionPlan,
+                out int rolledPoint
+            ))
+        {
+            return Fail(
+                "Roll失败：FreeAttack拒绝本次单方攻击点数生成",
+                out failureMessage
+            );
+        }
+
+        Phase = BattleExecutionRunnerPhase.Finalizing;
+        return BeginPresentation(
+            BattlePresentationCue.RollResult,
+            BattlePresentationContinuation.AfterRollResult,
+            null,
+            "FreeAttackRoll:" + rolledPoint
+        );
+    }
+
+    bool CanRollOneSidedFreeAttack()
+    {
+        return CurrentClashSession == null &&
+            CurrentResolutionPlan != null &&
+            CurrentResolutionPlan.planKind ==
+                BattleResolutionPlanKind.FreeActionAttack &&
+            !CurrentResolutionPlan.freeActionHasRolled &&
+            BattleExecutionPlanExecutor.IsPausableMeleeFreeAttack(CurrentItem);
     }
 
     public bool TryCommitNextResolutionStep(out string failureMessage)
@@ -488,6 +570,23 @@ public sealed class BattleExecutionRunner
         }
 
         if (continuation ==
+            BattlePresentationContinuation.AfterFreeActionBegin)
+        {
+            if (CurrentResolutionPlan == null ||
+                CurrentResolutionPlan.planKind !=
+                    BattleResolutionPlanKind.FreeActionAttack)
+            {
+                return Fail(
+                    "FreeAction ActionBegin完成后ResolutionPlan无效",
+                    out failureMessage
+                );
+            }
+
+            EnterReadyPause();
+            return true;
+        }
+
+        if (continuation ==
             BattlePresentationContinuation.AfterUnavailableResponseActionBegin)
         {
             CurrentResolutionPlan = BattleExecutionPlanExecutor
@@ -511,6 +610,24 @@ public sealed class BattleExecutionRunner
 
         if (continuation == BattlePresentationContinuation.AfterRollResult)
         {
+            if (CurrentResolutionPlan != null &&
+                CurrentResolutionPlan.planKind ==
+                    BattleResolutionPlanKind.FreeActionAttack)
+            {
+                if (CurrentClashSession != null ||
+                    !CurrentResolutionPlan.freeActionHasRolled ||
+                    CurrentResolutionPlan.impacts.Count == 0)
+                {
+                    return Fail(
+                        "FreeAttack RollResult表现完成后Plan无效",
+                        out failureMessage
+                    );
+                }
+
+                Phase = BattleExecutionRunnerPhase.ResolutionPending;
+                return true;
+            }
+
             if (CurrentClashSession == null)
             {
                 return Fail("RollResult表现完成失败：ClashSession为空", out failureMessage);
@@ -543,12 +660,20 @@ public sealed class BattleExecutionRunner
 
         if (continuation == BattlePresentationContinuation.AfterActionComplete)
         {
-            if (!BattleExecutionPlanExecutor
-                    .CompletePausableEnemyIntentAction(
+            bool completed = CurrentItem != null &&
+                CurrentItem.executionType == BattleExecutionItemType.FreeAction
+                    ? BattleExecutionPlanExecutor.CompletePausableFreeAction(
                         CurrentItem,
                         lifecycleController.RuntimeState,
                         CurrentResolutionPlan
-                    ))
+                    )
+                    : BattleExecutionPlanExecutor
+                        .CompletePausableEnemyIntentAction(
+                            CurrentItem,
+                            lifecycleController.RuntimeState,
+                            CurrentResolutionPlan
+                        );
+            if (!completed)
             {
                 return Fail("ActionComplete后未能完成ExecutionItem", out failureMessage);
             }
@@ -570,6 +695,14 @@ public sealed class BattleExecutionRunner
         BattleImpact impact = CurrentResolutionPlan.GetNextPendingImpact();
         if (impact != null)
         {
+            if (CurrentResolutionPlan.planKind ==
+                BattleResolutionPlanKind.FreeActionAttack)
+            {
+                Debug.Log(
+                    "[FreeAction Melee] Impact Presentation / Item=" +
+                    (CurrentItem != null ? CurrentItem.order : 0)
+                );
+            }
             return BeginPresentation(
                 BattlePresentationCue.Impact,
                 BattlePresentationContinuation.AfterImpact,
@@ -585,8 +718,14 @@ public sealed class BattleExecutionRunner
     bool CommitOneResolutionStep(out string failureMessage)
     {
         failureMessage = string.Empty;
+        BattleImpact pendingImpact = CurrentResolutionPlan != null
+            ? CurrentResolutionPlan.GetNextPendingImpact()
+            : null;
+        int hpBefore = pendingImpact != null && pendingImpact.target != null
+            ? pendingImpact.target.currentHP
+            : 0;
         if (!BattleExecutionPlanExecutor
-                .TryCommitPausableEnemyIntentResolutionStep(
+                .TryCommitPausableResolutionStep(
                     CurrentItem,
                     lifecycleController.RuntimeState,
                     CurrentResolutionPlan,
@@ -595,6 +734,18 @@ public sealed class BattleExecutionRunner
                 ))
         {
             return Fail("Resolution提交失败：当前步骤未能完成", out failureMessage);
+        }
+
+        if (pendingImpact != null && CurrentResolutionPlan.planKind ==
+            BattleResolutionPlanKind.FreeActionAttack)
+        {
+            int hpAfter = pendingImpact.target != null
+                ? pendingImpact.target.currentHP
+                : hpBefore;
+            Debug.Log(
+                "[FreeAction Melee] Impact Commit / Target HP: Before=" +
+                hpBefore + " / After=" + hpAfter
+            );
         }
 
         if (!resolutionCompleted)

@@ -292,6 +292,19 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         LogRequest(request, activeContext);
         BattleActionRollPanelHost.ShowForActionBegin(request);
 
+        if (IsOneSidedMeleeFreeAction(request))
+        {
+            if (!TryStartFreeMeleeActionBegin(
+                    request,
+                    completion,
+                    activeContext
+                ))
+            {
+                CompleteRequest(request, completion);
+            }
+            return;
+        }
+
         if (unavailableShootResponse)
         {
             PrepareLongRangeEngagement(activeContext);
@@ -528,6 +541,63 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 engagementBegun,
                 completion
             );
+    }
+
+    private static bool IsOneSidedMeleeFreeAction(
+        BattlePresentationRequest request
+    )
+    {
+        BattleExecutionItem item = request != null
+            ? request.ExecutionItem
+            : null;
+        return item != null &&
+            item.executionType == BattleExecutionItemType.FreeAction &&
+            item.actionSlot != null &&
+            item.actionSlot.cardState != null &&
+            item.actionSlot.cardState.IsMeleeAttack();
+    }
+
+    private bool TryStartFreeMeleeActionBegin(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context
+    )
+    {
+        BattleActionSlot slot = request.ExecutionItem.actionSlot;
+        context.SideAActor = slot.actor;
+        ResolvePresentation(
+            context.SideAActor,
+            out context.SideAHandle,
+            out context.SideAPresentation
+        );
+        context.SideBActor = slot.target;
+        ResolvePresentation(
+            context.SideBActor,
+            out context.SideBHandle,
+            out context.SideBPresentation
+        );
+        context.CurrentAttacker = context.SideAActor;
+        context.CurrentAttackerHandle = context.SideAHandle;
+        context.CurrentAttackerPresentation = context.SideAPresentation;
+        context.CurrentTarget = context.SideBActor;
+        context.CurrentTargetHandle = context.SideBHandle;
+        context.CurrentTargetPresentation = context.SideBPresentation;
+
+        // FreeAction只改变Roll语义；ClashReady复用普通AttackVsAttack双边接敌。
+        if (TryStartClashCameraAndApproach(
+                request,
+                completion,
+                context
+            ))
+        {
+            return true;
+        }
+
+        return TryStartAttackVsAttackApproach(
+            request,
+            completion,
+            context
+        );
     }
 
     private bool TryResolveLongRangeShootVsMelee(
@@ -3509,12 +3579,19 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ActionPresentationContext context
     )
     {
-        // Phase 4.2-C1只接第一个Default Attack Impact；多段演出后续处理。
-        return request.ExecutionItem != null &&
+        bool respondedAttackVsAttack = request.ExecutionItem != null &&
             request.ExecutionItem.executionType ==
                 BattleExecutionItemType.RespondedEnemyIntent &&
             request.ClashSession != null &&
-            request.ClashSession.ClashType == BattleClashType.AttackVsAttack &&
+            request.ClashSession.ClashType == BattleClashType.AttackVsAttack;
+        bool oneSidedMeleeFreeAction = IsOneSidedMeleeFreeAction(request) &&
+            request.ResolutionPlan != null &&
+            request.ResolutionPlan.planKind ==
+                BattleResolutionPlanKind.FreeActionAttack &&
+            request.ResolutionPlan.freeActionHasRolled;
+
+        // 单方Melee FreeAction与AttackVsAttack胜者共用同一攻击表现入口。
+        return (respondedAttackVsAttack || oneSidedMeleeFreeAction) &&
             request.Impact != null &&
             request.ImpactIndex == 0 &&
             context != null &&
@@ -3673,9 +3750,10 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             IsOwnedDefaultAttackContext(context, executionItem) &&
             !context.DefaultAttackFinished)
         {
-            if (attackVsAttackPresentationPlayer == null ||
+            bool playerUnavailable = attackVsAttackPresentationPlayer == null ||
                 (!attackVsAttackPresentationPlayer.IsRunning &&
-                    !attackVsAttackPresentationPlayer.IsFinished))
+                    !attackVsAttackPresentationPlayer.IsFinished);
+            if (playerUnavailable)
             {
                 context.DefaultAttackFinished = true;
                 break;

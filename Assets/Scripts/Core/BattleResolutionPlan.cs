@@ -18,7 +18,8 @@ public enum BattleImpactState
 public enum BattleResolutionPlanKind
 {
     RespondedClash,
-    UnrespondedEnemyAttack
+    UnrespondedEnemyAttack,
+    FreeActionAttack
 }
 
 public sealed class BattleImpact
@@ -35,6 +36,8 @@ public sealed class BattleImpact
     public BattleImpactState state;
     public int committedDamage;
     public bool didKill;
+    public bool usesPrecalculatedDamage;
+    public int precalculatedDamage;
 
     public BattleImpact(
         int impactIndex,
@@ -59,6 +62,12 @@ public sealed class BattleImpact
         this.shouldTriggerHit = shouldTriggerHit;
         state = BattleImpactState.Pending;
     }
+
+    public void SetPrecalculatedDamage(int damage)
+    {
+        usesPrecalculatedDamage = true;
+        precalculatedDamage = damage;
+    }
 }
 
 public sealed class BattleResolutionPlan
@@ -82,6 +91,10 @@ public sealed class BattleResolutionPlan
     public int unrespondedEnemyPoint;
     public BattleClashPointSnapshot unrespondedPointSnapshot;
     public BattleClashResourceSnapshot unrespondedResourceSnapshot;
+    public int freeActionPoint;
+    public bool freeActionHasRolled;
+    public BattleClashPointSnapshot freeActionPointSnapshot;
+    public BattleClashResourceSnapshot freeActionResourceSnapshot;
 
     // Defense 的一次性 Guard 只消费本次计算实际看到的层数。
     public int guardUpStackToConsume;

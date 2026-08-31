@@ -31,7 +31,7 @@ public sealed class BattleActionRollPanelSideView : MonoBehaviour
         CharacterData target
     )
     {
-        return Show(side, target, false, 0);
+        return Show(side, target, false, 0, true);
     }
 
     internal bool ShowRoll(
@@ -40,14 +40,32 @@ public sealed class BattleActionRollPanelSideView : MonoBehaviour
         int rolledPoint
     )
     {
-        return Show(side, target, true, rolledPoint);
+        return Show(side, target, true, rolledPoint, true);
+    }
+
+    internal bool ShowOneSidedAttackPending(
+        BattleClashSideState side,
+        CharacterData target
+    )
+    {
+        return Show(side, target, false, 0, false);
+    }
+
+    internal bool ShowOneSidedAttackRoll(
+        BattleClashSideState side,
+        CharacterData target,
+        int rolledPoint
+    )
+    {
+        return Show(side, target, true, rolledPoint, false);
     }
 
     bool Show(
         BattleClashSideState side,
         CharacterData target,
         bool hasRolledPoint,
-        int rolledPoint
+        int rolledPoint,
+        bool includeClashPointModifier
     )
     {
         if (side == null || side.cardState == null ||
@@ -74,7 +92,12 @@ public sealed class BattleActionRollPanelSideView : MonoBehaviour
         cardPreviewView.SetSelected(false);
         cardPreviewView.gameObject.SetActive(true);
 
-        GetEffectivePointRange(side, out int minPoint, out int maxPoint);
+        GetEffectivePointRange(
+            side,
+            includeClashPointModifier,
+            out int minPoint,
+            out int maxPoint
+        );
         if (rangeText != null)
         {
             rangeText.text = minPoint + "~" + maxPoint;
@@ -197,6 +220,7 @@ public sealed class BattleActionRollPanelSideView : MonoBehaviour
 
     static void GetEffectivePointRange(
         BattleClashSideState side,
+        bool includeClashPointModifier,
         out int minPoint,
         out int maxPoint
     )
@@ -224,7 +248,7 @@ public sealed class BattleActionRollPanelSideView : MonoBehaviour
         if (pointSnapshot != null)
         {
             modifier += pointSnapshot.nextCardPointModifier;
-            if (cardData.isClashable)
+            if (includeClashPointModifier && cardData.isClashable)
             {
                 modifier += pointSnapshot.nextClashPointModifier;
             }

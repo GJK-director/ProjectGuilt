@@ -145,33 +145,78 @@ public static class BattleResolver
 
     static BattleResolveResult ResolveFreeAttackAction(BattleActionSlot actionSlot)
     {
+        BattleResolveResult failureResult;
+        BattleResolutionPlan plan = BuildFreeAttackResolutionPlan(
+            null,
+            actionSlot,
+            out failureResult
+        );
+        if (plan == null)
+        {
+            return failureResult ?? CreateInvalidResolveResult(
+                "ResolveFreeAction 失败：无法建立 FreeAttack ResolutionPlan"
+            );
+        }
+
+        if (!TryRollFreeAttackResolutionPlan(plan, out int rolledPoint))
+        {
+            return CreateInvalidResolveResult(
+                "ResolveFreeAction 失败：无法生成 FreeAttack 点数"
+            );
+        }
+
+        return CommitResolutionSynchronously(plan);
+    }
+
+    internal static BattleResolutionPlan BuildFreeAttackResolutionPlan(
+        BattleExecutionItem executionItem,
+        BattleActionSlot actionSlot,
+        out BattleResolveResult failureResult
+    )
+    {
+        failureResult = null;
+        if (actionSlot == null || actionSlot.actor == null ||
+            actionSlot.cardState == null ||
+            actionSlot.cardState.cardData == null)
+        {
+            failureResult = CreateInvalidResolveResult(
+                "ResolveFreeAction 失败：FreeAttack行动数据不完整"
+            );
+            return null;
+        }
+
         CharacterData user = actionSlot.actor;
         CharacterData target = actionSlot.target;
         CardTestData attackCard = actionSlot.cardState.cardData;
 
         if (target == null)
         {
-            return CreateInvalidResolveResult("ResolveFreeAction 失败：Attack FreeAction 目标为空");
+            failureResult = CreateInvalidResolveResult(
+                "ResolveFreeAction 失败：Attack FreeAction 目标为空"
+            );
+            return null;
         }
 
         if (IsInvalidPointRange(attackCard.minPoint, attackCard.maxPoint))
         {
-            return CreateInvalidResolveResult(
+            failureResult = CreateInvalidResolveResult(
                 "ResolveFreeAction 失败：Attack FreeAction 点数范围异常：" +
                 attackCard.minPoint +
                 "-" +
                 attackCard.maxPoint
             );
+            return null;
         }
 
         if (!BattleCardManager.CanUseCard(user, target, actionSlot.cardState))
         {
-            return CreateActionUnavailableResult(
+            failureResult = CreateActionUnavailableResult(
                 "ResolveFreeAction：行动执行时卡牌已不可用，本次行动跳过。" +
                 user.characterName +
                 " 的卡牌不能使用：" +
                 actionSlot.cardState.GetCardName()
             );
+            return null;
         }
 
         Debug.Log(
@@ -198,57 +243,90 @@ public static class BattleResolver
 
         TriggerBattleEvent(BattleTiming.BeforeUse, user, target, actionSlot.cardState, 0, 0, false, false);
 
-        int playerAttackPoint = BattleCalculator.GetFinalAttackPointWithoutClash(
-            user,
+        BattleResolutionPlan plan = new BattleResolutionPlan(
+            executionItem,
+            actionSlot,
+            null,
+            null
+        );
+        plan.planKind = BattleResolutionPlanKind.FreeActionAttack;
+        plan.resultType = "FreeAttack";
+        plan.playerCardUsed = true;
+        plan.triggeredEventChain = true;
+        plan.attacker = user;
+        plan.target = target;
+        plan.sourceCardState = actionSlot.cardState;
+        plan.freeActionPointSnapshot = userPointBuffSnapshot;
+        plan.freeActionResourceSnapshot = userResourceSnapshot;
+        return plan;
+    }
+
+    internal static bool TryRollFreeAttackResolutionPlan(
+        BattleResolutionPlan plan,
+        out int rolledPoint
+    )
+    {
+        rolledPoint = 0;
+        if (plan == null ||
+            plan.planKind != BattleResolutionPlanKind.FreeActionAttack ||
+            plan.State != BattleResolutionPlanState.Pending ||
+            plan.freeActionHasRolled || plan.impacts.Count > 0 ||
+            plan.attacker == null || plan.target == null ||
+            plan.sourceCardState == null ||
+            plan.sourceCardState.cardData == null)
+        {
+            return false;
+        }
+
+        CardTestData attackCard = plan.sourceCardState.cardData;
+        BattleClashPointSnapshot pointSnapshot =
+            plan.freeActionPointSnapshot ?? new BattleClashPointSnapshot();
+        BattleClashResourceSnapshot resourceSnapshot =
+            plan.freeActionResourceSnapshot ??
+            new BattleClashResourceSnapshot
+            {
+                cardState = plan.sourceCardState,
+                selectedMinPoint = attackCard.minPoint,
+                selectedMaxPoint = attackCard.maxPoint
+            };
+        plan.freeActionPointSnapshot = pointSnapshot;
+        plan.freeActionResourceSnapshot = resourceSnapshot;
+        rolledPoint = BattleCalculator.GetFinalAttackPointWithoutClash(
+            plan.attacker,
             attackCard,
-            userPointBuffSnapshot.nextCardPointModifier,
-            userResourceSnapshot.selectedMinPoint,
-            userResourceSnapshot.selectedMaxPoint,
-            userResourceSnapshot.pointModifierFromResource
+            pointSnapshot.nextCardPointModifier,
+            resourceSnapshot.selectedMinPoint,
+            resourceSnapshot.selectedMaxPoint,
+            resourceSnapshot.pointModifierFromResource
         );
         int damageScaled = BattleCalculator.GetFinalDamageScaled(
-            user,
-            target,
+            plan.attacker,
+            plan.target,
             attackCard,
-            playerAttackPoint
+            rolledPoint
         );
-        int finalHpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+        int finalHpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(
+            damageScaled
+        );
 
-        ConsumeSuccessfulPointCardBuffs(user, userPointBuffSnapshot);
-        PayDefaultResourceCostOnSuccessfulUse(user, userResourceSnapshot);
+        plan.freeActionPoint = rolledPoint;
+        plan.freeActionHasRolled = true;
 
-        TriggerBattleEvent(BattleTiming.Resolved, user, target, actionSlot.cardState, playerAttackPoint, 0, false, false);
-        TriggerBattleEvent(BattleTiming.Hit, user, target, actionSlot.cardState, playerAttackPoint, finalHpDamage, true, false);
-        ApplyDamageAndTriggerEvents(user, target, actionSlot.cardState, finalHpDamage, playerAttackPoint);
-
-        BattleResolveResult result = new BattleResolveResult();
-        result.isSuccess = true;
-        result.shouldCompleteItem = true;
-        result.playerCardUsed = true;
-        result.enemyCardUsed = false;
-        result.hasDamage = finalHpDamage > 0;
-        result.damage = finalHpDamage;
-        result.damagedCharacter = target;
-        result.resultType = "FreeAttack";
-        result.playerPoint = playerAttackPoint;
-        result.enemyPoint = 0;
-        result.clashAttemptCount = 0;
-        result.isTieLimitReached = false;
-        result.triggeredEventChain = true;
-        result.message =
-            "ResolveFreeAction 完成：Attack FreeAction 使用 " +
-            actionSlot.cardState.GetCardName() +
-            " 命中 " +
-            target.characterName +
-            "，玩家攻击点数 " +
-            playerAttackPoint +
-            "，造成伤害 " +
-            finalHpDamage +
-            "。不触发 ClashWin / ClashLose";
-
-        Debug.Log(result.message);
-
-        return result;
+        BattleImpact impact = new BattleImpact(
+            0,
+            plan.attacker,
+            plan.target,
+            plan.sourceCardState,
+            rolledPoint,
+            rolledPoint,
+            ClashResult.None,
+            true,
+            true
+        );
+        // Roll时固定点数与伤害，HP仍只在Impact提交边界写入。
+        impact.SetPrecalculatedDamage(finalHpDamage);
+        plan.impacts.Add(impact);
+        return true;
     }
 
     // TestUseAbilitySinCard = 测试 / 使用能力型罪卡
@@ -891,8 +969,10 @@ public static class BattleResolver
             return true;
         }
 
-        int hpDamage = 0;
-        if (impact.allowsDamage)
+        int hpDamage = impact.usesPrecalculatedDamage
+            ? Mathf.Max(0, impact.precalculatedDamage)
+            : 0;
+        if (impact.allowsDamage && !impact.usesPrecalculatedDamage)
         {
             int damageScaled = BattleCalculator.GetFinalDamageScaled(
                 impact.attacker,
@@ -973,6 +1053,18 @@ public static class BattleResolver
             return true;
         }
 
+        if (plan.planKind == BattleResolutionPlanKind.FreeActionAttack)
+        {
+            if (!plan.freeActionHasRolled)
+            {
+                return false;
+            }
+
+            plan.State = BattleResolutionPlanState.Activated;
+            ActivateFreeActionAttackResolution(plan);
+            return true;
+        }
+
         BattleClashSession session = plan.clashSession;
         if (session == null || !session.IsFinalized)
         {
@@ -1020,6 +1112,30 @@ public static class BattleResolver
             plan.target,
             plan.sourceCardState,
             plan.unrespondedEnemyPoint,
+            0,
+            false,
+            false
+        );
+    }
+
+    static void ActivateFreeActionAttackResolution(
+        BattleResolutionPlan plan
+    )
+    {
+        ConsumeSuccessfulPointCardBuffs(
+            plan.attacker,
+            plan.freeActionPointSnapshot
+        );
+        PayDefaultResourceCostOnSuccessfulUse(
+            plan.attacker,
+            plan.freeActionResourceSnapshot
+        );
+        TriggerBattleEvent(
+            BattleTiming.Resolved,
+            plan.attacker,
+            plan.target,
+            plan.sourceCardState,
+            plan.freeActionPoint,
             0,
             false,
             false
@@ -1203,7 +1319,8 @@ public static class BattleResolver
             hasDamage = totalDamage > 0,
             damage = totalDamage,
             damagedCharacter = plan.planKind ==
-                    BattleResolutionPlanKind.UnrespondedEnemyAttack
+                    BattleResolutionPlanKind.UnrespondedEnemyAttack ||
+                plan.planKind == BattleResolutionPlanKind.FreeActionAttack
                 ? plan.target
                 : damagedCharacter,
             resultType = plan.resultType,
@@ -1213,6 +1330,13 @@ public static class BattleResolver
         {
             result.playerPoint = 0;
             result.enemyPoint = plan.unrespondedEnemyPoint;
+            result.clashAttemptCount = 0;
+            result.isTieLimitReached = false;
+        }
+        else if (plan.planKind == BattleResolutionPlanKind.FreeActionAttack)
+        {
+            result.playerPoint = plan.freeActionPoint;
+            result.enemyPoint = 0;
             result.clashAttemptCount = 0;
             result.isTieLimitReached = false;
         }
@@ -1260,6 +1384,23 @@ public static class BattleResolver
                 "，造成伤害 " +
                 result.damage +
                 "。已触发 Resolved / Hit，并按实际伤害触发 AfterDamage / AfterKill";
+        }
+
+        if (plan.planKind == BattleResolutionPlanKind.FreeActionAttack)
+        {
+            return "ResolveFreeAction 完成：Attack FreeAction 使用 " +
+                (plan.sourceCardState != null
+                    ? plan.sourceCardState.GetCardName()
+                    : "未知卡牌") +
+                " 命中 " +
+                (plan.target != null
+                    ? plan.target.characterName
+                    : "未知目标") +
+                "，玩家攻击点数 " +
+                result.playerPoint +
+                "，造成伤害 " +
+                result.damage +
+                "。不触发 ClashWin / ClashLose";
         }
 
         if (result.resultType == "TieLimit")

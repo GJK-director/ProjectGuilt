@@ -44,7 +44,11 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
     public static void ShowForActionBegin(BattlePresentationRequest request)
     {
         BattleClashSession session = GetSupportedSession(request);
-        if (session == null)
+        BattleResolutionPlan freeAttackPlan = GetSupportedFreeAttackPlan(
+            request,
+            false
+        );
+        if (session == null && freeAttackPlan == null)
         {
             return;
         }
@@ -52,14 +56,25 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         BattleActionRollPanelHost host = ResolveOrCreateInstance();
         if (host != null)
         {
-            host.ShowSession(session, false);
+            if (session != null)
+            {
+                host.ShowSession(session, false);
+            }
+            else
+            {
+                host.ShowOneSidedFreeAttack(freeAttackPlan, false);
+            }
         }
     }
 
     public static void ShowForRoll(BattlePresentationRequest request)
     {
         BattleClashSession session = GetSupportedSession(request);
-        if (session == null)
+        BattleResolutionPlan freeAttackPlan = GetSupportedFreeAttackPlan(
+            request,
+            true
+        );
+        if (session == null && freeAttackPlan == null)
         {
             return;
         }
@@ -67,7 +82,14 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         BattleActionRollPanelHost host = ResolveOrCreateInstance();
         if (host != null)
         {
-            host.ShowSession(session, true);
+            if (session != null)
+            {
+                host.ShowSession(session, true);
+            }
+            else
+            {
+                host.ShowOneSidedFreeAttack(freeAttackPlan, true);
+            }
         }
     }
 
@@ -172,6 +194,56 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         fadeCoroutine = StartCoroutine(FadeIn());
     }
 
+    void ShowOneSidedFreeAttack(
+        BattleResolutionPlan plan,
+        bool hasRolledPoint
+    )
+    {
+        if (plan == null)
+        {
+            return;
+        }
+
+        ApplySafeArea(false);
+        BindFollowActors(plan.attacker, plan.target);
+        BattleClashSideState attackerSide = new BattleClashSideState(
+            plan.attacker,
+            plan.sourceCardState,
+            plan.freeActionPointSnapshot,
+            plan.freeActionResourceSnapshot
+        );
+        bool allyShown = allySideView != null && (hasRolledPoint
+            ? allySideView.ShowOneSidedAttackRoll(
+                attackerSide,
+                plan.target,
+                plan.freeActionPoint
+            )
+            : allySideView.ShowOneSidedAttackPending(
+                attackerSide,
+                plan.target
+            ));
+        enemySideView?.Hide();
+        if (!allyShown)
+        {
+            HideInternal();
+            return;
+        }
+
+        RefreshFollowLayout();
+        if (visible)
+        {
+            SetCanvasState(1f);
+            return;
+        }
+
+        visible = true;
+        if (fadeCoroutine != null)
+        {
+            StopCoroutine(fadeCoroutine);
+        }
+        fadeCoroutine = StartCoroutine(FadeIn());
+    }
+
     static BattleClashSession GetSupportedSession(
         BattlePresentationRequest request
     )
@@ -182,6 +254,23 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         return session != null &&
             session.ClashType == BattleClashType.AttackVsAttack
                 ? session
+                : null;
+    }
+
+    static BattleResolutionPlan GetSupportedFreeAttackPlan(
+        BattlePresentationRequest request,
+        bool requireRolledPoint
+    )
+    {
+        BattleResolutionPlan plan = request != null
+            ? request.ResolutionPlan
+            : null;
+        return plan != null &&
+            plan.planKind == BattleResolutionPlanKind.FreeActionAttack &&
+            plan.sourceCardState != null &&
+            plan.sourceCardState.IsMeleeAttack() &&
+            (!requireRolledPoint || plan.freeActionHasRolled)
+                ? plan
                 : null;
     }
 

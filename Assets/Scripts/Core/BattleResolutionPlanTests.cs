@@ -40,6 +40,10 @@ public static class BattleResolutionPlanTests
         bool m = VerifyImpactReadsLiveDamageModifier();
         bool n = VerifyDefenseRemainingAttackIsFixed();
         bool o = VerifyDeadTargetDoesNotRepeatKill();
+        bool p = VerifyFreeAttackPlanDelaysDamage();
+        bool q = VerifyFreeAttackSynchronousCompatibility();
+        bool r = VerifyOnlyMeleeFreeAttackIsPausable();
+        bool s = VerifyFreeAttackUsesOneSidedRollGate();
 
         Debug.Log("模式82 A Calculate后Plan存在且HP不变：" + a);
         Debug.Log("模式82 B 首次Commit才提交第一个Impact伤害：" + b);
@@ -56,10 +60,14 @@ public static class BattleResolutionPlanTests
         Debug.Log("模式82 M Impact读取提交时DamageTaken：" + m);
         Debug.Log("模式82 N Defense使用Session固定remainingAttack：" + n);
         Debug.Log("模式82 O 已死亡目标后续Impact跳过且不重复AfterKill：" + o);
+        Debug.Log("模式82 P FreeAttack Build不扣血且Impact Commit后才扣血：" + p);
+        Debug.Log("模式82 Q FreeAttack同步入口仍返回旧结果语义：" + q);
+        Debug.Log("模式82 R 只有Melee FreeAction进入Pausable，Ability保持同步：" + r);
+        Debug.Log("模式82 S FreeAttack等待单方Roll后才建立Impact：" + s);
         Debug.Log(
             "模式82 聚合结果：" +
             (a && b && c && d && e && f && g && h && i && j && k && l &&
-             m && n && o)
+             m && n && o && p && q && r && s)
         );
     }
 
@@ -330,6 +338,180 @@ public static class BattleResolutionPlanTests
         return firstResult == null && finalResult != null && context.enemy.IsDead() &&
             killProbe == 1 && context.ally.GetBuffStack("Bullet") == 1 &&
             context.resolutionPlan.impacts[1].state == BattleImpactState.Skipped;
+    }
+
+    static bool VerifyFreeAttackPlanDelaysDamage()
+    {
+        TestContext context = CreateFreeAttackContext(
+            "resolution82_p",
+            CardType.Attack,
+            6,
+            30
+        );
+        int hpBefore = context.enemy.currentHP;
+        BattleResolveResult failure;
+        context.resolutionPlan = BattleResolver.BuildFreeAttackResolutionPlan(
+            context.item,
+            context.slot,
+            out failure
+        );
+        bool built = context.resolutionPlan != null && failure == null &&
+            context.resolutionPlan.planKind ==
+                BattleResolutionPlanKind.FreeActionAttack &&
+            !context.resolutionPlan.freeActionHasRolled &&
+            context.resolutionPlan.impacts.Count == 0 &&
+            context.enemy.currentHP == hpBefore;
+        bool earlyCommitRejected = !BattleResolver.TryCommitNextResolutionStep(
+            context.resolutionPlan,
+            out BattleResolveResult earlyResult
+        ) && earlyResult == null && context.enemy.currentHP == hpBefore;
+        bool rolled = BattleResolver.TryRollFreeAttackResolutionPlan(
+            context.resolutionPlan,
+            out int rolledPoint
+        ) && rolledPoint == 6 &&
+            context.resolutionPlan.freeActionHasRolled &&
+            context.resolutionPlan.impacts.Count == 1 &&
+            context.enemy.currentHP == hpBefore;
+        BattleResolver.TryCommitNextResolutionStep(
+            context.resolutionPlan,
+            out BattleResolveResult result
+        );
+        return built && earlyCommitRejected && rolled && result != null &&
+            result.resultType == "FreeAttack" &&
+            context.enemy.currentHP == hpBefore - 6;
+    }
+
+    static bool VerifyFreeAttackSynchronousCompatibility()
+    {
+        TestContext context = CreateFreeAttackContext(
+            "resolution82_q",
+            CardType.Attack,
+            6,
+            30
+        );
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(
+            context.slot
+        );
+        return result != null && result.isSuccess &&
+            result.resultType == "FreeAttack" && result.damage == 6 &&
+            context.enemy.currentHP == 24 && result.playerCardUsed;
+    }
+
+    static bool VerifyOnlyMeleeFreeAttackIsPausable()
+    {
+        TestContext melee = CreateFreeAttackContext(
+            "resolution82_r_melee",
+            CardType.Attack,
+            6,
+            30
+        );
+        BattleExecutionItem meleeItem = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            melee.slot
+        );
+
+        TestContext ability = CreateFreeAttackContext(
+            "resolution82_r_ability",
+            "Ability",
+            0,
+            30
+        );
+        BattleExecutionItem abilityItem = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            ability.slot
+        );
+        return BattleExecutionPlanExecutor.IsPausableMeleeFreeAttack(meleeItem) &&
+            !BattleExecutionPlanExecutor.IsPausableMeleeFreeAttack(abilityItem);
+    }
+
+    static bool VerifyFreeAttackUsesOneSidedRollGate()
+    {
+        TestContext context = CreateFreeAttackContext(
+            "resolution82_s",
+            CardType.Attack,
+            6,
+            30
+        );
+        context.runtimeState = new BattleRuntimeState();
+        context.runtimeState.SetCharacters(
+            context.ally,
+            context.allyB,
+            context.enemy
+        );
+        context.runtimeState.SetActionSlots(
+            new List<BattleActionSlot> { context.slot }
+        );
+        context.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+        context.executionPlan = new BattleExecutionPlan();
+        context.executionPlan.AddItem(context.item);
+        context.runtimeState.SetExecutionPlan(context.executionPlan);
+        context.controller = new BattleLifecycleController(context.runtimeState);
+        context.controller.TryInitializeToPrepare(out string initializeFailure);
+
+        bool began = string.IsNullOrEmpty(initializeFailure) &&
+            context.controller.TryBeginPausableExecution(
+                new BattleRollGateSettings(BattleRollMode.Manual, 0f, 0f),
+                out string beginFailure
+            ) && string.IsNullOrEmpty(beginFailure);
+        BattleExecutionRunner runner = context.controller.ExecutionRunner;
+        BattleResolutionPlan plan = runner != null
+            ? runner.CurrentResolutionPlan
+            : null;
+        bool preparedWithoutRoll = began && plan != null &&
+            runner.CurrentClashSession == null &&
+            !plan.freeActionHasRolled && plan.impacts.Count == 0 &&
+            context.enemy.currentHP == 30;
+        bool actionBeginCompleted = preparedWithoutRoll &&
+            context.controller.AdvancePausableExecution(
+                0f,
+                out string actionBeginFailure
+            ) && string.IsNullOrEmpty(actionBeginFailure) &&
+            runner.Phase == BattleExecutionRunnerPhase.WaitingForRoll;
+        bool rolled = actionBeginCompleted &&
+            context.controller.TryRequestManualRoll(out string rollFailure) &&
+            string.IsNullOrEmpty(rollFailure) &&
+            runner.CurrentClashSession == null && plan.freeActionHasRolled &&
+            plan.freeActionPoint == 6 && plan.impacts.Count == 1 &&
+            context.enemy.currentHP == 30;
+        bool rollResultCompleted = rolled &&
+            context.controller.AdvancePausableExecution(
+                0f,
+                out string rollResultFailure
+            ) && string.IsNullOrEmpty(rollResultFailure) &&
+            runner.Phase == BattleExecutionRunnerPhase.ResolutionPending;
+        return rollResultCompleted;
+    }
+
+    static TestContext CreateFreeAttackContext(
+        string prefix,
+        string cardType,
+        int point,
+        int enemyHP
+    )
+    {
+        TestContext context = CreateContext(
+            prefix,
+            cardType,
+            point,
+            0,
+            enemyHP
+        );
+        context.slot.AssignFreeAction(
+            context.ally,
+            context.playerCard,
+            context.enemy
+        );
+        context.item = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            context.slot
+        );
+        return context;
     }
 
     static TestContext CreateFinalizedContext(
