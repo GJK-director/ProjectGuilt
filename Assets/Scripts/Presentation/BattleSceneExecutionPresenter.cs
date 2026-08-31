@@ -583,21 +583,106 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         context.CurrentTargetHandle = context.SideBHandle;
         context.CurrentTargetPresentation = context.SideBPresentation;
 
-        // FreeAction只改变Roll语义；ClashReady复用普通AttackVsAttack双边接敌。
-        if (TryStartClashCameraAndApproach(
-                request,
-                completion,
-                context
-            ))
+        if (clashEngagementProfile == null ||
+            !HasCompleteClashPresentationMapping(context) ||
+            attackVsAttackPresentationPlayer == null)
         {
-            return true;
+            return false;
         }
 
-        return TryStartAttackVsAttackApproach(
-            request,
-            completion,
-            context
+        context.ClashEngagement =
+            ResolveAttackVsAttackClashEngagement(context);
+        if (context.ClashEngagement == null)
+        {
+            return false;
+        }
+
+        long requestId = request.RequestId;
+        activePresentationRequestId = requestId;
+        activePresentationCoroutine = StartCoroutine(
+            RunFreeMeleeSingleActorApproach(
+                context,
+                request.ExecutionItem,
+                requestId,
+                completion
+            )
         );
+        return activePresentationCoroutine != null;
+    }
+
+    private IEnumerator RunFreeMeleeSingleActorApproach(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        BattleCameraDirector director = ResolveBattleCameraDirector();
+        bool cameraReady = false;
+        bool cameraSucceeded = false;
+        bool cameraStarted = TryStartOneSidedAttackCameraGrammar(
+            director,
+            context.CurrentAttackerHandle,
+            context.CurrentTargetHandle,
+            context.ClashEngagement.FinalGap,
+            null,
+            success =>
+            {
+                cameraSucceeded = success;
+                cameraReady = true;
+            }
+        );
+        if (cameraStarted)
+        {
+            context.CameraCinematicOwned = true;
+        }
+
+        LogApproachStarted(requestId, context);
+        yield return BattleClashReadyApproachMotion.PlaySingleActorApproach(
+            context.CurrentAttackerPresentation,
+            context.CurrentAttackerHandle.WorldRoot.transform,
+            context.CurrentTargetPresentation,
+            context.CurrentTargetHandle.WorldRoot.transform,
+            context.ClashEngagement.FinalGap,
+            attackVsAttackPresentationPlayer.SprintDuration,
+            attackVsAttackPresentationPlayer.AfterimageSpawnInterval,
+            () => IsCurrentPresentationRequest(requestId) &&
+                object.ReferenceEquals(activeContext, context) &&
+                object.ReferenceEquals(context.ExecutionItem, executionItem)
+        );
+
+        while (cameraStarted && !cameraReady &&
+            IsCurrentPresentationRequest(requestId) &&
+            object.ReferenceEquals(activeContext, context) &&
+            object.ReferenceEquals(context.ExecutionItem, executionItem))
+        {
+            yield return null;
+        }
+
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem))
+        {
+            yield break;
+        }
+
+        if (cameraStarted)
+        {
+            if (cameraSucceeded)
+            {
+                director?.FinishAnchoredTwoUnitApproachTracking();
+            }
+            else
+            {
+                director?.CancelAnchoredTwoUnitApproach(false);
+                context.CameraCinematicOwned = false;
+            }
+        }
+
+        activePresentationCoroutine = null;
+        activePresentationRequestId = 0L;
+        LogApproachCompleted(requestId);
+        completion.TryComplete(requestId);
     }
 
     private bool TryResolveLongRangeShootVsMelee(
