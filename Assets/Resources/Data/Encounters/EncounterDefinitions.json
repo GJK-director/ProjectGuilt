@@ -13,6 +13,12 @@
         "targetRule": "FixedCharacterSlot",
         "targetCharacterID": "ally_002",
         "targetSlotIndex": 1
+      },
+      {
+        "enemyCardIndex": 2,
+        "targetRule": "FixedCharacterSlot",
+        "targetCharacterID": "ally_002",
+        "targetSlotIndex": 1
       }
     ],
     "repeatIntentPattern": true,
