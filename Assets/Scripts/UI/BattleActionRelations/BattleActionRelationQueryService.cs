@@ -8,6 +8,8 @@ public sealed class BattleActionRelationQueryService
         new List<BattleActionRelationDescriptor>();
     private readonly List<BattleActionRelationDescriptor> filtered =
         new List<BattleActionRelationDescriptor>();
+    private readonly List<BattleActionRelationDescriptor> intentFiltered =
+        new List<BattleActionRelationDescriptor>();
     private BattleRuntimeState runtimeState;
 
     public BattleActionRelationQueryService(BattleRuntimeState state)
@@ -41,6 +43,55 @@ public sealed class BattleActionRelationQueryService
         }
 
         return filtered;
+    }
+
+    public IReadOnlyList<BattleActionRelationDescriptor>
+        GetRelationsForIntent(BattleEnemyIntent intent)
+    {
+        RebuildRelations();
+        intentFiltered.Clear();
+        if (intent == null)
+        {
+            return intentFiltered;
+        }
+
+        for (int index = 0; index < relations.Count; index++)
+        {
+            if (object.ReferenceEquals(relations[index].SourceIntent, intent))
+            {
+                intentFiltered.Add(relations[index]);
+            }
+        }
+
+        return intentFiltered;
+    }
+
+    public bool TryGetIntentBySlot(
+        CharacterData enemy,
+        int oneBasedSlotIndex,
+        out BattleEnemyIntent intent
+    )
+    {
+        intent = null;
+        if (runtimeState == null || runtimeState.intentQueue == null ||
+            enemy == null || oneBasedSlotIndex <= 0)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < runtimeState.intentQueue.Count; index++)
+        {
+            BattleEnemyIntent candidate = runtimeState.intentQueue[index];
+            if (candidate != null &&
+                object.ReferenceEquals(candidate.enemy, enemy) &&
+                candidate.enemySlotIndex == oneBasedSlotIndex)
+            {
+                intent = candidate;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public string GetSlotID(
@@ -113,7 +164,7 @@ public sealed class BattleActionRelationQueryService
         for (int index = 0; index < runtimeState.intentQueue.Count; index++)
         {
             BattleEnemyIntent intent = runtimeState.intentQueue[index];
-            if (!IsAttackIntent(intent))
+            if (!IsQueryableIntent(intent))
             {
                 continue;
             }
@@ -129,6 +180,7 @@ public sealed class BattleActionRelationQueryService
                 BattleActionRelationKind mutualKind;
                 if (TryGetMutualRelationKind(
                         responseSlot.cardState,
+                        intent.enemyCardState,
                         out mutualKind))
                 {
                     string playerSlotID = GetSlotID(
@@ -149,7 +201,9 @@ public sealed class BattleActionRelationQueryService
                             intent.intentOrder,
                             responseSlot.cardState.cardData.cardType,
                             intent.enemyCardState.cardData.cardType,
-                            true
+                            true,
+                            intent,
+                            responseSlot
                         )
                     );
                 }
@@ -182,7 +236,8 @@ public sealed class BattleActionRelationQueryService
                     ),
                     string.Empty,
                     intent.enemyCardState.cardData.cardType,
-                    false
+                    false,
+                    intent
                 )
             );
         }
@@ -219,6 +274,15 @@ public sealed class BattleActionRelationQueryService
             int targetSlotIndex = slot.requestedEnemyIntent != null
                 ? MathfMaxOne(slot.requestedEnemyIntent.enemySlotIndex)
                 : MathfMaxOne(slot.requestedTargetSlotIndex);
+            BattleEnemyIntent targetIntent = slot.requestedEnemyIntent;
+            if (targetIntent == null)
+            {
+                TryGetIntentBySlot(
+                    slot.requestedEnemy,
+                    targetSlotIndex,
+                    out targetIntent
+                );
+            }
             string enemySlotID = GetSlotID(
                 slot.requestedEnemy,
                 targetSlotIndex
@@ -240,7 +304,9 @@ public sealed class BattleActionRelationQueryService
                         slot.requestedEnemy,
                         targetSlotIndex
                     ),
-                    false
+                    false,
+                    targetIntent,
+                    slot
                 )
             );
         }
@@ -267,18 +333,14 @@ public sealed class BattleActionRelationQueryService
         return null;
     }
 
-    private static bool IsAttackIntent(BattleEnemyIntent intent)
+    private static bool IsQueryableIntent(BattleEnemyIntent intent)
     {
         return intent != null &&
             intent.enemyCardState != null &&
-            IsAttackCard(intent.enemyCardState) &&
+            intent.enemyCardState.cardData != null &&
+            intent.enemy != null &&
+            intent.enemySlotIndex > 0 &&
             !string.IsNullOrEmpty(intent.intentID);
-    }
-
-    private static bool IsAttackCard(BattleCardState cardState)
-    {
-        return cardState != null && cardState.cardData != null &&
-            cardState.cardData.cardType == CardType.Attack;
     }
 
     private static bool IsPlayerTargetCard(BattleCardState cardState)
@@ -310,27 +372,32 @@ public sealed class BattleActionRelationQueryService
 
     private static bool TryGetMutualRelationKind(
         BattleCardState playerCardState,
+        BattleCardState enemyCardState,
         out BattleActionRelationKind kind
     )
     {
         kind = BattleActionRelationKind.AttackClash;
-        if (playerCardState == null || playerCardState.cardData == null)
+        if (playerCardState == null || playerCardState.cardData == null ||
+            enemyCardState == null || enemyCardState.cardData == null)
         {
             return false;
         }
 
-        string cardType = playerCardState.cardData.cardType;
-        if (cardType == CardType.Attack)
+        string playerType = playerCardState.cardData.cardType;
+        string enemyType = enemyCardState.cardData.cardType;
+        if (playerType == CardType.Attack && enemyType == CardType.Attack)
         {
             kind = BattleActionRelationKind.AttackClash;
             return true;
         }
-        if (cardType == CardType.Defense)
+        if (playerType == CardType.Defense && enemyType == CardType.Attack ||
+            playerType == CardType.Attack && enemyType == CardType.Defense)
         {
             kind = BattleActionRelationKind.DefenseResponse;
             return true;
         }
-        if (cardType == CardType.Dodge)
+        if (playerType == CardType.Dodge && enemyType == CardType.Attack ||
+            playerType == CardType.Attack && enemyType == CardType.Dodge)
         {
             kind = BattleActionRelationKind.EvadeResponse;
             return true;

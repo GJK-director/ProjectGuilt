@@ -51,12 +51,14 @@ public static class BattleExecutionPlanManager
                     continue;
                 }
 
-                executionPlan.AddItem(new BattleExecutionItem(
+                BattleExecutionItem item = new BattleExecutionItem(
                     order,
                     BattleExecutionItemType.RespondedEnemyIntent,
                     intent,
                     actionSlot
-                ));
+                );
+                PopulatePlannedInteractionType(item);
+                executionPlan.AddItem(item);
 
                 order++;
             }
@@ -68,13 +70,15 @@ public static class BattleExecutionPlanManager
         {
             if (intent != null && !intent.isResponded)
             {
-                executionPlan.AddItem(new BattleExecutionItem(
+                BattleExecutionItem item = new BattleExecutionItem(
                     order,
                     BattleExecutionItemType.UnrespondedEnemyIntent,
                     intent,
                     null,
                     BattleGuardSelectionManager.CollectGuardCandidates(actionSlots, intent)
-                ));
+                );
+                PopulatePlannedInteractionType(item);
+                executionPlan.AddItem(item);
 
                 order++;
             }
@@ -139,6 +143,7 @@ public static class BattleExecutionPlanManager
                         ? BattleGuardSelectionManager.CollectGuardCandidates(actionSlots, intent)
                         : null
                 );
+                PopulatePlannedInteractionType(item);
 
                 PopulateSortMetadata(
                     item,
@@ -174,6 +179,7 @@ public static class BattleExecutionPlanManager
                     null,
                     slot
                 );
+                PopulatePlannedInteractionType(item);
                 PopulateSortMetadata(
                     item,
                     GetSpeed(slot.actor),
@@ -348,6 +354,7 @@ public static class BattleExecutionPlanManager
         return
             "，排序键：[速度=" + item.effectiveSpeed +
             "，响应优先=" + item.responsePriority +
+            "，Interaction=" + item.interactionType +
             "，槽位=" + item.actionSlotOrder +
             "，站位=" + item.actorPositionOrder +
             "，稳定序=" + item.stableOrder +
@@ -573,6 +580,44 @@ public static class BattleExecutionPlanManager
         item.stableOrder = stableOrder;
     }
 
+    // 只记录计划生成时已经确定的双方卡牌，不参与运行时 Guard / Dodge 的替换选择。
+    static void PopulatePlannedInteractionType(BattleExecutionItem item)
+    {
+        if (item == null)
+        {
+            return;
+        }
+
+        if (item.executionType == BattleExecutionItemType.RespondedEnemyIntent)
+        {
+            item.interactionType = BattleInteractionClassifier.Classify(
+                item.actionSlot != null ? item.actionSlot.cardState : null,
+                item.enemyIntent != null ? item.enemyIntent.enemyCardState : null
+            );
+            return;
+        }
+
+        if (item.executionType == BattleExecutionItemType.UnrespondedEnemyIntent)
+        {
+            item.interactionType = BattleInteractionClassifier.Classify(
+                item.enemyIntent != null ? item.enemyIntent.enemyCardState : null,
+                null
+            );
+            return;
+        }
+
+        if (item.executionType == BattleExecutionItemType.FreeAction)
+        {
+            item.interactionType = BattleInteractionClassifier.Classify(
+                item.actionSlot != null ? item.actionSlot.cardState : null,
+                null
+            );
+            return;
+        }
+
+        item.interactionType = BattleInteractionType.NoInteraction;
+    }
+
     static int CompareExecutionItems(BattleExecutionItem left, BattleExecutionItem right)
     {
         int result = left.priorityTier.CompareTo(right.priorityTier);
@@ -610,25 +655,28 @@ public static class BattleExecutionPlanManager
 
     static BattleExecutionPriorityTier GetPriorityTier(BattleExecutionItem item)
     {
-        BattleCardState executingCard = GetExecutingCardState(item);
-        return executingCard != null && executingCard.HasTrait(BattleCardTrait.FirstStrike)
+        return ItemHasTrait(item, BattleCardTrait.FirstStrike)
             ? BattleExecutionPriorityTier.FirstStrike
             : BattleExecutionPriorityTier.Normal;
     }
 
-    static BattleCardState GetExecutingCardState(BattleExecutionItem item)
+    // Responded Item 的双方卡牌共同决定整个已配对 Item 的先攻层级，不拆开原有 pairing。
+    static bool ItemHasTrait(BattleExecutionItem item, BattleCardTrait trait)
     {
         if (item == null)
         {
-            return null;
+            return false;
         }
 
-        if (item.actionSlot != null && item.actionSlot.cardState != null)
-        {
-            return item.actionSlot.cardState;
-        }
+        BattleCardState actionSlotCard = item.actionSlot != null
+            ? item.actionSlot.cardState
+            : null;
+        BattleCardState enemyIntentCard = item.enemyIntent != null
+            ? item.enemyIntent.enemyCardState
+            : null;
 
-        return item.enemyIntent != null ? item.enemyIntent.enemyCardState : null;
+        return (actionSlotCard != null && actionSlotCard.HasTrait(trait)) ||
+            (enemyIntentCard != null && enemyIntentCard.HasTrait(trait));
     }
 
     static int GetSpeed(CharacterData character)

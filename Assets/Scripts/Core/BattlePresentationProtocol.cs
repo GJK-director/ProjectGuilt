@@ -1,9 +1,13 @@
 // Phase 3.5：纯代码表现等待协议。Presenter只能完成请求，不能拥有战斗规则。
 public enum BattlePresentationCue
 {
+    // 新 Engagement 进入 Ready State；是否需要 Approach Movement 由独立策略决定。
     ActionBegin,
+    // Roll 已确定，允许播放结果提交前的反馈。
     RollResult,
+    // Combat 结果的正式视觉落点，例如 Hit、Block 或 Miss。
     Impact,
+    // 当前 Engagement 表现收尾，并允许 Runner 推进下一 ExecutionItem。
     ActionComplete
 }
 
@@ -18,6 +22,11 @@ public sealed class BattlePresentationRequest
     public int ImpactIndex { get; private set; }
     public string Outcome { get; private set; }
     public bool ContinueBattleActionCameraToNextItem { get; private set; }
+    public BattlePresentationInteractionContext InteractionContext
+    {
+        get;
+        private set;
+    }
 
     public BattlePresentationRequest(
         long requestId,
@@ -27,7 +36,8 @@ public sealed class BattlePresentationRequest
         BattleResolutionPlan resolutionPlan,
         BattleImpact impact,
         string outcome,
-        bool continueBattleActionCameraToNextItem = false
+        bool continueBattleActionCameraToNextItem = false,
+        BattlePresentationInteractionContext interactionContext = null
     )
     {
         RequestId = requestId;
@@ -40,6 +50,7 @@ public sealed class BattlePresentationRequest
         Outcome = outcome ?? string.Empty;
         ContinueBattleActionCameraToNextItem =
             continueBattleActionCameraToNextItem;
+        InteractionContext = interactionContext;
     }
 }
 

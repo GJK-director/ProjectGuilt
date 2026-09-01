@@ -135,6 +135,22 @@ public static class CardDataLoader
     // FindCardByID = 根据 cardID 查找卡牌
     public static CardTestData FindCardByID(List<CardTestData> cards, string targetID)
     {
+        CardTestData card;
+        return TryFindCardByID(cards, targetID, out card) ? card : null;
+    }
+
+    public static bool TryFindCardByID(
+        List<CardTestData> cards,
+        string targetID,
+        out CardTestData result
+    )
+    {
+        result = null;
+        if (cards == null || string.IsNullOrEmpty(targetID))
+        {
+            return false;
+        }
+
         foreach (CardTestData card in cards)
         {
             if (card == null)
@@ -144,10 +160,11 @@ public static class CardDataLoader
 
             if (card.cardID == targetID)
             {
-                return card;
+                result = card;
+                return true;
             }
         }
 
-        return null;
+        return false;
     }
 }

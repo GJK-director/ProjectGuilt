@@ -1363,19 +1363,22 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         for (int index = 0; index < cachedRelations.Count; index++)
         {
             BattleActionRelationDescriptor relation = cachedRelations[index];
-            bool hovered = !string.IsNullOrEmpty(hoveredSlotID) &&
-                relation.InvolvesSlot(hoveredSlotID);
-            bool selected = !string.IsNullOrEmpty(selectedSlotID) &&
-                relation.InvolvesSlot(selectedSlotID);
-            bool highlighted = revealAllHeld
-                ? !string.IsNullOrEmpty(hoveredSlotID)
-                    ? hovered
-                    : selected
-                : hovered || selected;
-            if (!revealAllHeld && !hovered && !selected)
+            if (!BattleActionRelationVisibilityPolicy.IsVisible(
+                    relation,
+                    hoveredSlotID,
+                    selectedSlotID,
+                    revealAllHeld
+                ))
             {
                 continue;
             }
+            bool highlighted =
+                BattleActionRelationVisibilityPolicy.IsHighlighted(
+                    relation,
+                    hoveredSlotID,
+                    selectedSlotID,
+                    revealAllHeld
+                );
             ShowRelation(
                 relation,
                 highlighted,
@@ -1730,16 +1733,12 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         BattleActionRelationDescriptor relation
     )
     {
-        if (relation == null)
-        {
-            return false;
-        }
-
-        bool hovered = !string.IsNullOrEmpty(hoveredSlotID) &&
-            relation.InvolvesSlot(hoveredSlotID);
-        bool selected = !string.IsNullOrEmpty(selectedSlotID) &&
-            relation.InvolvesSlot(selectedSlotID);
-        return revealAllHeld || hovered || selected;
+        return BattleActionRelationVisibilityPolicy.IsVisible(
+            relation,
+            hoveredSlotID,
+            selectedSlotID,
+            revealAllHeld
+        );
     }
 
     private static int IndexOfView(

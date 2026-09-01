@@ -471,6 +471,23 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
 
         BattleCharacterPresentationController presentationController =
             worldRoot.GetComponent<BattleCharacterPresentationController>();
+        BattleCharacterPresentationRequirements presentationRequirements;
+        if (!BattleCharacterPresentationBindingValidator.TryValidate(
+                runtimeUnit,
+                presentationController,
+                out presentationRequirements,
+                out errorMessage))
+        {
+            errorMessage = worldName + "：" + errorMessage;
+            return false;
+        }
+
+        Debug.Log(
+            worldName + " " +
+            BattleCharacterPresentationBindingValidator
+                .CreateRequirementSummary(presentationRequirements),
+            worldRoot
+        );
         // 素材原始朝向与阵营目标朝向共同决定最终镜像，不改Sprite或Scale。
         ApplyCampVisualSettings(
             worldVisual.renderer,
@@ -685,9 +702,10 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
             return;
         }
 
-        bool desiredFacesRight = camp == BattleUnitCamp.Ally;
-        renderer.flipX = presentationController.SourceFacesRight !=
-            desiredFacesRight;
+        renderer.flipX = BattleCharacterPresentationFacing.ShouldFlipX(
+            presentationController.SourceFacesRight,
+            camp
+        );
     }
 
     private static bool HasRuntimeActionSlot(

@@ -327,6 +327,17 @@ public static class BattleExecutionPlanExecutor
             return true;
         }
 
+        BattleExecutionInteractionContext plannedContext =
+            BattleExecutionInteractionContextFactory.BuildEffective(item, null);
+        if (TryCompleteBasicCombatNoInteraction(
+                item,
+                plannedContext,
+                item.order + ". UnrespondedEnemyIntent"
+            ))
+        {
+            return true;
+        }
+
         System.Collections.Generic.IReadOnlyList<BattleActionSlot> guardSlots =
             runtimeState != null
                 ? runtimeState.actionSlots
@@ -351,6 +362,32 @@ public static class BattleExecutionPlanExecutor
         }
 
         BattleActionSlot passiveGuardSlot = guardSelection.slot;
+        BattleExecutionInteractionContext interactionContext =
+            BattleExecutionInteractionContextFactory.BuildEffective(
+                item,
+                passiveGuardSlot
+            );
+
+        if (passiveGuardSlot != null &&
+            !ValidateRuntimeResponseInteraction(
+                item,
+                passiveGuardSlot,
+                interactionContext,
+                guardSelection.selectionType
+            ))
+        {
+            return false;
+        }
+
+        if (TryCompleteBasicCombatNoInteraction(
+                item,
+                interactionContext,
+                item.order + ". UnrespondedEnemyIntent"
+            ))
+        {
+            return true;
+        }
+
         BattleResolveResult result = null;
 
         if (passiveGuardSlot != null)
@@ -584,6 +621,17 @@ public static class BattleExecutionPlanExecutor
             return ExecuteUnavailableResourceResponseSynchronously(item);
         }
 
+        BattleExecutionInteractionContext interactionContext =
+            BattleExecutionInteractionContextFactory.BuildPlanned(item);
+        if (TryCompleteBasicCombatNoInteraction(
+                item,
+                interactionContext,
+                item.order + ". RespondedEnemyIntent"
+            ))
+        {
+            return true;
+        }
+
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             item.actionSlot,
             item.enemyIntent
@@ -638,6 +686,18 @@ public static class BattleExecutionPlanExecutor
             return true;
         }
 
+        BattleExecutionInteractionContext interactionContext =
+            BattleExecutionInteractionContextFactory.BuildPlanned(item);
+        if (TryCompleteBasicCombatNoInteraction(
+                item,
+                interactionContext,
+                item.order + ". Pausable RespondedEnemyIntent"
+            ))
+        {
+            itemCompleted = true;
+            return true;
+        }
+
         BattleResolveResult beginFailure = BattleResolver.TryBeginRespondedClash(
             item.actionSlot,
             item.enemyIntent,
@@ -659,6 +719,54 @@ public static class BattleExecutionPlanExecutor
             failureMessage = "Pausable RespondedEnemyIntent初始化失败";
         }
         return completed;
+    }
+
+    // Guard Selection 必须先于 Pausable Eligibility，确保 Runner 消费本次冻结的 Effective Interaction。
+    internal static bool TryBuildPausableRoutingContext(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        out BattleActionSlot actionSlot,
+        out BattleGuardSelectionType guardSelectionType,
+        out BattleExecutionInteractionContext executionContext,
+        out BattlePresentationInteractionContext presentationContext
+    )
+    {
+        actionSlot = item != null ? item.actionSlot : null;
+        guardSelectionType = BattleGuardSelectionType.None;
+        executionContext = null;
+        presentationContext = null;
+        if (item == null)
+        {
+            return false;
+        }
+
+        if (item.executionType == BattleExecutionItemType.UnrespondedEnemyIntent)
+        {
+            System.Collections.Generic.IReadOnlyList<BattleActionSlot> guardSlots =
+                runtimeState != null
+                    ? runtimeState.actionSlots
+                    : item.passiveGuardCandidates;
+            BattleGuardSelectionResult selection =
+                BattleGuardSelectionManager.SelectHandlingCardForEnemyIntent(
+                    guardSlots,
+                    item.enemyIntent
+                );
+            actionSlot = selection != null ? selection.slot : null;
+            guardSelectionType = selection != null
+                ? selection.selectionType
+                : BattleGuardSelectionType.None;
+        }
+
+        executionContext = BattleExecutionInteractionContextFactory.BuildEffective(
+            item,
+            actionSlot
+        );
+        BattlePresentationInteractionContextFactory.TryCreate(
+            executionContext,
+            guardSelectionType == BattleGuardSelectionType.ContinuousDodge,
+            out presentationContext
+        );
+        return true;
     }
 
     internal static bool IsPausableMeleeFreeAttack(
@@ -689,6 +797,17 @@ public static class BattleExecutionPlanExecutor
         {
             failureMessage =
                 "Pausable FreeAction Melee启动失败：Item语义不匹配";
+            return false;
+        }
+
+        BattleExecutionInteractionContext interactionContext =
+            BattleExecutionInteractionContextFactory.BuildPlanned(item);
+        if (interactionContext.effectiveInteractionType !=
+            BattleInteractionType.UnilateralAttack)
+        {
+            item.MarkFailed(BattleExecutionItemOutcomeReason.InvalidData);
+            failureMessage =
+                "Pausable FreeAction Melee 的 Effective Interaction 不是 UnilateralAttack";
             return false;
         }
 
@@ -733,10 +852,126 @@ public static class BattleExecutionPlanExecutor
         return false;
     }
 
-    // Unresponded Item仍由正式守备选择器决定；只有ContinuousDodge转入Pausable。
+    internal static bool TryBeginPausableUnilateralAttack(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        BattlePresentationInteractionContext presentationContext,
+        BattleActionSlot compatibilityActionSlot,
+        out BattleResolutionPlan plan,
+        out bool itemCompleted,
+        out string failureMessage
+    )
+    {
+        plan = null;
+        itemCompleted = false;
+        failureMessage = string.Empty;
+        if (item == null || runtimeState == null || presentationContext == null ||
+            presentationContext.InteractionType !=
+                BattleInteractionType.UnilateralAttack ||
+            presentationContext.AttackAction == null)
+        {
+            failureMessage =
+                "Pausable UnilateralAttack启动失败：Interaction语义不匹配";
+            return false;
+        }
+
+        if (item.executionType == BattleExecutionItemType.UnrespondedEnemyIntent &&
+            TryCompleteEnemyItemBecauseActualTargetDead(item))
+        {
+            itemCompleted = true;
+            return true;
+        }
+
+        if (presentationContext.AttackAction.actor == null ||
+            presentationContext.AttackAction.actor.IsDead())
+        {
+            item.MarkSkipped(BattleExecutionItemOutcomeReason.ActorDead);
+            itemCompleted = true;
+            return true;
+        }
+
+        plan = BattleResolver.BuildUnilateralAttackResolutionPlan(
+            presentationContext.AttackAction,
+            item,
+            compatibilityActionSlot,
+            out BattleResolveResult failureResult
+        );
+        if (plan == null)
+        {
+            if (TryMarkResolveFailure(item, failureResult, true))
+            {
+                failureMessage = failureResult != null
+                    ? failureResult.message
+                    : "UnilateralAttack ResolutionPlan建立失败";
+                return false;
+            }
+
+            if (failureResult != null && !failureResult.isSuccess &&
+                failureResult.shouldCompleteItem)
+            {
+                item.MarkSkipped(BattleExecutionItemOutcomeReason.ActionUnavailable);
+                itemCompleted = true;
+                return true;
+            }
+
+            failureMessage = "UnilateralAttack ResolutionPlan建立失败";
+            return false;
+        }
+
+        // 单方攻击点数属于内部结算步骤，不创建假 Clash 或手动 Roll Gate。
+        if (!BattleResolver.TryRollUnilateralAttackResolutionPlan(plan, out _))
+        {
+            item.MarkFailed(BattleExecutionItemOutcomeReason.ResolverFailure);
+            failureMessage = "Pausable UnilateralAttack无法生成攻击点数";
+            return false;
+        }
+
+        return true;
+    }
+
+    // 保留旧测试入口；正式 Runner 会在路由前先选定 Guard 并调用下方重载。
     internal static bool TryBeginPausableUnrespondedEnemyIntent(
         BattleExecutionItem item,
         BattleRuntimeState runtimeState,
+        out BattleActionSlot actionSlot,
+        out BattleClashSession session,
+        out bool itemCompleted,
+        out string failureMessage
+    )
+    {
+        System.Collections.Generic.IReadOnlyList<BattleActionSlot> guardSlots =
+            runtimeState != null
+                ? runtimeState.actionSlots
+                : item != null ? item.passiveGuardCandidates : null;
+        BattleGuardSelectionResult selection =
+            BattleGuardSelectionManager.SelectHandlingCardForEnemyIntent(
+                guardSlots,
+                item != null ? item.enemyIntent : null
+            );
+        BattleActionSlot selectedSlot = selection != null
+            ? selection.slot
+            : null;
+        BattleGuardSelectionType selectedType = selection != null
+            ? selection.selectionType
+            : BattleGuardSelectionType.None;
+        return TryBeginPausableUnrespondedEnemyIntent(
+            item,
+            runtimeState,
+            selectedSlot,
+            selectedType,
+            out actionSlot,
+            out session,
+            out itemCompleted,
+            out failureMessage
+        );
+    }
+
+    // Unresponded Clash 只消费 Runner 在 Eligibility 前已经冻结的 Guard Selection。
+    internal static bool TryBeginPausableUnrespondedEnemyIntent(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        BattleActionSlot selectedActionSlot,
+        BattleGuardSelectionType selectedGuardType,
         out BattleActionSlot actionSlot,
         out BattleClashSession session,
         out bool itemCompleted,
@@ -760,36 +995,40 @@ public static class BattleExecutionPlanExecutor
             return true;
         }
 
-        System.Collections.Generic.IReadOnlyList<BattleActionSlot> guardSlots =
-            runtimeState != null
-                ? runtimeState.actionSlots
-                : item.passiveGuardCandidates;
-        BattleGuardSelectionResult guardSelection =
-            BattleGuardSelectionManager.SelectHandlingCardForEnemyIntent(
-                guardSlots,
-                item.enemyIntent
-            );
-
-        if (guardSelection.selectionType !=
-                BattleGuardSelectionType.ContinuousDodge ||
-            guardSelection.slot == null)
+        if (selectedActionSlot == null ||
+            selectedGuardType == BattleGuardSelectionType.None)
         {
-            bool completed = ExecuteUnrespondedEnemyIntentWithSelection(
-                item,
-                guardSelection
-            );
-            itemCompleted = item.isCompleted;
-            if (!completed)
-            {
-                failureMessage =
-                    "Pausable UnrespondedEnemyIntent同步路径未能完成当前Item";
-            }
-            return completed;
+            failureMessage =
+                "Pausable Unresponded Clash启动失败：缺少Runtime守备Action";
+            return false;
         }
 
-        actionSlot = guardSelection.slot;
-        BattleResolveResult beginFailure =
-            BattleResolver.TryBeginContinuousDodgeClash(
+        actionSlot = selectedActionSlot;
+        BattleExecutionInteractionContext interactionContext =
+            BattleExecutionInteractionContextFactory.BuildEffective(
+                item,
+                actionSlot
+            );
+        if (!ValidateRuntimeResponseInteraction(
+                item,
+                actionSlot,
+                interactionContext,
+                selectedGuardType
+            ))
+        {
+            failureMessage =
+                "Pausable Runtime Guard 的 Effective Interaction 不匹配";
+            return false;
+        }
+
+        BattleResolveResult beginFailure = selectedGuardType ==
+                BattleGuardSelectionType.ContinuousDodge
+            ? BattleResolver.TryBeginContinuousDodgeClash(
+                actionSlot,
+                item.enemyIntent,
+                out session
+            )
+            : BattleResolver.TryBeginRespondedClash(
                 actionSlot,
                 item.enemyIntent,
                 out session
@@ -803,13 +1042,13 @@ public static class BattleExecutionPlanExecutor
             item,
             actionSlot,
             beginFailure,
-            BattleGuardSelectionType.ContinuousDodge
+            selectedGuardType
         );
         itemCompleted = item.isCompleted;
         if (!failureCompleted)
         {
             failureMessage =
-                "Pausable ContinuousDodge初始化失败";
+                "Pausable Runtime Guard Clash初始化失败";
         }
         return failureCompleted;
     }
@@ -883,8 +1122,19 @@ public static class BattleExecutionPlanExecutor
         BattleResolutionPlan plan
     )
     {
+        return CompletePausableUnilateralAttack(item, runtimeState, plan);
+    }
+
+    internal static bool CompletePausableUnilateralAttack(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        BattleResolutionPlan plan
+    )
+    {
         if (item == null || runtimeState == null || plan == null ||
-            plan.planKind != BattleResolutionPlanKind.FreeActionAttack ||
+            (plan.planKind != BattleResolutionPlanKind.FreeActionAttack &&
+                plan.planKind !=
+                    BattleResolutionPlanKind.UnrespondedEnemyAttack) ||
             plan.State != BattleResolutionPlanState.Completed ||
             plan.CompletedResult == null)
         {
@@ -893,9 +1143,9 @@ public static class BattleExecutionPlanExecutor
 
         if (!plan.IsActionCompleted)
         {
-            if (plan.CompletedResult.playerCardUsed && item.actionSlot != null)
+            if (plan.CompletedResult.playerCardUsed && plan.actionSlot != null)
             {
-                item.actionSlot.MarkUsed();
+                plan.actionSlot.MarkUsed();
             }
 
             item.MarkExecuted();
@@ -912,7 +1162,8 @@ public static class BattleExecutionPlanExecutor
     internal static bool CompletePausableEnemyIntentAction(
         BattleExecutionItem item,
         BattleRuntimeState runtimeState,
-        BattleResolutionPlan plan
+        BattleResolutionPlan plan,
+        BattleGuardSelectionType guardSelectionType
     )
     {
         if (item == null || runtimeState == null || plan == null ||
@@ -952,13 +1203,13 @@ public static class BattleExecutionPlanExecutor
             else if (item.executionType ==
                     BattleExecutionItemType.UnrespondedEnemyIntent &&
                 plan.clashSession != null &&
-                plan.clashSession.IsContinuousDodgeContinuation)
+                guardSelectionType != BattleGuardSelectionType.None)
             {
                 completed = CompleteUnrespondedGuardResult(
                     item,
                     plan.actionSlot,
                     plan.CompletedResult,
-                    BattleGuardSelectionType.ContinuousDodge
+                    guardSelectionType
                 );
             }
             else
@@ -1290,6 +1541,17 @@ public static class BattleExecutionPlanExecutor
             return true;
         }
 
+        BattleExecutionInteractionContext interactionContext =
+            BattleExecutionInteractionContextFactory.BuildPlanned(item);
+        if (TryCompleteBasicCombatNoInteraction(
+                item,
+                interactionContext,
+                item.order + ". FreeAction"
+            ))
+        {
+            return true;
+        }
+
         BattleResolveResult result = BattleResolver.ResolveFreeAction(item.actionSlot);
 
         Debug.Log(
@@ -1341,6 +1603,142 @@ public static class BattleExecutionPlanExecutor
 
         item.MarkExecuted();
         return true;
+    }
+
+    static bool TryCompleteBasicCombatNoInteraction(
+        BattleExecutionItem item,
+        BattleExecutionInteractionContext context,
+        string logPrefix
+    )
+    {
+        if (item == null || context == null ||
+            context.effectiveInteractionType !=
+                BattleInteractionType.NoInteraction ||
+            !ContainsOnlyBasicCombatActions(context))
+        {
+            return false;
+        }
+
+        MarkInteractionActionSlotsHandled(context);
+        item.MarkSkipped(BattleExecutionItemOutcomeReason.NoInteraction);
+        Debug.Log(
+            logPrefix +
+            "：Effective Interaction 为 NoInteraction，" +
+            "不进入 Resolver；已安排槽位仅标记为本回合已处理"
+        );
+        return true;
+    }
+
+    static bool ContainsOnlyBasicCombatActions(
+        BattleExecutionInteractionContext context
+    )
+    {
+        bool hasAction = false;
+        if (!IsBasicCombatActionOrNull(context.sideA, ref hasAction) ||
+            !IsBasicCombatActionOrNull(context.sideB, ref hasAction))
+        {
+            return false;
+        }
+
+        return hasAction;
+    }
+
+    static bool IsBasicCombatActionOrNull(
+        BattleExecutionAction action,
+        ref bool hasAction
+    )
+    {
+        if (action == null)
+        {
+            return true;
+        }
+
+        if (action.cardState == null || action.cardState.cardData == null)
+        {
+            return false;
+        }
+
+        hasAction = true;
+        string cardType = action.cardState.cardData.cardType;
+        return cardType == CardType.Attack ||
+            cardType == CardType.Defense ||
+            cardType == CardType.Dodge;
+    }
+
+    static void MarkInteractionActionSlotsHandled(
+        BattleExecutionInteractionContext context
+    )
+    {
+        BattleActionSlot sideASlot = context.sideA != null
+            ? context.sideA.actionSlot
+            : null;
+        BattleActionSlot sideBSlot = context.sideB != null
+            ? context.sideB.actionSlot
+            : null;
+
+        if (sideASlot != null)
+        {
+            sideASlot.MarkUsed();
+        }
+
+        if (sideBSlot != null && !object.ReferenceEquals(sideBSlot, sideASlot))
+        {
+            sideBSlot.MarkUsed();
+        }
+    }
+
+    static bool ValidateRuntimeResponseInteraction(
+        BattleExecutionItem item,
+        BattleActionSlot responseSlot,
+        BattleExecutionInteractionContext context,
+        BattleGuardSelectionType selectionType
+    )
+    {
+        BattleInteractionType expectedInteraction;
+        string cardType = responseSlot != null &&
+            responseSlot.cardState != null &&
+            responseSlot.cardState.cardData != null
+                ? responseSlot.cardState.cardData.cardType
+                : null;
+
+        if (cardType == CardType.Defense)
+        {
+            expectedInteraction = BattleInteractionType.AttackVsDefense;
+        }
+        else if (cardType == CardType.Dodge)
+        {
+            expectedInteraction = BattleInteractionType.AttackVsDodge;
+        }
+        else
+        {
+            expectedInteraction = BattleInteractionType.NoInteraction;
+        }
+
+        bool isValid = context != null &&
+            expectedInteraction != BattleInteractionType.NoInteraction &&
+            context.effectiveInteractionType == expectedInteraction &&
+            (selectionType != BattleGuardSelectionType.ContinuousDodge ||
+             expectedInteraction == BattleInteractionType.AttackVsDodge);
+        if (isValid)
+        {
+            return true;
+        }
+
+        if (item != null)
+        {
+            item.MarkFailed(BattleExecutionItemOutcomeReason.InvalidData);
+        }
+
+        Debug.LogWarning(
+            "Runtime Guard Selection 与 Effective Interaction 不匹配：" +
+            "Selection=" + selectionType +
+            "，CardType=" + (cardType ?? "null") +
+            "，Effective=" +
+                (context != null
+                    ? context.effectiveInteractionType.ToString()
+                    : "null")
+        );
+        return false;
     }
 
     static bool TryCompleteEnemyItemBecauseActualTargetDead(BattleExecutionItem item)

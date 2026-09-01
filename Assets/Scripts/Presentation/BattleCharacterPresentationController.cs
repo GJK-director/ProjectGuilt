@@ -89,6 +89,33 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     public SpriteRenderer CharacterSpriteRenderer => characterSprite;
     public float DodgeMotionDuration => Mathf.Max(0f, dodgeDuration);
 
+    public BattleCharacterPresentationBindingSnapshot GetBindingSnapshot()
+    {
+        return new BattleCharacterPresentationBindingSnapshot
+        {
+            HasCharacterSpriteRenderer = characterSprite != null,
+            HasBodyVisualRoot = bodyVisualRoot != null,
+            HasIdleSprite = idleSprite != null,
+            HasSprintSprite = sprintSprite != null,
+            HasSlashSprite = slashSprite != null,
+            HasAimSprite = aimSprite != null,
+            HasShootSprite = shootSprite != null,
+            HasCloseRangeShootSprite = closeRangeShootSprite != null,
+            HasHitSprite = hitSprite != null,
+            HasGuardSprite = guardSprite != null,
+            HasDodgeSprite = dodgeSprite != null,
+            HasLongRangeMuzzleFlashAnchor = muzzleFlashAnchor != null,
+            HasLongRangeMuzzleFlashEffect = muzzleFlashEffect != null,
+            HasCloseRangeMuzzleFlashAnchor =
+                closeRangeMuzzleFlashAnchor != null,
+            HasCloseRangeMuzzleFlashEffect =
+                closeRangeMuzzleFlashEffect != null,
+            HasPerfectGuardEffect = perfectGuardEffect != null,
+            HasSlashBackEffect = slashBackEffect != null,
+            HasSlashFrontEffect = slashFrontEffect != null
+        };
+    }
+
     public bool TryGetCameraFramingWorldPosition(out Vector3 worldPosition)
     {
         // Offset是显式world-space构图修正，不受Sprite、Pose或Flip影响。

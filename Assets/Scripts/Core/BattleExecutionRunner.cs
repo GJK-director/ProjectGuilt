@@ -26,7 +26,7 @@ enum BattlePresentationContinuation
 {
     None,
     AfterActionBegin,
-    AfterFreeActionBegin,
+    AfterUnilateralActionBegin,
     AfterUnavailableResponseActionBegin,
     AfterRollResult,
     AfterImpact,
@@ -80,6 +80,23 @@ public sealed class BattleExecutionRunner
     public BattleActionSlot CurrentActionSlot { get; private set; }
     public BattleClashSession CurrentClashSession { get; private set; }
     public BattleResolutionPlan CurrentResolutionPlan { get; private set; }
+    public BattleExecutionInteractionContext CurrentExecutionInteractionContext
+    {
+        get;
+        private set;
+    }
+    public BattlePresentationInteractionContext
+        CurrentPresentationInteractionContext { get; private set; }
+    public BattleExecutionPhaseRequirements CurrentPhaseRequirements
+    {
+        get;
+        private set;
+    }
+    public BattleGuardSelectionType CurrentGuardSelectionType
+    {
+        get;
+        private set;
+    }
     public BattlePresentationRequest CurrentPresentationRequest { get; private set; }
     public BattlePresentationCompletion CurrentPresentationCompletion { get; private set; }
     public BattleExecutionRunnerPhase Phase { get; private set; }
@@ -157,6 +174,10 @@ public sealed class BattleExecutionRunner
             CurrentActionSlot = null;
             CurrentClashSession = null;
             CurrentResolutionPlan = null;
+            CurrentExecutionInteractionContext = null;
+            CurrentPresentationInteractionContext = null;
+            CurrentPhaseRequirements = null;
+            CurrentGuardSelectionType = BattleGuardSelectionType.None;
             CurrentItemCompleted = false;
             return BeginNextItem(out failureMessage);
         }
@@ -201,8 +222,7 @@ public sealed class BattleExecutionRunner
         }
 
         if (Phase != BattleExecutionRunnerPhase.WaitingForRoll ||
-            (CurrentClashSession == null &&
-                !CanRollOneSidedFreeAttack()))
+            CurrentClashSession == null)
         {
             // 提前请求直接拒绝且不缓存，ReadyPause结束后必须重新请求。
             failureMessage = "Manual Roll请求失败：当前尚未进入WaitingForRoll";
@@ -225,6 +245,10 @@ public sealed class BattleExecutionRunner
         CurrentActionSlot = null;
         CurrentClashSession = null;
         CurrentResolutionPlan = null;
+        CurrentExecutionInteractionContext = null;
+        CurrentPresentationInteractionContext = null;
+        CurrentPhaseRequirements = null;
+        CurrentGuardSelectionType = BattleGuardSelectionType.None;
         ClearPresentationReferences();
         CurrentItemCompleted = false;
 
@@ -238,11 +262,7 @@ public sealed class BattleExecutionRunner
             return Fail("Pausable执行失败：没有可推进的ExecutionItem", out failureMessage);
         }
 
-        bool pausableFreeMelee = BattleExecutionPlanExecutor
-            .IsPausableMeleeFreeAttack(CurrentItem);
-        if (runtimeState.IsBattleEnded ||
-            (CurrentItem.executionType == BattleExecutionItemType.FreeAction &&
-                !pausableFreeMelee))
+        if (runtimeState.IsBattleEnded)
         {
             bool executed = BattleExecutionPlanExecutor
                 .ExecuteNextItemFromLifecycle(lifecycleController);
@@ -254,33 +274,73 @@ public sealed class BattleExecutionRunner
             return FinishCurrentItem(out failureMessage);
         }
 
-        if (pausableFreeMelee)
+        if (!BattleExecutionPlanExecutor.TryBuildPausableRoutingContext(
+                CurrentItem,
+                runtimeState,
+                out BattleActionSlot routedActionSlot,
+                out BattleGuardSelectionType guardSelectionType,
+                out BattleExecutionInteractionContext executionContext,
+                out BattlePresentationInteractionContext presentationContext
+            ))
         {
-            bool freeBegan = BattleExecutionPlanExecutor
-                .TryBeginPausableFreeMeleeAttack(
-                    CurrentItem,
-                    runtimeState,
-                    out BattleResolutionPlan freePlan,
-                    out bool freeItemCompleted,
+            return Fail(
+                "Pausable执行失败：无法建立Effective Interaction Context",
+                out failureMessage
+            );
+        }
+
+        CurrentActionSlot = routedActionSlot;
+        CurrentGuardSelectionType = guardSelectionType;
+        CurrentExecutionInteractionContext = executionContext;
+        CurrentPresentationInteractionContext = presentationContext;
+        CurrentPhaseRequirements = BattleExecutionPausablePolicy.Evaluate(
+            presentationContext
+        );
+
+        if (!CurrentPhaseRequirements.HasPresentationPhases)
+        {
+            bool executed = BattleExecutionPlanExecutor
+                .ExecuteNextItemFromLifecycle(lifecycleController);
+            if (!executed || !CurrentItem.isCompleted)
+            {
+                return Fail(
+                    "非Combat Presentation Item未能按同步路径完成",
                     out failureMessage
                 );
-            if (!freeBegan)
+            }
+
+            return FinishCurrentItem(out failureMessage);
+        }
+
+        if (CurrentPhaseRequirements.InteractionType ==
+            BattleInteractionType.UnilateralAttack)
+        {
+            bool unilateralBegan = BattleExecutionPlanExecutor
+                .TryBeginPausableUnilateralAttack(
+                    CurrentItem,
+                    runtimeState,
+                    CurrentPresentationInteractionContext,
+                    CurrentActionSlot,
+                    out BattleResolutionPlan unilateralPlan,
+                    out bool unilateralItemCompleted,
+                    out failureMessage
+                );
+            if (!unilateralBegan)
             {
                 return Fail(failureMessage, out failureMessage);
             }
 
-            if (freeItemCompleted)
+            if (unilateralItemCompleted)
             {
                 return FinishCurrentItem(out failureMessage);
             }
 
-            CurrentActionSlot = CurrentItem.actionSlot;
-            CurrentResolutionPlan = freePlan;
+            CurrentResolutionPlan = unilateralPlan;
             return BeginPresentation(
                 BattlePresentationCue.ActionBegin,
-                BattlePresentationContinuation.AfterFreeActionBegin,
+                BattlePresentationContinuation.AfterUnilateralActionBegin,
                 null,
-                "FreeAttack"
+                BattleInteractionType.UnilateralAttack.ToString()
             );
         }
 
@@ -308,6 +368,8 @@ public sealed class BattleExecutionRunner
                 .TryBeginPausableUnrespondedEnemyIntent(
                     CurrentItem,
                     runtimeState,
+                    CurrentActionSlot,
+                    CurrentGuardSelectionType,
                     out actionSlot,
                     out session,
                     out itemCompleted,
@@ -316,14 +378,10 @@ public sealed class BattleExecutionRunner
         }
         else
         {
-            bool executed = BattleExecutionPlanExecutor
-                .ExecuteNextItemFromLifecycle(lifecycleController);
-            if (!executed || !CurrentItem.isCompleted)
-            {
-                return Fail("不支持的Pausable Item未能按同步路径完成", out failureMessage);
-            }
-
-            return FinishCurrentItem(out failureMessage);
+            return Fail(
+                "Pausable Clash缺少可识别的Execution来源Adapter",
+                out failureMessage
+            );
         }
 
         if (!began)
@@ -397,7 +455,10 @@ public sealed class BattleExecutionRunner
         failureMessage = string.Empty;
         if (CurrentClashSession == null)
         {
-            return RollOneSidedFreeAttack(out failureMessage);
+            return Fail(
+                "Roll失败：当前Interaction不包含ClashSession",
+                out failureMessage
+            );
         }
 
         if (CurrentClashSession == null || CurrentClashSession.IsFinalized)
@@ -446,48 +507,6 @@ public sealed class BattleExecutionRunner
             null,
             CurrentClashSession.AttemptResult.ToString()
         );
-    }
-
-    bool RollOneSidedFreeAttack(out string failureMessage)
-    {
-        failureMessage = string.Empty;
-        if (!CanRollOneSidedFreeAttack())
-        {
-            return Fail(
-                "Roll失败：当前不是合法的One-Sided FreeAttack",
-                out failureMessage
-            );
-        }
-
-        Phase = BattleExecutionRunnerPhase.Rolling;
-        if (!BattleResolver.TryRollFreeAttackResolutionPlan(
-                CurrentResolutionPlan,
-                out int rolledPoint
-            ))
-        {
-            return Fail(
-                "Roll失败：FreeAttack拒绝本次单方攻击点数生成",
-                out failureMessage
-            );
-        }
-
-        Phase = BattleExecutionRunnerPhase.Finalizing;
-        return BeginPresentation(
-            BattlePresentationCue.RollResult,
-            BattlePresentationContinuation.AfterRollResult,
-            null,
-            "FreeAttackRoll:" + rolledPoint
-        );
-    }
-
-    bool CanRollOneSidedFreeAttack()
-    {
-        return CurrentClashSession == null &&
-            CurrentResolutionPlan != null &&
-            CurrentResolutionPlan.planKind ==
-                BattleResolutionPlanKind.FreeActionAttack &&
-            !CurrentResolutionPlan.freeActionHasRolled &&
-            BattleExecutionPlanExecutor.IsPausableMeleeFreeAttack(CurrentItem);
     }
 
     public bool TryCommitNextResolutionStep(out string failureMessage)
@@ -570,19 +589,20 @@ public sealed class BattleExecutionRunner
         }
 
         if (continuation ==
-            BattlePresentationContinuation.AfterFreeActionBegin)
+            BattlePresentationContinuation.AfterUnilateralActionBegin)
         {
             if (CurrentResolutionPlan == null ||
-                CurrentResolutionPlan.planKind !=
-                    BattleResolutionPlanKind.FreeActionAttack)
+                CurrentPhaseRequirements == null ||
+                CurrentPhaseRequirements.InteractionType !=
+                    BattleInteractionType.UnilateralAttack)
             {
                 return Fail(
-                    "FreeAction ActionBegin完成后ResolutionPlan无效",
+                    "Unilateral ActionBegin完成后Phase Contract无效",
                     out failureMessage
                 );
             }
 
-            EnterReadyPause();
+            Phase = BattleExecutionRunnerPhase.ResolutionPending;
             return true;
         }
 
@@ -660,9 +680,12 @@ public sealed class BattleExecutionRunner
 
         if (continuation == BattlePresentationContinuation.AfterActionComplete)
         {
-            bool completed = CurrentItem != null &&
-                CurrentItem.executionType == BattleExecutionItemType.FreeAction
-                    ? BattleExecutionPlanExecutor.CompletePausableFreeAction(
+            bool unilateral = CurrentPhaseRequirements != null &&
+                CurrentPhaseRequirements.InteractionType ==
+                    BattleInteractionType.UnilateralAttack;
+            bool completed = unilateral
+                    ? BattleExecutionPlanExecutor
+                        .CompletePausableUnilateralAttack(
                         CurrentItem,
                         lifecycleController.RuntimeState,
                         CurrentResolutionPlan
@@ -671,7 +694,8 @@ public sealed class BattleExecutionRunner
                         .CompletePausableEnemyIntentAction(
                             CurrentItem,
                             lifecycleController.RuntimeState,
-                            CurrentResolutionPlan
+                            CurrentResolutionPlan,
+                            CurrentGuardSelectionType
                         );
             if (!completed)
             {
@@ -786,7 +810,8 @@ public sealed class BattleExecutionRunner
             impact,
             outcome,
             cue == BattlePresentationCue.ActionComplete &&
-                ShouldCarryBattleActionCameraToNextItem()
+                ShouldCarryBattleActionCameraToNextItem(),
+            CurrentPresentationInteractionContext
         );
         CurrentPresentationCompletion = new BattlePresentationCompletion(
             requestId

@@ -41,6 +41,20 @@ public sealed class BattleActionRelationDescriptor
     public int TargetOrder { get; }
     public int LaneIndex { get; internal set; }
 
+    // SourceIntent 保留具体敌人意图引用，Slot Identity 与 actualTarget 均从权威 Intent 读取。
+    public BattleEnemyIntent SourceIntent { get; }
+    public BattleActionSlot ResponseSlot { get; }
+    public CharacterData IntentSourceCharacter =>
+        SourceIntent != null ? SourceIntent.enemy : null;
+    public int IntentSourceSlotIndex =>
+        SourceIntent != null ? SourceIntent.enemySlotIndex : -1;
+    public CharacterData ActualTargetCharacter =>
+        SourceIntent != null ? SourceIntent.actualTargetCharacter : null;
+    public int ActualTargetSlotIndex =>
+        SourceIntent != null ? SourceIntent.actualTargetSlotIndex : -1;
+    public BattleCardState IntentCardState =>
+        SourceIntent != null ? SourceIntent.enemyCardState : null;
+
     public BattleActionRelationDescriptor(
         string relationID,
         BattleActionRelationKind kind,
@@ -53,7 +67,9 @@ public sealed class BattleActionRelationDescriptor
         int targetOrder,
         string playerActionType = null,
         string enemyActionType = null,
-        bool isMutual = false
+        bool isMutual = false,
+        BattleEnemyIntent sourceIntent = null,
+        BattleActionSlot responseSlot = null
     )
     {
         RelationID = relationID ?? string.Empty;
@@ -69,6 +85,8 @@ public sealed class BattleActionRelationDescriptor
         SourceOrder = sourceOrder;
         TargetOrder = targetOrder;
         IsCurrentFinalEffective = true;
+        SourceIntent = sourceIntent;
+        ResponseSlot = responseSlot;
     }
 
     public bool InvolvesSlot(string slotID)

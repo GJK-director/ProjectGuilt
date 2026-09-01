@@ -139,20 +139,6 @@ public class BattleSimpleUIController : MonoBehaviour
     private readonly List<RaycastResult> planningCancelRaycastResults =
         new List<RaycastResult>();
 
-    private readonly string[] normalTestHandCardIDs =
-    {
-        "atk_001",
-        "def_001",
-        "dodge_001",
-        "atk_bullet_001"
-    };
-
-    private readonly string[] sinTestHandCardIDs =
-    {
-        "sin_ability_001",
-        "sin_attack_test_001"
-    };
-
     private string lastLog = "等待初始化";
 
     public bool IsInitialized => isInitialized;
@@ -644,40 +630,38 @@ public class BattleSimpleUIController : MonoBehaviour
         CharacterData enemy = initializedRuntimeState.enemy;
         CharacterData enemy2 = initializedRuntimeState.enemy2;
 
-        if (!TryRequireCard(allyA, "atk_001", out references.allyAAttack, out errorMessage) ||
-            !TryRequireCard(allyA, "def_001", out references.allyADefense, out errorMessage) ||
-            !TryRequireCard(allyA, "dodge_001", out references.allyADodge, out errorMessage) ||
-            !TryRequireCard(allyA, "sin_ability_001", out references.allyAAbility, out errorMessage) ||
-            !TryRequireCard(allyA, ClashSinTestCardID, out references.allyASinAttack, out errorMessage))
+        // 旧按钮只需要兼容引用；正式角色卡组由 Definition 的通用 CardID 列表决定。
+        // 这里按卡牌数据语义取首张对应类型，不再要求生产角色持有固定 CardID。
+        references.allyAAttack = FindOwnedCardByType(allyA, CardType.Attack);
+        references.allyADefense = FindOwnedCardByType(allyA, CardType.Defense);
+        references.allyADodge = FindOwnedCardByType(allyA, CardType.Dodge);
+        references.allyAAbility = FindOwnedAbilityCard(allyA);
+        references.allyASinAttack = FindOwnedClashSinCard(allyA);
+
+        if (allyB != null)
         {
-            return false;
+            references.allyBAttack = FindOwnedCardByType(allyB, CardType.Attack);
+            references.allyBDefense = FindOwnedCardByType(allyB, CardType.Defense);
+            references.allyBDodge = FindOwnedCardByType(allyB, CardType.Dodge);
+            references.allyBAbility = FindOwnedAbilityCard(allyB);
+            references.allyBSinAttack = FindOwnedClashSinCard(allyB);
         }
 
-        if (allyB != null &&
-            (!TryRequireCard(allyB, "atk_001", out references.allyBAttack, out errorMessage) ||
-             !TryRequireCard(allyB, "def_001", out references.allyBDefense, out errorMessage) ||
-             !TryRequireCard(allyB, "dodge_001", out references.allyBDodge, out errorMessage) ||
-             !TryRequireCard(allyB, "sin_ability_001", out references.allyBAbility, out errorMessage) ||
-             !TryRequireCard(allyB, ClashSinTestCardID, out references.allyBSinAttack, out errorMessage)))
-        {
-            return false;
-        }
-
-        // 单卡预览是兼容调试入口，正式卡组没有基础射击时保持空白。
-        references.allyABulletAttack = FindOwnedCardByID(
+        // 单卡预览是兼容调试入口，正式卡组没有远程射击时保持空白。
+        references.allyABulletAttack = FindOwnedAttackByDeliveryMode(
             allyA,
-            "atk_bullet_001"
+            AttackDeliveryMode.LongRangeShoot
         );
         references.enemyAttack = FindIntentCardForEnemy(
             initializedRuntimeState.intentQueue,
             enemy
-        ) ?? FindOwnedCardByID(enemy, "enemy_atk_001");
+        ) ?? FindOwnedCardByType(enemy, CardType.Attack);
         if (enemy2 != null)
         {
             references.enemy02Attack = FindIntentCardForEnemy(
                 initializedRuntimeState.intentQueue,
                 enemy2
-            ) ?? FindOwnedCardByID(enemy2, "enemy_atk_001");
+            ) ?? FindOwnedCardByType(enemy2, CardType.Attack);
         }
 
         if (!ValidateEnemyCardReference(
@@ -856,29 +840,6 @@ public class BattleSimpleUIController : MonoBehaviour
         return allyA1 && allyA2 && allyB1 && allyB2;
     }
 
-    private static bool TryRequireCard(
-        CharacterData owner,
-        string cardID,
-        out BattleCardState cardState,
-        out string errorMessage
-    )
-    {
-        cardState = FindOwnedCardByID(owner, cardID);
-        if (cardState != null)
-        {
-            errorMessage = string.Empty;
-            return true;
-        }
-
-        string ownerID = owner != null
-            ? owner.runtimeUnitID
-            : "<null>";
-        errorMessage =
-            "BattleScene兼容卡牌绑定失败：角色 " + ownerID +
-            " 缺少 " + cardID;
-        return false;
-    }
-
     private static BattleCardState FindOwnedCardByID(
         CharacterData owner,
         string cardID
@@ -896,6 +857,99 @@ public class BattleSimpleUIController : MonoBehaviour
                 object.ReferenceEquals(cardState.owner, owner) &&
                 cardState.cardData != null &&
                 cardState.cardData.cardID == cardID)
+            {
+                return cardState;
+            }
+        }
+
+        return null;
+    }
+
+    private static BattleCardState FindOwnedCardByType(
+        CharacterData owner,
+        string cardType
+    )
+    {
+        if (owner == null || owner.battleCards == null)
+        {
+            return null;
+        }
+
+        for (int index = 0; index < owner.battleCards.Count; index++)
+        {
+            BattleCardState cardState = owner.battleCards[index];
+            if (cardState != null &&
+                object.ReferenceEquals(cardState.owner, owner) &&
+                cardState.cardData != null &&
+                cardState.cardData.cardType == cardType)
+            {
+                return cardState;
+            }
+        }
+
+        return null;
+    }
+
+    private static BattleCardState FindOwnedAttackByDeliveryMode(
+        CharacterData owner,
+        string deliveryMode
+    )
+    {
+        if (owner == null || owner.battleCards == null)
+        {
+            return null;
+        }
+
+        for (int index = 0; index < owner.battleCards.Count; index++)
+        {
+            BattleCardState cardState = owner.battleCards[index];
+            if (cardState != null &&
+                object.ReferenceEquals(cardState.owner, owner) &&
+                cardState.cardData != null &&
+                cardState.cardData.cardType == CardType.Attack &&
+                cardState.GetAttackDeliveryMode() == deliveryMode)
+            {
+                return cardState;
+            }
+        }
+
+        return null;
+    }
+
+    private static BattleCardState FindOwnedAbilityCard(CharacterData owner)
+    {
+        if (owner == null || owner.battleCards == null)
+        {
+            return null;
+        }
+
+        for (int index = 0; index < owner.battleCards.Count; index++)
+        {
+            BattleCardState cardState = owner.battleCards[index];
+            if (cardState != null &&
+                object.ReferenceEquals(cardState.owner, owner) &&
+                cardState.IsAbilitySinCard())
+            {
+                return cardState;
+            }
+        }
+
+        return null;
+    }
+
+    private static BattleCardState FindOwnedClashSinCard(CharacterData owner)
+    {
+        if (owner == null || owner.battleCards == null)
+        {
+            return null;
+        }
+
+        for (int index = 0; index < owner.battleCards.Count; index++)
+        {
+            BattleCardState cardState = owner.battleCards[index];
+            if (cardState != null &&
+                object.ReferenceEquals(cardState.owner, owner) &&
+                cardState.IsClashSinCard())
             {
                 return cardState;
             }
@@ -947,7 +1001,7 @@ public class BattleSimpleUIController : MonoBehaviour
         errorMessage =
             "BattleScene兼容卡牌绑定失败：敌人 " +
             (enemy != null ? enemy.runtimeUnitID : "<null>") +
-            " 缺少可用的enemy_atk_001正式实例";
+            " 缺少可用的正式意图卡或 Attack 卡实例";
         return false;
     }
 
@@ -3538,9 +3592,9 @@ public class BattleSimpleUIController : MonoBehaviour
         CharacterData handOwner = cardInteractionCoordinator != null
             ? cardInteractionCoordinator.SelectedCharacter
             : null;
-        BattleCardState previewCard = FindCardStateByID(
+        BattleCardState previewCard = FindOwnedAttackByDeliveryMode(
             handOwner,
-            "atk_bullet_001"
+            AttackDeliveryMode.LongRangeShoot
         );
         if (handOwner == null || previewCard == null)
         {
@@ -3586,13 +3640,9 @@ public class BattleSimpleUIController : MonoBehaviour
             return;
         }
 
-        string[] targetCardIDs = showingSinCards
-            ? sinTestHandCardIDs
-            : normalTestHandCardIDs;
-
-        List<BattleCardState> cards = FindTestHandCardsByID(
+        List<BattleCardState> cards = FindPlanningHandCards(
             selectedCharacter,
-            targetCardIDs
+            showingSinCards
         );
 
         testCardHandView.SetCards(
@@ -3602,31 +3652,23 @@ public class BattleSimpleUIController : MonoBehaviour
         );
     }
 
-    private List<BattleCardState> FindTestHandCardsByID(CharacterData handOwner, string[] cardIDs)
+    private List<BattleCardState> FindPlanningHandCards(
+        CharacterData handOwner,
+        bool showSinCards
+    )
     {
         List<BattleCardState> cards = new List<BattleCardState>();
 
-        if (cardIDs == null || handOwner == null || handOwner.battleCards == null)
+        if (handOwner == null || handOwner.battleCards == null)
         {
             return cards;
         }
 
-        for (int i = 0; i < cardIDs.Length; i++)
+        for (int index = 0; index < handOwner.battleCards.Count; index++)
         {
-            string cardID = cardIDs[i];
-            BattleCardState cardState = FindCardStateByID(handOwner, cardID);
-
-            if (cardState == null)
-            {
-                if (!HasCardStateByID(handOwner, cardID))
-                {
-                    Debug.LogWarning(handOwner.characterName + " 的测试手牌缺少卡牌：" + cardID);
-                }
-
-                continue;
-            }
-
-            if (!ShouldDisplayCardInHand(runtimeState, cardState))
+            BattleCardState cardState = handOwner.battleCards[index];
+            if (!ShouldDisplayCardInHand(runtimeState, cardState) ||
+                cardState.cardData.isSinCard != showSinCards)
             {
                 continue;
             }
@@ -4104,7 +4146,6 @@ public sealed class BattleAutomaticTurnCycleResult
 public static class BattleAutomaticTurnCycle
 {
     const int ActionSlotCountPerCharacter = 2;
-    const string FixedEnemyAttackCardID = "enemy_atk_001";
 
     public static bool CanStart(BattleRuntimeState runtimeState)
     {
@@ -4483,11 +4524,11 @@ public static class BattleAutomaticTurnCycle
             );
             return false;
         }
-        if (attackCardState.cardData.cardID != FixedEnemyAttackCardID)
+        if (attackCardState.cardData.cardType != CardType.Attack)
         {
             Debug.LogWarning(
-                "创建固定敌人意图失败：固定敌人卡必须是 " +
-                FixedEnemyAttackCardID
+                "创建固定敌人意图失败：传入卡牌必须是 Attack，当前为 " +
+                attackCardState.cardData.cardType
             );
             return false;
         }
@@ -4534,7 +4575,7 @@ public static class BattleAutomaticTurnCycle
         ));
         Debug.Log(
             "固定敌人意图：" + enemyLabel + " 使用 " +
-            FixedEnemyAttackCardID + " 攻击 " +
+            attackCardState.cardData.cardID + " 攻击 " +
             target.characterName + " 槽位" + targetSlotIndex
         );
         return true;

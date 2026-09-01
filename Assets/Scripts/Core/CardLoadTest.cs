@@ -71,7 +71,24 @@ public enum BattleTestMode
     BattlePresentationProtocolBasic = 83,
     BattleClashEngagementBasic = 84,
     BattleLongRangeShootResourceContractBasic = 85,
-    BattleFirstStrikeExecutionPlanBasic = 86
+    BattleFirstStrikeExecutionPlanBasic = 86,
+    BattleInteractionClassifierBasic = 87,
+    BattleExecutionPlanInteractionBasic = 88,
+    BattleExecutionPlanFirstStrikePolicyBasic = 89,
+    BattleExecutionInteractionContextBasic = 90,
+    BattleExecutionEffectiveInteractionBasic = 91,
+    BattleGenericAttackVsDefenseBasic = 92,
+    BattleGenericAttackVsDodgeBasic = 93,
+    BattleGenericUnilateralAttackBasic = 94,
+    BattlePresentationInteractionContextBasic = 95,
+    BattleGenericPausableRoutingBasic = 96,
+    BattleNeutralPresentationRouterBasic = 97,
+    BattleReadyMovementContinuationBasic = 98,
+    BattleMultiSlotIntentRelationQueryBasic = 99,
+    BattleMultiSlotRelationRenderingBasic = 100,
+    CharacterDefaultCardDataContractBasic = 101,
+    CharacterPresentationBindingContractBasic = 102,
+    FullBattleIntegrationRegressionBasic = 103
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -434,6 +451,108 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleFirstStrikeExecutionPlanBasic)
         {
             RunBattleFirstStrikeExecutionPlanBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleInteractionClassifierBasic)
+        {
+            BattleInteractionClassifierTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleExecutionPlanInteractionBasic)
+        {
+            BattleExecutionPlanInteractionTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleExecutionPlanFirstStrikePolicyBasic)
+        {
+            BattleExecutionPlanFirstStrikePolicyTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleExecutionInteractionContextBasic)
+        {
+            BattleExecutionInteractionContextTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleExecutionEffectiveInteractionBasic)
+        {
+            BattleExecutionEffectiveInteractionTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleGenericAttackVsDefenseBasic)
+        {
+            BattleGenericAttackVsDefenseTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleGenericAttackVsDodgeBasic)
+        {
+            BattleGenericAttackVsDodgeTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleGenericUnilateralAttackBasic)
+        {
+            BattleGenericUnilateralAttackTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattlePresentationInteractionContextBasic)
+        {
+            BattlePresentationInteractionContextTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleGenericPausableRoutingBasic)
+        {
+            BattleGenericPausableRoutingTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleNeutralPresentationRouterBasic)
+        {
+            BattleNeutralPresentationRouterTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleReadyMovementContinuationBasic)
+        {
+            BattleReadyMovementContinuationTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleMultiSlotIntentRelationQueryBasic)
+        {
+            BattleMultiSlotIntentRelationQueryTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleMultiSlotRelationRenderingBasic)
+        {
+            BattleMultiSlotRelationRenderingTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.CharacterDefaultCardDataContractBasic)
+        {
+            CharacterDefaultCardDataContractTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.CharacterPresentationBindingContractBasic)
+        {
+            CharacterPresentationBindingContractTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.FullBattleIntegrationRegressionBasic)
+        {
+            FullBattleIntegrationRegressionTests.Run();
             return;
         }
 
@@ -15394,7 +15513,7 @@ public class CardLoadTest : MonoBehaviour
         bool sameTierSpeed = VerifyFirstStrikeSameTierKeepsSpeedOrdering();
         bool pairing = VerifyFirstStrikeKeepsRespondedPairing();
         bool longRangeIndependent = VerifyLongRangeShootDoesNotImplyFirstStrike();
-        bool executingCardSource = VerifyFirstStrikeExecutingCardSourceRule();
+        bool participantCardSources = VerifyFirstStrikeParticipantCardSourceRule();
 
         Debug.Log("模式86 FirstStrike A JSON Trait读取与缺省兼容：" + jsonTrait);
         Debug.Log("模式86 FirstStrike B Normal排序回归：" + normalRegression);
@@ -15402,7 +15521,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("模式86 FirstStrike D 同Tier保持速度排序：" + sameTierSpeed);
         Debug.Log("模式86 FirstStrike E Responded Pairing引用保持不变：" + pairing);
         Debug.Log("模式86 FirstStrike F LongRangeShoot不自动先攻：" + longRangeIndependent);
-        Debug.Log("模式86 FirstStrike G executing card来源规则：" + executingCardSource);
+        Debug.Log("模式86 FirstStrike G 参与卡来源规则：" + participantCardSources);
         Debug.Log(
             "模式86 FirstStrike 聚合结果：" +
             (jsonTrait &&
@@ -15411,7 +15530,7 @@ public class CardLoadTest : MonoBehaviour
              sameTierSpeed &&
              pairing &&
              longRangeIndependent &&
-             executingCardSource)
+             participantCardSources)
         );
 
         Debug.Log("===== BattleFirstStrikeExecutionPlanBasic 聚合测试结束 =====");
@@ -15628,7 +15747,7 @@ public class CardLoadTest : MonoBehaviour
             plan.executionItems[0].priorityTier == BattleExecutionPriorityTier.Normal;
     }
 
-    bool VerifyFirstStrikeExecutingCardSourceRule()
+    bool VerifyFirstStrikeParticipantCardSourceRule()
     {
         BattleEndedTestContext context =
             CreateBattleEndedTestContext("firststrike86_g", 30, 30, 50, 10, 1, 1);
@@ -15667,7 +15786,7 @@ public class CardLoadTest : MonoBehaviour
         );
 
         return respondedPlan.executionItems.Count == 1 &&
-            respondedPlan.executionItems[0].priorityTier == BattleExecutionPriorityTier.Normal &&
+            respondedPlan.executionItems[0].priorityTier == BattleExecutionPriorityTier.FirstStrike &&
             object.ReferenceEquals(respondedPlan.executionItems[0].actionSlot, normalResponseSlot) &&
             unrespondedPlan.executionItems.Count == 1 &&
             unrespondedPlan.executionItems[0].priorityTier == BattleExecutionPriorityTier.FirstStrike &&

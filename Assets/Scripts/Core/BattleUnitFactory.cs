@@ -58,7 +58,12 @@ public static class BattleUnitFactory
         List<CardTestData> resolvedCards;
         string errorMessage;
 
-        if (!ResolveCardReferences(definition.characterID, definition.startingCardIDs, cards, out resolvedCards, out errorMessage))
+        if (!CharacterDefaultCardValidator.TryResolve(
+                definition.characterID,
+                definition.startingCardIDs,
+                cards,
+                out resolvedCards,
+                out errorMessage))
         {
             return BattleUnitFactoryResult.Failure(errorMessage);
         }
@@ -106,7 +111,12 @@ public static class BattleUnitFactory
         List<CardTestData> resolvedCards;
         string errorMessage;
 
-        if (!ResolveCardReferences(definition.enemyID, definition.cardIDs, cards, out resolvedCards, out errorMessage))
+        if (!CharacterDefaultCardValidator.TryResolve(
+                definition.enemyID,
+                definition.cardIDs,
+                cards,
+                out resolvedCards,
+                out errorMessage))
         {
             return BattleUnitFactoryResult.Failure(errorMessage);
         }
@@ -128,51 +138,6 @@ public static class BattleUnitFactory
         ApplyInitialBuffs(unit, definition.initialBuffs);
 
         return BattleUnitFactoryResult.Success(unit);
-    }
-
-    static bool ResolveCardReferences(
-        string ownerID,
-        string[] cardIDs,
-        List<CardTestData> cards,
-        out List<CardTestData> resolvedCards,
-        out string errorMessage
-    )
-    {
-        resolvedCards = new List<CardTestData>();
-        errorMessage = "";
-
-        if (cards == null)
-        {
-            errorMessage = ownerID + " 创建失败：卡牌列表为空";
-            return false;
-        }
-
-        if (cardIDs == null || cardIDs.Length == 0)
-        {
-            errorMessage = ownerID + " 创建失败：卡牌ID列表为空";
-            return false;
-        }
-
-        foreach (string cardID in cardIDs)
-        {
-            if (string.IsNullOrEmpty(cardID))
-            {
-                errorMessage = ownerID + " 创建失败：存在空 cardID";
-                return false;
-            }
-
-            CardTestData card = CardDataLoader.FindCardByID(cards, cardID);
-
-            if (card == null)
-            {
-                errorMessage = ownerID + " 创建失败：找不到卡牌 " + cardID;
-                return false;
-            }
-
-            resolvedCards.Add(card);
-        }
-
-        return true;
     }
 
     static bool ValidateInitialBuffReferences(

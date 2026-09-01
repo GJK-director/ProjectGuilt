@@ -48,7 +48,8 @@ public enum BattleExecutionItemOutcomeReason
     UnsupportedExecutionType,
     UnsupportedResolveType,
     ResolverFailure,
-    TieLimitReached
+    TieLimitReached,
+    NoInteraction
 }
 
 // 响应尝试由Execution层判定，Presenter只能读取该结果，不能重新查询资源。
@@ -80,6 +81,10 @@ public class BattleExecutionItem
     // executionType = 执行项类型
     // 使用 BattleExecutionItemType 枚举，决定这一项属于哪种处理类型。
     public BattleExecutionItemType executionType;
+
+    // interactionType = 计划阶段已知配对的统一 Interaction 分类。
+    // 执行阶段若被动守备或连续闪避改变实际双方 Action，后续会在执行边界重新分类。
+    public BattleInteractionType interactionType;
 
     // enemyIntent = 敌人意图
     // BattleEnemyIntent = 战斗敌人意图，记录敌人要攻击谁、攻击哪个槽位、实际目标是谁。
@@ -142,6 +147,7 @@ public class BattleExecutionItem
         actorPositionOrder = int.MaxValue;
         stableOrder = order;
         this.executionType = executionType;
+        interactionType = BattleInteractionType.NoInteraction;
         this.enemyIntent = enemyIntent;
         this.actionSlot = actionSlot;
         this.passiveGuardCandidates = passiveGuardCandidates != null
