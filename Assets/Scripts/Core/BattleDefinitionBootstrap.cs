@@ -271,6 +271,25 @@ public static class BattleDefinitionBootstrap
         int currentTurn
     )
     {
+        return CreateIntentQueueForTurn(
+            runtimeState,
+            encounterDefinition,
+            enemyDefinition,
+            allyByID,
+            currentTurn,
+            runtimeState != null ? runtimeState.actionSlots : null
+        );
+    }
+
+    public static BattleDefinitionIntentQueueResult CreateIntentQueueForTurn(
+        BattleRuntimeState runtimeState,
+        EncounterDefinitionData encounterDefinition,
+        EnemyDefinitionData enemyDefinition,
+        Dictionary<string, CharacterData> allyByID,
+        int currentTurn,
+        List<BattleActionSlot> targetActionSlots
+    )
+    {
         BattleDefinitionIntentQueueResult result = new BattleDefinitionIntentQueueResult();
         result.isSuccess = true;
         result.errorMessage = "";
@@ -299,6 +318,13 @@ public static class BattleDefinitionBootstrap
         {
             result.intentQueue = BattleEnemyIntentManager.CreateIntentQueue();
             return result;
+        }
+
+        if (targetActionSlots == null)
+        {
+            return BattleDefinitionIntentQueueResult.Failure(
+                "创建敌人意图失败：targetActionSlots 为空"
+            );
         }
 
         string errorMessage;
@@ -352,9 +378,9 @@ public static class BattleDefinitionBootstrap
                 int targetSlotIndex;
 
                 if (!TryResolveTarget(
-                    runtimeState,
                     encounterDefinition,
                     allyByID,
+                    targetActionSlots,
                     intentDefinition,
                     out targetCharacter,
                     out targetSlotIndex,
@@ -511,9 +537,9 @@ public static class BattleDefinitionBootstrap
     }
 
     static bool TryResolveTarget(
-        BattleRuntimeState runtimeState,
         EncounterDefinitionData encounterDefinition,
         Dictionary<string, CharacterData> allyByID,
+        List<BattleActionSlot> targetActionSlots,
         EnemyIntentDefinitionData intentDefinition,
         out CharacterData targetCharacter,
         out int targetSlotIndex,
@@ -532,7 +558,7 @@ public static class BattleDefinitionBootstrap
             // 意图创建后目标死亡，执行阶段仍按ActualTargetDead跳过，不临时转火。
             if (fixedTarget != null &&
                 !fixedTarget.IsDead() &&
-                HasActionSlot(runtimeState.actionSlots, fixedTarget, intentDefinition.targetSlotIndex))
+                HasActionSlot(targetActionSlots, fixedTarget, intentDefinition.targetSlotIndex))
             {
                 targetCharacter = fixedTarget;
                 return true;
@@ -540,7 +566,12 @@ public static class BattleDefinitionBootstrap
 
             CharacterData fallbackTarget;
 
-            if (TryFindFirstLivingTarget(runtimeState, encounterDefinition, allyByID, intentDefinition.targetSlotIndex, out fallbackTarget))
+            if (TryFindFirstLivingTarget(
+                    encounterDefinition,
+                    allyByID,
+                    targetActionSlots,
+                    intentDefinition.targetSlotIndex,
+                    out fallbackTarget))
             {
                 targetCharacter = fallbackTarget;
                 return true;
@@ -554,7 +585,12 @@ public static class BattleDefinitionBootstrap
         {
             CharacterData firstLivingTarget;
 
-            if (TryFindFirstLivingTarget(runtimeState, encounterDefinition, allyByID, intentDefinition.targetSlotIndex, out firstLivingTarget))
+            if (TryFindFirstLivingTarget(
+                    encounterDefinition,
+                    allyByID,
+                    targetActionSlots,
+                    intentDefinition.targetSlotIndex,
+                    out firstLivingTarget))
             {
                 targetCharacter = firstLivingTarget;
                 return true;
@@ -569,9 +605,9 @@ public static class BattleDefinitionBootstrap
     }
 
     static bool TryFindFirstLivingTarget(
-        BattleRuntimeState runtimeState,
         EncounterDefinitionData encounterDefinition,
         Dictionary<string, CharacterData> allyByID,
+        List<BattleActionSlot> targetActionSlots,
         int targetSlotIndex,
         out CharacterData targetCharacter
     )
@@ -592,7 +628,7 @@ public static class BattleDefinitionBootstrap
                 continue;
             }
 
-            if (!HasActionSlot(runtimeState.actionSlots, ally, targetSlotIndex))
+            if (!HasActionSlot(targetActionSlots, ally, targetSlotIndex))
             {
                 continue;
             }

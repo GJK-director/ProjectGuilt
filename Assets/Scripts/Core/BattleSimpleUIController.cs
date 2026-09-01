@@ -7,6 +7,13 @@ using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
+internal delegate bool BattleNextTurnIntentQueueProvider(
+    int nextTurnNumber,
+    List<BattleActionSlot> targetActionSlots,
+    out List<BattleEnemyIntent> intentQueue,
+    out string failureMessage
+);
+
 public class BattleSimpleUIController : MonoBehaviour
 {
     internal const string ClashSinTestCardID = "sin_attack_test_001";
@@ -80,6 +87,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private BattleRuntimeState runtimeState;
     private BattleLifecycleController lifecycleController;
+    private BattleNextTurnIntentQueueProvider nextTurnIntentQueueProvider;
 
     private CharacterData ally01;
     private CharacterData ally02;
@@ -328,13 +336,30 @@ public class BattleSimpleUIController : MonoBehaviour
         BattleRuntimeState initializedRuntimeState
     )
     {
-        return InitializeFromRuntimeState(initializedRuntimeState, false);
+        return InitializeFromRuntimeState(
+            initializedRuntimeState,
+            false,
+            null
+        );
     }
 
     // 预安排槽位只允许由已完成自身校验的正式测试Harness显式放行。
     internal bool InitializeFromRuntimeState(
         BattleRuntimeState initializedRuntimeState,
         bool allowPreparedActionSlots
+    )
+    {
+        return InitializeFromRuntimeState(
+            initializedRuntimeState,
+            allowPreparedActionSlots,
+            null
+        );
+    }
+
+    internal bool InitializeFromRuntimeState(
+        BattleRuntimeState initializedRuntimeState,
+        bool allowPreparedActionSlots,
+        BattleNextTurnIntentQueueProvider intentQueueProvider
     )
     {
         if (!TryBeginInitialization("正式RuntimeState"))
@@ -360,7 +385,11 @@ public class BattleSimpleUIController : MonoBehaviour
                 return false;
             }
 
-            BindRuntimeReferences(initializedRuntimeState, cardReferences);
+            BindRuntimeReferences(
+                initializedRuntimeState,
+                cardReferences,
+                intentQueueProvider
+            );
 
             if (!CompletePresentationInitialization())
             {
@@ -393,6 +422,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
         try
         {
+            nextTurnIntentQueueProvider = null;
             if (!InitializeTestBattleData())
             {
                 ShowInitializationFailure(lastLog);
@@ -1007,11 +1037,13 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void BindRuntimeReferences(
         BattleRuntimeState initializedRuntimeState,
-        LegacyCardReferenceSet references
+        LegacyCardReferenceSet references,
+        BattleNextTurnIntentQueueProvider intentQueueProvider
     )
     {
         runtimeState = initializedRuntimeState;
         lifecycleController = CreateLifecycleController(runtimeState);
+        nextTurnIntentQueueProvider = intentQueueProvider;
         terminalInteractionStateCleared = false;
         ally01 = runtimeState.allyA;
         ally02 = runtimeState.allyB;
@@ -1038,6 +1070,7 @@ public class BattleSimpleUIController : MonoBehaviour
     {
         runtimeState = null;
         lifecycleController = null;
+        nextTurnIntentQueueProvider = null;
         terminalInteractionStateCleared = false;
         ally01 = null;
         ally02 = null;
@@ -1374,8 +1407,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
     List<BattleEnemyIntent> CreateFixedEnemyIntentQueue(List<BattleActionSlot> actionSlots)
     {
-        // 正式初始化迁移第一轮：初始RuntimeState已由Definition创建；
-        // 自动完整回合与后续回合意图仍暂用固定兼容逻辑，下一轮再迁移。
+        // 仅供Debug/Legacy初始化使用；正式NextTurn由Definition Provider生成。
         return BattleAutomaticTurnCycle.CreateFixedEnemyIntentQueue(
             enemy01,
             enemyAttackCardState,
@@ -2330,7 +2362,9 @@ public class BattleSimpleUIController : MonoBehaviour
                 enemy01,
                 enemyAttackCardState,
                 enemy02,
-                enemy02AttackCardState
+                enemy02AttackCardState,
+                null,
+                nextTurnIntentQueueProvider
             );
 
             lastLog = result.message;
@@ -2519,7 +2553,8 @@ public class BattleSimpleUIController : MonoBehaviour
                 enemy01,
                 enemyAttackCardState,
                 enemy02,
-                enemy02AttackCardState
+                enemy02AttackCardState,
+                nextTurnIntentQueueProvider
             );
         BeginNewTurnPresentation(result);
     }
@@ -2845,11 +2880,31 @@ public class BattleSimpleUIController : MonoBehaviour
 
         List<BattleActionSlot> newActionSlots = BattleActionSlotManager.CreateLivingPartyActionSlots(ally01, ally02, 2);
 
-        List<BattleEnemyIntent> newIntentQueue = newActionSlots != null &&
-            newActionSlots.Count > 0
-            ? CreateFixedEnemyIntentQueue(newActionSlots)
-            : new List<BattleEnemyIntent>();
-        string failureMessage = "生命周期控制器为空";
+        List<BattleEnemyIntent> newIntentQueue;
+        string failureMessage;
+        if (newActionSlots == null || newActionSlots.Count == 0)
+        {
+            newIntentQueue = new List<BattleEnemyIntent>();
+        }
+        else if (!BattleAutomaticTurnCycle.TryCreateNextTurnIntentQueue(
+                nextTurnIntentQueueProvider,
+                runtimeState,
+                enemy01,
+                enemyAttackCardState,
+                enemy02,
+                enemy02AttackCardState,
+                ally01,
+                ally02,
+                newActionSlots,
+                out newIntentQueue,
+                out failureMessage))
+        {
+            lastLog = failureMessage;
+            Debug.LogError(lastLog, this);
+            RefreshView();
+            return;
+        }
+        failureMessage = "生命周期控制器为空";
         if (lifecycleController != null &&
             lifecycleController.TryPrepareNextTurn(
                 newActionSlots,
@@ -4207,6 +4262,31 @@ public static class BattleAutomaticTurnCycle
         IBattleExecutionPresenter executionPresenter
     )
     {
+        return TryRun(
+            runtimeState,
+            ally01,
+            ally02,
+            enemy01,
+            enemyAttackCardState,
+            enemy02,
+            enemy02AttackCardState,
+            executionPresenter,
+            null
+        );
+    }
+
+    internal static BattleAutomaticTurnCycleResult TryRun(
+        BattleRuntimeState runtimeState,
+        CharacterData ally01,
+        CharacterData ally02,
+        CharacterData enemy01,
+        BattleCardState enemyAttackCardState,
+        CharacterData enemy02,
+        BattleCardState enemy02AttackCardState,
+        IBattleExecutionPresenter executionPresenter,
+        BattleNextTurnIntentQueueProvider nextTurnIntentQueueProvider
+    )
+    {
         BattleAutomaticTurnCycleResult result = new BattleAutomaticTurnCycleResult
         {
             startingTurn = runtimeState != null ? runtimeState.currentTurn : 0,
@@ -4265,7 +4345,8 @@ public static class BattleAutomaticTurnCycle
             enemy01,
             enemyAttackCardState,
             enemy02,
-            enemy02AttackCardState
+            enemy02AttackCardState,
+            nextTurnIntentQueueProvider
         );
     }
 
@@ -4280,7 +4361,8 @@ public static class BattleAutomaticTurnCycle
             CharacterData enemy01,
             BattleCardState enemyAttackCardState,
             CharacterData enemy02,
-            BattleCardState enemy02AttackCardState
+            BattleCardState enemy02AttackCardState,
+            BattleNextTurnIntentQueueProvider nextTurnIntentQueueProvider = null
         )
     {
         if (result == null)
@@ -4348,15 +4430,25 @@ public static class BattleAutomaticTurnCycle
             return result;
         }
 
-        List<BattleEnemyIntent> newIntentQueue = CreateFixedEnemyIntentQueue(
-            enemy01,
-            enemyAttackCardState,
-            enemy02,
-            enemy02AttackCardState,
-            ally01,
-            ally02,
-            newActionSlots
-        );
+        List<BattleEnemyIntent> newIntentQueue;
+        if (!TryCreateNextTurnIntentQueue(
+                nextTurnIntentQueueProvider,
+                runtimeState,
+                enemy01,
+                enemyAttackCardState,
+                enemy02,
+                enemy02AttackCardState,
+                ally01,
+                ally02,
+                newActionSlots,
+                out newIntentQueue,
+                out failureMessage))
+        {
+            result.message = failureMessage;
+            result.battleEnded = runtimeState.IsBattleEnded;
+            result.endingTurn = runtimeState.currentTurn;
+            return result;
+        }
 
         if (!lifecycleController.TryPrepareNextTurn(
                 newActionSlots,
@@ -4382,6 +4474,64 @@ public static class BattleAutomaticTurnCycle
             : "下一回合准备失败";
 
         return result;
+    }
+
+    internal static bool TryCreateNextTurnIntentQueue(
+        BattleNextTurnIntentQueueProvider intentQueueProvider,
+        BattleRuntimeState runtimeState,
+        CharacterData enemy01,
+        BattleCardState enemyAttackCardState,
+        CharacterData enemy02,
+        BattleCardState enemy02AttackCardState,
+        CharacterData ally01,
+        CharacterData ally02,
+        List<BattleActionSlot> newActionSlots,
+        out List<BattleEnemyIntent> newIntentQueue,
+        out string failureMessage
+    )
+    {
+        newIntentQueue = null;
+        failureMessage = string.Empty;
+        if (runtimeState == null)
+        {
+            failureMessage = "下一回合意图创建失败：RuntimeState为空";
+            return false;
+        }
+
+        if (intentQueueProvider != null)
+        {
+            if (!intentQueueProvider(
+                    runtimeState.currentTurn + 1,
+                    newActionSlots,
+                    out newIntentQueue,
+                    out failureMessage))
+            {
+                if (string.IsNullOrEmpty(failureMessage))
+                {
+                    failureMessage = "下一回合正式意图创建失败：Provider拒绝请求";
+                }
+                return false;
+            }
+
+            if (newIntentQueue == null)
+            {
+                failureMessage = "下一回合正式意图创建失败：Provider返回空队列";
+                return false;
+            }
+            return true;
+        }
+
+        // 未注入正式Definition Context时，仅保留旧Debug/Legacy固定意图行为。
+        newIntentQueue = CreateFixedEnemyIntentQueue(
+            enemy01,
+            enemyAttackCardState,
+            enemy02,
+            enemy02AttackCardState,
+            ally01,
+            ally02,
+            newActionSlots
+        );
+        return true;
     }
 
     internal static bool TryExecuteCurrentPlan(

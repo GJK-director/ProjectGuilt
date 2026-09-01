@@ -42,7 +42,7 @@ public static class FullBattleIntegrationRegressionTests
             "Production Character Definition可建立正式Runtime Ally",
             "Production Enemy Definition可建立正式Runtime Enemy",
             "Production Card ownership与Definition引用一致",
-            "Enemy multi-slot Intent保持Slot1 Attack/Slot2 Defense",
+            "Enemy Turn1/Turn2均保持Slot1 Attack/Slot2 Defense",
             "Production Melee/Melee归类AttackVsAttack",
             "AttackVsDefense两个方向归一为同一Interaction",
             "AttackVsDodge两个方向归一为同一Interaction",
@@ -129,8 +129,141 @@ public static class FullBattleIntegrationRegressionTests
 
         BattleEnemyIntent first = fixture.runtime.intentQueue[0];
         BattleEnemyIntent second = fixture.runtime.intentQueue[1];
-        return IsIntent(first, 1, CardType.Attack, "enemy_atk_001") &&
-            IsIntent(second, 2, CardType.Defense, "def_001");
+        bool turnOneCorrect =
+            IsIntent(first, 1, CardType.Attack, "enemy_atk_001") &&
+            IsIntent(second, 2, CardType.Defense, "def_001") &&
+            fixture.bootstrap.encounterDefinition.repeatIntentPattern;
+        if (!turnOneCorrect)
+        {
+            return false;
+        }
+
+        ProductionFixture nextTurnFixture = CreateProductionFixture();
+        if (!nextTurnFixture.IsValid)
+        {
+            return false;
+        }
+
+        BattleRuntimeState runtime = nextTurnFixture.runtime;
+        BattleExecutionPlan completedPlan = new BattleExecutionPlan
+        {
+            isCompleted = true
+        };
+        runtime.SetExecutionPlan(completedPlan);
+        string transitionFailure;
+        if (!runtime.TryTransitionTo(
+                BattleLifecyclePhase.Executing,
+                out transitionFailure) ||
+            !runtime.TryTransitionTo(
+                BattleLifecyclePhase.TurnResolved,
+                out transitionFailure))
+        {
+            return false;
+        }
+
+        int providerCallCount = 0;
+        int requestedTurn = 0;
+        bool oldSlotsWereCleared = false;
+        bool receivedNewSlots = false;
+        BattleNextTurnIntentQueueProvider provider = delegate(
+            int nextTurnNumber,
+            List<BattleActionSlot> targetActionSlots,
+            out List<BattleEnemyIntent> intentQueue,
+            out string failureMessage)
+        {
+            providerCallCount++;
+            requestedTurn = nextTurnNumber;
+            oldSlotsWereCleared = runtime.actionSlots != null &&
+                runtime.actionSlots.Count == 0;
+            receivedNewSlots = targetActionSlots != null &&
+                targetActionSlots.Count > 0;
+
+            BattleDefinitionIntentQueueResult intentResult =
+                BattleDefinitionBootstrap.CreateIntentQueueForTurn(
+                    runtime,
+                    nextTurnFixture.bootstrap.encounterDefinition,
+                    nextTurnFixture.enemyDefinition,
+                    nextTurnFixture.bootstrap.allyByID,
+                    nextTurnNumber,
+                    targetActionSlots
+                );
+            if (intentResult == null || !intentResult.isSuccess ||
+                intentResult.intentQueue == null)
+            {
+                intentQueue = null;
+                failureMessage = intentResult != null
+                    ? intentResult.errorMessage
+                    : "Mode103 NextTurn Definition Builder未返回结果";
+                return false;
+            }
+
+            intentQueue = intentResult.intentQueue;
+            failureMessage = string.Empty;
+            return true;
+        };
+
+        BattleLifecycleController lifecycle =
+            new BattleLifecycleController(runtime);
+        BattleAutomaticTurnCycleResult cycleResult =
+            BattleAutomaticTurnCycle.CompleteTurnCycleAfterExecution(
+                new BattleAutomaticTurnCycleResult
+                {
+                    startingTurn = runtime.currentTurn,
+                    executedPlan = completedPlan
+                },
+                lifecycle,
+                runtime,
+                completedPlan,
+                runtime.allyA,
+                runtime.allyB,
+                runtime.enemy,
+                FindCard(runtime.enemy, "enemy_atk_001"),
+                runtime.enemy2,
+                null,
+                provider
+            );
+
+        BattleNextTurnIntentQueueProvider rejectedProvider = delegate(
+            int nextTurnNumber,
+            List<BattleActionSlot> targetActionSlots,
+            out List<BattleEnemyIntent> intentQueue,
+            out string failureMessage)
+        {
+            intentQueue = null;
+            failureMessage = "Mode103 Provider Failure";
+            return false;
+        };
+        bool providerFailureDidNotFallback =
+            !BattleAutomaticTurnCycle.TryCreateNextTurnIntentQueue(
+                rejectedProvider,
+                runtime,
+                runtime.enemy,
+                FindCard(runtime.enemy, "enemy_atk_001"),
+                runtime.enemy2,
+                null,
+                runtime.allyA,
+                runtime.allyB,
+                runtime.actionSlots,
+                out List<BattleEnemyIntent> rejectedQueue,
+                out string rejectedFailure
+            ) && rejectedQueue == null &&
+            rejectedFailure == "Mode103 Provider Failure";
+
+        return cycleResult != null && cycleResult.isSuccess &&
+            cycleResult.advancedToNextTurn && providerCallCount == 1 &&
+            requestedTurn == 2 && oldSlotsWereCleared && receivedNewSlots &&
+            providerFailureDidNotFallback &&
+            runtime.currentTurn == 2 && runtime.intentQueue.Count == 2 &&
+            IsIntent(
+                runtime.intentQueue[0],
+                1,
+                CardType.Attack,
+                "enemy_atk_001") &&
+            IsIntent(
+                runtime.intentQueue[1],
+                2,
+                CardType.Defense,
+                "def_001");
     }
 
     private static bool VerifyAttackVsAttack(ProductionFixture fixture)

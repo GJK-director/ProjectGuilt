@@ -116,7 +116,8 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
         activeBootstrapResult = bootstrapResult;
         if (!battleUIController.InitializeFromRuntimeState(
                 bootstrapResult.runtimeState,
-                allowPreparedActionSlots))
+                allowPreparedActionSlots,
+                TryCreateNextTurnIntentQueue))
         {
             Debug.LogError(
                 "BattleScene正式初始化失败：Controller拒绝RuntimeState，" +
@@ -135,6 +136,50 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
             "，runtimeUnitIDs=[" + GetRuntimeUnitIDList(runtimeState) + "]",
             this
         );
+        return true;
+    }
+
+    private bool TryCreateNextTurnIntentQueue(
+        int nextTurnNumber,
+        System.Collections.Generic.List<BattleActionSlot> targetActionSlots,
+        out System.Collections.Generic.List<BattleEnemyIntent> intentQueue,
+        out string failureMessage
+    )
+    {
+        intentQueue = null;
+        failureMessage = string.Empty;
+
+        BattleDefinitionBootstrapResult context = activeBootstrapResult;
+        if (context == null || !context.isSuccess ||
+            context.runtimeState == null ||
+            context.encounterDefinition == null ||
+            context.enemyDefinition == null ||
+            context.allyByID == null)
+        {
+            failureMessage =
+                "下一回合正式意图创建失败：BattleScene Bootstrap Context不完整";
+            return false;
+        }
+
+        BattleDefinitionIntentQueueResult result =
+            BattleDefinitionBootstrap.CreateIntentQueueForTurn(
+                context.runtimeState,
+                context.encounterDefinition,
+                context.enemyDefinition,
+                context.allyByID,
+                nextTurnNumber,
+                targetActionSlots
+            );
+        if (result == null || !result.isSuccess || result.intentQueue == null)
+        {
+            failureMessage = result != null &&
+                !string.IsNullOrEmpty(result.errorMessage)
+                ? result.errorMessage
+                : "下一回合正式意图创建失败：Definition Builder未返回有效队列";
+            return false;
+        }
+
+        intentQueue = result.intentQueue;
         return true;
     }
 
