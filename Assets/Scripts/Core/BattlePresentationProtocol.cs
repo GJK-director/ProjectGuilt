@@ -8,7 +8,9 @@ public enum BattlePresentationCue
     // Combat 结果的正式视觉落点，例如 Hit、Block 或 Miss。
     Impact,
     // 当前 Engagement 表现收尾，并允许 Runner 推进下一 ExecutionItem。
-    ActionComplete
+    ActionComplete,
+    // 全部ExecutionItem完成后的正式表现闭合。
+    ExecutionComplete
 }
 
 public sealed class BattlePresentationRequest

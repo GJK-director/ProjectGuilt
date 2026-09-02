@@ -1,4 +1,5 @@
-// 脚本中文说明：验证Ready、Movement与逐ActorContinuation三份契约互不替代。
+// 脚本中文说明：验证Ready、Movement、Pose Handoff与逐Actor Continuation契约互不替代。
+using System.Collections.Generic;
 using UnityEngine;
 
 public static class BattleReadyMovementContinuationTests
@@ -25,25 +26,29 @@ public static class BattleReadyMovementContinuationTests
                 false,
                 CardType.Defense,
                 false,
-                BattlePresentationReadyPoseKind.Sprint
+                BattlePresentationReadyPoseKind.Sprint,
+                BattlePresentationReadyPoseKind.Idle
             ),
             VerifyDirectionalReady(
                 true,
                 CardType.Defense,
                 false,
-                BattlePresentationReadyPoseKind.Sprint
+                BattlePresentationReadyPoseKind.Sprint,
+                BattlePresentationReadyPoseKind.Idle
             ),
             VerifyDirectionalReady(
                 false,
                 CardType.Dodge,
                 false,
-                BattlePresentationReadyPoseKind.Sprint
+                BattlePresentationReadyPoseKind.Sprint,
+                BattlePresentationReadyPoseKind.Idle
             ),
             VerifyDirectionalReady(
                 true,
                 CardType.Dodge,
                 false,
-                BattlePresentationReadyPoseKind.Sprint
+                BattlePresentationReadyPoseKind.Sprint,
+                BattlePresentationReadyPoseKind.Idle
             ),
             VerifyNewDodgeEngagementDoesNotPreapplyDodge(),
             VerifyPreserveDodgeActor(),
@@ -69,7 +74,12 @@ public static class BattleReadyMovementContinuationTests
                 BattlePresentationReadyPoseKind.Aim, false),
             VerifyNoApproachStillHasReadyHandler(),
             VerifyPreserveDoesNotAffectAttackActor(),
-            VerifyNextEngagementDoesNotPreapplyDodgePose()
+            VerifyNextEngagementDoesNotPreapplyDodgePose(),
+            VerifyPreviousOnlyActionParticipants(),
+            VerifySharedCurrentActorIsNotPreviousOnly(),
+            VerifyCurrentDefenseUsesIdleDirective(),
+            VerifyContinuousDodgeRemainsCurrentParticipant(),
+            VerifyExecutionClosureClearsParticipantTracking()
         };
         string[] names =
         {
@@ -77,11 +87,11 @@ public static class BattleReadyMovementContinuationTests
             "Melee AttackVsAttack 无Approach仍Ready",
             "LongRange Aim + Melee Sprint",
             "CloseRange + Melee 双Sprint",
-            "Enemy Attack Ready + Player Defense不提前Guard",
-            "Player Attack Ready + Enemy Defense不提前Guard",
-            "Enemy Attack Ready + Player Dodge不提前Dodge",
-            "Player Attack Ready + Enemy Dodge不提前Dodge",
-            "普通Dodge新Engagement不提前应用Dodge",
+            "Enemy Attack Sprint + Player Defense Idle",
+            "Player Attack Sprint + Enemy Defense Idle",
+            "Enemy Attack Sprint + Player Dodge Idle",
+            "Player Attack Sprint + Enemy Dodge Idle",
+            "普通Dodge新Engagement应用Idle",
             "Continuous Dodge只保留Dodger",
             "Continuous Dodge新Melee Attacker Sprint",
             "Continuous Dodge新LongRange Attacker Aim",
@@ -90,9 +100,14 @@ public static class BattleReadyMovementContinuationTests
             "Enemy Melee Unilateral",
             "CloseRange Unilateral Sprint",
             "LongRange Unilateral Aim",
-            "RequiresApproach=false仍遵守逐Actor Ready",
+            "RequiresApproach=false仍遵守Defense Idle Ready",
             "PreserveDodge不影响Attack Actor",
-            "新普通Engagement不提前覆盖为Dodge Pose"
+            "新普通Engagement使用Dodge Idle",
+            "前一Action A/B相对当前C/D为PreviousOnly",
+            "当前共享Actor不被PreviousOnly Idle覆盖",
+            "前一Slash Actor作为当前Defense接收Idle",
+            "Continuous Dodge当前Dodger不被PreviousOnly覆盖",
+            "ExecutionComplete清空Participant Tracking"
         };
 
         bool allPassed = true;
@@ -157,7 +172,8 @@ public static class BattleReadyMovementContinuationTests
         bool attackOnSideA,
         string responseType,
         bool preserveDodge,
-        BattlePresentationReadyPoseKind expectedAttack
+        BattlePresentationReadyPoseKind expectedAttack,
+        BattlePresentationReadyPoseKind expectedResponse
     )
     {
         BattlePresentationRoute route = CreateDirectionalRoute(
@@ -176,7 +192,11 @@ public static class BattleReadyMovementContinuationTests
                 expectedAttack) &&
             (preserveDodge
                 ? IsPreservedDodge(ready.Secondary, responseAction)
-                : IsNoPoseChange(ready.Secondary, responseAction));
+                : IsReady(
+                    ready.Secondary,
+                    responseAction,
+                    expectedResponse
+                ));
     }
 
     static bool VerifyNewDodgeEngagementDoesNotPreapplyDodge()
@@ -185,7 +205,8 @@ public static class BattleReadyMovementContinuationTests
             true,
             CardType.Dodge,
             false,
-            BattlePresentationReadyPoseKind.Sprint
+            BattlePresentationReadyPoseKind.Sprint,
+            BattlePresentationReadyPoseKind.Idle
         );
     }
 
@@ -270,9 +291,10 @@ public static class BattleReadyMovementContinuationTests
         return !phase.RequiresApproach && phase.RequiresReadyPose &&
             ready.ReadyDirectiveCount == 2 &&
             ready.Primary.ShouldApplyReady &&
-            IsNoPoseChange(
+            IsReady(
                 ready.Secondary,
-                route.InteractionContext.DefenseAction
+                route.InteractionContext.DefenseAction,
+                BattlePresentationReadyPoseKind.Idle
             );
     }
 
@@ -313,10 +335,159 @@ public static class BattleReadyMovementContinuationTests
             BattlePresentationReadyPolicy.Create(nextEngagement);
         return previous.Secondary.PreserveCurrentPose &&
             next.Primary.ShouldApplyReady &&
-            IsNoPoseChange(
+            IsReady(
                 next.Secondary,
-                nextEngagement.InteractionContext.DodgeAction
+                nextEngagement.InteractionContext.DodgeAction,
+                BattlePresentationReadyPoseKind.Idle
             );
+    }
+
+    static bool VerifyPreviousOnlyActionParticipants()
+    {
+        BattlePresentationRoute previous = CreateRoute(
+            CardType.Attack,
+            AttackDeliveryMode.Melee,
+            CardType.Attack,
+            AttackDeliveryMode.Melee,
+            false
+        );
+        BattlePresentationRoute current = CreateRoute(
+            CardType.Attack,
+            AttackDeliveryMode.Melee,
+            CardType.Attack,
+            AttackDeliveryMode.Melee,
+            false
+        );
+        var previousParticipants = new List<CharacterData>();
+        var currentParticipants = new List<CharacterData>();
+        var previousOnlyParticipants = new List<CharacterData>();
+        BattleSceneExecutionPresenter.CollectActionParticipants(
+            previous.InteractionContext,
+            previousParticipants
+        );
+        BattleSceneExecutionPresenter.CollectActionParticipants(
+            current.InteractionContext,
+            currentParticipants
+        );
+        BattleSceneExecutionPresenter.CollectPreviousOnlyParticipants(
+            previousParticipants,
+            currentParticipants,
+            previousOnlyParticipants
+        );
+        return previousParticipants.Count == 2 &&
+            currentParticipants.Count == 2 &&
+            previousOnlyParticipants.Count == 2 &&
+            ReferenceEquals(previousOnlyParticipants[0], previousParticipants[0]) &&
+            ReferenceEquals(previousOnlyParticipants[1], previousParticipants[1]);
+    }
+
+    static bool VerifySharedCurrentActorIsNotPreviousOnly()
+    {
+        CharacterData attacker = CreateActor("mode98_h_attacker");
+        CharacterData priorTarget = CreateActor("mode98_h_prior_target");
+        CharacterData currentTarget = CreateActor("mode98_h_current_target");
+        BattlePresentationInteractionContext previous = CreateInteraction(
+            CreateAction(attacker, priorTarget, CardType.Attack,
+                AttackDeliveryMode.Melee, "mode98_h_previous_attack"),
+            CreateAction(priorTarget, attacker, CardType.Defense,
+                null, "mode98_h_previous_defense"),
+            false
+        );
+        BattlePresentationInteractionContext current = CreateInteraction(
+            CreateAction(attacker, currentTarget, CardType.Attack,
+                AttackDeliveryMode.Melee, "mode98_h_current_attack"),
+            CreateAction(currentTarget, attacker, CardType.Dodge,
+                null, "mode98_h_current_dodge"),
+            false
+        );
+        var previousParticipants = new List<CharacterData>();
+        var currentParticipants = new List<CharacterData>();
+        var previousOnlyParticipants = new List<CharacterData>();
+        BattleSceneExecutionPresenter.CollectActionParticipants(
+            previous, previousParticipants);
+        BattleSceneExecutionPresenter.CollectActionParticipants(
+            current, currentParticipants);
+        BattleSceneExecutionPresenter.CollectPreviousOnlyParticipants(
+            previousParticipants, currentParticipants, previousOnlyParticipants);
+        return previousOnlyParticipants.Count == 1 &&
+            ReferenceEquals(previousOnlyParticipants[0], priorTarget) &&
+            !previousOnlyParticipants.Contains(attacker);
+    }
+
+    static bool VerifyCurrentDefenseUsesIdleDirective()
+    {
+        BattlePresentationRoute route = CreateDirectionalRoute(
+            true,
+            CardType.Defense,
+            AttackDeliveryMode.Melee,
+            false
+        );
+        BattlePresentationReadyContract ready =
+            BattlePresentationReadyPolicy.Create(route);
+        return IsReady(
+            ready.Secondary,
+            route.InteractionContext.DefenseAction,
+            BattlePresentationReadyPoseKind.Idle
+        );
+    }
+
+    static bool VerifyContinuousDodgeRemainsCurrentParticipant()
+    {
+        CharacterData attacker = CreateActor("mode98_j_attacker");
+        CharacterData dodger = CreateActor("mode98_j_dodger");
+        BattlePresentationInteractionContext previous = CreateInteraction(
+            CreateAction(attacker, dodger, CardType.Attack,
+                AttackDeliveryMode.Melee, "mode98_j_previous_attack"),
+            CreateAction(dodger, attacker, CardType.Dodge,
+                null, "mode98_j_previous_dodge"),
+            true
+        );
+        BattlePresentationInteractionContext current = CreateInteraction(
+            CreateAction(attacker, dodger, CardType.Attack,
+                AttackDeliveryMode.Melee, "mode98_j_current_attack"),
+            CreateAction(dodger, attacker, CardType.Dodge,
+                null, "mode98_j_current_dodge"),
+            true
+        );
+        BattlePresentationReadyContract ready = BattlePresentationReadyPolicy.Create(
+            CreateRouteFromInteraction(current)
+        );
+        var previousParticipants = new List<CharacterData>();
+        var currentParticipants = new List<CharacterData>();
+        var previousOnlyParticipants = new List<CharacterData>();
+        BattleSceneExecutionPresenter.CollectActionParticipants(
+            previous, previousParticipants);
+        BattleSceneExecutionPresenter.CollectActionParticipants(
+            current, currentParticipants);
+        BattleSceneExecutionPresenter.CollectPreviousOnlyParticipants(
+            previousParticipants, currentParticipants, previousOnlyParticipants);
+        return previousOnlyParticipants.Count == 0 &&
+            ready.Secondary.PreserveCurrentPose &&
+            ReferenceEquals(ready.Secondary.Action, current.DodgeAction);
+    }
+
+    static bool VerifyExecutionClosureClearsParticipantTracking()
+    {
+        var previousParticipants = new List<CharacterData>
+        {
+            CreateActor("mode98_l_previous")
+        };
+        var currentParticipants = new List<CharacterData>
+        {
+            CreateActor("mode98_l_current")
+        };
+        var previousOnlyParticipants = new List<CharacterData>
+        {
+            CreateActor("mode98_l_previous_only")
+        };
+        BattleSceneExecutionPresenter.ClearActionParticipantTracking(
+            previousParticipants,
+            currentParticipants,
+            previousOnlyParticipants
+        );
+        return previousParticipants.Count == 0 &&
+            currentParticipants.Count == 0 &&
+            previousOnlyParticipants.Count == 0;
     }
 
     static bool IsReady(
@@ -328,18 +499,6 @@ public static class BattleReadyMovementContinuationTests
         return directive != null && directive.ShouldApplyReady &&
             ReferenceEquals(directive.Action, expectedAction) &&
             directive.PoseKind == expectedPose;
-    }
-
-    static bool IsNoPoseChange(
-        BattlePresentationReadyDirective directive,
-        BattleExecutionAction expectedAction
-    )
-    {
-        return directive != null &&
-            ReferenceEquals(directive.Action, expectedAction) &&
-            directive.PoseKind == BattlePresentationReadyPoseKind.None &&
-            !directive.PreserveCurrentPose &&
-            !directive.ShouldApplyReady;
     }
 
     static bool IsPreservedDodge(
@@ -423,6 +582,46 @@ public static class BattleReadyMovementContinuationTests
             preserveDodge,
             out BattlePresentationInteractionContext interactionContext
         );
+        BattlePresentationRequest request = new BattlePresentationRequest(
+            98L,
+            BattlePresentationCue.ActionBegin,
+            null,
+            null,
+            null,
+            null,
+            string.Empty,
+            false,
+            interactionContext
+        );
+        BattlePresentationRouter.TryCreateRoute(request, out var route);
+        return route;
+    }
+
+    static CharacterData CreateActor(string characterID)
+    {
+        return new CharacterData(characterID, 30, 5, 5);
+    }
+
+    static BattlePresentationInteractionContext CreateInteraction(
+        BattleExecutionAction sideA,
+        BattleExecutionAction sideB,
+        bool preserveDodge
+    )
+    {
+        BattleExecutionInteractionContext executionContext =
+            new BattleExecutionInteractionContext(null, sideA, sideB);
+        BattlePresentationInteractionContextFactory.TryCreate(
+            executionContext,
+            preserveDodge,
+            out BattlePresentationInteractionContext interactionContext
+        );
+        return interactionContext;
+    }
+
+    static BattlePresentationRoute CreateRouteFromInteraction(
+        BattlePresentationInteractionContext interactionContext
+    )
+    {
         BattlePresentationRequest request = new BattlePresentationRequest(
             98L,
             BattlePresentationCue.ActionBegin,

@@ -2,6 +2,7 @@
 public enum BattlePresentationReadyPoseKind
 {
     None,
+    Idle,
     Sprint,
     Aim,
     Guard,
@@ -99,7 +100,7 @@ public static class BattlePresentationReadyPolicy
                 ),
                 new BattlePresentationReadyDirective(
                     context.DefenseAction,
-                    BattlePresentationReadyPoseKind.None
+                    BattlePresentationReadyPoseKind.Idle
                 )
             );
         }
@@ -118,7 +119,7 @@ public static class BattlePresentationReadyPolicy
                     context.DodgeAction,
                     preserveDodge
                         ? BattlePresentationReadyPoseKind.Dodge
-                        : BattlePresentationReadyPoseKind.None,
+                        : BattlePresentationReadyPoseKind.Idle,
                     preserveDodge
                 )
             );

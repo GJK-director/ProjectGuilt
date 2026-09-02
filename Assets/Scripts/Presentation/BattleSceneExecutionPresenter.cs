@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 // 正式战斗表现协议：按 Cue 解析运行时角色，并逐步接入异步战斗表现。
@@ -123,6 +124,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     private Coroutine activePresentationCoroutine;
     private long activePresentationRequestId;
     private bool battleActionCameraCarryPending;
+    private readonly List<CharacterData> previousActionParticipants =
+        new List<CharacterData>();
+    private readonly List<CharacterData> currentActionParticipants =
+        new List<CharacterData>();
+    private readonly List<CharacterData> previousOnlyActionParticipants =
+        new List<CharacterData>();
 
     void Awake()
     {
@@ -193,6 +200,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 break;
             case BattlePresentationCue.ActionComplete:
                 HandleActionComplete(request, completion, route);
+                break;
+            case BattlePresentationCue.ExecutionComplete:
+                HandleExecutionComplete(request, completion);
                 break;
             default:
                 CompleteRequest(request, completion);
@@ -296,6 +306,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             TryResolveUnavailableShootResponse(activeContext);
         LogRequest(request, activeContext);
         BattleActionRollPanelHost.ShowForActionBegin(request);
+        ApplyPreviousActionHandoff(activeContext.InteractionContext);
 
         if (unavailableShootResponse)
         {
@@ -489,6 +500,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         switch (directive.PoseKind)
         {
+            case BattlePresentationReadyPoseKind.Idle:
+                presentation.SetIdle();
+                break;
             case BattlePresentationReadyPoseKind.Sprint:
                 presentation.SetSprint();
                 break;
@@ -502,6 +516,191 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 presentation.SetDodge();
                 break;
         }
+    }
+
+    private void ApplyPreviousActionHandoff(
+        BattlePresentationInteractionContext currentInteraction
+    )
+    {
+        CollectActionParticipants(
+            currentInteraction,
+            currentActionParticipants
+        );
+        CollectPreviousOnlyParticipants(
+            previousActionParticipants,
+            currentActionParticipants,
+            previousOnlyActionParticipants
+        );
+
+        foreach (CharacterData actor in previousOnlyActionParticipants)
+        {
+            ResolvePresentation(
+                actor,
+                out _,
+                out BattleCharacterPresentationController presentation
+            );
+            presentation?.SetIdle();
+        }
+    }
+
+    private void CapturePreviousActionParticipants(
+        ActionPresentationContext context
+    )
+    {
+        CollectActionParticipants(
+            context != null ? context.InteractionContext : null,
+            previousActionParticipants
+        );
+    }
+
+    private void ResetPreviousActionParticipantsToStableIdle()
+    {
+        foreach (CharacterData actor in previousActionParticipants)
+        {
+            ResolvePresentation(
+                actor,
+                out _,
+                out BattleCharacterPresentationController presentation
+            );
+            presentation?.ResetToStableIdlePresentation();
+        }
+
+        ClearActionParticipantTracking(
+            previousActionParticipants,
+            currentActionParticipants,
+            previousOnlyActionParticipants
+        );
+    }
+
+    internal static void CollectActionParticipants(
+        BattlePresentationInteractionContext interaction,
+        List<CharacterData> participants
+    )
+    {
+        if (participants == null)
+        {
+            return;
+        }
+
+        participants.Clear();
+        if (interaction == null)
+        {
+            return;
+        }
+
+        if (interaction.InteractionType == BattleInteractionType.AttackVsAttack)
+        {
+            AddActionParticipant(participants, interaction.AttackActionA);
+            AddActionParticipant(participants, interaction.AttackActionB);
+            return;
+        }
+
+        if (interaction.InteractionType == BattleInteractionType.AttackVsDefense)
+        {
+            AddActionParticipant(participants, interaction.AttackAction);
+            AddActionParticipant(participants, interaction.DefenseAction);
+            return;
+        }
+
+        if (interaction.InteractionType == BattleInteractionType.AttackVsDodge)
+        {
+            AddActionParticipant(participants, interaction.AttackAction);
+            AddActionParticipant(participants, interaction.DodgeAction);
+            return;
+        }
+
+        if (interaction.InteractionType == BattleInteractionType.UnilateralAttack)
+        {
+            AddActionParticipant(participants, interaction.AttackAction);
+            AddParticipant(participants, interaction.Target);
+            return;
+        }
+
+        AddActionParticipant(participants, interaction.SideA);
+        AddActionParticipant(participants, interaction.SideB);
+    }
+
+    internal static void CollectPreviousOnlyParticipants(
+        List<CharacterData> previousParticipants,
+        List<CharacterData> currentParticipants,
+        List<CharacterData> previousOnlyParticipants
+    )
+    {
+        if (previousOnlyParticipants == null)
+        {
+            return;
+        }
+
+        previousOnlyParticipants.Clear();
+        if (previousParticipants == null)
+        {
+            return;
+        }
+
+        foreach (CharacterData actor in previousParticipants)
+        {
+            if (!ContainsParticipant(currentParticipants, actor))
+            {
+                AddParticipant(previousOnlyParticipants, actor);
+            }
+        }
+    }
+
+    internal static void ClearActionParticipantTracking(
+        List<CharacterData> previousParticipants,
+        List<CharacterData> currentParticipants,
+        List<CharacterData> previousOnlyParticipants
+    )
+    {
+        previousParticipants?.Clear();
+        currentParticipants?.Clear();
+        previousOnlyParticipants?.Clear();
+    }
+
+    private static void AddActionParticipant(
+        List<CharacterData> participants,
+        BattleExecutionAction action
+    )
+    {
+        if (action != null)
+        {
+            AddParticipant(participants, action.actor);
+        }
+    }
+
+    private static void AddParticipant(
+        List<CharacterData> participants,
+        CharacterData actor
+    )
+    {
+        if (participants == null || actor == null ||
+            ContainsParticipant(participants, actor))
+        {
+            return;
+        }
+
+        participants.Add(actor);
+    }
+
+    private static bool ContainsParticipant(
+        List<CharacterData> participants,
+        CharacterData actor
+    )
+    {
+        if (participants == null || actor == null)
+        {
+            return false;
+        }
+
+        foreach (CharacterData participant in participants)
+        {
+            if (object.ReferenceEquals(participant, actor))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool IsNearRangeAttack(BattleCardState cardState)
@@ -3122,6 +3321,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         if (!context.DefaultAttackStarted)
         {
+            CapturePreviousActionParticipants(context);
             BattleActionRollPanelHost.HideImmediate();
             ReleaseCameraForContext(context);
             CompleteRequest(request, completion);
@@ -3137,6 +3337,17 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 context
             )
         );
+    }
+
+    private void HandleExecutionComplete(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion
+    )
+    {
+        ResetPreviousActionParticipantsToStableIdle();
+        BattleActionRollPanelHost.HideImmediate();
+        ReleasePendingBattleActionCamera();
+        CompleteRequest(request, completion);
     }
 
     private void HandleDodgeActionComplete(
@@ -3165,6 +3376,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     {
         if (context.LongRangeShotImpactFinished)
         {
+            CapturePreviousActionParticipants(context);
             BattleActionRollPanelHost.HideImmediate();
             ReleaseCameraForContext(context);
             CompleteRequest(request, completion);
@@ -3209,6 +3421,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         activePresentationCoroutine = null;
         activePresentationRequestId = 0L;
+        CapturePreviousActionParticipants(context);
         BattleActionRollPanelHost.HideImmediate();
         ReleaseCameraForContext(context);
         completion.TryComplete(requestId);
@@ -3285,6 +3498,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             request.ContinueBattleActionCameraToNextItem &&
             context != null && context.CameraCinematicOwned)
         {
+            CapturePreviousActionParticipants(context);
             ClearDodgeVsAttackApproachState(context);
             context.CameraCinematicOwned = false;
             battleActionCameraCarryPending = true;
@@ -3955,6 +4169,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ActionPresentationContext context
     )
     {
+        CapturePreviousActionParticipants(context);
         BattleActionRollPanelHost.HideImmediate();
         ReleaseCameraForContext(context);
         CompleteRequest(request, completion);

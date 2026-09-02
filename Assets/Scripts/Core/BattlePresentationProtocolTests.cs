@@ -61,7 +61,7 @@ public static class BattlePresentationProtocolTests
             "J DodgeSuccess不创建Fake Impact",
             "K TieLimit不创建Fake Impact且不MarkUsed",
             "L ActionComplete未完成时Item不完成",
-            "M ActionComplete完成后才MarkUsed与ItemComplete",
+            "M ActionComplete后先进入ExecutionComplete闭合边界",
             "N 所有Presentation等待期间Lifecycle保持Executing",
             "O Cancel后迟到Completion无副作用",
             "P ImmediatePresenter不在同一次推进穿透新Boundary",
@@ -271,9 +271,17 @@ public static class BattlePresentationProtocolTests
         bool impactReady = ReachImpactPresentation(context);
         bool committed = CompleteCurrent(context) && Advance(context);
         bool completed = CompleteCurrent(context) && Advance(context);
-        return impactReady && committed && completed && context.item.isCompleted &&
+        bool executionClosureWaiting = context.item.isCompleted &&
             context.slot.isUsed && context.plan.isCompleted &&
-            context.runtimeState.LifecyclePhase == BattleLifecyclePhase.TurnResolved;
+            context.controller.ExecutionRunner.Phase ==
+                BattleExecutionRunnerPhase.WaitingForPresentation &&
+            context.presenter.GetLastRequest().Cue ==
+                BattlePresentationCue.ExecutionComplete &&
+            context.runtimeState.LifecyclePhase == BattleLifecyclePhase.Executing;
+        bool closureCompleted = CompleteCurrent(context) && Advance(context);
+        return impactReady && committed && completed && executionClosureWaiting &&
+            closureCompleted && context.runtimeState.LifecyclePhase ==
+                BattleLifecyclePhase.TurnResolved;
     }
 
     static bool VerifyLifecycleStaysExecuting()

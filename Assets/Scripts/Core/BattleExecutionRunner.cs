@@ -30,7 +30,8 @@ enum BattlePresentationContinuation
     AfterUnavailableResponseActionBegin,
     AfterRollResult,
     AfterImpact,
-    AfterActionComplete
+    AfterActionComplete,
+    AfterExecutionComplete
 }
 
 [System.Serializable]
@@ -261,7 +262,12 @@ public sealed class BattleExecutionRunner
         {
             if (plan != null && plan.isCompleted)
             {
-                return CompleteRunner(out failureMessage);
+                return BeginPresentation(
+                    BattlePresentationCue.ExecutionComplete,
+                    BattlePresentationContinuation.AfterExecutionComplete,
+                    null,
+                    "ExecutionComplete"
+                );
             }
 
             return Fail("Pausable执行失败：没有可推进的ExecutionItem", out failureMessage);
@@ -771,6 +777,12 @@ public sealed class BattleExecutionRunner
             return FinishCurrentItem(out failureMessage);
         }
 
+        if (continuation ==
+            BattlePresentationContinuation.AfterExecutionComplete)
+        {
+            return CompleteRunner(out failureMessage);
+        }
+
         return Fail("表现推进失败：Continuation无效", out failureMessage);
     }
 
@@ -957,7 +969,12 @@ public sealed class BattleExecutionRunner
         if (runtimeState.currentExecutionPlan != null &&
             runtimeState.currentExecutionPlan.isCompleted)
         {
-            return CompleteRunner(out failureMessage);
+            return BeginPresentation(
+                BattlePresentationCue.ExecutionComplete,
+                BattlePresentationContinuation.AfterExecutionComplete,
+                null,
+                "ExecutionComplete"
+            );
         }
 
         Phase = BattleExecutionRunnerPhase.ItemCompleted;
