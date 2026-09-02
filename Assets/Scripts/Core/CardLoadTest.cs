@@ -16665,18 +16665,36 @@ public class CardLoadTest : MonoBehaviour
             allyAUnit.battleCards != null &&
             allyAUnit.battleCards.Count == result.allyADefinition.startingCardIDs.Length &&
             IsCardStateFromDefinition(allyAUnit.battleCards[0], allyAUnit, result.allyADefinition.startingCardIDs[0], "ally_001_atk_bullet_001_copy_0") &&
-            IsCardStateFromDefinition(allyAUnit.battleCards[1], allyAUnit, result.allyADefinition.startingCardIDs[1], "ally_001_atk_bullet_001_copy_1");
+            IsCardStateFromDefinition(allyAUnit.battleCards[1], allyAUnit, result.allyADefinition.startingCardIDs[1], "ally_001_atk_001_copy_0") &&
+            IsCardStateFromDefinition(allyAUnit.battleCards[2], allyAUnit, result.allyADefinition.startingCardIDs[2], "ally_001_def_001_copy_0") &&
+            IsCardStateFromDefinition(allyAUnit.battleCards[3], allyAUnit, result.allyADefinition.startingCardIDs[3], "ally_001_dodge_001_copy_0") &&
+            IsCardStateFromDefinition(allyAUnit.battleCards[4], allyAUnit, result.allyADefinition.startingCardIDs[4], "ally_001_sin_ability_001_copy_0") &&
+            IsCardStateFromDefinition(allyAUnit.battleCards[5], allyAUnit, result.allyADefinition.startingCardIDs[5], "ally_001_sin_attack_test_001_copy_0");
 
         Debug.Log("模式56 F 玩家卡牌实例顺序、owner和初始状态正确：" + playerCards);
     }
 
     void RunBattleDefinitionDataDuplicatePlayerCardsSubTest()
     {
-        BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
-        CharacterData allyAUnit = result != null && result.runtimeState != null ? result.runtimeState.allyA : null;
-
-        BattleCardState copy0 = allyAUnit != null && allyAUnit.battleCards.Count > 0 ? allyAUnit.battleCards[0] : null;
-        BattleCardState copy1 = allyAUnit != null && allyAUnit.battleCards.Count > 1 ? allyAUnit.battleCards[1] : null;
+        List<CardTestData> cards = CardDataLoader.LoadCardData();
+        CardTestData duplicateDefinition = CardDataLoader.FindCardByID(cards, "atk_bullet_001");
+        CharacterData duplicateOwner = duplicateDefinition != null
+            ? new CharacterData("Mode56 Duplicate Owner", 30, 4, 8, "mode56_duplicate_owner")
+            : null;
+        BattleCardState copy0 = duplicateDefinition != null
+            ? BattleCardManager.CreateBattleCard(
+                duplicateOwner,
+                duplicateDefinition,
+                "mode56_duplicate_owner_atk_bullet_001_copy_0"
+            )
+            : null;
+        BattleCardState copy1 = duplicateDefinition != null
+            ? BattleCardManager.CreateBattleCard(
+                duplicateOwner,
+                duplicateDefinition,
+                "mode56_duplicate_owner_atk_bullet_001_copy_1"
+            )
+            : null;
 
         if (copy0 != null)
         {
@@ -16686,10 +16704,15 @@ public class CardLoadTest : MonoBehaviour
         bool duplicateIndependent =
             copy0 != null &&
             copy1 != null &&
+            duplicateOwner != null &&
+            duplicateOwner.battleCards != null &&
+            duplicateOwner.battleCards.Count == 2 &&
             !object.ReferenceEquals(copy0, copy1) &&
             copy0.cardData == copy1.cardData &&
-            copy0.instanceID == "ally_001_atk_bullet_001_copy_0" &&
-            copy1.instanceID == "ally_001_atk_bullet_001_copy_1" &&
+            copy0.owner == duplicateOwner &&
+            copy1.owner == duplicateOwner &&
+            copy0.instanceID == "mode56_duplicate_owner_atk_bullet_001_copy_0" &&
+            copy1.instanceID == "mode56_duplicate_owner_atk_bullet_001_copy_1" &&
             copy1.currentCooldown == 0;
 
         if (copy0 != null)
@@ -16736,9 +16759,10 @@ public class CardLoadTest : MonoBehaviour
             enemyUnit.battleCards != null &&
             enemyUnit.battleCards.Count == 2 &&
             !object.ReferenceEquals(enemyUnit.battleCards[0], enemyUnit.battleCards[1]) &&
-            enemyUnit.battleCards[0].cardData == enemyUnit.battleCards[1].cardData &&
+            enemyUnit.battleCards[0].cardData.cardID == "enemy_atk_001" &&
+            enemyUnit.battleCards[1].cardData.cardID == "def_001" &&
             enemyUnit.battleCards[0].instanceID == "enemy_001_enemy_atk_001_copy_0" &&
-            enemyUnit.battleCards[1].instanceID == "enemy_001_enemy_atk_001_copy_1" &&
+            enemyUnit.battleCards[1].instanceID == "enemy_001_def_001_copy_0" &&
             enemyUnit.battleCards[0].owner == enemyUnit &&
             enemyUnit.battleCards[1].owner == enemyUnit &&
             enemyUnit2 != null &&
@@ -16747,7 +16771,7 @@ public class CardLoadTest : MonoBehaviour
             enemyUnit2.battleCards[0].instanceID ==
                 "enemy_001_02_enemy_atk_001_copy_0" &&
             enemyUnit2.battleCards[1].instanceID ==
-                "enemy_001_02_enemy_atk_001_copy_1" &&
+                "enemy_001_02_def_001_copy_0" &&
             enemyUnit2.battleCards[0].owner == enemyUnit2 &&
             enemyUnit2.battleCards[1].owner == enemyUnit2 &&
             !object.ReferenceEquals(
