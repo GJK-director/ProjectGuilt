@@ -693,7 +693,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             {
                 cameraSucceeded = success;
                 cameraReady = true;
-            }
+            },
+            true
         );
         if (cameraStarted)
         {
