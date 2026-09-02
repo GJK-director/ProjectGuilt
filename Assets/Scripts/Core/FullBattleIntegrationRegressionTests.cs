@@ -34,7 +34,10 @@ public static class FullBattleIntegrationRegressionTests
             VerifyResponseBindsEnemySlot2(),
             VerifyProductionPresentationRequirements(production),
             VerifyCampOnlyChangesFacing(production),
-            VerifyProductionDataToBindingContract(production)
+            VerifyProductionDataToBindingContract(production),
+            VerifyTurnEndClosingPushesIntoRecoveryPose(),
+            VerifyNewTurnOpeningPullsBackToDefaultPose(),
+            VerifyCombatTerminalCameraPolicy()
         };
 
         string[] names =
@@ -62,7 +65,10 @@ public static class FullBattleIntegrationRegressionTests
             "Player Response精确绑定Enemy Slot2",
             "Production Card Capability推导Presentation Requirements",
             "Camp只改变Facing不改变Presentation Capability",
-            "Production Definition到Binding Contract数据链完整"
+            "Production Definition到Binding Contract数据链完整",
+            "TurnEnd Closing从Combat Terminal前缩到Recovery",
+            "NewTurn Opening从Recovery后缩到Default",
+            "One-Sided Near统一Terminal Focus且Continuous Carry跳过"
         };
 
         bool allPassed = true;
@@ -81,6 +87,84 @@ public static class FullBattleIntegrationRegressionTests
             "BattleScene、Prefab Inspector与实际UI/Presentation仍需手动Runtime验收。"
         );
         return allPassed;
+    }
+
+    private static bool VerifyTurnEndClosingPushesIntoRecoveryPose()
+    {
+        const float combatTerminalRadius = 9.5f;
+        const float recoveryRadius = 8.5f;
+        float endRadius = Mathf.Lerp(combatTerminalRadius, recoveryRadius, 1f);
+
+        return Mathf.Approximately(endRadius, recoveryRadius) &&
+            endRadius < combatTerminalRadius;
+    }
+
+    private static bool VerifyNewTurnOpeningPullsBackToDefaultPose()
+    {
+        const float recoveryRadius = 8.5f;
+        const float defaultRadius = 11.5f;
+        float startRadius = Mathf.Lerp(recoveryRadius, defaultRadius, 0f);
+        float endRadius = Mathf.Lerp(recoveryRadius, defaultRadius, 1f);
+
+        return Mathf.Approximately(startRadius, recoveryRadius) &&
+            Mathf.Approximately(endRadius, defaultRadius) &&
+            endRadius > startRadius;
+    }
+
+    private static bool VerifyCombatTerminalCameraPolicy()
+    {
+        BattlePresentationRoute attackVsAttack = CreatePresentationRoute(
+            CardType.Attack,
+            AttackDeliveryMode.Melee,
+            CardType.Attack,
+            AttackDeliveryMode.Melee,
+            false
+        );
+        BattlePresentationRoute attackVsDefense = CreatePresentationRoute(
+            CardType.Defense,
+            string.Empty,
+            CardType.Attack,
+            AttackDeliveryMode.Melee,
+            false
+        );
+        BattlePresentationRoute closeRangeVsDefense = CreatePresentationRoute(
+            CardType.Defense,
+            string.Empty,
+            CardType.Attack,
+            AttackDeliveryMode.CloseRangeShoot,
+            false
+        );
+        BattlePresentationRoute attackVsDodge = CreatePresentationRoute(
+            CardType.Dodge,
+            string.Empty,
+            CardType.Attack,
+            AttackDeliveryMode.Melee,
+            false
+        );
+        BattlePresentationRoute unilateralMelee =
+            CreateUnilateralPresentationRoute(AttackDeliveryMode.Melee);
+        BattlePresentationRoute unilateralLongRange =
+            CreateUnilateralPresentationRoute(
+                AttackDeliveryMode.LongRangeShoot
+            );
+
+        return !BattleSceneExecutionPresenter
+                .RequiresCombatTerminalCameraFocus(attackVsAttack, false) &&
+            BattleSceneExecutionPresenter
+                .RequiresCombatTerminalCameraFocus(attackVsDefense, false) &&
+            BattleSceneExecutionPresenter
+                .RequiresCombatTerminalCameraFocus(
+                    closeRangeVsDefense,
+                    false
+                ) &&
+            BattleSceneExecutionPresenter
+                .RequiresCombatTerminalCameraFocus(attackVsDodge, false) &&
+            BattleSceneExecutionPresenter
+                .RequiresCombatTerminalCameraFocus(unilateralMelee, false) &&
+            !BattleSceneExecutionPresenter
+                .RequiresCombatTerminalCameraFocus(attackVsDodge, true) &&
+            !BattleSceneExecutionPresenter
+                .RequiresCombatTerminalCameraFocus(unilateralLongRange, false);
     }
 
     private static bool VerifyProductionCharacterBootstrap(
@@ -884,6 +968,46 @@ public static class FullBattleIntegrationRegressionTests
         if (!BattlePresentationInteractionContextFactory.TryCreate(
                 executionContext,
                 preserveDodge,
+                out BattlePresentationInteractionContext context
+            ))
+        {
+            return null;
+        }
+
+        BattlePresentationRequest request = new BattlePresentationRequest(
+            103L,
+            BattlePresentationCue.ActionBegin,
+            null,
+            null,
+            null,
+            null,
+            string.Empty,
+            false,
+            context
+        );
+        BattlePresentationRouter.TryCreateRoute(request, out var route);
+        return route;
+    }
+
+    private static BattlePresentationRoute CreateUnilateralPresentationRoute(
+        string deliveryMode
+    )
+    {
+        CharacterData actor = CreateCharacter("mode103_unilateral_actor");
+        CharacterData target = CreateCharacter("mode103_unilateral_target");
+        BattleExecutionInteractionContext executionContext =
+            new BattleExecutionInteractionContext(
+                null,
+                CreateAction(
+                    actor,
+                    target,
+                    CreateCard(actor, CardType.Attack, 5, deliveryMode)
+                ),
+                null
+            );
+        if (!BattlePresentationInteractionContextFactory.TryCreate(
+                executionContext,
+                false,
                 out BattlePresentationInteractionContext context
             ))
         {
