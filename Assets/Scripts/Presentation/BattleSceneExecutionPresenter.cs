@@ -2295,7 +2295,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 requestId,
                 completion,
                 success
-            )
+            ),
+            true
         );
         if (!cameraStarted)
         {
