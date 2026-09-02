@@ -561,7 +561,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
             true,
             approachReady,
             engagementBegan,
-            engagementReady
+            engagementReady,
+            false
         );
     }
 
@@ -570,7 +571,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
         BattleUnitViewHandle defender,
         float nearSeparation,
         System.Action engagementBegan,
-        System.Action<bool> engagementReady
+        System.Action<bool> engagementReady,
+        bool useBattleFocusVertical = false
     )
     {
         return TryPlaySingleActorApproachFollow(
@@ -580,7 +582,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
             false,
             null,
             engagementBegan,
-            engagementReady
+            engagementReady,
+            useBattleFocusVertical
         );
     }
 
@@ -591,7 +594,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
         bool useBattleActionEntry,
         System.Action<bool> approachReady,
         System.Action engagementBegan,
-        System.Action<bool> engagementReady
+        System.Action<bool> engagementReady,
+        bool useBattleFocusVertical
     )
     {
         if (!TryBeginAnchoredTwoUnitApproach(
@@ -609,7 +613,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
                 useBattleActionEntry,
                 approachReady,
                 engagementBegan,
-                engagementReady
+                engagementReady,
+                useBattleFocusVertical
             )
         );
         return true;
@@ -1116,7 +1121,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
         bool useBattleActionEntry,
         System.Action<bool> approachReady,
         System.Action engagementBegan,
-        System.Action<bool> engagementReady
+        System.Action<bool> engagementReady,
+        bool useBattleFocusVertical
     )
     {
         float blendTrigger = Mathf.Max(
@@ -1299,6 +1305,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
 
         float blendStartRadius = cameraController.CurrentOrbitRadius;
+        float blendStartVerticalProgress =
+            cameraController.CurrentCinematicVerticalViewProgress;
         float safeBlendDuration = Mathf.Max(0f, engagementBlendDuration);
         elapsed = 0f;
 
@@ -1342,12 +1350,31 @@ public sealed class BattleCameraDirector : MonoBehaviour
                     blendProgress
                 )
             );
+            if (useBattleFocusVertical)
+            {
+                cameraController.SetCinematicVerticalViewProgress(
+                    Mathf.Lerp(
+                        blendStartVerticalProgress,
+                        twoUnitFocusVerticalViewProgress,
+                        blendProgress
+                    )
+                );
+            }
             yield return null;
         }
 
         if (!isAnchoredApproachPlaying)
         {
             yield break;
+        }
+
+        if (useBattleFocusVertical)
+        {
+            // Defense只在既有Engagement Blend内补齐Battle Focus Vertical，
+            // 与Horizontal/Radius共用同一条Coroutine，避免Camera写入竞争。
+            cameraController.SetCinematicVerticalViewProgress(
+                twoUnitFocusVerticalViewProgress
+            );
         }
 
         // Blend后由同一Coroutine继续现有Anchored tracking，避免写入竞争。

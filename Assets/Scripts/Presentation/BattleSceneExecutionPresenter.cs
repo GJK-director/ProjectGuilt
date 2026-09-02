@@ -536,7 +536,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         BattleUnitViewHandle target,
         float finalGap,
         System.Action engagementBegun,
-        System.Action<bool> completion
+        System.Action<bool> completion,
+        bool useBattleFocusVertical = false
     )
     {
         return director != null &&
@@ -545,7 +546,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 target,
                 finalGap,
                 engagementBegun,
-                completion
+                completion,
+                useBattleFocusVertical
             );
     }
 
@@ -1464,7 +1466,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 requestId,
                 completion,
                 success
-            )
+            ),
+            true
         );
         if (!cameraStarted)
         {
