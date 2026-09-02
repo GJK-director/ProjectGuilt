@@ -51,12 +51,12 @@ public static class BattleExecutionPausablePolicy
 
         if (context.InteractionType == BattleInteractionType.UnilateralAttack)
         {
-            // 单方攻击内部生成攻击点，但不伪造 Clash 或等待手动 Roll。
+            // 单方攻击共用 Roll 输入门，但不伪造 ClashSession。
             return new BattleExecutionPhaseRequirements(
                 context.InteractionType,
                 true,
-                false,
-                false,
+                true,
+                true,
                 true,
                 false
             );

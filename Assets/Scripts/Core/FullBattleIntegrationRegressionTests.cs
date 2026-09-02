@@ -59,7 +59,7 @@ public static class FullBattleIntegrationRegressionTests
             "AttackVsDefense FullBlock仍提交Attack生命周期",
             "AttackVsDodge Success仍提交Attack生命周期",
             "Continuous Dodge只保留Dodger且新Attack进入Ready",
-            "Unilateral不创建ClashSession或Manual Roll Gate",
+            "Unilateral共用Manual Roll Gate但不创建ClashSession",
             "Enemy Slot2 Descriptor保持Defense与Slot Identity",
             "Player Response精确绑定Enemy Slot2",
             "Production Card Capability推导Presentation Requirements",
@@ -603,8 +603,8 @@ public static class FullBattleIntegrationRegressionTests
         return failure == null && plan != null && plan.clashSession == null &&
             requirements.HasPresentationPhases && requirements.RequiresActionBegin &&
             requirements.RequiresImpact && requirements.RequiresActionComplete &&
-            !requirements.RequiresClashSession && !requirements.RequiresManualRoll &&
-            !requirements.RequiresRollResult;
+            !requirements.RequiresClashSession && requirements.RequiresManualRoll &&
+            requirements.RequiresRollResult;
     }
 
     private static bool VerifyEnemySlot2Descriptor(ProductionFixture fixture)

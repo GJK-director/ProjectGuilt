@@ -221,11 +221,16 @@ public sealed class BattleExecutionRunner
             return false;
         }
 
-        if (Phase != BattleExecutionRunnerPhase.WaitingForRoll ||
-            CurrentClashSession == null)
+        if (Phase != BattleExecutionRunnerPhase.WaitingForRoll)
         {
             // 提前请求直接拒绝且不缓存，ReadyPause结束后必须重新请求。
             failureMessage = "Manual Roll请求失败：当前尚未进入WaitingForRoll";
+            return false;
+        }
+
+        if (!HasPendingRollMechanic())
+        {
+            failureMessage = "Manual Roll请求失败：当前没有可执行的Roll Mechanic";
             return false;
         }
 
@@ -453,14 +458,22 @@ public sealed class BattleExecutionRunner
     bool RollOneAttempt(out string failureMessage)
     {
         failureMessage = string.Empty;
-        if (CurrentClashSession == null)
+        if (CurrentClashSession != null)
         {
-            return Fail(
-                "Roll失败：当前Interaction不包含ClashSession",
-                out failureMessage
-            );
+            return RollClashAttempt(out failureMessage);
         }
 
+        if (IsPendingUnilateralRoll())
+        {
+            return RollUnilateralAttack(out failureMessage);
+        }
+
+        return Fail("Roll失败：当前没有可执行的Roll Mechanic", out failureMessage);
+    }
+
+    bool RollClashAttempt(out string failureMessage)
+    {
+        failureMessage = string.Empty;
         if (CurrentClashSession == null || CurrentClashSession.IsFinalized)
         {
             return Fail("Roll失败：当前ClashSession无效或已完成", out failureMessage);
@@ -507,6 +520,55 @@ public sealed class BattleExecutionRunner
             null,
             CurrentClashSession.AttemptResult.ToString()
         );
+    }
+
+    bool RollUnilateralAttack(out string failureMessage)
+    {
+        failureMessage = string.Empty;
+        Phase = BattleExecutionRunnerPhase.Rolling;
+        if (!BattleResolver.TryRollUnilateralAttackResolutionPlan(
+                CurrentResolutionPlan,
+                out _
+            ) || !CurrentResolutionPlan.freeActionHasRolled ||
+            CurrentResolutionPlan.impacts.Count == 0)
+        {
+            return Fail(
+                "Roll失败：UnilateralAttack无法生成有效攻击点与Impact",
+                out failureMessage
+            );
+        }
+
+        return BeginPresentation(
+            BattlePresentationCue.RollResult,
+            BattlePresentationContinuation.AfterRollResult,
+            null,
+            CurrentResolutionPlan.resultType
+        );
+    }
+
+    bool HasPendingRollMechanic()
+    {
+        return CurrentClashSession != null && !CurrentClashSession.IsFinalized ||
+            IsPendingUnilateralRoll();
+    }
+
+    bool IsPendingUnilateralRoll()
+    {
+        return CurrentClashSession == null && CurrentPhaseRequirements != null &&
+            CurrentPhaseRequirements.InteractionType ==
+                BattleInteractionType.UnilateralAttack &&
+            IsUnilateralResolutionPlan(CurrentResolutionPlan) &&
+            CurrentResolutionPlan.State == BattleResolutionPlanState.Pending &&
+            !CurrentResolutionPlan.freeActionHasRolled &&
+            CurrentResolutionPlan.impacts.Count == 0;
+    }
+
+    static bool IsUnilateralResolutionPlan(BattleResolutionPlan plan)
+    {
+        return plan != null &&
+            (plan.planKind == BattleResolutionPlanKind.FreeActionAttack ||
+             plan.planKind ==
+                BattleResolutionPlanKind.UnrespondedEnemyAttack);
     }
 
     public bool TryCommitNextResolutionStep(out string failureMessage)
@@ -594,7 +656,13 @@ public sealed class BattleExecutionRunner
             if (CurrentResolutionPlan == null ||
                 CurrentPhaseRequirements == null ||
                 CurrentPhaseRequirements.InteractionType !=
-                    BattleInteractionType.UnilateralAttack)
+                    BattleInteractionType.UnilateralAttack ||
+                CurrentClashSession != null ||
+                !IsUnilateralResolutionPlan(CurrentResolutionPlan) ||
+                CurrentResolutionPlan.State !=
+                    BattleResolutionPlanState.Pending ||
+                CurrentResolutionPlan.freeActionHasRolled ||
+                CurrentResolutionPlan.impacts.Count != 0)
             {
                 return Fail(
                     "Unilateral ActionBegin完成后Phase Contract无效",
@@ -602,7 +670,7 @@ public sealed class BattleExecutionRunner
                 );
             }
 
-            Phase = BattleExecutionRunnerPhase.ResolutionPending;
+            EnterReadyPause();
             return true;
         }
 
@@ -630,16 +698,14 @@ public sealed class BattleExecutionRunner
 
         if (continuation == BattlePresentationContinuation.AfterRollResult)
         {
-            if (CurrentResolutionPlan != null &&
-                CurrentResolutionPlan.planKind ==
-                    BattleResolutionPlanKind.FreeActionAttack)
+            if (IsUnilateralResolutionPlan(CurrentResolutionPlan))
             {
                 if (CurrentClashSession != null ||
                     !CurrentResolutionPlan.freeActionHasRolled ||
                     CurrentResolutionPlan.impacts.Count == 0)
                 {
                     return Fail(
-                        "FreeAttack RollResult表现完成后Plan无效",
+                        "UnilateralAttack RollResult表现完成后Plan无效",
                         out failureMessage
                     );
                 }

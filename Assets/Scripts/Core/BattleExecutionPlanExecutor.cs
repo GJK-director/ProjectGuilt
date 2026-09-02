@@ -918,14 +918,6 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
-        // 单方攻击点数属于内部结算步骤，不创建假 Clash 或手动 Roll Gate。
-        if (!BattleResolver.TryRollUnilateralAttackResolutionPlan(plan, out _))
-        {
-            item.MarkFailed(BattleExecutionItemOutcomeReason.ResolverFailure);
-            failureMessage = "Pausable UnilateralAttack无法生成攻击点数";
-            return false;
-        }
-
         return true;
     }
 

@@ -32,7 +32,7 @@ public static class BattleRollGateTests
         bool g = VerifyAutoTieRepeatsBothWaits();
         bool h = VerifyFinalizedCommitsOnlyOnce();
         bool i = VerifyLifecycleStaysExecutingWhileWaiting();
-        bool j = VerifyNonClashItemsRemainSynchronous();
+        bool j = VerifyNonCombatItemsRemainSynchronousAndUnilateralWaits();
         bool k = VerifyAttackTieLimitCompletesNormally();
         bool l = VerifyDefenseUsesRollGateAndEqualityFullBlocks();
         bool m = VerifyDodgeUsesRollGateAndEqualitySucceeds();
@@ -47,7 +47,7 @@ public static class BattleRollGateTests
         Debug.Log("模式81 G Auto AttackTie重新经过两段等待：" + g);
         Debug.Log("模式81 H Finalized后只提交一次：" + h);
         Debug.Log("模式81 I 等待期间Lifecycle保持Executing：" + i);
-        Debug.Log("模式81 J FreeAction与Unresponded保持同步完成：" + j);
+        Debug.Log("模式81 J 非Combat同步且Unilateral进入Generic Roll Gate：" + j);
         Debug.Log("模式81 K Attack第10次平局进入TieLimit并完成：" + k);
         Debug.Log("模式81 L Defense经过RollGate且相等时FullBlock：" + l);
         Debug.Log("模式81 M Dodge经过RollGate且相等时成功：" + m);
@@ -366,8 +366,42 @@ public static class BattleRollGateTests
             context.item.isCompleted && context.plan.isCompleted;
     }
 
-    static bool VerifyNonClashItemsRemainSynchronous()
+    static bool VerifyNonCombatItemsRemainSynchronousAndUnilateralWaits()
     {
+        TestContext abilityContext = CreateBaseContext("roll81_j_ability");
+        BattleActionSlot abilitySlot = new BattleActionSlot(
+            abilityContext.ally,
+            1
+        );
+        abilityContext.playerCard = CreateCard(
+            abilityContext.ally,
+            "roll81_j_ability_card",
+            "Ability",
+            0
+        );
+        abilitySlot.AssignFreeAction(
+            abilityContext.ally,
+            abilityContext.playerCard,
+            abilityContext.ally
+        );
+        abilityContext.item = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            abilitySlot
+        );
+        SetPlan(abilityContext, abilityContext.item);
+        bool abilityBegan = Begin(
+            abilityContext,
+            BattleRollMode.Manual,
+            1f,
+            1f
+        );
+        bool abilityCompleted = abilityBegan && abilityContext.item.isCompleted &&
+            abilityContext.plan.isCompleted &&
+            abilityContext.runtimeState.LifecyclePhase ==
+                BattleLifecyclePhase.TurnResolved;
+
         TestContext freeContext = CreateBaseContext("roll81_j_free");
         BattleActionSlot freeSlot = new BattleActionSlot(freeContext.ally, 1);
         freeContext.playerCard = CreateCard(
@@ -388,11 +422,13 @@ public static class BattleRollGateTests
             freeSlot
         );
         SetPlan(freeContext, freeContext.item);
-        bool freeBegan = Begin(freeContext, BattleRollMode.Manual, 1f, 1f);
-        bool freeCompleted = freeBegan && freeContext.item.isCompleted &&
-            freeContext.plan.isCompleted &&
-            freeContext.controller.ExecutionRunner.CurrentClashSession == null &&
-            freeContext.runtimeState.LifecyclePhase == BattleLifecyclePhase.TurnResolved;
+        bool freeBegan = Begin(freeContext, BattleRollMode.Manual, 0f, 1f);
+        BattleExecutionRunner freeRunner = freeContext.controller.ExecutionRunner;
+        bool freeWaiting = freeBegan && !freeContext.item.isCompleted &&
+            freeRunner.Phase == BattleExecutionRunnerPhase.WaitingForRoll &&
+            freeRunner.CurrentClashSession == null &&
+            !freeRunner.CurrentResolutionPlan.freeActionHasRolled &&
+            freeRunner.CurrentResolutionPlan.impacts.Count == 0;
 
         TestContext enemyContext = CreateBaseContext("roll81_j_enemy");
         enemyContext.enemyCard = CreateCard(
@@ -416,13 +452,15 @@ public static class BattleRollGateTests
             null
         );
         SetPlan(enemyContext, enemyContext.item);
-        bool enemyBegan = Begin(enemyContext, BattleRollMode.Auto, 1f, 1f);
-        bool enemyCompleted = enemyBegan && enemyContext.item.isCompleted &&
-            enemyContext.plan.isCompleted &&
-            enemyContext.controller.ExecutionRunner.CurrentClashSession == null &&
-            enemyContext.runtimeState.LifecyclePhase == BattleLifecyclePhase.TurnResolved;
+        bool enemyBegan = Begin(enemyContext, BattleRollMode.Auto, 0f, 1f);
+        BattleExecutionRunner enemyRunner = enemyContext.controller.ExecutionRunner;
+        bool enemyWaiting = enemyBegan && !enemyContext.item.isCompleted &&
+            enemyRunner.Phase == BattleExecutionRunnerPhase.AutoRollDelay &&
+            enemyRunner.CurrentClashSession == null &&
+            !enemyRunner.CurrentResolutionPlan.freeActionHasRolled &&
+            enemyRunner.CurrentResolutionPlan.impacts.Count == 0;
 
-        return freeCompleted && enemyCompleted;
+        return abilityCompleted && freeWaiting && enemyWaiting;
     }
 
     static bool VerifyAttackTieLimitCompletesNormally()

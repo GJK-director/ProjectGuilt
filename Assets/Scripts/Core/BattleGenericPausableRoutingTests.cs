@@ -90,6 +90,7 @@ public static class BattleGenericPausableRoutingTests
                 AttackDeliveryMode.LongRangeShoot,
                 true
             ),
+            VerifyAutoUnilateralRollGate(),
             VerifyLongRangeNoResourceDoesNotPresent(),
             VerifyNoInteractionHasNoPhases(),
             VerifyAbilityDoesNotEnterCombatPresentation(),
@@ -113,10 +114,11 @@ public static class BattleGenericPausableRoutingTests
             "Enemy Melee Unilateral进入Pausable",
             "Enemy CloseRange Unilateral进入Pausable",
             "Enemy LongRange Unilateral资源充足",
+            "Auto Unilateral共用Generic Roll Gate",
             "LongRange NoResource不开始成功Presentation",
             "NoInteraction无Presentation Phases",
             "Ability不进入Generic Combat Presentation",
-            "Unilateral有Phase但无Clash/Manual Roll",
+            "Unilateral有Manual Roll但无ClashSession",
             "RequiresApproach=false仍有ActionBegin",
             "Continuous Dodge保留PreserveDodgePose",
             "同一Engagement的Request共用冻结Context"
@@ -258,18 +260,86 @@ public static class BattleGenericPausableRoutingTests
         );
         bool began = BeginRunner(fixture);
         BattleExecutionRunner runner = fixture.controller.ExecutionRunner;
-        BattlePresentationRequest request = fixture.presenter.GetLastRequest();
-
-        return began && runner != null && !runner.HasFailed &&
+        BattlePresentationRequest actionBegin = fixture.presenter.GetLastRequest();
+        bool preparedWithoutRoll = began && runner != null && !runner.HasFailed &&
             runner.Phase == BattleExecutionRunnerPhase.WaitingForPresentation &&
-            request != null && request.Cue == BattlePresentationCue.ActionBegin &&
-            request.InteractionContext != null &&
-            request.InteractionContext.InteractionType ==
+            actionBegin != null &&
+            actionBegin.Cue == BattlePresentationCue.ActionBegin &&
+            actionBegin.InteractionContext != null &&
+            actionBegin.InteractionContext.InteractionType ==
                 BattleInteractionType.UnilateralAttack &&
             runner.CurrentClashSession == null && !runner.IsWaitingForInput &&
             runner.CurrentPhaseRequirements.HasPresentationPhases &&
-            !runner.CurrentPhaseRequirements.RequiresManualRoll &&
-            !runner.CurrentPhaseRequirements.RequiresClashSession;
+            runner.CurrentPhaseRequirements.RequiresManualRoll &&
+            runner.CurrentPhaseRequirements.RequiresRollResult &&
+            !runner.CurrentPhaseRequirements.RequiresClashSession &&
+            runner.CurrentResolutionPlan != null &&
+            !runner.CurrentResolutionPlan.freeActionHasRolled &&
+            runner.CurrentResolutionPlan.impacts.Count == 0;
+        bool waitingForRoll = preparedWithoutRoll &&
+            CompleteAndAdvance(fixture, actionBegin) && runner.IsWaitingForInput &&
+            runner.Phase == BattleExecutionRunnerPhase.WaitingForRoll &&
+            runner.CurrentClashSession == null;
+        bool rolled = waitingForRoll &&
+            fixture.controller.TryRequestManualRoll(out string rollFailure) &&
+            string.IsNullOrEmpty(rollFailure) &&
+            runner.Phase == BattleExecutionRunnerPhase.WaitingForPresentation &&
+            runner.CurrentResolutionPlan.freeActionHasRolled &&
+            runner.CurrentResolutionPlan.impacts.Count == 1 &&
+            runner.CurrentClashSession == null;
+        int impactCount = rolled
+            ? runner.CurrentResolutionPlan.impacts.Count
+            : 0;
+        bool duplicateRejected = rolled &&
+            !fixture.controller.TryRequestManualRoll(out string duplicateFailure) &&
+            !string.IsNullOrEmpty(duplicateFailure) &&
+            runner.CurrentResolutionPlan.impacts.Count == impactCount;
+        BattlePresentationRequest rollResult = fixture.presenter.GetLastRequest();
+        return duplicateRejected && rollResult != null &&
+            rollResult.Cue == BattlePresentationCue.RollResult &&
+            CompleteAndAdvance(fixture, rollResult) &&
+            runner.Phase == BattleExecutionRunnerPhase.ResolutionPending;
+    }
+
+    static bool VerifyAutoUnilateralRollGate()
+    {
+        RunnerFixture fixture = CreateUnilateralRunnerFixture(
+            "mode96_auto_unilateral",
+            false,
+            AttackDeliveryMode.Melee,
+            true
+        );
+        bool began = fixture != null && fixture.initialized &&
+            fixture.controller.TryBeginPausableExecution(
+                new BattleRollGateSettings(BattleRollMode.Auto, 0f, 1f),
+                out string beginFailure
+            ) && string.IsNullOrEmpty(beginFailure);
+        BattleExecutionRunner runner = fixture.controller.ExecutionRunner;
+        BattlePresentationRequest actionBegin = fixture.presenter.GetLastRequest();
+        bool delayStarted = began && CompleteAndAdvance(fixture, actionBegin) &&
+            runner.Phase == BattleExecutionRunnerPhase.AutoRollDelay &&
+            !runner.IsWaitingForInput && runner.CurrentClashSession == null &&
+            !runner.CurrentResolutionPlan.freeActionHasRolled;
+        bool stillDelayed = delayStarted &&
+            fixture.controller.AdvancePausableExecution(
+                0.5f,
+                out string delayFailure
+            ) && string.IsNullOrEmpty(delayFailure) &&
+            runner.Phase == BattleExecutionRunnerPhase.AutoRollDelay;
+        bool rolled = stillDelayed &&
+            fixture.controller.AdvancePausableExecution(
+                0.5f,
+                out string rollFailure
+            ) && string.IsNullOrEmpty(rollFailure) &&
+            runner.Phase == BattleExecutionRunnerPhase.WaitingForPresentation &&
+            runner.CurrentClashSession == null &&
+            runner.CurrentResolutionPlan.freeActionHasRolled &&
+            runner.CurrentResolutionPlan.impacts.Count == 1;
+        BattlePresentationRequest rollResult = fixture.presenter.GetLastRequest();
+        return rolled && rollResult != null &&
+            rollResult.Cue == BattlePresentationCue.RollResult &&
+            CompleteAndAdvance(fixture, rollResult) &&
+            runner.Phase == BattleExecutionRunnerPhase.ResolutionPending;
     }
 
     static bool VerifyLongRangeNoResourceDoesNotPresent()
@@ -330,8 +400,8 @@ public static class BattleGenericPausableRoutingTests
             BattleExecutionPausablePolicy.Evaluate(context);
         return requirements.HasPresentationPhases &&
             requirements.RequiresActionBegin &&
-            !requirements.RequiresRollResult &&
-            !requirements.RequiresManualRoll &&
+            requirements.RequiresRollResult &&
+            requirements.RequiresManualRoll &&
             requirements.RequiresImpact &&
             requirements.RequiresActionComplete &&
             !requirements.RequiresClashSession;
