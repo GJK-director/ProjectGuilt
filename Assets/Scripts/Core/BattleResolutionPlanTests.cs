@@ -44,6 +44,7 @@ public static class BattleResolutionPlanTests
         bool q = VerifyFreeAttackSynchronousCompatibility();
         bool r = VerifyOnlyMeleeFreeAttackIsPausable();
         bool s = VerifyFreeAttackUsesOneSidedRollGate();
+        bool t = VerifyGenericUnilateralRollPanelSupport();
 
         Debug.Log("模式82 A Calculate后Plan存在且HP不变：" + a);
         Debug.Log("模式82 B 首次Commit才提交第一个Impact伤害：" + b);
@@ -64,10 +65,11 @@ public static class BattleResolutionPlanTests
         Debug.Log("模式82 Q FreeAttack同步入口仍返回旧结果语义：" + q);
         Debug.Log("模式82 R 只有Melee FreeAction进入Pausable，Ability保持同步：" + r);
         Debug.Log("模式82 S FreeAttack等待单方Roll后才建立Impact：" + s);
+        Debug.Log("模式82 T 单方Roll面板支持双方全部Attack Delivery：" + t);
         Debug.Log(
             "模式82 聚合结果：" +
             (a && b && c && d && e && f && g && h && i && j && k && l &&
-             m && n && o && p && q && r && s)
+             m && n && o && p && q && r && s && t)
         );
     }
 
@@ -710,6 +712,156 @@ public static class BattleResolutionPlanTests
             fallbackMaxPoint = 1,
             consumeAmountOnSuccess = consumeAmount
         };
+    }
+
+    static bool VerifyGenericUnilateralRollPanelSupport()
+    {
+        bool allDeliveriesSupported = true;
+        string[] deliveries =
+        {
+            AttackDeliveryMode.Melee,
+            AttackDeliveryMode.CloseRangeShoot,
+            AttackDeliveryMode.LongRangeShoot
+        };
+        for (int index = 0; index < deliveries.Length; index++)
+        {
+            allDeliveriesSupported &= VerifySupportedUnilateralRollPanelPlan(
+                BattleResolutionPlanKind.FreeActionAttack,
+                true,
+                deliveries[index]
+            );
+            allDeliveriesSupported &= VerifySupportedUnilateralRollPanelPlan(
+                BattleResolutionPlanKind.UnrespondedEnemyAttack,
+                false,
+                deliveries[index]
+            );
+        }
+
+        BattleResolutionPlan pending = CreateUnilateralRollPanelPlan(
+            BattleResolutionPlanKind.FreeActionAttack,
+            true,
+            AttackDeliveryMode.Melee,
+            false
+        );
+        BattleResolutionPlan rolled = CreateUnilateralRollPanelPlan(
+            BattleResolutionPlanKind.UnrespondedEnemyAttack,
+            false,
+            AttackDeliveryMode.Melee,
+            true
+        );
+        BattleResolutionPlan invalidKind = CreateUnilateralRollPanelPlan(
+            BattleResolutionPlanKind.RespondedClash,
+            true,
+            AttackDeliveryMode.Melee,
+            true
+        );
+        BattleResolutionPlan invalidCard = CreateUnilateralRollPanelPlan(
+            BattleResolutionPlanKind.FreeActionAttack,
+            true,
+            AttackDeliveryMode.Melee,
+            true
+        );
+        invalidCard.sourceCardState.cardData.cardType = CardType.Defense;
+        BattleResolutionPlan invalidOwnership = CreateUnilateralRollPanelPlan(
+            BattleResolutionPlanKind.FreeActionAttack,
+            true,
+            AttackDeliveryMode.Melee,
+            true
+        );
+        invalidOwnership.enemyCardUsed = true;
+
+        return allDeliveriesSupported &&
+            BattleActionRollPanelHost.IsSupportedUnilateralAttackPlan(
+                pending,
+                false
+            ) && !BattleActionRollPanelHost.IsSupportedUnilateralAttackPlan(
+                pending,
+                true
+            ) && BattleActionRollPanelHost.IsSupportedUnilateralAttackPlan(
+                rolled,
+                true
+            ) &&
+            BattleActionRollPanelHost.ShouldShowUnilateralOnAllySide(pending) &&
+            !BattleActionRollPanelHost.ShouldShowUnilateralOnAllySide(rolled) &&
+            !BattleActionRollPanelHost.IsSupportedUnilateralAttackPlan(
+                invalidKind,
+                true
+            ) && !BattleActionRollPanelHost.IsSupportedUnilateralAttackPlan(
+                invalidCard,
+                true
+            ) && !BattleActionRollPanelHost.IsSupportedUnilateralAttackPlan(
+                invalidOwnership,
+                true
+            );
+    }
+
+    static bool VerifySupportedUnilateralRollPanelPlan(
+        BattleResolutionPlanKind planKind,
+        bool playerSource,
+        string delivery,
+        bool rolled = true
+    )
+    {
+        BattleResolutionPlan plan = CreateUnilateralRollPanelPlan(
+            planKind,
+            playerSource,
+            delivery,
+            rolled
+        );
+        return BattleActionRollPanelHost.IsSupportedUnilateralAttackPlan(
+                plan,
+                true
+            ) && BattleActionRollPanelHost.ShouldShowUnilateralOnAllySide(
+                plan
+            ) == playerSource;
+    }
+
+    static BattleResolutionPlan CreateUnilateralRollPanelPlan(
+        BattleResolutionPlanKind planKind,
+        bool playerSource,
+        string delivery,
+        bool rolled
+    )
+    {
+        CharacterData attacker = new CharacterData(
+            "roll_panel_attacker",
+            30,
+            10,
+            10
+        );
+        CharacterData target = new CharacterData(
+            "roll_panel_target",
+            30,
+            10,
+            10
+        );
+        CardTestData data = new CardTestData
+        {
+            cardID = "roll_panel_attack",
+            cardName = "RollPanel Attack",
+            cardType = CardType.Attack,
+            attackDeliveryMode = delivery,
+            minPoint = 1,
+            maxPoint = 1
+        };
+        BattleResolutionPlan plan = new BattleResolutionPlan(
+            null,
+            null,
+            null,
+            null
+        );
+        plan.planKind = planKind;
+        plan.attacker = attacker;
+        plan.target = target;
+        plan.sourceCardState = BattleCardManager.CreateBattleCard(
+            attacker,
+            data,
+            "roll_panel_attack_instance"
+        );
+        plan.playerCardUsed = playerSource;
+        plan.enemyCardUsed = !playerSource;
+        plan.freeActionHasRolled = rolled;
+        return plan;
     }
 
     static void AddProbeEffect(

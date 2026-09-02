@@ -44,11 +44,12 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
     public static void ShowForActionBegin(BattlePresentationRequest request)
     {
         BattleClashSession session = GetSupportedSession(request);
-        BattleResolutionPlan freeAttackPlan = GetSupportedFreeAttackPlan(
+        BattleResolutionPlan unilateralAttackPlan =
+            GetSupportedUnilateralAttackPlan(
             request,
             false
-        );
-        if (session == null && freeAttackPlan == null)
+            );
+        if (session == null && unilateralAttackPlan == null)
         {
             return;
         }
@@ -62,7 +63,10 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
             }
             else
             {
-                host.ShowOneSidedFreeAttack(freeAttackPlan, false);
+                host.ShowOneSidedUnilateralAttack(
+                    unilateralAttackPlan,
+                    false
+                );
             }
         }
     }
@@ -70,11 +74,12 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
     public static void ShowForRoll(BattlePresentationRequest request)
     {
         BattleClashSession session = GetSupportedSession(request);
-        BattleResolutionPlan freeAttackPlan = GetSupportedFreeAttackPlan(
+        BattleResolutionPlan unilateralAttackPlan =
+            GetSupportedUnilateralAttackPlan(
             request,
             true
-        );
-        if (session == null && freeAttackPlan == null)
+            );
+        if (session == null && unilateralAttackPlan == null)
         {
             return;
         }
@@ -88,7 +93,10 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
             }
             else
             {
-                host.ShowOneSidedFreeAttack(freeAttackPlan, true);
+                host.ShowOneSidedUnilateralAttack(
+                    unilateralAttackPlan,
+                    true
+                );
             }
         }
     }
@@ -194,7 +202,7 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         fadeCoroutine = StartCoroutine(FadeIn());
     }
 
-    void ShowOneSidedFreeAttack(
+    void ShowOneSidedUnilateralAttack(
         BattleResolutionPlan plan,
         bool hasRolledPoint
     )
@@ -204,26 +212,36 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
             return;
         }
 
+        bool showOnAllySide = ShouldShowUnilateralOnAllySide(plan);
         ApplySafeArea(false);
-        BindFollowActors(plan.attacker, plan.target);
+        BindFollowActors(
+            showOnAllySide ? plan.attacker : plan.target,
+            showOnAllySide ? plan.target : plan.attacker
+        );
         BattleClashSideState attackerSide = new BattleClashSideState(
             plan.attacker,
             plan.sourceCardState,
             plan.freeActionPointSnapshot,
             plan.freeActionResourceSnapshot
         );
-        bool allyShown = allySideView != null && (hasRolledPoint
-            ? allySideView.ShowOneSidedAttackRoll(
+        BattleActionRollPanelSideView shownSideView = showOnAllySide
+            ? allySideView
+            : enemySideView;
+        BattleActionRollPanelSideView hiddenSideView = showOnAllySide
+            ? enemySideView
+            : allySideView;
+        bool shown = shownSideView != null && (hasRolledPoint
+            ? shownSideView.ShowOneSidedAttackRoll(
                 attackerSide,
                 plan.target,
                 plan.freeActionPoint
             )
-            : allySideView.ShowOneSidedAttackPending(
+            : shownSideView.ShowOneSidedAttackPending(
                 attackerSide,
                 plan.target
             ));
-        enemySideView?.Hide();
-        if (!allyShown)
+        hiddenSideView?.Hide();
+        if (!shown)
         {
             HideInternal();
             return;
@@ -257,7 +275,7 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
                 : null;
     }
 
-    static BattleResolutionPlan GetSupportedFreeAttackPlan(
+    static BattleResolutionPlan GetSupportedUnilateralAttackPlan(
         BattlePresentationRequest request,
         bool requireRolledPoint
     )
@@ -265,13 +283,33 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         BattleResolutionPlan plan = request != null
             ? request.ResolutionPlan
             : null;
-        return plan != null &&
-            plan.planKind == BattleResolutionPlanKind.FreeActionAttack &&
-            plan.sourceCardState != null &&
-            plan.sourceCardState.IsMeleeAttack() &&
-            (!requireRolledPoint || plan.freeActionHasRolled)
+        return IsSupportedUnilateralAttackPlan(plan, requireRolledPoint)
                 ? plan
                 : null;
+    }
+
+    internal static bool IsSupportedUnilateralAttackPlan(
+        BattleResolutionPlan plan,
+        bool requireRolledPoint
+    )
+    {
+        return plan != null &&
+            (plan.planKind == BattleResolutionPlanKind.FreeActionAttack ||
+             plan.planKind ==
+                BattleResolutionPlanKind.UnrespondedEnemyAttack) &&
+            plan.sourceCardState != null &&
+            plan.sourceCardState.cardData != null &&
+            plan.sourceCardState.cardData.cardType == CardType.Attack &&
+            plan.attacker != null && plan.target != null &&
+            plan.playerCardUsed != plan.enemyCardUsed &&
+            (!requireRolledPoint || plan.freeActionHasRolled);
+    }
+
+    internal static bool ShouldShowUnilateralOnAllySide(
+        BattleResolutionPlan plan
+    )
+    {
+        return plan != null && plan.playerCardUsed && !plan.enemyCardUsed;
     }
 
     IEnumerator FadeIn()
