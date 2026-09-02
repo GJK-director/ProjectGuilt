@@ -74,7 +74,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public bool DodgeVsAttackEngagementBegun;
         public bool DodgeVsAttackCameraEntryFinished;
         public bool DodgeVsAttackApproachFinished;
-        public bool CombatTerminalFocusActive;
 
         public BattleClashSideState LongRangeShooterSide;
         public BattleClashSideState LongRangeMeleeSide;
@@ -509,25 +508,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     {
         return cardState != null &&
             (cardState.IsMeleeAttack() || cardState.IsCloseRangeShoot());
-    }
-
-    internal static bool RequiresCombatTerminalCameraFocus(
-        BattlePresentationRoute route,
-        bool continueCameraToNextItem
-    )
-    {
-        if (route == null || continueCameraToNextItem ||
-            !route.UsesNearRangeAttackGrammar || route.UsesLongRangeGrammar)
-        {
-            return false;
-        }
-
-        return route.HandlerKind ==
-                BattlePresentationHandlerKind.AttackVsDefense ||
-            route.HandlerKind ==
-                BattlePresentationHandlerKind.AttackVsDodge ||
-            route.HandlerKind ==
-                BattlePresentationHandlerKind.UnilateralAttack;
     }
 
     private static bool TryStartOneSidedAttackCameraGrammar(
@@ -3976,134 +3956,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     )
     {
         BattleActionRollPanelHost.HideImmediate();
-        if (TryStartCombatTerminalCameraTail(request, completion, context))
-        {
-            return;
-        }
-
         ReleaseCameraForContext(context);
         CompleteRequest(request, completion);
         activeContext = null;
-    }
-
-    private bool TryStartCombatTerminalCameraTail(
-        BattlePresentationRequest request,
-        BattlePresentationCompletion completion,
-        ActionPresentationContext context
-    )
-    {
-        if (!RequiresCombatTerminalCameraFocus(
-                context != null ? context.Route : null,
-                request != null &&
-                    request.ContinueBattleActionCameraToNextItem
-            ))
-        {
-            return false;
-        }
-
-        if (request == null || context == null || context.Cancelled ||
-            !context.CameraCinematicOwned ||
-            !TryGetCombatTerminalFocusHandles(
-                context,
-                out BattleUnitViewHandle first,
-                out BattleUnitViewHandle second
-            ))
-        {
-            Debug.LogWarning(
-                "[ScenePresenter] Combat Terminal Focus引用无效，" +
-                "已安全释放Camera并完成ActionComplete。",
-                this
-            );
-            return false;
-        }
-
-        BattleCameraDirector director = ResolveBattleCameraDirector();
-        long requestId = request.RequestId;
-        BattleExecutionItem executionItem = request.ExecutionItem;
-        context.CombatTerminalFocusActive = true;
-        activePresentationRequestId = requestId;
-        bool started = director != null && director.TryPlayTwoUnitFocus(
-            first,
-            second,
-            false,
-            () => CompleteCombatTerminalCameraTail(
-                context,
-                executionItem,
-                requestId,
-                completion
-            )
-        );
-        if (started)
-        {
-            return true;
-        }
-
-        context.CombatTerminalFocusActive = false;
-        if (activePresentationRequestId == requestId)
-        {
-            activePresentationRequestId = 0L;
-        }
-        Debug.LogWarning(
-            "[ScenePresenter] Combat Terminal Focus启动失败，" +
-            "已安全释放Camera并完成ActionComplete。",
-            this
-        );
-        return false;
-    }
-
-    private void CompleteCombatTerminalCameraTail(
-        ActionPresentationContext context,
-        BattleExecutionItem executionItem,
-        long requestId,
-        BattlePresentationCompletion completion
-    )
-    {
-        if (!IsCurrentPresentationRequest(requestId) ||
-            !object.ReferenceEquals(activeContext, context) ||
-            !object.ReferenceEquals(context.ExecutionItem, executionItem) ||
-            !context.CombatTerminalFocusActive)
-        {
-            return;
-        }
-
-        context.CombatTerminalFocusActive = false;
-        activePresentationRequestId = 0L;
-        ReleaseCameraForContext(context);
-        completion.TryComplete(requestId);
-        activeContext = null;
-    }
-
-    private static bool TryGetCombatTerminalFocusHandles(
-        ActionPresentationContext context,
-        out BattleUnitViewHandle first,
-        out BattleUnitViewHandle second
-    )
-    {
-        first = null;
-        second = null;
-        if (context == null || context.Route == null)
-        {
-            return false;
-        }
-
-        switch (context.Route.HandlerKind)
-        {
-            case BattlePresentationHandlerKind.AttackVsDefense:
-                first = context.DefenseAttackerHandle;
-                second = context.DefenseDefenderHandle;
-                break;
-            case BattlePresentationHandlerKind.AttackVsDodge:
-                first = context.DodgeAttackerHandle;
-                second = context.DodgeDefenderHandle;
-                break;
-            case BattlePresentationHandlerKind.UnilateralAttack:
-                first = context.CurrentAttackerHandle;
-                second = context.CurrentTargetHandle;
-                break;
-        }
-
-        return first != null && second != null &&
-            first.WorldRoot != null && second.WorldRoot != null;
     }
 
     private bool IsOwnedDefaultAttackContext(

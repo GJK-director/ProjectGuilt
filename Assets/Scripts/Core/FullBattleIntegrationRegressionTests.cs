@@ -36,8 +36,7 @@ public static class FullBattleIntegrationRegressionTests
             VerifyCampOnlyChangesFacing(production),
             VerifyProductionDataToBindingContract(production),
             VerifyTurnEndClosingPushesIntoRecoveryPose(),
-            VerifyNewTurnOpeningPullsBackToDefaultPose(),
-            VerifyCombatTerminalCameraPolicy()
+            VerifyNewTurnOpeningPullsBackToDefaultPose()
         };
 
         string[] names =
@@ -67,8 +66,7 @@ public static class FullBattleIntegrationRegressionTests
             "Camp只改变Facing不改变Presentation Capability",
             "Production Definition到Binding Contract数据链完整",
             "TurnEnd Closing从Combat Terminal前缩到Recovery",
-            "NewTurn Opening从Recovery后缩到Default",
-            "One-Sided Near统一Terminal Focus且Continuous Carry跳过"
+            "NewTurn Opening从Recovery后缩到Default"
         };
 
         bool allPassed = true;
@@ -109,62 +107,6 @@ public static class FullBattleIntegrationRegressionTests
         return Mathf.Approximately(startRadius, recoveryRadius) &&
             Mathf.Approximately(endRadius, defaultRadius) &&
             endRadius > startRadius;
-    }
-
-    private static bool VerifyCombatTerminalCameraPolicy()
-    {
-        BattlePresentationRoute attackVsAttack = CreatePresentationRoute(
-            CardType.Attack,
-            AttackDeliveryMode.Melee,
-            CardType.Attack,
-            AttackDeliveryMode.Melee,
-            false
-        );
-        BattlePresentationRoute attackVsDefense = CreatePresentationRoute(
-            CardType.Defense,
-            string.Empty,
-            CardType.Attack,
-            AttackDeliveryMode.Melee,
-            false
-        );
-        BattlePresentationRoute closeRangeVsDefense = CreatePresentationRoute(
-            CardType.Defense,
-            string.Empty,
-            CardType.Attack,
-            AttackDeliveryMode.CloseRangeShoot,
-            false
-        );
-        BattlePresentationRoute attackVsDodge = CreatePresentationRoute(
-            CardType.Dodge,
-            string.Empty,
-            CardType.Attack,
-            AttackDeliveryMode.Melee,
-            false
-        );
-        BattlePresentationRoute unilateralMelee =
-            CreateUnilateralPresentationRoute(AttackDeliveryMode.Melee);
-        BattlePresentationRoute unilateralLongRange =
-            CreateUnilateralPresentationRoute(
-                AttackDeliveryMode.LongRangeShoot
-            );
-
-        return !BattleSceneExecutionPresenter
-                .RequiresCombatTerminalCameraFocus(attackVsAttack, false) &&
-            BattleSceneExecutionPresenter
-                .RequiresCombatTerminalCameraFocus(attackVsDefense, false) &&
-            BattleSceneExecutionPresenter
-                .RequiresCombatTerminalCameraFocus(
-                    closeRangeVsDefense,
-                    false
-                ) &&
-            BattleSceneExecutionPresenter
-                .RequiresCombatTerminalCameraFocus(attackVsDodge, false) &&
-            BattleSceneExecutionPresenter
-                .RequiresCombatTerminalCameraFocus(unilateralMelee, false) &&
-            !BattleSceneExecutionPresenter
-                .RequiresCombatTerminalCameraFocus(attackVsDodge, true) &&
-            !BattleSceneExecutionPresenter
-                .RequiresCombatTerminalCameraFocus(unilateralLongRange, false);
     }
 
     private static bool VerifyProductionCharacterBootstrap(
