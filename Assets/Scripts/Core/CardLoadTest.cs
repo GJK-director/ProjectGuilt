@@ -16564,8 +16564,16 @@ public class CardLoadTest : MonoBehaviour
         List<EncounterDefinitionData> encounterDefinitions = EncounterDefinitionLoader.LoadDefinitions();
 
         EncounterDefinitionData encounter = EncounterDefinitionLoader.FindByID(encounterDefinitions, "encounter_test_001");
-        CharacterDefinitionData allyA = encounter != null ? CharacterDefinitionLoader.FindByID(characterDefinitions, encounter.allyCharacterIDs[0]) : null;
-        CharacterDefinitionData allyB = encounter != null ? CharacterDefinitionLoader.FindByID(characterDefinitions, encounter.allyCharacterIDs[1]) : null;
+        CharacterDefinitionData allyA = encounter != null &&
+            encounter.allyCharacterIDs != null &&
+            encounter.allyCharacterIDs.Length > 0
+            ? CharacterDefinitionLoader.FindByID(characterDefinitions, encounter.allyCharacterIDs[0])
+            : null;
+        CharacterDefinitionData allyB = encounter != null &&
+            encounter.allyCharacterIDs != null &&
+            encounter.allyCharacterIDs.Length > 1
+            ? CharacterDefinitionLoader.FindByID(characterDefinitions, encounter.allyCharacterIDs[1])
+            : null;
         EnemyDefinitionData enemyDefinition = encounter != null ? EnemyDefinitionLoader.FindByID(enemyDefinitions, encounter.enemyID) : null;
 
         bool encounterRefs =
@@ -16574,10 +16582,39 @@ public class CardLoadTest : MonoBehaviour
             allyB != null &&
             enemyDefinition != null &&
             encounter.intentPattern != null &&
-            encounter.intentPattern.Length == 1 &&
-            encounter.intentPattern[0].enemyCardIndex == 1 &&
-            CardDataLoader.FindCardByID(cards, enemyDefinition.cardIDs[0]) != null &&
-            CharacterDefinitionLoader.FindByID(characterDefinitions, encounter.intentPattern[0].targetCharacterID) != null;
+            enemyDefinition.cardIDs != null &&
+            enemyDefinition.cardIDs.Length > 0;
+
+        if (encounterRefs)
+        {
+            foreach (EnemyIntentDefinitionData intentDefinition in encounter.intentPattern)
+            {
+                bool validIntentReference =
+                    intentDefinition != null &&
+                    intentDefinition.enemyCardIndex > 0 &&
+                    intentDefinition.enemyCardIndex <= enemyDefinition.cardIDs.Length &&
+                    CardDataLoader.FindCardByID(
+                        cards,
+                        enemyDefinition.cardIDs[intentDefinition.enemyCardIndex - 1]
+                    ) != null;
+
+                if (validIntentReference &&
+                    intentDefinition.targetRule == "FixedCharacterSlot")
+                {
+                    validIntentReference =
+                        CharacterDefinitionLoader.FindByID(
+                            characterDefinitions,
+                            intentDefinition.targetCharacterID
+                        ) != null;
+                }
+
+                if (!validIntentReference)
+                {
+                    encounterRefs = false;
+                    break;
+                }
+            }
+        }
 
         bool artKeysStored =
             encounter != null &&
@@ -16803,31 +16840,80 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
         BattleRuntimeState runtimeState = result != null ? result.runtimeState : null;
-        BattleEnemyIntent intent = runtimeState != null && runtimeState.intentQueue != null && runtimeState.intentQueue.Count > 0
-            ? runtimeState.intentQueue[0]
-            : null;
-        BattleEnemyIntent intent2 = runtimeState != null && runtimeState.intentQueue != null && runtimeState.intentQueue.Count > 1
-            ? runtimeState.intentQueue[1]
-            : null;
+        int expectedIntentCount = result != null &&
+            result.encounterDefinition != null &&
+            result.encounterDefinition.intentPattern != null &&
+            runtimeState != null &&
+            runtimeState.enemyUnits != null
+            ? result.encounterDefinition.intentPattern.Length * runtimeState.enemyUnits.Count
+            : 0;
 
         bool intents =
+            result != null &&
             runtimeState != null &&
             runtimeState.intentQueue != null &&
-            runtimeState.intentQueue.Count ==
-                result.encounterDefinition.intentPattern.Length * 2 &&
-            intent != null &&
-            intent2 != null &&
-            intent.intentOrder == 1 &&
-            intent2.intentOrder == 2 &&
-            intent.enemySlotIndex == 1 &&
-            intent2.enemySlotIndex == 1 &&
-            intent.enemy == runtimeState.enemy &&
-            intent.enemyCardState == runtimeState.enemy.battleCards[0] &&
-            intent2.enemy == runtimeState.enemy2 &&
-            intent2.enemyCardState == runtimeState.enemy2.battleCards[0] &&
-            !object.ReferenceEquals(intent.enemy, intent2.enemy) &&
-            !intent.isResponded &&
-            !intent2.isResponded;
+            runtimeState.intentQueue.Count == expectedIntentCount;
+
+        if (intents)
+        {
+            int queueIndex = 0;
+            foreach (CharacterData enemyUnit in runtimeState.enemyUnits)
+            {
+                for (int patternIndex = 0;
+                    patternIndex < result.encounterDefinition.intentPattern.Length;
+                    patternIndex++)
+                {
+                    EnemyIntentDefinitionData intentDefinition =
+                        result.encounterDefinition.intentPattern[patternIndex];
+                    BattleEnemyIntent intent = runtimeState.intentQueue[queueIndex];
+                    int cardIndex = intentDefinition != null
+                        ? intentDefinition.enemyCardIndex - 1
+                        : -1;
+
+                    if (intent == null ||
+                        intent.intentOrder != queueIndex + 1 ||
+                        intent.enemySlotIndex != patternIndex + 1 ||
+                        intent.enemy != enemyUnit ||
+                        enemyUnit.battleCards == null ||
+                        cardIndex < 0 ||
+                        cardIndex >= enemyUnit.battleCards.Count ||
+                        intent.enemyCardState != enemyUnit.battleCards[cardIndex] ||
+                        intent.isResponded)
+                    {
+                        intents = false;
+                        break;
+                    }
+
+                    queueIndex++;
+                }
+
+                if (!intents)
+                {
+                    break;
+                }
+            }
+
+            if (intents)
+            {
+                for (int firstIndex = 0;
+                    firstIndex < runtimeState.intentQueue.Count && intents;
+                    firstIndex++)
+                {
+                    for (int secondIndex = firstIndex + 1;
+                        secondIndex < runtimeState.intentQueue.Count && intents;
+                        secondIndex++)
+                    {
+                        if (object.ReferenceEquals(
+                            runtimeState.intentQueue[firstIndex],
+                            runtimeState.intentQueue[secondIndex]
+                        ))
+                        {
+                            intents = false;
+                        }
+                    }
+                }
+            }
+        }
 
         Debug.Log("模式56 K 两名敌人分别从真实pattern生成独立意图：" + intents);
     }
@@ -16876,7 +16962,8 @@ public class CardLoadTest : MonoBehaviour
             runtimeState.actionSlots != null &&
             runtimeState.actionSlots.Count == 4 &&
             runtimeState.intentQueue != null &&
-            runtimeState.intentQueue.Count == 2 &&
+            runtimeState.intentQueue.Count ==
+                result.encounterDefinition.intentPattern.Length * runtimeState.enemyUnits.Count &&
             runtimeState.currentExecutionPlan == null &&
             runtimeState.currentTurn == 1 &&
             runtimeState.battleResult == BattleResult.None &&
@@ -16949,11 +17036,63 @@ public class CardLoadTest : MonoBehaviour
             result.runtimeState.currentTurn
         );
 
+        int expectedRemainingIntentCount = 0;
+        if (result != null &&
+            result.encounterDefinition != null &&
+            result.encounterDefinition.intentPattern != null &&
+            result.runtimeState != null &&
+            result.runtimeState.enemyUnits != null)
+        {
+            foreach (EnemyIntentDefinitionData intentDefinition in
+                result.encounterDefinition.intentPattern)
+            {
+                if (intentDefinition != null && intentDefinition.enemyCardIndex != 1)
+                {
+                    expectedRemainingIntentCount += result.runtimeState.enemyUnits.Count;
+                }
+            }
+        }
+
+        bool remainingIntentsAreAvailableDefense =
+            intentResult != null &&
+            intentResult.intentQueue != null &&
+            intentResult.intentQueue.Count == expectedRemainingIntentCount;
+        if (remainingIntentsAreAvailableDefense)
+        {
+            foreach (BattleEnemyIntent intent in intentResult.intentQueue)
+            {
+                if (intent == null ||
+                    intent.enemyCardState == enemyCard ||
+                    intent.enemyCardState == enemyCard2 ||
+                    intent.enemyCardState.cardData == null ||
+                    intent.enemyCardState.cardData.cardType != CardType.Defense)
+                {
+                    remainingIntentsAreAvailableDefense = false;
+                    break;
+                }
+            }
+        }
+
+        int skippedAttackWarnings = 0;
+        if (intentResult != null && intentResult.warningMessages != null)
+        {
+            foreach (string warningMessage in intentResult.warningMessages)
+            {
+                if (!string.IsNullOrEmpty(warningMessage) &&
+                    enemyCard != null &&
+                    warningMessage.Contains(enemyCard.GetCardName()))
+                {
+                    skippedAttackWarnings++;
+                }
+            }
+        }
+
         bool skipped =
             intentResult != null &&
             intentResult.isSuccess &&
             intentResult.intentQueue != null &&
-            intentResult.intentQueue.Count == 0 &&
+            remainingIntentsAreAvailableDefense &&
+            skippedAttackWarnings >= 2 &&
             intentResult.warningMessages != null &&
             intentResult.warningMessages.Count > 0 &&
             enemyCard != null &&
