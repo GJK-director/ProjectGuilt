@@ -182,7 +182,12 @@ public static class BattleActionSlotManager
             return false;
         }
 
-        bool canRespond = CanRespondToEnemyIntent(slot, owner, enemyIntent);
+        bool canRespond = CanExactlyRespondToEnemyIntent(
+            slot,
+            owner,
+            cardState,
+            enemyIntent
+        );
         BattleActionPlacementType placementType = canRespond
             ? BattleActionPlacementType.ExactEnemyIntent
             : BattleActionPlacementType.SpecificEnemy;
@@ -199,7 +204,7 @@ public static class BattleActionSlotManager
 
         string message = canRespond
             ? "已精确安排到敌人意图"
-            : "速度不足或不是原目标槽位，已按针对该敌人的单方面行动安排。";
+            : "不具备精确响应资格，已按针对该敌人的单方面行动安排。";
 
         result = CreateAssignmentSuccess(
             slot,
@@ -1503,7 +1508,12 @@ public static class BattleActionSlotManager
             !IsAllowedForEnemyPlacement(slot.cardState) ||
             intent.enemy == null ||
             intent.enemy.IsDead() ||
-            !CanRespondToEnemyIntent(slot, slot.owner, intent))
+            !CanExactlyRespondToEnemyIntent(
+                slot,
+                slot.owner,
+                slot.cardState,
+                intent
+            ))
         {
             return false;
         }
@@ -1532,6 +1542,30 @@ public static class BattleActionSlotManager
                 object.ReferenceEquals(owner, enemyIntent.originalTargetCharacter) &&
                 slot.slotIndex == enemyIntent.originalTargetSlotIndex
             );
+    }
+
+    static bool CanExactlyRespondToEnemyIntent(
+        BattleActionSlot slot,
+        CharacterData owner,
+        BattleCardState candidateCardState,
+        BattleEnemyIntent enemyIntent
+    )
+    {
+        if (!CanRespondToEnemyIntent(slot, owner, enemyIntent) ||
+            candidateCardState == null ||
+            enemyIntent == null ||
+            enemyIntent.enemyCardState == null)
+        {
+            return false;
+        }
+
+        BattleInteractionType interactionType = BattleInteractionClassifier.Classify(
+            candidateCardState,
+            enemyIntent.enemyCardState
+        );
+        return interactionType == BattleInteractionType.AttackVsAttack ||
+            interactionType == BattleInteractionType.AttackVsDefense ||
+            interactionType == BattleInteractionType.AttackVsDodge;
     }
 
     static bool IsAllowedForEnemyPlacement(BattleCardState cardState)

@@ -25,31 +25,27 @@ public static class BattleReadyMovementContinuationTests
                 false,
                 CardType.Defense,
                 false,
-                BattlePresentationReadyPoseKind.Sprint,
-                BattlePresentationReadyPoseKind.Guard
+                BattlePresentationReadyPoseKind.Sprint
             ),
             VerifyDirectionalReady(
                 true,
                 CardType.Defense,
                 false,
-                BattlePresentationReadyPoseKind.Sprint,
-                BattlePresentationReadyPoseKind.Guard
+                BattlePresentationReadyPoseKind.Sprint
             ),
             VerifyDirectionalReady(
                 false,
                 CardType.Dodge,
                 false,
-                BattlePresentationReadyPoseKind.Sprint,
-                BattlePresentationReadyPoseKind.Dodge
+                BattlePresentationReadyPoseKind.Sprint
             ),
             VerifyDirectionalReady(
                 true,
                 CardType.Dodge,
                 false,
-                BattlePresentationReadyPoseKind.Sprint,
-                BattlePresentationReadyPoseKind.Dodge
+                BattlePresentationReadyPoseKind.Sprint
             ),
-            VerifyNewDodgeEngagementReappliesBothReady(),
+            VerifyNewDodgeEngagementDoesNotPreapplyDodge(),
             VerifyPreserveDodgeActor(),
             VerifyContinuousDodgeAttackReady(
                 AttackDeliveryMode.Melee,
@@ -73,7 +69,7 @@ public static class BattleReadyMovementContinuationTests
                 BattlePresentationReadyPoseKind.Aim, false),
             VerifyNoApproachStillHasReadyHandler(),
             VerifyPreserveDoesNotAffectAttackActor(),
-            VerifyNextEngagementOverridesPreviousPose()
+            VerifyNextEngagementDoesNotPreapplyDodgePose()
         };
         string[] names =
         {
@@ -81,11 +77,11 @@ public static class BattleReadyMovementContinuationTests
             "Melee AttackVsAttack 无Approach仍Ready",
             "LongRange Aim + Melee Sprint",
             "CloseRange + Melee 双Sprint",
-            "Enemy Attack + Player Defense",
-            "Player Attack + Enemy Defense",
-            "Enemy Attack + Player Dodge",
-            "Player Attack + Enemy Dodge",
-            "普通Dodge后新Engagement重建双方Ready",
+            "Enemy Attack Ready + Player Defense不提前Guard",
+            "Player Attack Ready + Enemy Defense不提前Guard",
+            "Enemy Attack Ready + Player Dodge不提前Dodge",
+            "Player Attack Ready + Enemy Dodge不提前Dodge",
+            "普通Dodge新Engagement不提前应用Dodge",
             "Continuous Dodge只保留Dodger",
             "Continuous Dodge新Melee Attacker Sprint",
             "Continuous Dodge新LongRange Attacker Aim",
@@ -94,9 +90,9 @@ public static class BattleReadyMovementContinuationTests
             "Enemy Melee Unilateral",
             "CloseRange Unilateral Sprint",
             "LongRange Unilateral Aim",
-            "RequiresApproach=false仍有Ready Handler",
+            "RequiresApproach=false仍遵守逐Actor Ready",
             "PreserveDodge不影响Attack Actor",
-            "ActionComplete后新ActionBegin覆盖旧Pose"
+            "新普通Engagement不提前覆盖为Dodge Pose"
         };
 
         bool allPassed = true;
@@ -161,8 +157,7 @@ public static class BattleReadyMovementContinuationTests
         bool attackOnSideA,
         string responseType,
         bool preserveDodge,
-        BattlePresentationReadyPoseKind expectedAttack,
-        BattlePresentationReadyPoseKind expectedResponse
+        BattlePresentationReadyPoseKind expectedAttack
     )
     {
         BattlePresentationRoute route = CreateDirectionalRoute(
@@ -179,17 +174,18 @@ public static class BattleReadyMovementContinuationTests
         return route != null &&
             IsReady(ready.Primary, route.InteractionContext.AttackAction,
                 expectedAttack) &&
-            IsReady(ready.Secondary, responseAction, expectedResponse);
+            (preserveDodge
+                ? IsPreservedDodge(ready.Secondary, responseAction)
+                : IsNoPoseChange(ready.Secondary, responseAction));
     }
 
-    static bool VerifyNewDodgeEngagementReappliesBothReady()
+    static bool VerifyNewDodgeEngagementDoesNotPreapplyDodge()
     {
         return VerifyDirectionalReady(
             true,
             CardType.Dodge,
             false,
-            BattlePresentationReadyPoseKind.Sprint,
-            BattlePresentationReadyPoseKind.Dodge
+            BattlePresentationReadyPoseKind.Sprint
         );
     }
 
@@ -274,7 +270,10 @@ public static class BattleReadyMovementContinuationTests
         return !phase.RequiresApproach && phase.RequiresReadyPose &&
             ready.ReadyDirectiveCount == 2 &&
             ready.Primary.ShouldApplyReady &&
-            ready.Secondary.ShouldApplyReady;
+            IsNoPoseChange(
+                ready.Secondary,
+                route.InteractionContext.DefenseAction
+            );
     }
 
     static bool VerifyPreserveDoesNotAffectAttackActor()
@@ -294,7 +293,7 @@ public static class BattleReadyMovementContinuationTests
             ready.Secondary.PreserveCurrentPose;
     }
 
-    static bool VerifyNextEngagementOverridesPreviousPose()
+    static bool VerifyNextEngagementDoesNotPreapplyDodgePose()
     {
         BattlePresentationRoute continuation = CreateDirectionalRoute(
             false,
@@ -314,8 +313,10 @@ public static class BattleReadyMovementContinuationTests
             BattlePresentationReadyPolicy.Create(nextEngagement);
         return previous.Secondary.PreserveCurrentPose &&
             next.Primary.ShouldApplyReady &&
-            next.Secondary.ShouldApplyReady &&
-            !next.Secondary.PreserveCurrentPose;
+            IsNoPoseChange(
+                next.Secondary,
+                nextEngagement.InteractionContext.DodgeAction
+            );
     }
 
     static bool IsReady(
@@ -327,6 +328,30 @@ public static class BattleReadyMovementContinuationTests
         return directive != null && directive.ShouldApplyReady &&
             ReferenceEquals(directive.Action, expectedAction) &&
             directive.PoseKind == expectedPose;
+    }
+
+    static bool IsNoPoseChange(
+        BattlePresentationReadyDirective directive,
+        BattleExecutionAction expectedAction
+    )
+    {
+        return directive != null &&
+            ReferenceEquals(directive.Action, expectedAction) &&
+            directive.PoseKind == BattlePresentationReadyPoseKind.None &&
+            !directive.PreserveCurrentPose &&
+            !directive.ShouldApplyReady;
+    }
+
+    static bool IsPreservedDodge(
+        BattlePresentationReadyDirective directive,
+        BattleExecutionAction expectedAction
+    )
+    {
+        return directive != null &&
+            ReferenceEquals(directive.Action, expectedAction) &&
+            directive.PoseKind == BattlePresentationReadyPoseKind.Dodge &&
+            directive.PreserveCurrentPose &&
+            !directive.ShouldApplyReady;
     }
 
     static BattlePresentationRoute CreateDirectionalRoute(

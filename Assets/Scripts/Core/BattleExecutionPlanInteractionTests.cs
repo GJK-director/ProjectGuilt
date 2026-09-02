@@ -6,7 +6,7 @@ public static class BattleExecutionPlanInteractionTests
 {
     public static bool Run()
     {
-        bool[] results = new bool[12];
+        bool[] results = new bool[13];
 
         results[0] = VerifyResponded(
             CardType.Attack,
@@ -65,6 +65,7 @@ public static class BattleExecutionPlanInteractionTests
                 CardType.Dodge,
                 BattleInteractionType.NoInteraction
             );
+        results[12] = VerifyExactResponseInteractionEligibility();
 
         string[] names =
         {
@@ -79,7 +80,8 @@ public static class BattleExecutionPlanInteractionTests
             "FreeAction CloseRangeShoot",
             "FreeAction Defense / Dodge / Ability",
             "Unresponded Enemy Attack",
-            "Unresponded Enemy Defense / Dodge"
+            "Unresponded Enemy Defense / Dodge",
+            "Exact Response同时验证Interaction并保留Guard降级"
         };
 
         bool allPassed = true;
@@ -184,6 +186,216 @@ public static class BattleExecutionPlanInteractionTests
         )?.interactionType == expected;
     }
 
+    private static bool VerifyExactResponseInteractionEligibility()
+    {
+        return VerifyPreparedAssignment(
+                CardType.Dodge,
+                CardType.Defense,
+                false
+            ) &&
+            VerifyPreparedAssignment(
+                CardType.Defense,
+                CardType.Dodge,
+                false
+            ) &&
+            VerifyPreparedAssignment(
+                CardType.Attack,
+                CardType.Defense,
+                true
+            ) &&
+            VerifyPreparedAssignment(
+                CardType.Attack,
+                CardType.Dodge,
+                true
+            ) &&
+            VerifyPreparedAssignment(
+                CardType.Defense,
+                CardType.Attack,
+                true
+            ) &&
+            VerifyPreparedAssignment(
+                CardType.Dodge,
+                CardType.Attack,
+                true
+            ) &&
+            VerifyDowngradedGuardWaitsForAttack();
+    }
+
+    private static bool VerifyPreparedAssignment(
+        string playerCardType,
+        string enemyCardType,
+        bool expectExactResponse
+    )
+    {
+        PreparedAssignmentFixture fixture = CreatePreparedAssignmentFixture(
+            "prepared_" + playerCardType + "_" + enemyCardType,
+            playerCardType,
+            enemyCardType
+        );
+        if (fixture == null)
+        {
+            return false;
+        }
+
+        bool assigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+            fixture.runtimeState,
+            fixture.ally,
+            1,
+            fixture.playerCard,
+            fixture.intent,
+            out BattleActionAssignmentResult result
+        );
+
+        if (expectExactResponse)
+        {
+            return assigned && result != null && result.isSuccess &&
+                !result.wasAutoDowngraded &&
+                result.placementType == BattleActionPlacementType.ExactEnemyIntent &&
+                result.effectiveSlotType == BattleActionSlotType.RespondToEnemyIntent &&
+                fixture.slot.placementType == BattleActionPlacementType.ExactEnemyIntent &&
+                fixture.slot.slotType == BattleActionSlotType.RespondToEnemyIntent &&
+                object.ReferenceEquals(fixture.slot.enemyIntent, fixture.intent) &&
+                fixture.intent.isResponded;
+        }
+
+        return assigned && result != null && result.isSuccess &&
+            result.wasAutoDowngraded &&
+            result.placementType == BattleActionPlacementType.SpecificEnemy &&
+            result.effectiveSlotType == BattleActionSlotType.EnemySpecificGuard &&
+            fixture.slot.placementType == BattleActionPlacementType.SpecificEnemy &&
+            fixture.slot.slotType == BattleActionSlotType.EnemySpecificGuard &&
+            fixture.slot.enemyIntent == null &&
+            object.ReferenceEquals(fixture.slot.requestedEnemy, fixture.enemy) &&
+            !fixture.intent.isResponded;
+    }
+
+    private static bool VerifyDowngradedGuardWaitsForAttack()
+    {
+        PreparedAssignmentFixture fixture = CreatePreparedAssignmentFixture(
+            "prepared_guard_followup",
+            CardType.Dodge,
+            CardType.Defense
+        );
+        if (fixture == null)
+        {
+            return false;
+        }
+
+        bool assigned = BattleActionSlotManager.TryAssignToEnemyIntent(
+            fixture.runtimeState,
+            fixture.ally,
+            1,
+            fixture.playerCard,
+            fixture.intent,
+            out BattleActionAssignmentResult result
+        );
+        if (!assigned || result == null || !result.wasAutoDowngraded)
+        {
+            return false;
+        }
+
+        BattleExecutionPlan defensePlan =
+            BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+                fixture.runtimeState.actionSlots,
+                fixture.runtimeState.intentQueue,
+                fixture.runtimeState
+            );
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(defensePlan);
+        if (fixture.slot.isUsed)
+        {
+            return false;
+        }
+
+        BattleEnemyIntent attackIntent = new BattleEnemyIntent(
+            "interaction88_followup_attack",
+            fixture.enemy,
+            CreateCard(
+                fixture.enemy,
+                CardType.Attack,
+                "interaction88_followup_enemy_attack"
+            ),
+            fixture.ally,
+            1,
+            2,
+            1
+        );
+        BattleGuardSelectionResult selection = BattleGuardSelectionManager
+            .SelectHandlingCardForEnemyIntent(
+                fixture.runtimeState.actionSlots,
+                attackIntent
+            );
+        return selection != null &&
+            selection.selectionType == BattleGuardSelectionType.EnemySpecificGuard &&
+            object.ReferenceEquals(selection.slot, fixture.slot);
+    }
+
+    private static PreparedAssignmentFixture CreatePreparedAssignmentFixture(
+        string suffix,
+        string playerCardType,
+        string enemyCardType
+    )
+    {
+        CharacterData ally = new CharacterData(
+            "interaction88_prepared_ally_" + suffix,
+            30,
+            10,
+            10
+        );
+        CharacterData enemy = new CharacterData(
+            "interaction88_prepared_enemy_" + suffix,
+            30,
+            5,
+            5
+        );
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(ally, null, enemy);
+        List<BattleActionSlot> slots = BattleActionSlotManager
+            .CreatePartyActionSlots(ally, null, 1);
+        BattleEnemyIntent intent = new BattleEnemyIntent(
+            "interaction88_prepared_intent_" + suffix,
+            enemy,
+            CreateCard(
+                enemy,
+                enemyCardType,
+                "interaction88_prepared_enemy_card_" + suffix
+            ),
+            ally,
+            1,
+            1,
+            1
+        );
+        runtimeState.SetActionSlots(slots);
+        runtimeState.SetIntentQueue(new List<BattleEnemyIntent> { intent });
+
+        BattleLifecycleController lifecycleController =
+            new BattleLifecycleController(runtimeState);
+        bool initialized = lifecycleController.TryInitializeToPrepare(
+            out string failureMessage
+        );
+        if (!initialized ||
+            runtimeState.LifecyclePhase != BattleLifecyclePhase.Prepare)
+        {
+            Debug.LogError(
+                "Mode88 Prepared Fixture初始化失败：" + failureMessage
+            );
+            return null;
+        }
+
+        return new PreparedAssignmentFixture
+        {
+            runtimeState = runtimeState,
+            ally = ally,
+            enemy = enemy,
+            slot = slots[0],
+            playerCard = CreateCard(
+                ally,
+                playerCardType,
+                "interaction88_prepared_player_card_" + suffix
+            ),
+            intent = intent
+        };
+    }
+
     private static BattleExecutionItem GetOnlyItem(
         List<BattleActionSlot> actionSlots,
         List<BattleEnemyIntent> intentQueue
@@ -231,5 +443,15 @@ public static class BattleExecutionPlanInteractionTests
     {
         public CharacterData ally;
         public CharacterData enemy;
+    }
+
+    private sealed class PreparedAssignmentFixture
+    {
+        public BattleRuntimeState runtimeState;
+        public CharacterData ally;
+        public CharacterData enemy;
+        public BattleActionSlot slot;
+        public BattleCardState playerCard;
+        public BattleEnemyIntent intent;
     }
 }

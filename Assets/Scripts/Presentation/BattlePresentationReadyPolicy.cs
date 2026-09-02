@@ -99,7 +99,7 @@ public static class BattlePresentationReadyPolicy
                 ),
                 new BattlePresentationReadyDirective(
                     context.DefenseAction,
-                    BattlePresentationReadyPoseKind.Guard
+                    BattlePresentationReadyPoseKind.None
                 )
             );
         }
@@ -116,7 +116,9 @@ public static class BattlePresentationReadyPolicy
                 ),
                 new BattlePresentationReadyDirective(
                     context.DodgeAction,
-                    BattlePresentationReadyPoseKind.Dodge,
+                    preserveDodge
+                        ? BattlePresentationReadyPoseKind.Dodge
+                        : BattlePresentationReadyPoseKind.None,
                     preserveDodge
                 )
             );
