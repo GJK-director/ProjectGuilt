@@ -12,6 +12,7 @@ public enum BattlePresentationReadyPoseKind
 public sealed class BattlePresentationReadyDirective
 {
     public BattleExecutionAction Action { get; private set; }
+    public CharacterData Actor { get; private set; }
     public BattlePresentationReadyPoseKind PoseKind { get; private set; }
     public bool PreserveCurrentPose { get; private set; }
 
@@ -19,7 +20,7 @@ public sealed class BattlePresentationReadyDirective
     {
         get
         {
-            return Action != null &&
+            return Actor != null &&
                 PoseKind != BattlePresentationReadyPoseKind.None &&
                 !PreserveCurrentPose;
         }
@@ -30,10 +31,36 @@ public sealed class BattlePresentationReadyDirective
         BattlePresentationReadyPoseKind poseKind,
         bool preserveCurrentPose = false
     )
+        : this(action, action != null ? action.actor : null, poseKind,
+            preserveCurrentPose)
+    {
+    }
+
+    private BattlePresentationReadyDirective(
+        BattleExecutionAction action,
+        CharacterData actor,
+        BattlePresentationReadyPoseKind poseKind,
+        bool preserveCurrentPose
+    )
     {
         Action = action;
+        Actor = actor;
         PoseKind = poseKind;
         PreserveCurrentPose = preserveCurrentPose;
+    }
+
+    internal static BattlePresentationReadyDirective ForActor(
+        CharacterData actor,
+        BattlePresentationReadyPoseKind poseKind,
+        bool preserveCurrentPose = false
+    )
+    {
+        return new BattlePresentationReadyDirective(
+            null,
+            actor,
+            poseKind,
+            preserveCurrentPose
+        );
     }
 }
 
@@ -46,9 +73,9 @@ public sealed class BattlePresentationReadyContract
     {
         get
         {
-            int count = Primary != null && Primary.Action != null ? 1 : 0;
+            int count = Primary != null && Primary.Actor != null ? 1 : 0;
             return count +
-                (Secondary != null && Secondary.Action != null ? 1 : 0);
+                (Secondary != null && Secondary.Actor != null ? 1 : 0);
         }
     }
 
@@ -133,7 +160,10 @@ public static class BattlePresentationReadyPolicy
                     context.AttackAction,
                     route.AttackDelivery
                 ),
-                null
+                BattlePresentationReadyDirective.ForActor(
+                    context.Target,
+                    BattlePresentationReadyPoseKind.Idle
+                )
             );
         }
 

@@ -297,6 +297,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         BattleActionRollPanelHost.HideImmediate();
         activeContext = CreateContext(request);
         activeContext.Route = route;
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        LogPoseReadyContext(route);
+#endif
         if (battleActionCameraCarryPending &&
             !IsContinuousDodgeContinuation(request))
         {
@@ -475,6 +478,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     {
         BattlePresentationReadyContract readyContract =
             BattlePresentationReadyPolicy.Create(route);
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        LogPoseReadySecondaryDirective(readyContract.Secondary);
+#endif
         ApplyReadyDirective(readyContract.Primary);
         ApplyReadyDirective(readyContract.Secondary);
     }
@@ -489,10 +495,13 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         ResolvePresentation(
-            directive.Action.actor,
-            out _,
+            directive.Actor,
+            out BattleUnitViewHandle handle,
             out BattleCharacterPresentationController presentation
         );
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+        LogPoseReadyPresentationMapping(directive, handle, presentation);
+#endif
         if (presentation == null)
         {
             return;
@@ -501,7 +510,19 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         switch (directive.PoseKind)
         {
             case BattlePresentationReadyPoseKind.Idle:
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                string beforeSpriteName = GetPoseReadySpriteName(presentation);
+#endif
                 presentation.SetIdle();
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+                Debug.Log(
+                    "[PoseReadyDiag] IdleWrite actor=" +
+                    GetPoseReadyActorID(directive.Actor) +
+                    " beforeSprite=" + beforeSpriteName +
+                    " afterSprite=" + GetPoseReadySpriteName(presentation),
+                    this
+                );
+#endif
                 break;
             case BattlePresentationReadyPoseKind.Sprint:
                 presentation.SetSprint();
@@ -517,6 +538,91 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 break;
         }
     }
+
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    private void LogPoseReadyContext(BattlePresentationRoute route)
+    {
+        BattlePresentationInteractionContext interaction = route != null
+            ? route.InteractionContext
+            : null;
+        Debug.Log(
+            "[PoseReadyDiag] ActionBegin handler=" +
+            (route != null ? route.HandlerKind.ToString() : "null") +
+            " attackActor=" + GetPoseReadyActorID(
+                interaction != null ? interaction.AttackAction?.actor : null
+            ) +
+            " defenseActor=" + GetPoseReadyActorID(
+                interaction != null ? interaction.DefenseAction?.actor : null
+            ),
+            this
+        );
+    }
+
+    private void LogPoseReadySecondaryDirective(
+        BattlePresentationReadyDirective directive
+    )
+    {
+        Debug.Log(
+            "[PoseReadyDiag] Secondary actor=" + GetPoseReadyActorID(
+                directive != null
+                    ? directive.Actor
+                    : null
+            ) +
+            " pose=" + (directive != null
+                ? directive.PoseKind.ToString()
+                : "null") +
+            " preserve=" + (directive != null &&
+                directive.PreserveCurrentPose) +
+            " shouldApply=" + (directive != null &&
+                directive.ShouldApplyReady),
+            this
+        );
+    }
+
+    private void LogPoseReadyPresentationMapping(
+        BattlePresentationReadyDirective directive,
+        BattleUnitViewHandle handle,
+        BattleCharacterPresentationController presentation
+    )
+    {
+        CharacterData actor = directive != null
+            ? directive.Actor
+            : null;
+        Debug.Log(
+            "[PoseReadyDiag] Apply actor=" + GetPoseReadyActorID(actor) +
+            " pose=" + (directive != null
+                ? directive.PoseKind.ToString()
+                : "null") +
+            " handle=" + (handle != null) +
+            " handleActor=" + GetPoseReadyActorID(
+                handle != null ? handle.RuntimeUnit : null
+            ) +
+            " sameActor=" + (handle != null && object.ReferenceEquals(
+                actor,
+                handle.RuntimeUnit
+            )) +
+            " presentation=" + (presentation != null),
+            this
+        );
+    }
+
+    private static string GetPoseReadyActorID(CharacterData actor)
+    {
+        return actor != null ? actor.runtimeUnitID : "null";
+    }
+
+    private static string GetPoseReadySpriteName(
+        BattleCharacterPresentationController presentation
+    )
+    {
+        SpriteRenderer renderer = presentation != null
+            ? presentation.CharacterSpriteRenderer
+            : null;
+        return renderer != null && renderer.sprite != null
+            ? renderer.sprite.name
+            : "null";
+    }
+#endif
 
     private void ApplyPreviousActionHandoff(
         BattlePresentationInteractionContext currentInteraction
@@ -553,18 +659,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         );
     }
 
-    private void ResetPreviousActionParticipantsToStableIdle()
+    private void ClearPreviousActionParticipantTracking()
     {
-        foreach (CharacterData actor in previousActionParticipants)
-        {
-            ResolvePresentation(
-                actor,
-                out _,
-                out BattleCharacterPresentationController presentation
-            );
-            presentation?.ResetToStableIdlePresentation();
-        }
-
         ClearActionParticipantTracking(
             previousActionParticipants,
             currentActionParticipants,
@@ -3344,7 +3440,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         BattlePresentationCompletion completion
     )
     {
-        ResetPreviousActionParticipantsToStableIdle();
+        ClearPreviousActionParticipantTracking();
         BattleActionRollPanelHost.HideImmediate();
         ReleasePendingBattleActionCamera();
         CompleteRequest(request, completion);

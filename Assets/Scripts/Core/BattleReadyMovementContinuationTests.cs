@@ -72,6 +72,7 @@ public static class BattleReadyMovementContinuationTests
                 BattlePresentationReadyPoseKind.Sprint, false),
             VerifyUnilateralReady(false, AttackDeliveryMode.LongRangeShoot,
                 BattlePresentationReadyPoseKind.Aim, false),
+            VerifyUnilateralTargetParticipantTracking(),
             VerifyNoApproachStillHasReadyHandler(),
             VerifyPreserveDoesNotAffectAttackActor(),
             VerifyNextEngagementDoesNotPreapplyDodgePose(),
@@ -100,6 +101,7 @@ public static class BattleReadyMovementContinuationTests
             "Enemy Melee Unilateral",
             "CloseRange Unilateral Sprint",
             "LongRange Unilateral Aim",
+            "Unilateral Target Idle且保留Participant Tracking",
             "RequiresApproach=false仍遵守Defense Idle Ready",
             "PreserveDodge不影响Attack Actor",
             "新普通Engagement使用Dodge Idle",
@@ -227,6 +229,10 @@ public static class BattleReadyMovementContinuationTests
             ReferenceEquals(
                 ready.Secondary.Action,
                 route.InteractionContext.DodgeAction
+            ) &&
+            ReferenceEquals(
+                ready.Secondary.Actor,
+                route.InteractionContext.DodgeAction.actor
             );
     }
 
@@ -249,7 +255,11 @@ public static class BattleReadyMovementContinuationTests
                 expectedAttack
             ) &&
             ready.Secondary.PreserveCurrentPose &&
-            !ready.Secondary.ShouldApplyReady;
+            !ready.Secondary.ShouldApplyReady &&
+            ReferenceEquals(
+                ready.Secondary.Actor,
+                route.InteractionContext.DodgeAction.actor
+            );
     }
 
     static bool VerifyUnilateralReady(
@@ -268,12 +278,45 @@ public static class BattleReadyMovementContinuationTests
             BattlePresentationReadyPolicy.Create(route);
         return route != null && phase != null &&
             phase.RequiresApproach == requiresApproach &&
-            phase.RequiresReadyPose && ready.Secondary == null &&
+            phase.RequiresReadyPose &&
             IsReady(
                 ready.Primary,
                 route.InteractionContext.AttackAction,
                 expected
-            );
+            ) &&
+            IsActorReady(
+                ready.Secondary,
+                route.InteractionContext.Target,
+                BattlePresentationReadyPoseKind.Idle
+            ) &&
+            ready.Secondary.Action == null;
+    }
+
+    static bool VerifyUnilateralTargetParticipantTracking()
+    {
+        BattlePresentationRoute route = CreateRoute(
+            CardType.Attack,
+            AttackDeliveryMode.Melee,
+            null,
+            null,
+            false
+        );
+        BattlePresentationReadyContract ready =
+            BattlePresentationReadyPolicy.Create(route);
+        var participants = new List<CharacterData>();
+        BattleSceneExecutionPresenter.CollectActionParticipants(
+            route.InteractionContext,
+            participants
+        );
+        return IsActorReady(
+                ready.Secondary,
+                route.InteractionContext.Target,
+                BattlePresentationReadyPoseKind.Idle
+            ) &&
+            ready.Secondary.Action == null &&
+            participants.Count == 2 &&
+            participants.Contains(route.InteractionContext.AttackAction.actor) &&
+            participants.Contains(route.InteractionContext.Target);
     }
 
     static bool VerifyNoApproachStillHasReadyHandler()
@@ -312,7 +355,11 @@ public static class BattleReadyMovementContinuationTests
             ready.Primary.ShouldApplyReady &&
             !ready.Primary.PreserveCurrentPose &&
             ready.Secondary.Action == route.InteractionContext.DodgeAction &&
-            ready.Secondary.PreserveCurrentPose;
+            ready.Secondary.PreserveCurrentPose &&
+            ReferenceEquals(
+                ready.Secondary.Actor,
+                route.InteractionContext.DodgeAction.actor
+            );
     }
 
     static bool VerifyNextEngagementDoesNotPreapplyDodgePose()
@@ -463,7 +510,8 @@ public static class BattleReadyMovementContinuationTests
             previousParticipants, currentParticipants, previousOnlyParticipants);
         return previousOnlyParticipants.Count == 0 &&
             ready.Secondary.PreserveCurrentPose &&
-            ReferenceEquals(ready.Secondary.Action, current.DodgeAction);
+            ReferenceEquals(ready.Secondary.Action, current.DodgeAction) &&
+            ReferenceEquals(ready.Secondary.Actor, current.DodgeAction.actor);
     }
 
     static bool VerifyExecutionClosureClearsParticipantTracking()
@@ -498,6 +546,18 @@ public static class BattleReadyMovementContinuationTests
     {
         return directive != null && directive.ShouldApplyReady &&
             ReferenceEquals(directive.Action, expectedAction) &&
+            ReferenceEquals(directive.Actor, expectedAction.actor) &&
+            directive.PoseKind == expectedPose;
+    }
+
+    static bool IsActorReady(
+        BattlePresentationReadyDirective directive,
+        CharacterData expectedActor,
+        BattlePresentationReadyPoseKind expectedPose
+    )
+    {
+        return directive != null && directive.ShouldApplyReady &&
+            ReferenceEquals(directive.Actor, expectedActor) &&
             directive.PoseKind == expectedPose;
     }
 
@@ -508,6 +568,7 @@ public static class BattleReadyMovementContinuationTests
     {
         return directive != null &&
             ReferenceEquals(directive.Action, expectedAction) &&
+            ReferenceEquals(directive.Actor, expectedAction.actor) &&
             directive.PoseKind == BattlePresentationReadyPoseKind.Dodge &&
             directive.PreserveCurrentPose &&
             !directive.ShouldApplyReady;
