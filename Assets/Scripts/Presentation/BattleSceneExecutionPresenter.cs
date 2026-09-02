@@ -537,7 +537,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         float finalGap,
         System.Action engagementBegun,
         System.Action<bool> completion,
-        bool useBattleFocusVertical = false
+        bool establishBattleFocusPose = false
     )
     {
         return director != null &&
@@ -547,7 +547,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 finalGap,
                 engagementBegun,
                 completion,
-                useBattleFocusVertical
+                establishBattleFocusPose
             );
     }
 

@@ -243,6 +243,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
     private float anchoredApproachStartRadius;
     private float anchoredApproachStartVerticalProgress;
     private bool anchoredApproachUsesContinuousFraming;
+    private bool anchoredApproachEstablishesBattleFocusPose;
     private float anchoredApproachHorizontalVelocity;
     private float anchoredApproachRadiusVelocity;
 
@@ -572,7 +573,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         float nearSeparation,
         System.Action engagementBegan,
         System.Action<bool> engagementReady,
-        bool useBattleFocusVertical = false
+        bool establishBattleFocusPose = false
     )
     {
         return TryPlaySingleActorApproachFollow(
@@ -583,7 +584,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
             null,
             engagementBegan,
             engagementReady,
-            useBattleFocusVertical
+            establishBattleFocusPose
         );
     }
 
@@ -595,7 +596,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         System.Action<bool> approachReady,
         System.Action engagementBegan,
         System.Action<bool> engagementReady,
-        bool useBattleFocusVertical
+        bool establishBattleFocusPose
     )
     {
         if (!TryBeginAnchoredTwoUnitApproach(
@@ -608,13 +609,15 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
 
         anchoredApproachUsesContinuousFraming = true;
+        anchoredApproachEstablishesBattleFocusPose =
+            establishBattleFocusPose;
         anchoredApproachCoroutine = StartCoroutine(
             PlaySingleActorApproachFollowSequence(
                 useBattleActionEntry,
                 approachReady,
                 engagementBegan,
                 engagementReady,
-                useBattleFocusVertical
+                establishBattleFocusPose
             )
         );
         return true;
@@ -1122,7 +1125,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         System.Action<bool> approachReady,
         System.Action engagementBegan,
         System.Action<bool> engagementReady,
-        bool useBattleFocusVertical
+        bool establishBattleFocusPose
     )
     {
         float blendTrigger = Mathf.Max(
@@ -1350,7 +1353,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
                     blendProgress
                 )
             );
-            if (useBattleFocusVertical)
+            if (establishBattleFocusPose)
             {
                 cameraController.SetCinematicVerticalViewProgress(
                     Mathf.Lerp(
@@ -1368,10 +1371,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
             yield break;
         }
 
-        if (useBattleFocusVertical)
+        if (establishBattleFocusPose)
         {
-            // Defense只在既有Engagement Blend内补齐Battle Focus Vertical，
-            // 与Horizontal/Radius共用同一条Coroutine，避免Camera写入竞争。
+            // Canonical Battle Focus与Horizontal/Radius共用既有Coroutine，
+            // 避免为Vertical新增独立Camera writer。
             cameraController.SetCinematicVerticalViewProgress(
                 twoUnitFocusVerticalViewProgress
             );
@@ -1547,6 +1550,12 @@ public sealed class BattleCameraDirector : MonoBehaviour
             snapHorizontal
         );
         cameraController.SetCinematicOrbitRadius(targetRadius);
+        if (anchoredApproachEstablishesBattleFocusPose)
+        {
+            cameraController.SetCinematicVerticalViewProgress(
+                twoUnitFocusVerticalViewProgress
+            );
+        }
     }
 
     private void ApplyFinalEngagementFramingCorrectionWithinTolerance()
@@ -1579,6 +1588,12 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
         cameraController.SetCinematicHorizontalWorldX(targetWorldX);
         cameraController.SetCinematicOrbitRadius(targetRadius);
+        if (anchoredApproachEstablishesBattleFocusPose)
+        {
+            cameraController.SetCinematicVerticalViewProgress(
+                twoUnitFocusVerticalViewProgress
+            );
+        }
     }
 
     private void ApplyContinuousHorizontalFraming(
@@ -1764,6 +1779,11 @@ public sealed class BattleCameraDirector : MonoBehaviour
         );
 
         targetRadius = Mathf.Lerp(nearRadius, farRadius, farProgress);
+        if (useContinuousFraming &&
+            anchoredApproachEstablishesBattleFocusPose)
+        {
+            targetRadius = twoUnitFocusOrbitRadius;
+        }
         return true;
     }
 
@@ -1929,6 +1949,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         anchoredApproachStartSeparation = 0f;
         anchoredApproachStartVerticalProgress = 0f;
         anchoredApproachUsesContinuousFraming = false;
+        anchoredApproachEstablishesBattleFocusPose = false;
         anchoredApproachHorizontalVelocity = 0f;
         anchoredApproachRadiusVelocity = 0f;
     }
