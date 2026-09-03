@@ -19,6 +19,8 @@ public static class BattleGenericAttackVsDefenseTests
             VerifyInvalidPairRejected(),
             VerifyMeleeAndCloseRangeIdentity(),
             VerifyLongRangeIdentityAndResourceContract(),
+            VerifyLongRangeRespondedFullBlock(),
+            VerifyLongRangeRespondedReducedDamage(),
             VerifyOldAdapterParity()
         };
         string[] names =
@@ -34,6 +36,8 @@ public static class BattleGenericAttackVsDefenseTests
             "Defense + Defense被安全拒绝",
             "Melee与CloseRange均为AttackVsDefense",
             "LongRange仍为AttackVsDefense并保留资源契约",
+            "LongRange Responded Adapter FullBlock保持Defense Session",
+            "LongRange Responded Adapter ReducedDamage保持Defense Session",
             "旧Responded Adapter与Generic Core结果一致"
         };
 
@@ -228,6 +232,49 @@ public static class BattleGenericAttackVsDefenseTests
         return fixture.context.effectiveInteractionType == BattleInteractionType.AttackVsDefense &&
             IsSuccessful(outcome, "DefenseFullBlock") &&
             fixture.attackActor.GetBuffStack(resourceID) == 0;
+    }
+
+    static bool VerifyLongRangeRespondedFullBlock()
+    {
+        Fixture fixture = CreateFixture(
+            "mode92_long_range_adapter_full",
+            true,
+            4,
+            8,
+            AttackDeliveryMode.LongRangeShoot
+        );
+        const string resourceID = "Mode92LongRangeAdapterFullBullet";
+        ConfigureSingleUseResource(fixture.attackActor, fixture.attackCard, resourceID);
+
+        Resolution outcome = ResolveThroughRespondedAdapter(fixture);
+        return outcome.session != null &&
+            outcome.session.ClashType == BattleClashType.DefenseVsAttack &&
+            outcome.session.FinalResult == BattleClashFinalResult.DefenseFullBlock &&
+            IsSuccessful(outcome, "DefenseFullBlock") &&
+            outcome.result.damage == 0 &&
+            fixture.attackActor.GetBuffStack(resourceID) == 1;
+    }
+
+    static bool VerifyLongRangeRespondedReducedDamage()
+    {
+        Fixture fixture = CreateFixture(
+            "mode92_long_range_adapter_reduced",
+            true,
+            8,
+            5,
+            AttackDeliveryMode.LongRangeShoot
+        );
+        const string resourceID = "Mode92LongRangeAdapterReducedBullet";
+        ConfigureSingleUseResource(fixture.attackActor, fixture.attackCard, resourceID);
+
+        Resolution outcome = ResolveThroughRespondedAdapter(fixture);
+        return outcome.session != null &&
+            outcome.session.ClashType == BattleClashType.DefenseVsAttack &&
+            outcome.session.FinalResult == BattleClashFinalResult.DefenseReducedDamage &&
+            outcome.session.RemainingAttackPoint > 0 &&
+            IsSuccessful(outcome, "DefenseReducedDamage") &&
+            outcome.result.damage > 0 &&
+            fixture.attackActor.GetBuffStack(resourceID) == 1;
     }
 
     static bool VerifyOldAdapterParity()
@@ -442,6 +489,30 @@ public static class BattleGenericAttackVsDefenseTests
     {
         int baseCooldown = BattleCardManager.GetBaseCooldown(card.cardData);
         return baseCooldown > 0 ? baseCooldown + 1 : 0;
+    }
+
+    static void ConfigureSingleUseResource(
+        CharacterData actor,
+        BattleCardState card,
+        string resourceID
+    )
+    {
+        actor.AddBuff(
+            resourceID,
+            resourceID,
+            BuffCategory.AbilityBuff,
+            2,
+            -1,
+            BattleTiming.TurnEnd,
+            BuffExpireRule.Permanent
+        );
+        card.cardData.resourceRule = new CardResourceRuleData
+        {
+            resourceType = "BuffStack",
+            resourceID = resourceID,
+            requiredStackForNormalVersion = 1,
+            consumeAmountOnSuccess = 1
+        };
     }
 
     sealed class Fixture

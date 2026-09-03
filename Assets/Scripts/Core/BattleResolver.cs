@@ -942,15 +942,10 @@ public static class BattleResolver
         CardTestData playerCard = actionSlot.cardState.cardData;
         CardTestData enemyCard = enemyIntent.enemyCardState.cardData;
 
-        bool isLongRangeShootVsResponse =
-            actionSlot.cardState.IsLongRangeShoot() &&
-            (enemyCard.cardType == CardType.Defense ||
-                enemyCard.cardType == CardType.Dodge);
         BattleExecutionInteractionContext interactionContext =
             CreateRespondedInteractionContext(actionSlot, enemyIntent);
         if (interactionContext.effectiveInteractionType ==
-                BattleInteractionType.AttackVsDefense &&
-            !isLongRangeShootVsResponse)
+                BattleInteractionType.AttackVsDefense)
         {
             if (!BattleCardManager.CanUseCard(
                     actionSlot.actor,
@@ -985,8 +980,7 @@ public static class BattleResolver
         }
 
         if (interactionContext.effectiveInteractionType ==
-                BattleInteractionType.AttackVsDodge &&
-            !isLongRangeShootVsResponse)
+                BattleInteractionType.AttackVsDodge)
         {
             if (!BattleCardManager.CanUseCard(
                     actionSlot.actor,
@@ -1021,8 +1015,7 @@ public static class BattleResolver
             );
         }
 
-        if (enemyCard.cardType != CardType.Attack &&
-            !isLongRangeShootVsResponse)
+        if (enemyCard.cardType != CardType.Attack)
         {
             return CreateUnsupportedResolveResult(
                 "ResolveRespondedEnemyIntent 暂不支持该卡牌对抗类型：玩家 " +
@@ -1424,14 +1417,10 @@ public static class BattleResolver
             ? session.SideA.cardState
             : session.SideB.cardState;
         int winnerPoint = playerWon ? session.SideAPoint : session.SideBPoint;
-        // LongRange Shoot vs Guard/Dodge 由拼点胜者决定结果表现。
-        // 响应卡胜出时仍建立一个不可伤害的Presentation Impact，
-        // 让正式表现拥有真实的结果边界，但不伪造Hit或伤害。
         bool winnerIsAttack = plan.sourceCardState != null &&
             plan.sourceCardState.cardData != null &&
             plan.sourceCardState.cardData.cardType == CardType.Attack;
-        bool isLongRangeResponse = IsLongRangeShootResponse(session);
-        if (winnerIsAttack || isLongRangeResponse)
+        if (winnerIsAttack)
         {
             plan.impacts.Add(new BattleImpact(
                 0,
@@ -1445,29 +1434,6 @@ public static class BattleResolver
                 winnerIsAttack
             ));
         }
-    }
-
-    static bool IsLongRangeShootResponse(BattleClashSession session)
-    {
-        if (session == null || session.SideA == null || session.SideB == null ||
-            session.SideA.cardState == null || session.SideB.cardState == null ||
-            session.SideA.cardState.cardData == null ||
-            session.SideB.cardState.cardData == null)
-        {
-            return false;
-        }
-
-        return session.SideA.cardState.IsLongRangeShoot() &&
-            IsLongRangeResponseCard(session.SideB.cardState) ||
-            session.SideB.cardState.IsLongRangeShoot() &&
-            IsLongRangeResponseCard(session.SideA.cardState);
-    }
-
-    static bool IsLongRangeResponseCard(BattleCardState cardState)
-    {
-        return cardState != null && cardState.cardData != null &&
-            (cardState.cardData.cardType == CardType.Defense ||
-                cardState.cardData.cardType == CardType.Dodge);
     }
 
     static void BuildDefenseResolutionPlan(BattleResolutionPlan plan)

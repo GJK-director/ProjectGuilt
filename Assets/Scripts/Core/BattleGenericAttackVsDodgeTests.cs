@@ -19,6 +19,8 @@ public static class BattleGenericAttackVsDodgeTests
             VerifyInvalidPairRejected(),
             VerifyMeleeAndCloseRangeIdentity(),
             VerifyLongRangeIdentityAndResourceContract(),
+            VerifyLongRangeRespondedDodgeSuccess(),
+            VerifyLongRangeRespondedDodgeFailed(),
             VerifyOldAdapterParity(),
             VerifyContinuousDodgeBeginRegression(),
             VerifyContinuousDodgeSuccessPolicyProtection(),
@@ -37,6 +39,8 @@ public static class BattleGenericAttackVsDodgeTests
             "Dodge + Dodge被安全拒绝",
             "Melee与CloseRange均为AttackVsDodge",
             "LongRange仍为AttackVsDodge并保留资源契约",
+            "LongRange Responded Adapter DodgeSuccess保持Dodge Session",
+            "LongRange Responded Adapter DodgeFailed保持Dodge Session",
             "旧Responded Adapter与Generic Core结果一致",
             "TryBeginContinuousDodgeClash仍汇入Generic Session",
             "Continuous Dodge成功仍由外层保留Slot",
@@ -251,6 +255,48 @@ public static class BattleGenericAttackVsDodgeTests
         return fixture.context.effectiveInteractionType == BattleInteractionType.AttackVsDodge &&
             IsSuccessful(outcome, "DodgeSuccess") &&
             fixture.attackActor.GetBuffStack(resourceID) == 0;
+    }
+
+    static bool VerifyLongRangeRespondedDodgeSuccess()
+    {
+        Fixture fixture = CreateFixture(
+            "mode93_long_range_adapter_success",
+            true,
+            4,
+            8,
+            AttackDeliveryMode.LongRangeShoot
+        );
+        const string resourceID = "Mode93LongRangeAdapterSuccessBullet";
+        ConfigureSingleUseResource(fixture.attackActor, fixture.attackCard, resourceID);
+
+        Resolution outcome = ResolveThroughRespondedAdapter(fixture);
+        return outcome.session != null &&
+            outcome.session.ClashType == BattleClashType.DodgeVsAttack &&
+            outcome.session.FinalResult == BattleClashFinalResult.DodgeSuccess &&
+            IsSuccessful(outcome, "DodgeSuccess") &&
+            outcome.result.damage == 0 &&
+            fixture.attackActor.GetBuffStack(resourceID) == 1;
+    }
+
+    static bool VerifyLongRangeRespondedDodgeFailed()
+    {
+        Fixture fixture = CreateFixture(
+            "mode93_long_range_adapter_failed",
+            true,
+            8,
+            5,
+            AttackDeliveryMode.LongRangeShoot
+        );
+        const string resourceID = "Mode93LongRangeAdapterFailedBullet";
+        ConfigureSingleUseResource(fixture.attackActor, fixture.attackCard, resourceID);
+
+        Resolution outcome = ResolveThroughRespondedAdapter(fixture);
+        return outcome.session != null &&
+            outcome.session.ClashType == BattleClashType.DodgeVsAttack &&
+            outcome.session.FinalResult == BattleClashFinalResult.DodgeFailed &&
+            IsSuccessful(outcome, "DodgeFailed") &&
+            outcome.result.damage > 0 &&
+            fixture.attackActor.GetBuffStack(resourceID) == 1;
     }
 
     static bool VerifyOldAdapterParity()
@@ -551,6 +597,30 @@ public static class BattleGenericAttackVsDodgeTests
     {
         int baseCooldown = BattleCardManager.GetBaseCooldown(card.cardData);
         return baseCooldown > 0 ? baseCooldown + 1 : 0;
+    }
+
+    static void ConfigureSingleUseResource(
+        CharacterData actor,
+        BattleCardState card,
+        string resourceID
+    )
+    {
+        actor.AddBuff(
+            resourceID,
+            resourceID,
+            BuffCategory.AbilityBuff,
+            2,
+            -1,
+            BattleTiming.TurnEnd,
+            BuffExpireRule.Permanent
+        );
+        card.cardData.resourceRule = new CardResourceRuleData
+        {
+            resourceType = "BuffStack",
+            resourceID = resourceID,
+            requiredStackForNormalVersion = 1,
+            consumeAmountOnSuccess = 1
+        };
     }
 
     sealed class Fixture
