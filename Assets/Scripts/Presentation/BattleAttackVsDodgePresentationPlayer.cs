@@ -28,7 +28,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
     private BattleCharacterPresentationController attacker;
     private BattleCharacterPresentationController defender;
     private BattleDodgePresentationResult presentationResult;
-    private bool useCloseRangeShoot;
+    private BattlePresentationAttackDeliveryKind attackDelivery;
     private float attackDirectionSign = 1f;
     private Action onClashReadyFinished;
     private Action onRollResultReady;
@@ -280,7 +280,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
             dodgeActor,
             directionSign,
             result,
-            false,
+            BattlePresentationAttackDeliveryKind.Melee,
             rollResultCompletion,
             actionTailCompletion
         );
@@ -296,7 +296,31 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         Action actionTailCompletion
     )
     {
-        if (!CanStartPlayback() || attackActor == null || dodgeActor == null)
+        return TryPlayDodgeRollResult(
+            attackActor,
+            dodgeActor,
+            directionSign,
+            result,
+            playCloseRangeShoot
+                ? BattlePresentationAttackDeliveryKind.CloseRangeShoot
+                : BattlePresentationAttackDeliveryKind.Melee,
+            rollResultCompletion,
+            actionTailCompletion
+        );
+    }
+
+    public bool TryPlayDodgeRollResult(
+        BattleCharacterPresentationController attackActor,
+        BattleCharacterPresentationController dodgeActor,
+        float directionSign,
+        BattleDodgePresentationResult result,
+        BattlePresentationAttackDeliveryKind delivery,
+        Action rollResultCompletion,
+        Action actionTailCompletion
+    )
+    {
+        if (!CanStartPlayback() || attackActor == null || dodgeActor == null ||
+            !IsSupportedAttackDelivery(delivery))
         {
             return false;
         }
@@ -306,7 +330,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         attacker = attackActor;
         defender = dodgeActor;
         presentationResult = result;
-        useCloseRangeShoot = playCloseRangeShoot;
+        attackDelivery = delivery;
         attackDirectionSign = directionSign >= 0f ? 1f : -1f;
         onRollResultReady = rollResultCompletion;
         onActionTailFinished = actionTailCompletion;
@@ -359,9 +383,13 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
     private IEnumerator RunDodgeResult(int version)
     {
         PrepareResultActors();
-        if (useCloseRangeShoot)
+        if (UsesCloseRangeShootVisual(attackDelivery))
         {
             attacker.SetCloseRangeShoot();
+        }
+        else if (UsesLongRangeShootVisual(attackDelivery))
+        {
+            attacker.SetShoot();
         }
         else
         {
@@ -373,11 +401,21 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
             attackDirectionSign,
             () => MarkDodgeFinished(version)
         );
-        if (useCloseRangeShoot)
+        if (UsesCloseRangeShootVisual(attackDelivery))
         {
             // Flash开始即为开枪接触点；完成回调则等价于原Slash结束边界。
             attacker.PlayCloseRangeMuzzleFlash(
-                () => MarkCloseRangeAttackFinished(version)
+                () => MarkShootAttackFinished(version)
+            );
+            if (presentationResult == BattleDodgePresentationResult.DodgeFailed)
+            {
+                ReachAttackVisualImpact(version);
+            }
+        }
+        else if (UsesLongRangeShootVisual(attackDelivery))
+        {
+            attacker.PlayMuzzleFlash(
+                () => MarkShootAttackFinished(version)
             );
             if (presentationResult == BattleDodgePresentationResult.DodgeFailed)
             {
@@ -431,7 +469,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         }
     }
 
-    private void MarkCloseRangeAttackFinished(int version)
+    private void MarkShootAttackFinished(int version)
     {
         if (IsCurrentPlayback(version))
         {
@@ -521,7 +559,7 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         {
             attacker.SetPresentationPaused(false);
             attacker.ClearSlashEffect();
-            if (!useCloseRangeShoot)
+            if (UsesMeleeVisual(attackDelivery))
             {
                 attacker.FinishSlashPresentation();
             }
@@ -577,8 +615,42 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         rollResultReady = false;
         impactStarted = false;
         hitFinished = false;
-        useCloseRangeShoot = false;
+        attackDelivery = BattlePresentationAttackDeliveryKind.None;
         attackDirectionSign = 1f;
+    }
+
+    internal static bool IsSupportedAttackDelivery(
+        BattlePresentationAttackDeliveryKind delivery
+    )
+    {
+        return delivery == BattlePresentationAttackDeliveryKind.Melee ||
+            delivery ==
+                BattlePresentationAttackDeliveryKind.CloseRangeShoot ||
+            delivery ==
+                BattlePresentationAttackDeliveryKind.LongRangeShoot;
+    }
+
+    internal static bool UsesMeleeVisual(
+        BattlePresentationAttackDeliveryKind delivery
+    )
+    {
+        return delivery == BattlePresentationAttackDeliveryKind.Melee;
+    }
+
+    internal static bool UsesCloseRangeShootVisual(
+        BattlePresentationAttackDeliveryKind delivery
+    )
+    {
+        return delivery ==
+            BattlePresentationAttackDeliveryKind.CloseRangeShoot;
+    }
+
+    internal static bool UsesLongRangeShootVisual(
+        BattlePresentationAttackDeliveryKind delivery
+    )
+    {
+        return delivery ==
+            BattlePresentationAttackDeliveryKind.LongRangeShoot;
     }
 
     private bool CanStartPlayback()

@@ -68,9 +68,7 @@ public sealed class BattlePresentationRoute
         get
         {
             return GrammarKind ==
-                    BattlePresentationGrammarKind.LongRangeVsMeleeClash ||
-                AttackDelivery ==
-                    BattlePresentationAttackDeliveryKind.LongRangeShoot;
+                BattlePresentationGrammarKind.LongRangeVsMeleeClash;
         }
     }
 

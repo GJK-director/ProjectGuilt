@@ -85,6 +85,8 @@ public static class BattleNeutralPresentationRouterTests
             VerifyDodgeResults(),
             VerifyDefenseResults(),
             VerifyContinuousDodgeMetadata(),
+            VerifyGuardAttackDeliveryVisualPolicy(),
+            VerifyDodgeAttackDeliveryVisualPolicy(),
             VerifyRejectedRoutes()
         };
         string[] names =
@@ -110,6 +112,8 @@ public static class BattleNeutralPresentationRouterTests
             "Dodge Result只消费Combat Result",
             "Defense Result只消费Combat Result",
             "Continuous Dodge保留metadata",
+            "Guard Player按Melee/CloseRange/LongRange选择攻击视觉",
+            "Dodge Player的LongRange不映射为Slash",
             "NoInteraction/Ability/ActionUnavailable拒绝"
         };
 
@@ -144,7 +148,10 @@ public static class BattleNeutralPresentationRouterTests
         return TryRoute(request, out BattlePresentationRoute route) &&
             route.HandlerKind == BattlePresentationHandlerKind.AttackVsAttack &&
             route.GrammarKind == expectedGrammar &&
-            route.InteractionType == BattleInteractionType.AttackVsAttack;
+            route.InteractionType == BattleInteractionType.AttackVsAttack &&
+            route.UsesLongRangeGrammar ==
+                (expectedGrammar ==
+                    BattlePresentationGrammarKind.LongRangeVsMeleeClash);
     }
 
     static bool VerifyDirectionalRoute(
@@ -175,9 +182,15 @@ public static class BattleNeutralPresentationRouterTests
             );
         BattlePresentationAttackDeliveryKind expectedDelivery =
             ParseExpectedDelivery(deliveryMode);
+        BattlePresentationGrammarKind expectedGrammar = expectedHandler ==
+                BattlePresentationHandlerKind.AttackVsDefense
+            ? BattlePresentationGrammarKind.AttackVsDefense
+            : BattlePresentationGrammarKind.AttackVsDodge;
         return TryRoute(request, out BattlePresentationRoute route) &&
             route.HandlerKind == expectedHandler &&
+            route.GrammarKind == expectedGrammar &&
             route.AttackDelivery == expectedDelivery &&
+            !route.UsesLongRangeGrammar &&
             route.InteractionContext.AttackAction != null &&
             (expectedHandler == BattlePresentationHandlerKind.AttackVsDefense
                 ? route.InteractionContext.DefenseAction != null
@@ -268,6 +281,46 @@ public static class BattleNeutralPresentationRouterTests
             route.HandlerKind == BattlePresentationHandlerKind.AttackVsDodge &&
             route.ContinuationPolicy ==
                 BattlePresentationContinuationPolicy.PreserveDodgePose;
+    }
+
+    static bool VerifyGuardAttackDeliveryVisualPolicy()
+    {
+        return BattleAttackVsGuardPresentationPlayer
+                .UsesMeleeVisual(
+                    BattlePresentationAttackDeliveryKind.Melee
+                ) &&
+            BattleAttackVsGuardPresentationPlayer
+                .UsesCloseRangeShootVisual(
+                    BattlePresentationAttackDeliveryKind.CloseRangeShoot
+                ) &&
+            BattleAttackVsGuardPresentationPlayer
+                .UsesLongRangeShootVisual(
+                    BattlePresentationAttackDeliveryKind.LongRangeShoot
+                ) &&
+            !BattleAttackVsGuardPresentationPlayer
+                .UsesMeleeVisual(
+                    BattlePresentationAttackDeliveryKind.LongRangeShoot
+                );
+    }
+
+    static bool VerifyDodgeAttackDeliveryVisualPolicy()
+    {
+        return BattleAttackVsDodgePresentationPlayer
+                .UsesMeleeVisual(
+                    BattlePresentationAttackDeliveryKind.Melee
+                ) &&
+            BattleAttackVsDodgePresentationPlayer
+                .UsesCloseRangeShootVisual(
+                    BattlePresentationAttackDeliveryKind.CloseRangeShoot
+                ) &&
+            BattleAttackVsDodgePresentationPlayer
+                .UsesLongRangeShootVisual(
+                    BattlePresentationAttackDeliveryKind.LongRangeShoot
+                ) &&
+            !BattleAttackVsDodgePresentationPlayer
+                .UsesMeleeVisual(
+                    BattlePresentationAttackDeliveryKind.LongRangeShoot
+                );
     }
 
     static bool VerifyRejectedRoutes()

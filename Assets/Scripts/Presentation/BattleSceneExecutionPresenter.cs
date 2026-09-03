@@ -436,6 +436,14 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (route.HandlerKind ==
             BattlePresentationHandlerKind.AttackVsDefense)
         {
+            if (route.AttackDelivery ==
+                BattlePresentationAttackDeliveryKind.LongRangeShoot)
+            {
+                TryResolveDefensePresentationActors(activeContext);
+                CompleteRequest(request, completion);
+                return;
+            }
+
             if (route.UsesNearRangeAttackGrammar &&
                 TryStartDefenseVsAttackAnchoredApproach(
                     request,
@@ -460,6 +468,15 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (route.HandlerKind ==
             BattlePresentationHandlerKind.AttackVsDodge)
         {
+            if (route.AttackDelivery ==
+                BattlePresentationAttackDeliveryKind.LongRangeShoot)
+            {
+                ReleasePendingBattleActionCamera();
+                TryResolveDodgePresentationActors(activeContext);
+                CompleteRequest(request, completion);
+                return;
+            }
+
             if (route.UsesNearRangeAttackGrammar &&
                 TryStartDodgeVsAttackAnchoredApproach(
                     request,
@@ -712,6 +729,21 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     {
         return cardState != null &&
             (cardState.IsMeleeAttack() || cardState.IsCloseRangeShoot());
+    }
+
+    private static BattlePresentationAttackDeliveryKind ResolveAttackDelivery(
+        BattleCardState cardState
+    )
+    {
+        if (cardState != null && cardState.IsLongRangeShoot())
+        {
+            return BattlePresentationAttackDeliveryKind.LongRangeShoot;
+        }
+        if (cardState != null && cardState.IsCloseRangeShoot())
+        {
+            return BattlePresentationAttackDeliveryKind.CloseRangeShoot;
+        }
+        return BattlePresentationAttackDeliveryKind.Melee;
     }
 
     private static bool TryStartOneSidedAttackCameraGrammar(
@@ -3585,8 +3617,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         context.GuardImpactRequestId = requestId;
         activePresentationRequestId = requestId;
 
-        bool useCloseRangeShoot = request.Impact.sourceCardState != null &&
-            request.Impact.sourceCardState.IsCloseRangeShoot();
+        BattlePresentationAttackDeliveryKind attackDelivery =
+            ResolveAttackDelivery(request.Impact.sourceCardState);
         bool useMeleeGuardCamera = request.Impact.sourceCardState != null &&
             request.Impact.sourceCardState.IsMeleeAttack();
         bool started = attackVsGuardPresentationPlayer.TryPlayGuardImpact(
@@ -3594,7 +3626,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.DefenseDefenderPresentation,
             directionSign,
             context.GuardPresentationResult,
-            useCloseRangeShoot,
+            attackDelivery,
             () => HandleDefenseGuardTrueVisualContact(
                 context,
                 executionItem,
@@ -3868,15 +3900,15 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.InteractionContext.AttackAction != null
                 ? context.InteractionContext.AttackAction.cardState
                 : GetDodgeAttackCardState(context.ClashSession);
-        bool useCloseRangeShoot = attackCardState != null &&
-            attackCardState.IsCloseRangeShoot();
+        BattlePresentationAttackDeliveryKind attackDelivery =
+            ResolveAttackDelivery(attackCardState);
         bool started = attackVsDodgePresentationPlayer
             .TryPlayDodgeRollResult(
                 context.DodgeAttackerPresentation,
                 context.DodgeDefenderPresentation,
                 directionSign,
                 context.DodgePresentationResult,
-                useCloseRangeShoot,
+                attackDelivery,
                 () => CompleteDodgeRollResult(
                     context,
                     executionItem,

@@ -41,7 +41,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
     private Coroutine dualHitStopCoroutine;
     private int playbackVersion;
     private bool visualImpactReached;
-    private bool attackerUsesCloseRangeShoot;
+    private BattlePresentationAttackDeliveryKind attackerDelivery;
 
     void OnDisable()
     {
@@ -262,7 +262,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
             guardActor,
             directionSign,
             result,
-            false,
+            BattlePresentationAttackDeliveryKind.Melee,
             onImpactReached,
             completion
         );
@@ -278,8 +278,32 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         Action completion
     )
     {
+        return TryPlayGuardImpact(
+            attackActor,
+            guardActor,
+            directionSign,
+            result,
+            useCloseRangeShoot
+                ? BattlePresentationAttackDeliveryKind.CloseRangeShoot
+                : BattlePresentationAttackDeliveryKind.Melee,
+            onImpactReached,
+            completion
+        );
+    }
+
+    public bool TryPlayGuardImpact(
+        BattleCharacterPresentationController attackActor,
+        BattleCharacterPresentationController guardActor,
+        float directionSign,
+        BattleGuardPresentationResult result,
+        BattlePresentationAttackDeliveryKind attackDelivery,
+        Action onImpactReached,
+        Action completion
+    )
+    {
         if (IsRunning || !isActiveAndEnabled || attackActor == null ||
-            guardActor == null || !ValidatePresentationProfile())
+            guardActor == null || !ValidatePresentationProfile() ||
+            !IsSupportedAttackDelivery(attackDelivery))
         {
             return false;
         }
@@ -289,7 +313,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         defender = guardActor;
         presentationResult = result;
         attackDirectionSign = directionSign >= 0f ? 1f : -1f;
-        attackerUsesCloseRangeShoot = useCloseRangeShoot;
+        attackerDelivery = attackDelivery;
         onVisualImpact = onImpactReached;
         onFinished = completion;
         visualImpactReached = false;
@@ -316,7 +340,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         PrepareGuardActors();
         defender.SetGuard();
 
-        if (attackerUsesCloseRangeShoot)
+        if (UsesCloseRangeShootVisual(attackerDelivery))
         {
             attacker.SetCloseRangeShoot();
             bool muzzleFlashFinished = false;
@@ -325,6 +349,19 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
             );
 
             // 枪火出现即沿用原Guard视觉接触点，真实结算仍由Runner提交。
+            ReachVisualImpact(version);
+            while (!muzzleFlashFinished && IsCurrentPlayback(version))
+            {
+                yield return null;
+            }
+        }
+        else if (UsesLongRangeShootVisual(attackerDelivery))
+        {
+            attacker.SetShoot();
+            bool muzzleFlashFinished = false;
+            attacker.PlayMuzzleFlash(() => muzzleFlashFinished = true);
+
+            // 远程枪火出现即为Guard视觉接触点，规则结算仍由Runner提交。
             ReachVisualImpact(version);
             while (!muzzleFlashFinished && IsCurrentPlayback(version))
             {
@@ -385,7 +422,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         else
         {
             guardRecoilCoroutine = StartCoroutine(
-                attackerUsesCloseRangeShoot
+                !UsesMeleeVisual(attackerDelivery)
                     ? RunGuardRecoil(version)
                     : RunReducedGuardShake(version)
             );
@@ -606,8 +643,42 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         guardRecoilCoroutine = null;
         dualHitStopCoroutine = null;
         visualImpactReached = false;
-        attackerUsesCloseRangeShoot = false;
+        attackerDelivery = BattlePresentationAttackDeliveryKind.None;
         attackDirectionSign = 1f;
+    }
+
+    internal static bool IsSupportedAttackDelivery(
+        BattlePresentationAttackDeliveryKind delivery
+    )
+    {
+        return delivery == BattlePresentationAttackDeliveryKind.Melee ||
+            delivery ==
+                BattlePresentationAttackDeliveryKind.CloseRangeShoot ||
+            delivery ==
+                BattlePresentationAttackDeliveryKind.LongRangeShoot;
+    }
+
+    internal static bool UsesMeleeVisual(
+        BattlePresentationAttackDeliveryKind delivery
+    )
+    {
+        return delivery == BattlePresentationAttackDeliveryKind.Melee;
+    }
+
+    internal static bool UsesCloseRangeShootVisual(
+        BattlePresentationAttackDeliveryKind delivery
+    )
+    {
+        return delivery ==
+            BattlePresentationAttackDeliveryKind.CloseRangeShoot;
+    }
+
+    internal static bool UsesLongRangeShootVisual(
+        BattlePresentationAttackDeliveryKind delivery
+    )
+    {
+        return delivery ==
+            BattlePresentationAttackDeliveryKind.LongRangeShoot;
     }
 
     private bool IsCurrentPlayback(int version)
