@@ -789,10 +789,21 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
     {
         if (loser != null)
         {
-            yield return loser.PlaySustainedHitReaction(
-                loserWorldRoot,
-                attackDirectionSign
-            );
+            if (resolvedWinnerUsesCloseRangeShoot)
+            {
+                yield return loser.PlaySustainedHitReaction(
+                    loserWorldRoot,
+                    attackDirectionSign
+                );
+            }
+            else
+            {
+                yield return loser.PlaySustainedHitReaction(
+                    loserWorldRoot,
+                    attackDirectionSign,
+                    presentationProfile.HitWorldKnockbackDistance
+                );
+            }
         }
 
         if (IsCurrentPlayback(version))

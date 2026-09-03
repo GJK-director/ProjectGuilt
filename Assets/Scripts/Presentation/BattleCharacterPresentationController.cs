@@ -578,6 +578,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         yield return PlayHitReactionInternal(
             worldRoot,
             recoilDirectionSign,
+            hitRecoilDistance,
             true
         );
     }
@@ -590,6 +591,21 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         yield return PlayHitReactionInternal(
             worldRoot,
             recoilDirectionSign,
+            hitRecoilDistance,
+            false
+        );
+    }
+
+    public IEnumerator PlaySustainedHitReaction(
+        Transform worldRoot,
+        float recoilDirectionSign,
+        float worldKnockbackDistance
+    )
+    {
+        yield return PlayHitReactionInternal(
+            worldRoot,
+            recoilDirectionSign,
+            Mathf.Max(0f, worldKnockbackDistance),
             false
         );
     }
@@ -845,6 +861,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     private IEnumerator PlayHitReactionInternal(
         Transform worldRoot,
         float recoilDirectionSign,
+        float worldKnockbackDistance,
         bool finishAutomatically
     )
     {
@@ -866,7 +883,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         float normalizedDirection = recoilDirectionSign >= 0f ? 1f : -1f;
         float recoilStartX = worldRoot.position.x;
         float recoilTargetX = recoilStartX +
-            normalizedDirection * hitRecoilDistance;
+            normalizedDirection * worldKnockbackDistance;
         float recoilDuration = Mathf.Max(0f, hitRecoilDuration);
         float shakeDuration = Mathf.Max(0f, hitShakeDuration);
         float holdDuration = finishAutomatically

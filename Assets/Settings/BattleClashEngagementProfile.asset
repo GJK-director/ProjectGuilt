@@ -12,7 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 03b4ea0664d947a68890b09ef9685b85, type: 3}
   m_Name: BattleClashEngagementProfile
   m_EditorClassIdentifier: Assembly-CSharp::BattleClashEngagementProfile
-  defaultClashReadyGap: 2.2
+  defaultClashReadyGap: 2.9
   relativeSpeedInfluence: 0.35
   minMovementShare: 0.15
   maxMovementShare: 0.85
