@@ -28,19 +28,33 @@ public sealed class BattleActionRollPanelSideView : MonoBehaviour
 
     internal bool ShowPending(
         BattleClashSideState side,
-        CharacterData target
+        CharacterData target,
+        bool includeClashPointModifier
     )
     {
-        return Show(side, target, false, 0, true);
+        return Show(
+            side,
+            target,
+            false,
+            0,
+            includeClashPointModifier
+        );
     }
 
     internal bool ShowRoll(
         BattleClashSideState side,
         CharacterData target,
-        int rolledPoint
+        int rolledPoint,
+        bool includeClashPointModifier
     )
     {
-        return Show(side, target, true, rolledPoint, true);
+        return Show(
+            side,
+            target,
+            true,
+            rolledPoint,
+            includeClashPointModifier
+        );
     }
 
     internal bool ShowOneSidedAttackPending(

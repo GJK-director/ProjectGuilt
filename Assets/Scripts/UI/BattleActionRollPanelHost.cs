@@ -1,5 +1,16 @@
+using System;
 using System.Collections;
 using UnityEngine;
+
+internal enum BattleActionRollPanelLifecycleState
+{
+    Hidden,
+    ShowPending,
+    FadingIn,
+    Visible,
+    TerminalHold,
+    FadingOut
+}
 
 // 动态生成的行动 Roll 面板宿主。仅负责表现，不参与拼点规则与随机数生成。
 [DefaultExecutionOrder(300)]
@@ -21,6 +32,8 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
 
     [Header("生成表现")]
     [SerializeField, Min(0f)] float fadeInDuration = 0.2f;
+    [SerializeField, Min(0f)] float terminalHoldDuration = 0.2f;
+    [SerializeField, Min(0f)] float fadeOutDuration = 0.2f;
 
     [Header("角色跟随")]
     [SerializeField, Min(0f)] float followHorizontalGap = 24f;
@@ -29,7 +42,10 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
     [SerializeField] bool clampToSafeArea = true;
 
     Coroutine fadeCoroutine;
+    Action transitionCompletion;
     bool visible;
+    BattleActionRollPanelLifecycleState lifecycleState =
+        BattleActionRollPanelLifecycleState.Hidden;
     Rect lastSafeArea;
     Vector2Int lastScreenSize;
     RectTransform allySideRect;
@@ -41,7 +57,10 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
     BattleUnitViewSpawner unitViewSpawner;
     Camera worldCamera;
 
-    public static void ShowForActionBegin(BattlePresentationRequest request)
+    public static bool ShowForActionBegin(
+        BattlePresentationRequest request,
+        Action visibleCompletion = null
+    )
     {
         BattleClashSession session = GetSupportedSession(request);
         BattleResolutionPlan unilateralAttackPlan =
@@ -51,7 +70,7 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
             );
         if (session == null && unilateralAttackPlan == null)
         {
-            return;
+            return false;
         }
 
         BattleActionRollPanelHost host = ResolveOrCreateInstance();
@@ -59,19 +78,24 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         {
             if (session != null)
             {
-                host.ShowSession(session, false);
-            }
-            else
-            {
-                host.ShowOneSidedUnilateralAttack(
-                    unilateralAttackPlan,
-                    false
+                return host.ShowSession(
+                    request,
+                    session,
+                    false,
+                    visibleCompletion
                 );
             }
+            return host.ShowOneSidedUnilateralAttack(
+                unilateralAttackPlan,
+                false,
+                visibleCompletion
+            );
         }
+
+        return false;
     }
 
-    public static void ShowForRoll(BattlePresentationRequest request)
+    public static bool ShowForRoll(BattlePresentationRequest request)
     {
         BattleClashSession session = GetSupportedSession(request);
         BattleResolutionPlan unilateralAttackPlan =
@@ -81,7 +105,7 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
             );
         if (session == null && unilateralAttackPlan == null)
         {
-            return;
+            return false;
         }
 
         BattleActionRollPanelHost host = ResolveOrCreateInstance();
@@ -89,16 +113,30 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         {
             if (session != null)
             {
-                host.ShowSession(session, true);
+                return host.ShowSession(request, session, true, null);
             }
-            else
-            {
-                host.ShowOneSidedUnilateralAttack(
-                    unilateralAttackPlan,
-                    true
-                );
-            }
+            return host.ShowOneSidedUnilateralAttack(
+                unilateralAttackPlan,
+                true,
+                null
+            );
         }
+
+        return false;
+    }
+
+    public static bool ShowTerminalRollResult(
+        BattlePresentationRequest request,
+        Action hiddenCompletion
+    )
+    {
+        if (!ShowForRoll(request) || instance == null)
+        {
+            return false;
+        }
+
+        instance.BeginTerminalExit(hiddenCompletion);
+        return true;
     }
 
     public static void HideImmediate()
@@ -151,65 +189,86 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         ApplySafeArea(false);
     }
 
-    void ShowSession(BattleClashSession session, bool hasRolledPoint)
+    bool ShowSession(
+        BattlePresentationRequest request,
+        BattleClashSession session,
+        bool hasRolledPoint,
+        Action visibleCompletion
+    )
     {
         ApplySafeArea(false);
+        ResolveSessionDisplaySides(
+            request,
+            session,
+            out BattleClashSideState allySide,
+            out BattleClashSideState enemySide
+        );
         BindFollowActors(
-            session.SideA != null ? session.SideA.actor : null,
-            session.SideB != null ? session.SideB.actor : null
+            allySide != null ? allySide.actor : null,
+            enemySide != null ? enemySide.actor : null
         );
 
-        CharacterData allyTarget = session.SideB != null
-            ? session.SideB.actor
+        CharacterData allyTarget = enemySide != null
+            ? enemySide.actor
             : null;
-        CharacterData enemyTarget = session.SideA != null
-            ? session.SideA.actor
+        CharacterData enemyTarget = allySide != null
+            ? allySide.actor
             : null;
+        bool includeClashPointModifier = session.ClashType !=
+            BattleClashType.DefenseVsAttack;
         bool allyShown = allySideView != null && (hasRolledPoint
             ? allySideView.ShowRoll(
-                session.SideA,
+                allySide,
                 allyTarget,
-                session.SideAPoint
+                GetRolledPoint(session, allySide),
+                includeClashPointModifier
             )
-            : allySideView.ShowPending(session.SideA, allyTarget));
+            : allySideView.ShowPending(
+                allySide,
+                allyTarget,
+                includeClashPointModifier
+            ));
         bool enemyShown = enemySideView != null && (hasRolledPoint
             ? enemySideView.ShowRoll(
-                session.SideB,
+                enemySide,
                 enemyTarget,
-                session.SideBPoint
+                GetRolledPoint(session, enemySide),
+                includeClashPointModifier
             )
-            : enemySideView.ShowPending(session.SideB, enemyTarget));
+            : enemySideView.ShowPending(
+                enemySide,
+                enemyTarget,
+                includeClashPointModifier
+            ));
         if (!allyShown && !enemyShown)
         {
             HideInternal();
-            return;
+            return false;
         }
 
         RefreshFollowLayout();
-
-        // 平点重投时只刷新卡牌和点数，不重新播放淡入。
-        if (visible)
+        if (!ShouldStartFadeIn(lifecycleState))
         {
+            visible = true;
             SetCanvasState(1f);
-            return;
+            lifecycleState = BattleActionRollPanelLifecycleState.Visible;
+            visibleCompletion?.Invoke();
+            return true;
         }
 
-        visible = true;
-        if (fadeCoroutine != null)
-        {
-            StopCoroutine(fadeCoroutine);
-        }
-        fadeCoroutine = StartCoroutine(FadeIn());
+        BeginEntrance(visibleCompletion);
+        return true;
     }
 
-    void ShowOneSidedUnilateralAttack(
+    bool ShowOneSidedUnilateralAttack(
         BattleResolutionPlan plan,
-        bool hasRolledPoint
+        bool hasRolledPoint,
+        Action visibleCompletion
     )
     {
         if (plan == null)
         {
-            return;
+            return false;
         }
 
         bool showOnAllySide = ShouldShowUnilateralOnAllySide(plan);
@@ -244,22 +303,21 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         if (!shown)
         {
             HideInternal();
-            return;
+            return false;
         }
 
         RefreshFollowLayout();
-        if (visible)
+        if (!ShouldStartFadeIn(lifecycleState))
         {
+            visible = true;
             SetCanvasState(1f);
-            return;
+            lifecycleState = BattleActionRollPanelLifecycleState.Visible;
+            visibleCompletion?.Invoke();
+            return true;
         }
 
-        visible = true;
-        if (fadeCoroutine != null)
-        {
-            StopCoroutine(fadeCoroutine);
-        }
-        fadeCoroutine = StartCoroutine(FadeIn());
+        BeginEntrance(visibleCompletion);
+        return true;
     }
 
     static BattleClashSession GetSupportedSession(
@@ -269,11 +327,106 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         BattleClashSession session = request != null
             ? request.ClashSession
             : null;
-        return session != null &&
-            session.ClashType == BattleClashType.AttackVsAttack
-                ? session
-                : null;
+        return session != null && IsSupportedClashType(session.ClashType)
+            ? session
+            : null;
     }
+
+    static void ResolveSessionDisplaySides(
+        BattlePresentationRequest request,
+        BattleClashSession session,
+        out BattleClashSideState allySide,
+        out BattleClashSideState enemySide
+    )
+    {
+        allySide = session != null ? session.SideA : null;
+        enemySide = session != null ? session.SideB : null;
+        if (session == null || request == null ||
+            request.InteractionContext == null)
+        {
+            return;
+        }
+
+        BattleExecutionAction sideAAction =
+            request.InteractionContext.SideA;
+        BattleExecutionAction sideBAction =
+            request.InteractionContext.SideB;
+        BattleExecutionAction allyAction = IsAllyAction(sideAAction)
+            ? sideAAction
+            : IsAllyAction(sideBAction)
+                ? sideBAction
+                : null;
+        if (MatchesSessionSide(allyAction, session.SideB))
+        {
+            allySide = session.SideB;
+            enemySide = session.SideA;
+        }
+    }
+
+    static bool IsAllyAction(BattleExecutionAction action)
+    {
+        return action != null && action.actionSlot != null;
+    }
+
+    static bool MatchesSessionSide(
+        BattleExecutionAction action,
+        BattleClashSideState side
+    )
+    {
+        return action != null && side != null &&
+            object.ReferenceEquals(action.actor, side.actor) &&
+            object.ReferenceEquals(action.cardState, side.cardState);
+    }
+
+    static int GetRolledPoint(
+        BattleClashSession session,
+        BattleClashSideState side
+    )
+    {
+        return session != null && object.ReferenceEquals(side, session.SideB)
+            ? session.SideBPoint
+            : session != null
+                ? session.SideAPoint
+                : 0;
+    }
+
+    internal static bool IsSupportedClashType(BattleClashType clashType)
+    {
+        return clashType == BattleClashType.AttackVsAttack ||
+            clashType == BattleClashType.DefenseVsAttack ||
+            clashType == BattleClashType.DodgeVsAttack;
+    }
+
+    internal static bool ShouldUseTerminalExit(
+        BattlePresentationResultKind resultKind
+    )
+    {
+        return resultKind != BattlePresentationResultKind.AttackTie;
+    }
+
+    internal static bool CanCompleteActionBegin(
+        bool actionBeginPresentationFinished,
+        bool panelEntranceRequired,
+        bool panelEntranceFinished
+    )
+    {
+        return actionBeginPresentationFinished &&
+            (!panelEntranceRequired || panelEntranceFinished);
+    }
+
+    internal static bool ShouldStartFadeIn(
+        BattleActionRollPanelLifecycleState state
+    )
+    {
+        return state == BattleActionRollPanelLifecycleState.Hidden;
+    }
+
+    internal BattleActionRollPanelLifecycleState LifecycleState =>
+        lifecycleState;
+
+    internal static bool IsHidden => instance == null ||
+        instance.lifecycleState ==
+            BattleActionRollPanelLifecycleState.Hidden;
 
     static BattleResolutionPlan GetSupportedUnilateralAttackPlan(
         BattlePresentationRequest request,
@@ -312,12 +465,25 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
         return plan != null && plan.playerCardUsed && !plan.enemyCardUsed;
     }
 
+    void BeginEntrance(Action visibleCompletion)
+    {
+        StopTransitionCoroutine();
+        transitionCompletion = visibleCompletion;
+        visible = true;
+        lifecycleState = BattleActionRollPanelLifecycleState.ShowPending;
+        fadeCoroutine = StartCoroutine(FadeIn());
+    }
+
     IEnumerator FadeIn()
     {
+        lifecycleState = BattleActionRollPanelLifecycleState.FadingIn;
         if (fadeInDuration <= 0f)
         {
             SetCanvasState(1f);
             fadeCoroutine = null;
+            CompleteTransition(
+                BattleActionRollPanelLifecycleState.Visible
+            );
             yield break;
         }
 
@@ -332,23 +498,90 @@ public sealed class BattleActionRollPanelHost : MonoBehaviour
 
         SetCanvasState(1f);
         fadeCoroutine = null;
+        CompleteTransition(BattleActionRollPanelLifecycleState.Visible);
+    }
+
+    void BeginTerminalExit(Action hiddenCompletion)
+    {
+        StopTransitionCoroutine();
+        transitionCompletion = hiddenCompletion;
+        visible = true;
+        SetCanvasState(1f);
+        fadeCoroutine = StartCoroutine(TerminalHoldAndFadeOut());
+    }
+
+    IEnumerator TerminalHoldAndFadeOut()
+    {
+        lifecycleState = BattleActionRollPanelLifecycleState.TerminalHold;
+        float elapsed = 0f;
+        while (elapsed < terminalHoldDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        lifecycleState = BattleActionRollPanelLifecycleState.FadingOut;
+        elapsed = 0f;
+        float startAlpha = panelCanvasGroup != null
+            ? panelCanvasGroup.alpha
+            : 1f;
+        while (elapsed < fadeOutDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            float progress = fadeOutDuration > Mathf.Epsilon
+                ? Mathf.Clamp01(elapsed / fadeOutDuration)
+                : 1f;
+            SetCanvasState(Mathf.Lerp(startAlpha, 0f, progress));
+            yield return null;
+        }
+
+        SetCanvasState(0f);
+        visible = false;
+        ClearFollowActors();
+        SetSideViewsActive(false);
+        fadeCoroutine = null;
+        CompleteTransition(BattleActionRollPanelLifecycleState.Hidden);
     }
 
     void HideInternal()
     {
-        if (fadeCoroutine != null)
-        {
-            StopCoroutine(fadeCoroutine);
-            fadeCoroutine = null;
-        }
+        StopTransitionCoroutine();
+        transitionCompletion = null;
 
         visible = false;
+        lifecycleState = BattleActionRollPanelLifecycleState.Hidden;
+        ClearFollowActors();
+        SetCanvasState(0f);
+        SetSideViewsActive(false);
+    }
+
+    void ClearFollowActors()
+    {
         allyFollowActor = null;
         enemyFollowActor = null;
         allyFollowHandle = null;
         enemyFollowHandle = null;
-        SetCanvasState(0f);
-        SetSideViewsActive(false);
+    }
+
+    void StopTransitionCoroutine()
+    {
+        if (fadeCoroutine == null)
+        {
+            return;
+        }
+
+        StopCoroutine(fadeCoroutine);
+        fadeCoroutine = null;
+    }
+
+    void CompleteTransition(
+        BattleActionRollPanelLifecycleState completedState
+    )
+    {
+        lifecycleState = completedState;
+        Action completion = transitionCompletion;
+        transitionCompletion = null;
+        completion?.Invoke();
     }
 
     void SetCanvasState(float alpha)

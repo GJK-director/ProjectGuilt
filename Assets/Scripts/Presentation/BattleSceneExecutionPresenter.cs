@@ -76,6 +76,18 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public bool DodgeVsAttackCameraEntryFinished;
         public bool DodgeVsAttackApproachFinished;
 
+        public BattlePresentationRequest ActionBeginRequest;
+        public BattlePresentationCompletion ActionBeginCompletion;
+        public bool ActionBeginPresentationFinished;
+        public bool RollPanelEntranceAttempted;
+        public bool RollPanelEntranceRequired;
+        public bool RollPanelEntranceFinished;
+
+        public BattlePresentationCompletion RollResultCompletion;
+        public bool RollResultPresentationFinished;
+        public bool RollPanelExitRequired;
+        public bool RollPanelExitFinished;
+
         public BattleClashSideState LongRangeShooterSide;
         public BattleClashSideState LongRangeMeleeSide;
         public CharacterData LongRangeShooter;
@@ -297,6 +309,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         BattleActionRollPanelHost.HideImmediate();
         activeContext = CreateContext(request);
         activeContext.Route = route;
+        activeContext.ActionBeginRequest = request;
+        activeContext.ActionBeginCompletion = completion;
         if (battleActionCameraCarryPending &&
             !IsContinuousDodgeContinuation(request))
         {
@@ -305,7 +319,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         bool unavailableShootResponse =
             TryResolveUnavailableShootResponse(activeContext);
         LogRequest(request, activeContext);
-        BattleActionRollPanelHost.ShowForActionBegin(request);
         ApplyPreviousActionHandoff(activeContext.InteractionContext);
 
         if (unavailableShootResponse)
@@ -857,7 +870,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.CurrentAttackerHandle,
             context.CurrentTargetHandle,
             context.ClashEngagement.FinalGap,
-            null,
+            () => BeginRollPanelEntrance(
+                context,
+                executionItem,
+                requestId
+            ),
             success =>
             {
                 cameraSucceeded = success;
@@ -915,7 +932,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         activePresentationCoroutine = null;
         activePresentationRequestId = 0L;
         LogApproachCompleted(requestId);
-        completion.TryComplete(requestId);
+        MarkActionBeginPresentationFinished(
+            context,
+            requestId,
+            completion
+        );
     }
 
     private bool TryResolveLongRangeShootVsMelee(
@@ -1152,8 +1173,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         context.LongRangeCameraFocusActive = false;
-        activePresentationRequestId = 0L;
-        completion.TryComplete(requestId);
+        BeginRollPanelEntrance(context, executionItem, requestId);
+        MarkActionBeginPresentationFinished(
+            context,
+            requestId,
+            completion
+        );
     }
 
     private void HandleLongRangeRollResult(
@@ -1231,8 +1256,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        activePresentationRequestId = 0L;
-        completion.TryComplete(requestId);
+        MarkRollResultPresentationFinished(
+            context,
+            requestId,
+            completion
+        );
     }
 
     private bool TryStartAttackVsAttackApproach(
@@ -1400,6 +1428,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         context.AttackVsAttackFocusFinished = true;
+        BeginRollPanelEntrance(context, executionItem, requestId);
         TryCompleteAttackVsAttackParallelBegin(
             completion,
             context,
@@ -1453,8 +1482,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         context.AttackVsAttackParallelBeginActive = false;
-        activePresentationRequestId = 0L;
-        completion.TryComplete(requestId);
+        MarkActionBeginPresentationFinished(
+            context,
+            requestId,
+            completion
+        );
     }
 
     private void CompleteLongRangeResponseImpact(
@@ -1520,9 +1552,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        activePresentationRequestId = 0L;
         LogApproachCompleted(requestId);
-        completion.TryComplete(requestId);
+        MarkActionBeginPresentationFinished(
+            context,
+            requestId,
+            completion
+        );
     }
 
     private bool HasCompleteClashPresentationMapping(
@@ -1712,6 +1747,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         // 单一Engagement Begin边界，后续二级拼点UI可绑定在这里。
         context.DefenseVsAttackEngagementBegun = true;
+        BeginRollPanelEntrance(context, executionItem, requestId);
     }
 
     private void MarkDefenseVsAttackCameraEntryFinished(
@@ -1737,7 +1773,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             ClearDefenseVsAttackApproachState(context);
             activePresentationRequestId = 0L;
             LogApproachFallback(requestId, "Guard Camera Entry启动失败");
-            completion.TryComplete(requestId);
+            MarkActionBeginPresentationFinished(
+                context,
+                requestId,
+                completion
+            );
             return;
         }
 
@@ -1794,9 +1834,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ResolveBattleCameraDirector()?
             .FinishAnchoredTwoUnitApproachTracking();
         ClearDefenseVsAttackApproachState(context);
-        activePresentationRequestId = 0L;
         LogApproachCompleted(requestId);
-        completion.TryComplete(requestId);
+        MarkActionBeginPresentationFinished(
+            context,
+            requestId,
+            completion
+        );
     }
 
     private static void ClearDefenseVsAttackApproachState(
@@ -1909,8 +1952,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        activePresentationRequestId = 0L;
-        completion.TryComplete(requestId);
+        MarkActionBeginPresentationFinished(
+            context,
+            requestId,
+            completion
+        );
     }
 
     private static bool IsContinuousDodgeContinuation(
@@ -2044,8 +2090,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        activePresentationRequestId = 0L;
-        completion.TryComplete(requestId);
+        MarkActionBeginPresentationFinished(
+            context,
+            requestId,
+            completion
+        );
     }
 
     private bool TryResolveDefensePresentationActors(
@@ -2254,7 +2303,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         context.Route = route;
         RefreshClashActors(context);
         LogRequest(request, context);
-        BattleActionRollPanelHost.ShowForRoll(request);
+        PrepareRollPanelResultLifecycle(
+            request,
+            completion,
+            route,
+            context
+        );
 
         if (route == null)
         {
@@ -2301,9 +2355,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        if (route.HandlerKind !=
-                BattlePresentationHandlerKind.AttackVsAttack ||
-            route.ResultKind != BattlePresentationResultKind.AttackTie)
+        if (!ShouldPlayAnimatedAttackTie(route))
         {
             CompleteRequest(request, completion);
             return;
@@ -2313,6 +2365,29 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         {
             CompleteRequest(request, completion);
         }
+    }
+
+    internal static bool ShouldPlayAnimatedAttackTie(
+        BattlePresentationRoute route
+    )
+    {
+        return route != null && ShouldPlayAnimatedAttackTie(
+            route.HandlerKind,
+            route.GrammarKind,
+            route.ResultKind
+        );
+    }
+
+    internal static bool ShouldPlayAnimatedAttackTie(
+        BattlePresentationHandlerKind handlerKind,
+        BattlePresentationGrammarKind grammarKind,
+        BattlePresentationResultKind resultKind
+    )
+    {
+        return handlerKind ==
+                BattlePresentationHandlerKind.AttackVsAttack &&
+            grammarKind == BattlePresentationGrammarKind.MeleeClash &&
+            resultKind == BattlePresentationResultKind.AttackTie;
     }
 
     private static bool TryCacheGuardPresentationResult(
@@ -2547,6 +2622,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         // 单一Dodge Engagement Begin边界；后续Roll Panel和专属镜头可绑定在这里。
         context.DodgeVsAttackEngagementBegun = true;
+        BeginRollPanelEntrance(context, executionItem, requestId);
     }
 
     private void MarkDodgeVsAttackCameraEntryFinished(
@@ -2572,7 +2648,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             ClearDodgeVsAttackApproachState(context);
             activePresentationRequestId = 0L;
             LogApproachFallback(requestId, "Dodge Camera Entry启动失败");
-            completion.TryComplete(requestId);
+            MarkActionBeginPresentationFinished(
+                context,
+                requestId,
+                completion
+            );
             return;
         }
 
@@ -2629,9 +2709,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ResolveBattleCameraDirector()?
             .FinishAnchoredTwoUnitApproachTracking();
         ClearDodgeVsAttackApproachState(context);
-        activePresentationRequestId = 0L;
         LogApproachCompleted(requestId);
-        completion.TryComplete(requestId);
+        MarkActionBeginPresentationFinished(
+            context,
+            requestId,
+            completion
+        );
     }
 
     private static void ClearDodgeVsAttackApproachState(
@@ -2680,8 +2763,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        activePresentationRequestId = 0L;
-        completion.TryComplete(requestId);
+        MarkRollResultPresentationFinished(
+            context,
+            requestId,
+            completion
+        );
     }
 
     private void HandleImpact(
@@ -3312,7 +3398,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (!context.DefaultAttackStarted)
         {
             CapturePreviousActionParticipants(context);
-            BattleActionRollPanelHost.HideImmediate();
             ReleaseCameraForContext(context);
             CompleteRequest(request, completion);
             activeContext = null;
@@ -3367,7 +3452,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (context.LongRangeShotImpactFinished)
         {
             CapturePreviousActionParticipants(context);
-            BattleActionRollPanelHost.HideImmediate();
             ReleaseCameraForContext(context);
             CompleteRequest(request, completion);
             activeContext = null;
@@ -3412,7 +3496,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         activePresentationCoroutine = null;
         activePresentationRequestId = 0L;
         CapturePreviousActionParticipants(context);
-        BattleActionRollPanelHost.HideImmediate();
         ReleaseCameraForContext(context);
         completion.TryComplete(requestId);
         activeContext = null;
@@ -3492,7 +3575,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             ClearDodgeVsAttackApproachState(context);
             context.CameraCinematicOwned = false;
             battleActionCameraCarryPending = true;
-            BattleActionRollPanelHost.HideImmediate();
             CompleteRequest(request, completion);
             activeContext = null;
             return;
@@ -3848,8 +3930,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         context.DodgeRollResultReady = true;
-        activePresentationRequestId = 0L;
-        completion.TryComplete(requestId);
+        MarkRollResultPresentationFinished(
+            context,
+            requestId,
+            completion
+        );
     }
 
     private void MarkDodgeTailFinished(
@@ -4160,7 +4245,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     )
     {
         CapturePreviousActionParticipants(context);
-        BattleActionRollPanelHost.HideImmediate();
         ReleaseCameraForContext(context);
         CompleteRequest(request, completion);
         activeContext = null;
@@ -4442,11 +4526,247 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         context.AttackVsAttackApproachFinished = false;
     }
 
+    private void BeginRollPanelEntrance(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId
+    )
+    {
+        if (context == null || context.RollPanelEntranceAttempted ||
+            !IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem))
+        {
+            return;
+        }
+
+        context.RollPanelEntranceAttempted = true;
+        BattlePresentationRequest request = context.ActionBeginRequest;
+        if (request == null || context.Route == null ||
+            BattlePresentationRouter.IsActionUnavailable(request))
+        {
+            context.RollPanelEntranceFinished = true;
+            TryCompleteActionBegin(context, requestId);
+            return;
+        }
+
+        context.RollPanelEntranceRequired = true;
+        context.RollPanelEntranceFinished = false;
+        bool started = BattleActionRollPanelHost.ShowForActionBegin(
+            request,
+            () => MarkRollPanelEntranceFinished(
+                context,
+                executionItem,
+                requestId
+            )
+        );
+        if (started)
+        {
+            return;
+        }
+
+        context.RollPanelEntranceRequired = false;
+        context.RollPanelEntranceFinished = true;
+        TryCompleteActionBegin(context, requestId);
+    }
+
+    private void MarkRollPanelEntranceFinished(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem))
+        {
+            return;
+        }
+
+        context.RollPanelEntranceFinished = true;
+        TryCompleteActionBegin(context, requestId);
+    }
+
+    private void MarkActionBeginPresentationFinished(
+        ActionPresentationContext context,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (context == null || !IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context))
+        {
+            return;
+        }
+
+        context.ActionBeginCompletion = completion;
+        context.ActionBeginPresentationFinished = true;
+        BeginRollPanelEntrance(context, context.ExecutionItem, requestId);
+        TryCompleteActionBegin(context, requestId);
+    }
+
+    private void TryCompleteActionBegin(
+        ActionPresentationContext context,
+        long requestId
+    )
+    {
+        if (context == null || context.ActionBeginCompletion == null ||
+            !BattleActionRollPanelHost.CanCompleteActionBegin(
+                context.ActionBeginPresentationFinished,
+                context.RollPanelEntranceRequired,
+                context.RollPanelEntranceFinished
+            ) || !IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context))
+        {
+            return;
+        }
+
+        BattlePresentationCompletion completion =
+            context.ActionBeginCompletion;
+        context.ActionBeginCompletion = null;
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        completion.TryComplete(requestId);
+    }
+
+    private void PrepareRollPanelResultLifecycle(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        BattlePresentationRoute route,
+        ActionPresentationContext context
+    )
+    {
+        context.RollResultCompletion = completion;
+        context.RollResultPresentationFinished = false;
+        context.RollPanelExitRequired = false;
+        context.RollPanelExitFinished = true;
+        if (route == null)
+        {
+            return;
+        }
+
+        if (!BattleActionRollPanelHost.ShouldUseTerminalExit(
+                route.ResultKind
+            ))
+        {
+            BattleActionRollPanelHost.ShowForRoll(request);
+            return;
+        }
+
+        context.RollPanelExitRequired = true;
+        context.RollPanelExitFinished = false;
+        bool started = BattleActionRollPanelHost.ShowTerminalRollResult(
+            request,
+            () => MarkRollPanelExitFinished(
+                context,
+                request.ExecutionItem,
+                request.RequestId
+            )
+        );
+        if (started)
+        {
+            return;
+        }
+
+        context.RollPanelExitRequired = false;
+        context.RollPanelExitFinished = true;
+    }
+
+    private void MarkRollPanelExitFinished(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId
+    )
+    {
+        if (!IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem))
+        {
+            return;
+        }
+
+        context.RollPanelExitFinished = true;
+        TryCompleteRollResult(context, requestId);
+    }
+
+    private void MarkRollResultPresentationFinished(
+        ActionPresentationContext context,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (context == null || !IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context))
+        {
+            return;
+        }
+
+        context.RollResultCompletion = completion;
+        context.RollResultPresentationFinished = true;
+        TryCompleteRollResult(context, requestId);
+    }
+
+    private void TryCompleteRollResult(
+        ActionPresentationContext context,
+        long requestId
+    )
+    {
+        if (context == null || context.RollResultCompletion == null ||
+            !context.RollResultPresentationFinished ||
+            context.RollPanelExitRequired && !context.RollPanelExitFinished ||
+            !IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context))
+        {
+            return;
+        }
+
+        BattlePresentationCompletion completion =
+            context.RollResultCompletion;
+        context.RollResultCompletion = null;
+        if (activePresentationRequestId == requestId)
+        {
+            activePresentationRequestId = 0L;
+        }
+        completion.TryComplete(requestId);
+    }
+
     private void CompleteRequest(
         BattlePresentationRequest request,
         BattlePresentationCompletion completion
     )
     {
+        if (request.Cue == BattlePresentationCue.ActionBegin &&
+            activeContext != null &&
+            object.ReferenceEquals(
+                activeContext.ExecutionItem,
+                request.ExecutionItem
+            ))
+        {
+            MarkActionBeginPresentationFinished(
+                activeContext,
+                request.RequestId,
+                completion
+            );
+            return;
+        }
+
+        if (request.Cue == BattlePresentationCue.RollResult &&
+            activeContext != null &&
+            object.ReferenceEquals(
+                activeContext.ExecutionItem,
+                request.ExecutionItem
+            ))
+        {
+            MarkRollResultPresentationFinished(
+                activeContext,
+                request.RequestId,
+                completion
+            );
+            return;
+        }
+
         completion.TryComplete(request.RequestId);
     }
 

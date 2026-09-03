@@ -88,7 +88,8 @@ public enum BattleTestMode
     BattleMultiSlotRelationRenderingBasic = 100,
     CharacterDefaultCardDataContractBasic = 101,
     CharacterPresentationBindingContractBasic = 102,
-    FullBattleIntegrationRegressionBasic = 103
+    FullBattleIntegrationRegressionBasic = 103,
+    BattleActionRollPanelLifecycleBasic = 104
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -433,6 +434,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattlePresentationProtocolBasic)
         {
             BattlePresentationProtocolTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleActionRollPanelLifecycleBasic)
+        {
+            BattleActionRollPanelLifecycleTests.Run();
             return;
         }
 

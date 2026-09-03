@@ -902,6 +902,135 @@ public static class BattleResolutionPlanTests
     }
 }
 
+
+// 验证 Roll Panel 只消费 Presenter 已确定的生命周期语义，不参与规则判断。
+public static class BattleActionRollPanelLifecycleTests
+{
+    public static void Run()
+    {
+        Debug.Log("===== BattleActionRollPanelLifecycle 聚合测试开始 =====");
+
+        bool a = VerifyActionBeginDoesNotCompleteBeforePresentation();
+        bool b = VerifyReadablePanelBlocksActionBeginCompletion();
+        bool c = VerifyUnifiedClashCoverage();
+        bool d = VerifyTerminalResultUsesExitLifecycle();
+        bool e = VerifyVisibleTieRefreshDoesNotFadeInAgain();
+        bool f = VerifyOrdinaryAttackTieUsesTiePresentation();
+        bool g = VerifyLongRangeTieIsSilentAndKeepsPanel();
+        bool h = VerifyImmediateSafetyCleanupRemainsAvailable();
+
+        bool[] results = { a, b, c, d, e, f, g, h };
+        string[] names =
+        {
+            "A ActionBegin初始阶段不会提前完成",
+            "B WaitingForRoll前必须等Panel可读",
+            "C Attack/Defense/Dodge共用Roll Panel",
+            "D Terminal RollResult使用Hold与FadeOut",
+            "E Tie刷新Visible Panel不重新FadeIn",
+            "F 普通Attack Tie保留Panel并播放Tie表现",
+            "G LongRange Tie保留Panel且不播放Tie表现",
+            "H Cancel/Disable异常清理仍可立即隐藏Panel"
+        };
+
+        bool allPassed = true;
+        for (int index = 0; index < results.Length; index++)
+        {
+            Debug.Log("模式104 " + names[index] + "：" + results[index]);
+            allPassed &= results[index];
+        }
+
+        Debug.Log("模式104 聚合结果：" + allPassed);
+    }
+
+    static bool VerifyActionBeginDoesNotCompleteBeforePresentation()
+    {
+        return !BattleActionRollPanelHost.CanCompleteActionBegin(
+            false,
+            false,
+            false
+        );
+    }
+
+    static bool VerifyReadablePanelBlocksActionBeginCompletion()
+    {
+        return !BattleActionRollPanelHost.CanCompleteActionBegin(
+                true,
+                true,
+                false
+            ) && BattleActionRollPanelHost.CanCompleteActionBegin(
+                true,
+                true,
+                true
+            );
+    }
+
+    static bool VerifyUnifiedClashCoverage()
+    {
+        return BattleActionRollPanelHost.IsSupportedClashType(
+                BattleClashType.AttackVsAttack
+            ) && BattleActionRollPanelHost.IsSupportedClashType(
+                BattleClashType.DefenseVsAttack
+            ) && BattleActionRollPanelHost.IsSupportedClashType(
+                BattleClashType.DodgeVsAttack
+            );
+    }
+
+    static bool VerifyTerminalResultUsesExitLifecycle()
+    {
+        return BattleActionRollPanelHost.ShouldUseTerminalExit(
+                BattlePresentationResultKind.SideAWin
+            ) && BattleActionRollPanelHost.ShouldUseTerminalExit(
+                BattlePresentationResultKind.DefenseFullBlock
+            ) && BattleActionRollPanelHost.ShouldUseTerminalExit(
+                BattlePresentationResultKind.DefenseReducedDamage
+            ) && BattleActionRollPanelHost.ShouldUseTerminalExit(
+                BattlePresentationResultKind.DodgeSuccess
+            ) && BattleActionRollPanelHost.ShouldUseTerminalExit(
+                BattlePresentationResultKind.DodgeFailed
+            ) && BattleActionRollPanelHost.ShouldUseTerminalExit(
+                BattlePresentationResultKind.UnilateralAttack
+            );
+    }
+
+    static bool VerifyVisibleTieRefreshDoesNotFadeInAgain()
+    {
+        return !BattleActionRollPanelHost.ShouldStartFadeIn(
+                BattleActionRollPanelLifecycleState.Visible
+            ) && BattleActionRollPanelHost.ShouldStartFadeIn(
+                BattleActionRollPanelLifecycleState.Hidden
+            );
+    }
+
+    static bool VerifyOrdinaryAttackTieUsesTiePresentation()
+    {
+        return !BattleActionRollPanelHost.ShouldUseTerminalExit(
+                BattlePresentationResultKind.AttackTie
+            ) && BattleSceneExecutionPresenter.ShouldPlayAnimatedAttackTie(
+                BattlePresentationHandlerKind.AttackVsAttack,
+                BattlePresentationGrammarKind.MeleeClash,
+                BattlePresentationResultKind.AttackTie
+            );
+    }
+
+    static bool VerifyLongRangeTieIsSilentAndKeepsPanel()
+    {
+        return !BattleActionRollPanelHost.ShouldUseTerminalExit(
+                BattlePresentationResultKind.AttackTie
+            ) && !BattleSceneExecutionPresenter.ShouldPlayAnimatedAttackTie(
+                BattlePresentationHandlerKind.AttackVsAttack,
+                BattlePresentationGrammarKind.LongRangeVsMeleeClash,
+                BattlePresentationResultKind.AttackTie
+            );
+    }
+
+    static bool VerifyImmediateSafetyCleanupRemainsAvailable()
+    {
+        BattleActionRollPanelHost.HideImmediate();
+        return BattleActionRollPanelHost.IsHidden;
+    }
+}
+
+
 // Mode85：只验证LongRangeShoot终局资源提交，不包含任何射击表现。
 public static class BattleLongRangeShootResourceContractTests
 {
