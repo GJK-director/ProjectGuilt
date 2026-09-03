@@ -918,8 +918,11 @@ public static class BattleActionRollPanelLifecycleTests
         bool f = VerifyOrdinaryAttackTieUsesTiePresentation();
         bool g = VerifyLongRangeTieIsSilentAndKeepsPanel();
         bool h = VerifyImmediateSafetyCleanupRemainsAvailable();
+        bool i = VerifyActionBeginGateReleasesCurrentRequest();
+        bool j = VerifyTerminalRollResultGateReleasesCurrentRequest();
+        bool k = VerifyStaleRequestCannotReleaseOwnership();
 
-        bool[] results = { a, b, c, d, e, f, g, h };
+        bool[] results = { a, b, c, d, e, f, g, h, i, j, k };
         string[] names =
         {
             "A ActionBegin初始阶段不会提前完成",
@@ -929,7 +932,10 @@ public static class BattleActionRollPanelLifecycleTests
             "E Tie刷新Visible Panel不重新FadeIn",
             "F 普通Attack Tie保留Panel并播放Tie表现",
             "G LongRange Tie保留Panel且不播放Tie表现",
-            "H Cancel/Disable异常清理仍可立即隐藏Panel"
+            "H Cancel/Disable异常清理仍可立即隐藏Panel",
+            "I ActionBegin局部与Panel完成后释放当前Request",
+            "J Terminal RollResult FadeOut后释放当前Request",
+            "K Stale Request callback不能释放新Request"
         };
 
         bool allPassed = true;
@@ -1027,6 +1033,64 @@ public static class BattleActionRollPanelLifecycleTests
     {
         BattleActionRollPanelHost.HideImmediate();
         return BattleActionRollPanelHost.IsHidden;
+    }
+
+    static bool VerifyActionBeginGateReleasesCurrentRequest()
+    {
+        const long requestId = 10401L;
+        long activeRequestId = requestId;
+        bool gateReady = BattleActionRollPanelHost.CanCompleteActionBegin(
+            true,
+            true,
+            true
+        );
+
+        return gateReady &&
+            BattleSceneExecutionPresenter
+                .TryReleasePresentationRequestOwnership(
+                    ref activeRequestId,
+                    requestId
+                ) &&
+            activeRequestId == 0L;
+    }
+
+    static bool VerifyTerminalRollResultGateReleasesCurrentRequest()
+    {
+        const long requestId = 10402L;
+        long activeRequestId = requestId;
+        bool blockedBeforeFadeOut =
+            !BattleSceneExecutionPresenter.CanCompleteRollResult(
+                true,
+                true,
+                false
+            );
+        bool gateReady = BattleSceneExecutionPresenter.CanCompleteRollResult(
+            true,
+            true,
+            true
+        );
+
+        return blockedBeforeFadeOut && gateReady &&
+            BattleSceneExecutionPresenter
+                .TryReleasePresentationRequestOwnership(
+                    ref activeRequestId,
+                    requestId
+                ) &&
+            activeRequestId == 0L;
+    }
+
+    static bool VerifyStaleRequestCannotReleaseOwnership()
+    {
+        const long activeRequest = 10403L;
+        const long staleRequest = 10402L;
+        long activeRequestId = activeRequest;
+
+        return !BattleSceneExecutionPresenter
+                .TryReleasePresentationRequestOwnership(
+                    ref activeRequestId,
+                    staleRequest
+                ) &&
+            activeRequestId == activeRequest;
     }
 }
 

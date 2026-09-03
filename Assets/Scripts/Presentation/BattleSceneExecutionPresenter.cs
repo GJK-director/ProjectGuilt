@@ -311,6 +311,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         activeContext.Route = route;
         activeContext.ActionBeginRequest = request;
         activeContext.ActionBeginCompletion = completion;
+        activePresentationRequestId = request.RequestId;
         if (battleActionCameraCarryPending &&
             !IsContinuousDodgeContinuation(request))
         {
@@ -930,7 +931,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         activePresentationCoroutine = null;
-        activePresentationRequestId = 0L;
         LogApproachCompleted(requestId);
         MarkActionBeginPresentationFinished(
             context,
@@ -1150,10 +1150,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         context.LongRangeCameraFocusActive = false;
         context.CameraCinematicOwned = false;
-        if (activePresentationRequestId == requestId)
-        {
-            activePresentationRequestId = 0L;
-        }
         return false;
     }
 
@@ -1235,10 +1231,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        if (activePresentationRequestId == requestId)
-        {
-            activePresentationRequestId = 0L;
-        }
         CompleteRequest(request, completion);
     }
 
@@ -1312,10 +1304,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return true;
         }
 
-        if (activePresentationRequestId == requestId)
-        {
-            activePresentationRequestId = 0L;
-        }
         LogApproachFallback(requestId, "共享AttackVsAttack Player启动失败");
         return false;
     }
@@ -1369,10 +1357,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (!focusStarted)
         {
             ClearAttackVsAttackParallelBeginState(context);
-            if (activePresentationRequestId == requestId)
-            {
-                activePresentationRequestId = 0L;
-            }
             return false;
         }
 
@@ -1403,10 +1387,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
         context.CameraCinematicOwned = false;
         ClearAttackVsAttackParallelBeginState(context);
-        if (activePresentationRequestId == requestId)
-        {
-            activePresentationRequestId = 0L;
-        }
         LogApproachFallback(requestId, "共享AttackVsAttack Player启动失败");
         return false;
     }
@@ -1677,7 +1657,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (!cameraStarted)
         {
             ClearDefenseVsAttackApproachState(context);
-            activePresentationRequestId = 0L;
             return false;
         }
 
@@ -1722,10 +1701,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ResolveBattleCameraDirector()?.CancelAnchoredTwoUnitApproach(true);
         context.CameraCinematicOwned = false;
         ClearDefenseVsAttackApproachState(context);
-        if (activePresentationRequestId == requestId)
-        {
-            activePresentationRequestId = 0L;
-        }
         LogApproachFallback(requestId, "共享AttackVsGuard Player启动失败");
         return false;
     }
@@ -1771,7 +1746,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             attackVsGuardPresentationPlayer?.CancelAndReset();
             context.CameraCinematicOwned = false;
             ClearDefenseVsAttackApproachState(context);
-            activePresentationRequestId = 0L;
             LogApproachFallback(requestId, "Guard Camera Entry启动失败");
             MarkActionBeginPresentationFinished(
                 context,
@@ -1930,10 +1904,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return true;
         }
 
-        if (activePresentationRequestId == requestId)
-        {
-            activePresentationRequestId = 0L;
-        }
         LogApproachFallback(requestId, "共享AttackVsGuard Player启动失败");
         return false;
     }
@@ -2068,10 +2038,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return true;
         }
 
-        if (activePresentationRequestId == requestId)
-        {
-            activePresentationRequestId = 0L;
-        }
         LogApproachFallback(requestId, "共享AttackVsDodge Player启动失败");
         return false;
     }
@@ -2301,6 +2267,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ActionPresentationContext context = EnsureContext(request);
         RefreshRequestState(context, request);
         context.Route = route;
+        activePresentationRequestId = request.RequestId;
         RefreshClashActors(context);
         LogRequest(request, context);
         PrepareRollPanelResultLifecycle(
@@ -2468,10 +2435,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return true;
         }
 
-        if (activePresentationRequestId == requestId)
-        {
-            activePresentationRequestId = 0L;
-        }
         return false;
     }
 
@@ -2546,7 +2509,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (!cameraStarted)
         {
             ClearDodgeVsAttackApproachState(context);
-            activePresentationRequestId = 0L;
             return false;
         }
 
@@ -2597,10 +2559,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         director.CancelAnchoredTwoUnitApproach(true);
         context.CameraCinematicOwned = false;
         ClearDodgeVsAttackApproachState(context);
-        if (activePresentationRequestId == requestId)
-        {
-            activePresentationRequestId = 0L;
-        }
         LogApproachFallback(requestId, "普通近战Dodge Approach启动失败");
         return false;
     }
@@ -2646,7 +2604,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             attackVsDodgePresentationPlayer?.CancelAndReset();
             context.CameraCinematicOwned = false;
             ClearDodgeVsAttackApproachState(context);
-            activePresentationRequestId = 0L;
             LogApproachFallback(requestId, "Dodge Camera Entry启动失败");
             MarkActionBeginPresentationFinished(
                 context,
@@ -3907,10 +3864,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         context.DodgeRollStarted = false;
         context.DodgeRollRequestId = 0L;
-        if (activePresentationRequestId == requestId)
-        {
-            activePresentationRequestId = 0L;
-        }
         return false;
     }
 
@@ -4624,11 +4577,39 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         BattlePresentationCompletion completion =
             context.ActionBeginCompletion;
         context.ActionBeginCompletion = null;
-        if (activePresentationRequestId == requestId)
+        if (!TryReleasePresentationRequestOwnership(
+                ref activePresentationRequestId,
+                requestId
+            ))
         {
-            activePresentationRequestId = 0L;
+            context.ActionBeginCompletion = completion;
+            return;
         }
         completion.TryComplete(requestId);
+    }
+
+    internal static bool TryReleasePresentationRequestOwnership(
+        ref long activeRequestId,
+        long requestId
+    )
+    {
+        if (requestId == 0L || activeRequestId != requestId)
+        {
+            return false;
+        }
+
+        activeRequestId = 0L;
+        return true;
+    }
+
+    internal static bool CanCompleteRollResult(
+        bool presentationFinished,
+        bool panelExitRequired,
+        bool panelExitFinished
+    )
+    {
+        return presentationFinished &&
+            (!panelExitRequired || panelExitFinished);
     }
 
     private void PrepareRollPanelResultLifecycle(
@@ -4714,8 +4695,11 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     )
     {
         if (context == null || context.RollResultCompletion == null ||
-            !context.RollResultPresentationFinished ||
-            context.RollPanelExitRequired && !context.RollPanelExitFinished ||
+            !CanCompleteRollResult(
+                context.RollResultPresentationFinished,
+                context.RollPanelExitRequired,
+                context.RollPanelExitFinished
+            ) ||
             !IsCurrentPresentationRequest(requestId) ||
             !object.ReferenceEquals(activeContext, context))
         {
@@ -4725,9 +4709,13 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         BattlePresentationCompletion completion =
             context.RollResultCompletion;
         context.RollResultCompletion = null;
-        if (activePresentationRequestId == requestId)
+        if (!TryReleasePresentationRequestOwnership(
+                ref activePresentationRequestId,
+                requestId
+            ))
         {
-            activePresentationRequestId = 0L;
+            context.RollResultCompletion = completion;
+            return;
         }
         completion.TryComplete(requestId);
     }
