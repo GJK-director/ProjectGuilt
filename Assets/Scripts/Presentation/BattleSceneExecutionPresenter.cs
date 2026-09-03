@@ -56,6 +56,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public bool DodgeTailFinished;
         public bool DodgeImpactStarted;
         public bool DodgeImpactFinished;
+        public bool DodgeRollPresentationPending;
         public long DodgeRollRequestId;
         public long DodgeImpactRequestId;
 
@@ -2268,6 +2269,10 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         RefreshRequestState(context, request);
         context.Route = route;
         activePresentationRequestId = request.RequestId;
+        context.DodgeRollPresentationPending = route != null &&
+            route.HandlerKind ==
+                BattlePresentationHandlerKind.AttackVsDodge &&
+            IsDodgeResult(route.ResultKind);
         RefreshClashActors(context);
         LogRequest(request, context);
         PrepareRollPanelResultLifecycle(
@@ -2302,15 +2307,10 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 BattlePresentationHandlerKind.AttackVsDodge &&
             IsDodgeResult(route.ResultKind))
         {
-            if (!TryStartDodgeRollResult(
-                    request,
-                    completion,
-                    context,
-                    route.ResultKind
-                ))
-            {
-                CompleteRequest(request, completion);
-            }
+            TryStartPendingDodgeRollResult(
+                context,
+                request.RequestId
+            );
             return;
         }
 
@@ -3791,8 +3791,49 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         completion.TryComplete(requestId);
     }
 
+    private void TryStartPendingDodgeRollResult(
+        ActionPresentationContext context,
+        long requestId
+    )
+    {
+        if (context == null ||
+            !CanStartDodgeRollResultPresentation(
+                context.DodgeRollPresentationPending,
+                context.RollPanelExitFinished,
+                activePresentationRequestId,
+                requestId
+            ) ||
+            !IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context))
+        {
+            return;
+        }
+
+        BattlePresentationCompletion completion =
+            context.RollResultCompletion;
+        if (completion == null || context.Route == null)
+        {
+            return;
+        }
+
+        context.DodgeRollPresentationPending = false;
+        if (!TryStartDodgeRollResult(
+                requestId,
+                completion,
+                context,
+                context.Route.ResultKind
+            ))
+        {
+            MarkRollResultPresentationFinished(
+                context,
+                requestId,
+                completion
+            );
+        }
+    }
+
     private bool TryStartDodgeRollResult(
-        BattlePresentationRequest request,
+        long requestId,
         BattlePresentationCompletion completion,
         ActionPresentationContext context,
         BattlePresentationResultKind resultKind
@@ -3814,8 +3855,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.DodgeAttackerHandle,
             context.DodgeDefenderHandle
         );
-        long requestId = request.RequestId;
-        BattleExecutionItem executionItem = request.ExecutionItem;
+        BattleExecutionItem executionItem = context.ExecutionItem;
         context.DodgeRollStarted = true;
         context.DodgeRollResultReady = false;
         context.DodgeTailFinished = false;
@@ -3827,7 +3867,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         BattleCardState attackCardState = context.InteractionContext != null &&
             context.InteractionContext.AttackAction != null
                 ? context.InteractionContext.AttackAction.cardState
-                : GetDodgeAttackCardState(request.ClashSession);
+                : GetDodgeAttackCardState(context.ClashSession);
         bool useCloseRangeShoot = attackCardState != null &&
             attackCardState.IsCloseRangeShoot();
         bool started = attackVsDodgePresentationPlayer
@@ -4612,6 +4652,17 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             (!panelExitRequired || panelExitFinished);
     }
 
+    internal static bool CanStartDodgeRollResultPresentation(
+        bool presentationPending,
+        bool panelExitFinished,
+        long activeRequestId,
+        long requestId
+    )
+    {
+        return presentationPending && panelExitFinished &&
+            requestId != 0L && activeRequestId == requestId;
+    }
+
     private void PrepareRollPanelResultLifecycle(
         BattlePresentationRequest request,
         BattlePresentationCompletion completion,
@@ -4669,6 +4720,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         context.RollPanelExitFinished = true;
+        TryStartPendingDodgeRollResult(context, requestId);
         TryCompleteRollResult(context, requestId);
     }
 

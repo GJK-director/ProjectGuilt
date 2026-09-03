@@ -921,8 +921,9 @@ public static class BattleActionRollPanelLifecycleTests
         bool i = VerifyActionBeginGateReleasesCurrentRequest();
         bool j = VerifyTerminalRollResultGateReleasesCurrentRequest();
         bool k = VerifyStaleRequestCannotReleaseOwnership();
+        bool l = VerifyDodgeResultWaitsForOwnedPanelExit();
 
-        bool[] results = { a, b, c, d, e, f, g, h, i, j, k };
+        bool[] results = { a, b, c, d, e, f, g, h, i, j, k, l };
         string[] names =
         {
             "A ActionBegin初始阶段不会提前完成",
@@ -935,7 +936,8 @@ public static class BattleActionRollPanelLifecycleTests
             "H Cancel/Disable异常清理仍可立即隐藏Panel",
             "I ActionBegin局部与Panel完成后释放当前Request",
             "J Terminal RollResult FadeOut后释放当前Request",
-            "K Stale Request callback不能释放新Request"
+            "K Stale Request callback不能释放新Request",
+            "L Dodge Result只在当前Request的Panel Exit后启动"
         };
 
         bool allPassed = true;
@@ -1091,6 +1093,34 @@ public static class BattleActionRollPanelLifecycleTests
                     staleRequest
                 ) &&
             activeRequestId == activeRequest;
+    }
+
+    static bool VerifyDodgeResultWaitsForOwnedPanelExit()
+    {
+        const long requestId = 10404L;
+        const long staleRequestId = 10403L;
+
+        return !BattleSceneExecutionPresenter
+                .CanStartDodgeRollResultPresentation(
+                    true,
+                    false,
+                    requestId,
+                    requestId
+                ) &&
+            BattleSceneExecutionPresenter
+                .CanStartDodgeRollResultPresentation(
+                    true,
+                    true,
+                    requestId,
+                    requestId
+                ) &&
+            !BattleSceneExecutionPresenter
+                .CanStartDodgeRollResultPresentation(
+                    true,
+                    true,
+                    requestId,
+                    staleRequestId
+                );
     }
 }
 
