@@ -14,6 +14,9 @@ public sealed class BattleAttackVsAttackPresentationProfile : ScriptableObject
 
     [Header("Resolved Melee Hit")]
     [SerializeField, Min(0f)] private float hitWorldKnockbackDistance = 1f;
+    [SerializeField, Min(0f)] private float hitBodyReactionAmplitude = 0.12f;
+    [SerializeField, Min(0f)] private float hitBodyReactionDuration = 0.18f;
+    [SerializeField, Min(0f)] private float hitBodyReactionOscillations = 2f;
 
     [Header("Attack Tie")]
     [SerializeField, Min(0f)] private float tieRecoilDistance = 1.2f;
@@ -27,6 +30,12 @@ public sealed class BattleAttackVsAttackPresentationProfile : ScriptableObject
     public float HitStopDuration => Mathf.Max(0f, hitStopDuration);
     public float HitWorldKnockbackDistance =>
         Mathf.Max(0f, hitWorldKnockbackDistance);
+    public float HitBodyReactionAmplitude =>
+        Mathf.Max(0f, hitBodyReactionAmplitude);
+    public float HitBodyReactionDuration =>
+        Mathf.Max(0f, hitBodyReactionDuration);
+    public float HitBodyReactionOscillations =>
+        Mathf.Max(0f, hitBodyReactionOscillations);
     public float TieRecoilDistance => Mathf.Max(0f, tieRecoilDistance);
     public float TieRecoilDuration => Mathf.Max(0f, tieRecoilDuration);
 }

@@ -798,10 +798,13 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             }
             else
             {
-                yield return loser.PlaySustainedHitReaction(
+                yield return loser.PlaySustainedDirectionalHitReaction(
                     loserWorldRoot,
                     attackDirectionSign,
-                    presentationProfile.HitWorldKnockbackDistance
+                    presentationProfile.HitWorldKnockbackDistance,
+                    presentationProfile.HitBodyReactionAmplitude,
+                    presentationProfile.HitBodyReactionDuration,
+                    presentationProfile.HitBodyReactionOscillations
                 );
             }
         }
