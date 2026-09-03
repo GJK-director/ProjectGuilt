@@ -42,6 +42,8 @@ public class BattleEnemyIntent
     // true 表示已经有一个玩家槽位绑定并响应了这个敌人意图。
     public bool isResponded;
 
+    public bool isConsumedAsReactiveGuard;
+
     // BattleEnemyIntent = 敌人意图构造函数
     // 负责创建一条敌人意图，并把实际目标初始化为原始目标。
     public BattleEnemyIntent(
@@ -115,8 +117,14 @@ public class BattleEnemyIntent
     public void ResetResponseState()
     {
         isResponded = false;
+        isConsumedAsReactiveGuard = false;
         actualTargetCharacter = originalTargetCharacter;
         actualTargetSlotIndex = originalTargetSlotIndex;
+    }
+
+    public void MarkConsumedAsReactiveGuard()
+    {
+        isConsumedAsReactiveGuard = true;
     }
 
     // GetEnemyName = 获取敌人名字

@@ -116,6 +116,11 @@ public static class BattleExecutionPlanManager
                     continue;
                 }
 
+                if (!intent.isResponded && IsReactiveEnemyDefensiveIntent(intent))
+                {
+                    continue;
+                }
+
                 BattleActionSlot responseSlot = intent.isResponded
                     ? FindValidResponseSlot(actionSlots, intent)
                     : null;
@@ -203,6 +208,15 @@ public static class BattleExecutionPlanManager
         }
 
         return executionPlan;
+    }
+
+    static bool IsReactiveEnemyDefensiveIntent(BattleEnemyIntent intent)
+    {
+        string cardType = intent != null && intent.enemyCardState != null &&
+            intent.enemyCardState.cardData != null
+                ? intent.enemyCardState.cardData.cardType
+                : string.Empty;
+        return cardType == CardType.Defense || cardType == CardType.Dodge;
     }
 
     // PrintExecutionPlan = 打印执行计划
@@ -944,6 +958,66 @@ public sealed class BattleGuardSelectionResult
 // 守备槽位不独立进入执行队列，只在敌人攻击真正执行时按优先级重新验证。
 public static class BattleGuardSelectionManager
 {
+    public static BattleEnemyIntent SelectEnemyDefensiveIntentForFreeAttack(
+        IReadOnlyList<BattleEnemyIntent> intents,
+        BattleActionSlot freeActionSlot
+    )
+    {
+        if (intents == null || freeActionSlot == null ||
+            freeActionSlot.slotType != BattleActionSlotType.FreeAction ||
+            freeActionSlot.actor == null || freeActionSlot.actor.IsDead() ||
+            freeActionSlot.target == null || freeActionSlot.target.IsDead() ||
+            freeActionSlot.cardState == null || freeActionSlot.cardState.cardData == null ||
+            freeActionSlot.cardState.cardData.cardType != CardType.Attack)
+        {
+            return null;
+        }
+
+        BattleEnemyIntent selected = null;
+        foreach (BattleEnemyIntent intent in intents)
+        {
+            if (!IsValidEnemyReactiveGuard(intent, freeActionSlot))
+            {
+                continue;
+            }
+
+            if (selected == null || intent.enemySlotIndex < selected.enemySlotIndex ||
+                (intent.enemySlotIndex == selected.enemySlotIndex &&
+                    intent.intentOrder < selected.intentOrder))
+            {
+                selected = intent;
+            }
+        }
+        return selected;
+    }
+
+    static bool IsValidEnemyReactiveGuard(
+        BattleEnemyIntent intent,
+        BattleActionSlot freeActionSlot
+    )
+    {
+        if (intent == null || intent.enemy == null || intent.enemy.IsDead() ||
+            intent.isResponded || intent.isConsumedAsReactiveGuard ||
+            !object.ReferenceEquals(intent.enemy, freeActionSlot.target) ||
+            intent.enemyCardState == null || intent.enemyCardState.cardData == null)
+        {
+            return false;
+        }
+
+        string cardType = intent.enemyCardState.cardData.cardType;
+        if (cardType != CardType.Defense && cardType != CardType.Dodge)
+        {
+            return false;
+        }
+
+        CardEligibilityResult eligibility = BattleCardManager.EvaluateCardEligibility(
+            intent.enemy,
+            freeActionSlot.actor,
+            intent.enemyCardState
+        );
+        return eligibility != null && eligibility.isEligible;
+    }
+
     public static BattleActionSlot SelectGuardForEnemyIntent(
         BattleRuntimeState runtimeState,
         BattleEnemyIntent enemyIntent

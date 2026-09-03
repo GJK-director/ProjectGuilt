@@ -387,6 +387,19 @@ public sealed class BattleExecutionRunner
                     out failureMessage
                 );
         }
+        else if (CurrentItem.executionType == BattleExecutionItemType.FreeAction &&
+            CurrentItem.reactiveEnemyGuardIntent != null)
+        {
+            actionSlot = CurrentItem.actionSlot;
+            began = BattleExecutionPlanExecutor
+                .TryBeginPausableFreeActionVsEnemyGuard(
+                    CurrentItem,
+                    runtimeState,
+                    out session,
+                    out itemCompleted,
+                    out failureMessage
+                );
+        }
         else
         {
             return Fail(
@@ -754,7 +767,9 @@ public sealed class BattleExecutionRunner
         {
             bool unilateral = CurrentPhaseRequirements != null &&
                 CurrentPhaseRequirements.InteractionType ==
-                    BattleInteractionType.UnilateralAttack;
+                    BattleInteractionType.UnilateralAttack &&
+                (CurrentItem == null ||
+                    CurrentItem.reactiveEnemyGuardIntent == null);
             bool completed = unilateral
                     ? BattleExecutionPlanExecutor
                         .CompletePausableUnilateralAttack(

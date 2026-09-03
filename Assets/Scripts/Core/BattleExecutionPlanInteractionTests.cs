@@ -6,7 +6,7 @@ public static class BattleExecutionPlanInteractionTests
 {
     public static bool Run()
     {
-        bool[] results = new bool[13];
+        bool[] results = new bool[27];
 
         results[0] = VerifyResponded(
             CardType.Attack,
@@ -66,6 +66,20 @@ public static class BattleExecutionPlanInteractionTests
                 BattleInteractionType.NoInteraction
             );
         results[12] = VerifyExactResponseInteractionEligibility();
+        results[13] = VerifyFreeAttackSkipsStandaloneEnemyGuard();
+        results[14] = VerifyFreeAttackUsesEnemyDefenseGuard();
+        results[15] = VerifyFreeAttackUsesEnemyDodgeGuard();
+        results[16] = VerifyFreeAttackWithoutEnemyGuardRemainsUnilateral();
+        results[17] = VerifyUnavailableEnemyGuardIsNotSelected();
+        results[18] = VerifyDeadEnemyGuardIsNotSelected();
+        results[19] = VerifyEnemyGuardSelectionUsesStableSlotOrder();
+        results[20] = VerifyEnemyGuardSelectionUsesIntentOrderTieBreak();
+        results[21] = VerifyReactiveEnemyGuardIsNotConsumedBySelection();
+        results[22] = VerifyConsumedReactiveEnemyGuardIsNotSelectedAgain();
+        results[23] = VerifyFreeAttackSkipsStandaloneEnemyDodge();
+        results[24] = VerifyOtherEnemyGuardDoesNotIntercept();
+        results[25] = VerifyUnavailableFreeAttackDoesNotConsumeEnemyGuard();
+        results[26] = VerifyRespondedEnemyGuardIsNotReactiveCandidate();
 
         string[] names =
         {
@@ -81,7 +95,21 @@ public static class BattleExecutionPlanInteractionTests
             "FreeAction Defense / Dodge / Ability",
             "Unresponded Enemy Attack",
             "Unresponded Enemy Defense / Dodge",
-            "Exact Response同时验证Interaction并保留Guard降级"
+            "Exact Response同时验证Interaction并保留Guard降级",
+            "FreeAction不生成Enemy Defense/Dodge Standalone Item",
+            "FreeAction + Enemy Defense进入AttackVsDefense",
+            "FreeAction + Enemy Dodge进入AttackVsDodge",
+            "没有Enemy Guard时保持UnilateralAttack",
+            "不可用Enemy Guard不被选择",
+            "死亡Enemy Guard不被选择",
+            "Enemy Guard按enemySlotIndex稳定选择",
+            "Enemy Guard按intentOrder稳定打破并列",
+            "选择Reactive Enemy Guard不提前消费",
+            "Reactive Enemy Guard完成后不再重复选择",
+            "FreeAction不生成Enemy Dodge Standalone Item",
+            "其他Enemy的Guard不会跨目标接管",
+            "失效FreeAction不消费Enemy Guard",
+            "已Responded Enemy Guard不进入Reactive候选"
         };
 
         bool allPassed = true;
@@ -219,6 +247,351 @@ public static class BattleExecutionPlanInteractionTests
                 true
             ) &&
             VerifyDowngradedGuardWaitsForAttack();
+    }
+
+    private static bool VerifyFreeAttackSkipsStandaloneEnemyGuard()
+    {
+        ReactiveEnemyGuardFixture fixture = CreateReactiveEnemyGuardFixture(
+            "skip_standalone",
+            CardType.Defense
+        );
+        BattleExecutionPlan plan = BattleExecutionPlanManager
+            .CreateSpeedBasedExecutionPlan(
+                fixture.runtimeState.actionSlots,
+                fixture.runtimeState.intentQueue,
+                fixture.runtimeState
+            );
+
+        return plan != null && plan.executionItems != null &&
+            plan.executionItems.Count == 1 &&
+            plan.executionItems[0].executionType ==
+                BattleExecutionItemType.FreeAction &&
+            object.ReferenceEquals(
+                plan.executionItems[0].actionSlot,
+                fixture.freeActionSlot
+            );
+    }
+
+    private static bool VerifyFreeAttackSkipsStandaloneEnemyDodge()
+    {
+        ReactiveEnemyGuardFixture fixture = CreateReactiveEnemyGuardFixture(
+            "skip_standalone_dodge",
+            CardType.Dodge
+        );
+        BattleExecutionPlan plan = BattleExecutionPlanManager
+            .CreateSpeedBasedExecutionPlan(
+                fixture.runtimeState.actionSlots,
+                fixture.runtimeState.intentQueue,
+                fixture.runtimeState
+            );
+
+        return plan != null && plan.executionItems != null &&
+            plan.executionItems.Count == 1 &&
+            plan.executionItems[0].executionType ==
+                BattleExecutionItemType.FreeAction;
+    }
+
+    private static bool VerifyFreeAttackUsesEnemyDefenseGuard()
+    {
+        return VerifyFreeAttackUsesEnemyGuard(
+            CardType.Defense,
+            BattleInteractionType.AttackVsDefense,
+            BattleClashType.DefenseVsAttack
+        );
+    }
+
+    private static bool VerifyFreeAttackUsesEnemyDodgeGuard()
+    {
+        return VerifyFreeAttackUsesEnemyGuard(
+            CardType.Dodge,
+            BattleInteractionType.AttackVsDodge,
+            BattleClashType.DodgeVsAttack
+        );
+    }
+
+    private static bool VerifyFreeAttackUsesEnemyGuard(
+        string guardCardType,
+        BattleInteractionType expectedInteraction,
+        BattleClashType expectedClashType
+    )
+    {
+        ReactiveEnemyGuardFixture fixture = CreateReactiveEnemyGuardFixture(
+            "uses_" + guardCardType,
+            guardCardType
+        );
+        BattleExecutionItem item = CreateOnlyFreeActionItem(fixture);
+        bool built = BattleExecutionPlanExecutor.TryBuildPausableRoutingContext(
+            item,
+            fixture.runtimeState,
+            out BattleActionSlot actionSlot,
+            out BattleGuardSelectionType selectionType,
+            out BattleExecutionInteractionContext executionContext,
+            out BattlePresentationInteractionContext presentationContext
+        );
+        if (!built)
+        {
+            return false;
+        }
+
+        bool began = BattleExecutionPlanExecutor
+            .TryBeginPausableFreeActionVsEnemyGuard(
+                item,
+                fixture.runtimeState,
+                out BattleClashSession session,
+                out bool itemCompleted,
+                out string failureMessage
+            );
+
+        return began && !itemCompleted &&
+            string.IsNullOrEmpty(failureMessage) &&
+            object.ReferenceEquals(actionSlot, fixture.freeActionSlot) &&
+            selectionType == BattleGuardSelectionType.None &&
+            object.ReferenceEquals(item.reactiveEnemyGuardIntent, fixture.guardIntent) &&
+            executionContext.effectiveInteractionType == expectedInteraction &&
+            presentationContext.InteractionType == expectedInteraction &&
+            session != null && session.ClashType == expectedClashType;
+    }
+
+    private static bool VerifyFreeAttackWithoutEnemyGuardRemainsUnilateral()
+    {
+        ReactiveEnemyGuardFixture fixture = CreateReactiveEnemyGuardFixture(
+            "no_guard",
+            CardType.Attack
+        );
+        BattleExecutionItem item = CreateOnlyFreeActionItem(fixture);
+        bool built = BattleExecutionPlanExecutor.TryBuildPausableRoutingContext(
+            item,
+            fixture.runtimeState,
+            out BattleActionSlot actionSlot,
+            out BattleGuardSelectionType selectionType,
+            out BattleExecutionInteractionContext executionContext,
+            out BattlePresentationInteractionContext presentationContext
+        );
+
+        return built && object.ReferenceEquals(actionSlot, fixture.freeActionSlot) &&
+            selectionType == BattleGuardSelectionType.None &&
+            item.reactiveEnemyGuardIntent == null &&
+            executionContext.effectiveInteractionType ==
+                BattleInteractionType.UnilateralAttack &&
+            presentationContext.InteractionType ==
+                BattleInteractionType.UnilateralAttack;
+    }
+
+    private static bool VerifyUnavailableEnemyGuardIsNotSelected()
+    {
+        ReactiveEnemyGuardFixture fixture = CreateReactiveEnemyGuardFixture(
+            "unavailable",
+            CardType.Defense
+        );
+        fixture.guardIntent.enemyCardState.currentCooldown = 1;
+        return BattleGuardSelectionManager.SelectEnemyDefensiveIntentForFreeAttack(
+            fixture.runtimeState.intentQueue,
+            fixture.freeActionSlot
+        ) == null;
+    }
+
+    private static bool VerifyDeadEnemyGuardIsNotSelected()
+    {
+        ReactiveEnemyGuardFixture fixture = CreateReactiveEnemyGuardFixture(
+            "dead",
+            CardType.Dodge
+        );
+        fixture.enemy.currentHP = 0;
+        return BattleGuardSelectionManager.SelectEnemyDefensiveIntentForFreeAttack(
+            fixture.runtimeState.intentQueue,
+            fixture.freeActionSlot
+        ) == null;
+    }
+
+    private static bool VerifyEnemyGuardSelectionUsesStableSlotOrder()
+    {
+        ReactiveEnemyGuardFixture fixture = CreateReactiveEnemyGuardFixture(
+            "slot_order",
+            CardType.Defense,
+            2,
+            2
+        );
+        BattleEnemyIntent earlierSlot = CreateReactiveEnemyIntent(
+            fixture,
+            "slot_order_earlier",
+            CardType.Dodge,
+            1,
+            9
+        );
+        fixture.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>
+        {
+            fixture.guardIntent,
+            earlierSlot
+        });
+        return object.ReferenceEquals(
+            BattleGuardSelectionManager.SelectEnemyDefensiveIntentForFreeAttack(
+                fixture.runtimeState.intentQueue,
+                fixture.freeActionSlot
+            ),
+            earlierSlot
+        );
+    }
+
+    private static bool VerifyEnemyGuardSelectionUsesIntentOrderTieBreak()
+    {
+        ReactiveEnemyGuardFixture fixture = CreateReactiveEnemyGuardFixture(
+            "intent_order",
+            CardType.Defense,
+            1,
+            4
+        );
+        BattleEnemyIntent earlierIntent = CreateReactiveEnemyIntent(
+            fixture,
+            "intent_order_earlier",
+            CardType.Dodge,
+            1,
+            3
+        );
+        fixture.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>
+        {
+            fixture.guardIntent,
+            earlierIntent
+        });
+        return object.ReferenceEquals(
+            BattleGuardSelectionManager.SelectEnemyDefensiveIntentForFreeAttack(
+                fixture.runtimeState.intentQueue,
+                fixture.freeActionSlot
+            ),
+            earlierIntent
+        );
+    }
+
+    private static bool VerifyReactiveEnemyGuardIsNotConsumedBySelection()
+    {
+        ReactiveEnemyGuardFixture fixture = CreateReactiveEnemyGuardFixture(
+            "not_consumed_by_selection",
+            CardType.Defense
+        );
+        BattleEnemyIntent selected = BattleGuardSelectionManager
+            .SelectEnemyDefensiveIntentForFreeAttack(
+                fixture.runtimeState.intentQueue,
+                fixture.freeActionSlot
+            );
+        return object.ReferenceEquals(selected, fixture.guardIntent) &&
+            !fixture.guardIntent.isConsumedAsReactiveGuard;
+    }
+
+    private static bool VerifyConsumedReactiveEnemyGuardIsNotSelectedAgain()
+    {
+        ReactiveEnemyGuardFixture fixture = CreateReactiveEnemyGuardFixture(
+            "consumed_once",
+            CardType.Dodge
+        );
+        fixture.guardIntent.MarkConsumedAsReactiveGuard();
+        return BattleGuardSelectionManager.SelectEnemyDefensiveIntentForFreeAttack(
+            fixture.runtimeState.intentQueue,
+            fixture.freeActionSlot
+        ) == null;
+    }
+
+    private static bool VerifyOtherEnemyGuardDoesNotIntercept()
+    {
+        ReactiveEnemyGuardFixture fixture = CreateReactiveEnemyGuardFixture(
+            "other_enemy",
+            CardType.Defense
+        );
+        CharacterData otherEnemy = new CharacterData(
+            "interaction88_reactive_other_enemy",
+            30,
+            5,
+            5
+        );
+        BattleEnemyIntent otherEnemyGuard = new BattleEnemyIntent(
+            "interaction88_reactive_other_enemy_guard",
+            otherEnemy,
+            CreateCombatCard(
+                otherEnemy,
+                "interaction88_reactive_other_enemy_defense",
+                CardType.Defense,
+                2
+            ),
+            fixture.ally,
+            1,
+            1
+        );
+        fixture.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>
+        {
+            otherEnemyGuard
+        });
+        return BattleGuardSelectionManager.SelectEnemyDefensiveIntentForFreeAttack(
+            fixture.runtimeState.intentQueue,
+            fixture.freeActionSlot
+        ) == null;
+    }
+
+    private static bool VerifyUnavailableFreeAttackDoesNotConsumeEnemyGuard()
+    {
+        ReactiveEnemyGuardFixture fixture = CreateReactiveEnemyGuardFixture(
+            "unavailable_free_action",
+            CardType.Defense
+        );
+        BattleExecutionItem unavailableItem = CreateOnlyFreeActionItem(fixture);
+        fixture.freeActionSlot.cardState.currentCooldown = 1;
+        bool built = BattleExecutionPlanExecutor.TryBuildPausableRoutingContext(
+            unavailableItem,
+            fixture.runtimeState,
+            out BattleActionSlot actionSlot,
+            out BattleGuardSelectionType selectionType,
+            out BattleExecutionInteractionContext executionContext,
+            out BattlePresentationInteractionContext presentationContext
+        );
+        if (!built)
+        {
+            return false;
+        }
+
+        bool began = BattleExecutionPlanExecutor
+            .TryBeginPausableFreeActionVsEnemyGuard(
+                unavailableItem,
+                fixture.runtimeState,
+                out BattleClashSession session,
+                out bool itemCompleted,
+                out string failureMessage
+            );
+        if (!began || !itemCompleted ||
+            unavailableItem.status != BattleExecutionItemStatus.Skipped ||
+            fixture.guardIntent.isConsumedAsReactiveGuard)
+        {
+            return false;
+        }
+
+        fixture.freeActionSlot.cardState.currentCooldown = 0;
+        BattleExecutionItem nextItem = new BattleExecutionItem(
+            2,
+            BattleExecutionItemType.FreeAction,
+            null,
+            fixture.freeActionSlot
+        );
+        bool nextBuilt = BattleExecutionPlanExecutor.TryBuildPausableRoutingContext(
+            nextItem,
+            fixture.runtimeState,
+            out BattleActionSlot nextActionSlot,
+            out BattleGuardSelectionType nextSelectionType,
+            out BattleExecutionInteractionContext nextExecutionContext,
+            out BattlePresentationInteractionContext nextPresentationContext
+        );
+        return nextBuilt && object.ReferenceEquals(
+            nextItem.reactiveEnemyGuardIntent,
+            fixture.guardIntent
+        );
+    }
+
+    private static bool VerifyRespondedEnemyGuardIsNotReactiveCandidate()
+    {
+        ReactiveEnemyGuardFixture fixture = CreateReactiveEnemyGuardFixture(
+            "responded_guard",
+            CardType.Dodge
+        );
+        fixture.guardIntent.MarkResponded();
+        return BattleGuardSelectionManager.SelectEnemyDefensiveIntentForFreeAttack(
+            fixture.runtimeState.intentQueue,
+            fixture.freeActionSlot
+        ) == null;
     }
 
     private static bool VerifyPreparedAssignment(
@@ -396,6 +769,104 @@ public static class BattleExecutionPlanInteractionTests
         };
     }
 
+    private static ReactiveEnemyGuardFixture CreateReactiveEnemyGuardFixture(
+        string suffix,
+        string guardCardType,
+        int enemySlotIndex = 1,
+        int intentOrder = 1
+    )
+    {
+        CharacterData ally = new CharacterData(
+            "interaction88_reactive_ally_" + suffix,
+            30,
+            10,
+            10
+        );
+        CharacterData enemy = new CharacterData(
+            "interaction88_reactive_enemy_" + suffix,
+            30,
+            5,
+            5
+        );
+        BattleActionSlot freeActionSlot = new BattleActionSlot(ally, 1);
+        freeActionSlot.AssignFreeAction(
+            ally,
+            CreateCombatCard(
+                ally,
+                "interaction88_reactive_attack_" + suffix,
+                CardType.Attack,
+                8,
+                AttackDeliveryMode.Melee
+            ),
+            enemy
+        );
+        BattleEnemyIntent guardIntent = new BattleEnemyIntent(
+            "interaction88_reactive_intent_" + suffix,
+            enemy,
+            CreateCombatCard(
+                enemy,
+                "interaction88_reactive_guard_" + suffix,
+                guardCardType,
+                2
+            ),
+            ally,
+            enemySlotIndex,
+            intentOrder
+        );
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(ally, null, enemy);
+        runtimeState.SetActionSlots(new List<BattleActionSlot> { freeActionSlot });
+        runtimeState.SetIntentQueue(new List<BattleEnemyIntent> { guardIntent });
+
+        return new ReactiveEnemyGuardFixture
+        {
+            runtimeState = runtimeState,
+            ally = ally,
+            enemy = enemy,
+            freeActionSlot = freeActionSlot,
+            guardIntent = guardIntent
+        };
+    }
+
+    private static BattleEnemyIntent CreateReactiveEnemyIntent(
+        ReactiveEnemyGuardFixture fixture,
+        string suffix,
+        string guardCardType,
+        int enemySlotIndex,
+        int intentOrder
+    )
+    {
+        return new BattleEnemyIntent(
+            "interaction88_reactive_intent_" + suffix,
+            fixture.enemy,
+            CreateCombatCard(
+                fixture.enemy,
+                "interaction88_reactive_guard_" + suffix,
+                guardCardType,
+                2
+            ),
+            fixture.ally,
+            enemySlotIndex,
+            intentOrder
+        );
+    }
+
+    private static BattleExecutionItem CreateOnlyFreeActionItem(
+        ReactiveEnemyGuardFixture fixture
+    )
+    {
+        BattleExecutionPlan plan = BattleExecutionPlanManager
+            .CreateSpeedBasedExecutionPlan(
+                fixture.runtimeState.actionSlots,
+                fixture.runtimeState.intentQueue,
+                fixture.runtimeState
+            );
+        return plan != null && plan.executionItems != null &&
+            plan.executionItems.Count == 1
+            ? plan.executionItems[0]
+            : null;
+    }
+
     private static BattleExecutionItem GetOnlyItem(
         List<BattleActionSlot> actionSlots,
         List<BattleEnemyIntent> intentQueue
@@ -430,6 +901,40 @@ public static class BattleExecutionPlanInteractionTests
         );
     }
 
+    private static BattleCardState CreateCombatCard(
+        CharacterData owner,
+        string instanceID,
+        string cardType,
+        int point,
+        string attackDeliveryMode = null
+    )
+    {
+        return BattleCardManager.CreateBattleCard(
+            owner,
+            new CardTestData
+            {
+                cardID = instanceID + "_data",
+                cardName = instanceID,
+                cardType = cardType,
+                attackDeliveryMode = cardType == CardType.Attack
+                    ? attackDeliveryMode
+                    : string.Empty,
+                isClashable = cardType == CardType.Attack,
+                minPoint = point,
+                maxPoint = point,
+                cooldown = 1,
+                damageFormula = cardType == CardType.Attack
+                    ? "PointAsDamage"
+                    : string.Empty,
+                defenseFormula = cardType == CardType.Defense
+                    ? "PointAsDefense"
+                    : string.Empty,
+                effects = new List<CardEffectData>()
+            },
+            instanceID
+        );
+    }
+
     private static TestContext CreateContext(string suffix)
     {
         return new TestContext
@@ -453,5 +958,14 @@ public static class BattleExecutionPlanInteractionTests
         public BattleActionSlot slot;
         public BattleCardState playerCard;
         public BattleEnemyIntent intent;
+    }
+
+    private sealed class ReactiveEnemyGuardFixture
+    {
+        public BattleRuntimeState runtimeState;
+        public CharacterData ally;
+        public CharacterData enemy;
+        public BattleActionSlot freeActionSlot;
+        public BattleEnemyIntent guardIntent;
     }
 }

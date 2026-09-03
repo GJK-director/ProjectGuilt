@@ -72,6 +72,24 @@ public static class BattleExecutionInteractionContextFactory
         return BuildResponded(item, runtimeResponseSlot);
     }
 
+    public static BattleExecutionInteractionContext BuildEffectiveFreeAction(
+        BattleExecutionItem item,
+        BattleEnemyIntent reactiveGuardIntent
+    )
+    {
+        if (item == null || item.executionType != BattleExecutionItemType.FreeAction ||
+            reactiveGuardIntent == null)
+        {
+            return BuildPlanned(item);
+        }
+
+        return new BattleExecutionInteractionContext(
+            item,
+            CreateSlotAction(item.actionSlot, reactiveGuardIntent),
+            CreateIntentAction(reactiveGuardIntent)
+        );
+    }
+
     private static BattleExecutionInteractionContext BuildResponded(
         BattleExecutionItem item,
         BattleActionSlot responseSlot

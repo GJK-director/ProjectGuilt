@@ -757,10 +757,24 @@ public static class BattleExecutionPlanExecutor
                 : BattleGuardSelectionType.None;
         }
 
-        executionContext = BattleExecutionInteractionContextFactory.BuildEffective(
-            item,
-            actionSlot
-        );
+        if (item.executionType == BattleExecutionItemType.FreeAction)
+        {
+            item.reactiveEnemyGuardIntent =
+                BattleGuardSelectionManager.SelectEnemyDefensiveIntentForFreeAttack(
+                    runtimeState != null ? runtimeState.intentQueue : null,
+                    item.actionSlot
+                );
+            executionContext = BattleExecutionInteractionContextFactory
+                .BuildEffectiveFreeAction(item, item.reactiveEnemyGuardIntent);
+        }
+        else
+        {
+            executionContext = BattleExecutionInteractionContextFactory.BuildEffective(
+                item,
+                actionSlot
+            );
+        }
+
         BattlePresentationInteractionContextFactory.TryCreate(
             executionContext,
             guardSelectionType == BattleGuardSelectionType.ContinuousDodge,
@@ -921,6 +935,48 @@ public static class BattleExecutionPlanExecutor
         return true;
     }
 
+    internal static bool TryBeginPausableFreeActionVsEnemyGuard(
+        BattleExecutionItem item,
+        BattleRuntimeState runtimeState,
+        out BattleClashSession session,
+        out bool itemCompleted,
+        out string failureMessage
+    )
+    {
+        session = null;
+        itemCompleted = false;
+        failureMessage = string.Empty;
+        if (item == null || runtimeState == null || item.actionSlot == null ||
+            item.reactiveEnemyGuardIntent == null)
+        {
+            failureMessage = "Pausable FreeAction Enemy Guard启动失败：运行时守备意图为空";
+            return false;
+        }
+
+        BattleResolveResult beginFailure = BattleResolver.TryBeginRespondedClash(
+            item.actionSlot,
+            item.reactiveEnemyGuardIntent,
+            out session
+        );
+        if (beginFailure == null && session != null)
+        {
+            return true;
+        }
+
+        if (beginFailure != null && !beginFailure.isSuccess &&
+            beginFailure.shouldCompleteItem)
+        {
+            item.MarkSkipped(BattleExecutionItemOutcomeReason.ActionUnavailable);
+            itemCompleted = true;
+            return true;
+        }
+
+        failureMessage = beginFailure != null
+            ? beginFailure.message
+            : "Pausable FreeAction Enemy Guard无法建立Clash";
+        return false;
+    }
+
     // 保留旧测试入口；正式 Runner 会在路由前先选定 Guard 并调用下方重载。
     internal static bool TryBeginPausableUnrespondedEnemyIntent(
         BattleExecutionItem item,
@@ -1072,9 +1128,13 @@ public static class BattleExecutionPlanExecutor
             return null;
         }
 
+        BattleEnemyIntent enemyIntent = item.executionType ==
+                BattleExecutionItemType.FreeAction
+            ? item.reactiveEnemyGuardIntent
+            : item.enemyIntent;
         return BattleResolver.BuildRespondedClashResolutionPlan(
             actionSlot,
-            item.enemyIntent,
+            enemyIntent,
             session,
             item
         );
@@ -1203,6 +1263,23 @@ public static class BattleExecutionPlanExecutor
                     plan.CompletedResult,
                     guardSelectionType
                 );
+            }
+            else if (item.executionType == BattleExecutionItemType.FreeAction &&
+                item.reactiveEnemyGuardIntent != null &&
+                plan.clashSession != null &&
+                plan.CompletedResult.isSuccess &&
+                plan.CompletedResult.shouldCompleteItem)
+            {
+                HandlePlayerCardDisposition(
+                    item.actionSlot,
+                    plan.CompletedResult,
+                    ContinuousDodgeSource.None,
+                    item.reactiveEnemyGuardIntent,
+                    item.order + ". FreeAction Enemy Guard"
+                );
+                item.reactiveEnemyGuardIntent.MarkConsumedAsReactiveGuard();
+                item.MarkExecuted();
+                completed = true;
             }
             else
             {

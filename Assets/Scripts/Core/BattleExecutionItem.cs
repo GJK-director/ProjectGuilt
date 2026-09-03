@@ -91,6 +91,8 @@ public class BattleExecutionItem
     // 如果这一项是 FreeAction，自由行动可能不需要绑定 enemyIntent。
     public BattleEnemyIntent enemyIntent;
 
+    public BattleEnemyIntent reactiveEnemyGuardIntent;
+
     // actionSlot = 行动槽位
     // BattleActionSlot = 战斗行动槽位，记录玩家把哪张卡放进哪个槽位，以及是否响应敌人意图。
     // 如果这一项是 UnrespondedEnemyIntent，无人响应敌人意图时可能没有 actionSlot。
