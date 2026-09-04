@@ -16,6 +16,9 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
     public bool IsRunning { get; private set; }
     public bool IsFinished { get; private set; }
 
+    [SerializeField]
+    private BattleHitPresentationProfile normalHitProfile;
+
     private PlaybackStage playbackStage;
     private BattleCharacterPresentationController shooter;
     private BattleCharacterPresentationController meleeActor;
@@ -156,6 +159,15 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         Action finishedCallback
     )
     {
+        if (normalHitProfile == null)
+        {
+            Debug.LogError(
+                nameof(TryPlayShotHit) +
+                " failed: NormalHitProfile is not assigned."
+            );
+            return false;
+        }
+
         if (IsRunning || shooterController == null ||
             targetController == null || targetWorldRoot == null)
         {
@@ -272,6 +284,12 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
     private IEnumerator RunShotHit(int version)
     {
         hitTarget.SetHit();
+        BattleNormalHitFxPlayer.TrySpawn(
+            normalHitProfile,
+            hitTarget,
+            hitTargetWorldRoot,
+            attackDirectionSign
+        );
         hitReactionCoroutine = StartCoroutine(RunHitReaction(version));
 
         // 没有弹道时，目标进入Hit即作为正式Impact的视觉提交边界。
@@ -294,7 +312,8 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         {
             yield return hitTarget.PlaySustainedHitReaction(
                 hitTargetWorldRoot,
-                attackDirectionSign
+                attackDirectionSign,
+                normalHitProfile
             );
         }
 

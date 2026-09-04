@@ -27,9 +27,9 @@ MonoBehaviour:
   hitFxBaseScale: 1
   hitFxHorizontalOffset: 0.12
   hitFxVerticalOffset: 0
-  hitFxADuration: 0.11
+  hitFxHoldDuration: 0.45
+  hitFxAExpandDuration: 0.11
   hitFxAStartScale: 0.75
   hitFxAEndScale: 1.15
-  hitFxAHoldRatio: 0.25
-  hitFxBDuration: 0.14
-  hitFxBHoldRatio: 0.5
+  hitFxAFadeDuration: 0.1
+  hitFxBFadeDuration: 0.14

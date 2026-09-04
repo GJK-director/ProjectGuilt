@@ -25,16 +25,16 @@ public sealed class BattleHitPresentationProfile : ScriptableObject
     [SerializeField, Min(0f)] private float hitFxBaseScale = 1f;
     [SerializeField, Min(0f)] private float hitFxHorizontalOffset = 0.12f;
     [SerializeField] private float hitFxVerticalOffset = 0f;
+    [SerializeField, Min(0f)] private float hitFxHoldDuration = 0.45f;
 
     [Header("Normal Hit FX A")]
-    [SerializeField, Min(0f)] private float hitFxADuration = 0.11f;
+    [SerializeField, Min(0f)] private float hitFxAExpandDuration = 0.11f;
     [SerializeField, Min(0f)] private float hitFxAStartScale = 0.75f;
     [SerializeField, Min(0f)] private float hitFxAEndScale = 1.15f;
-    [SerializeField, Range(0f, 1f)] private float hitFxAHoldRatio = 0.25f;
+    [SerializeField, Min(0f)] private float hitFxAFadeDuration = 0.10f;
 
     [Header("Normal Hit FX B")]
-    [SerializeField, Min(0f)] private float hitFxBDuration = 0.14f;
-    [SerializeField, Range(0f, 1f)] private float hitFxBHoldRatio = 0.50f;
+    [SerializeField, Min(0f)] private float hitFxBFadeDuration = 0.14f;
 
     public float ImpactBurstDistance => Mathf.Max(0f, impactBurstDistance);
     public float ImpactBurstDuration => Mathf.Max(0f, impactBurstDuration);
@@ -52,10 +52,10 @@ public sealed class BattleHitPresentationProfile : ScriptableObject
     public float HitFxBaseScale => Mathf.Max(0f, hitFxBaseScale);
     public float HitFxHorizontalOffset => Mathf.Max(0f, hitFxHorizontalOffset);
     public float HitFxVerticalOffset => hitFxVerticalOffset;
-    public float HitFxADuration => Mathf.Max(0f, hitFxADuration);
+    public float HitFxHoldDuration => Mathf.Max(0f, hitFxHoldDuration);
+    public float HitFxAExpandDuration => Mathf.Max(0f, hitFxAExpandDuration);
     public float HitFxAStartScale => Mathf.Max(0f, hitFxAStartScale);
     public float HitFxAEndScale => Mathf.Max(0f, hitFxAEndScale);
-    public float HitFxAHoldRatio => Mathf.Clamp01(hitFxAHoldRatio);
-    public float HitFxBDuration => Mathf.Max(0f, hitFxBDuration);
-    public float HitFxBHoldRatio => Mathf.Clamp01(hitFxBHoldRatio);
+    public float HitFxAFadeDuration => Mathf.Max(0f, hitFxAFadeDuration);
+    public float HitFxBFadeDuration => Mathf.Max(0f, hitFxBFadeDuration);
 }

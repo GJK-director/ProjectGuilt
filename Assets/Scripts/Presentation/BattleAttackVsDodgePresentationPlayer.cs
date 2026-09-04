@@ -21,6 +21,9 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
     [SerializeField]
     private BattleAttackVsDodgePresentationProfile presentationProfile;
 
+    [SerializeField]
+    private BattleHitPresentationProfile normalHitProfile;
+
     public bool IsRunning { get; private set; }
     public bool IsFinished { get; private set; }
 
@@ -352,6 +355,15 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         Action completion
     )
     {
+        if (normalHitProfile == null)
+        {
+            Debug.LogError(
+                nameof(TryPlayDodgeFailedImpact) +
+                " failed: NormalHitProfile is not assigned."
+            );
+            return false;
+        }
+
         if (!IsRunning || playbackStage != PlaybackStage.DodgeResult ||
             presentationResult != BattleDodgePresentationResult.DodgeFailed ||
             !rollResultReady || impactStarted || dodgeActor == null ||
@@ -482,9 +494,16 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
     {
         defender.FinishDodgePresentation();
         defender.SetHit();
-        yield return defender.PlayHitReaction(
+        BattleNormalHitFxPlayer.TrySpawn(
+            normalHitProfile,
+            defender,
             dodgeWorldRoot,
             attackDirectionSign
+        );
+        yield return defender.PlaySustainedHitReaction(
+            dodgeWorldRoot,
+            attackDirectionSign,
+            normalHitProfile
         );
 
         if (!IsCurrentPlayback(version))
