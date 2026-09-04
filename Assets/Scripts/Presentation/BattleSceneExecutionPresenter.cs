@@ -3318,6 +3318,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 expectedTargetTravelDistance,
                 specialHitProfile.SpecialCameraHorizontalDistance
             );
+            TryPlaySharedAttackImpactShake();
             return;
         }
 
@@ -3326,6 +3327,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             directionSign,
             activeHitDuration
         );
+        TryPlaySharedAttackImpactShake();
     }
 
     private BattleSpecialLongRangeDuelPresentationProfile
@@ -4043,6 +4045,18 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 context.DodgeDefenderPresentation,
                 context.DodgeDefenderHandle.WorldRoot.transform,
                 directionSign,
+                () =>
+                {
+                    if (IsOwnedDodgePresentationContext(context, executionItem) &&
+                        context.DodgeImpactStarted &&
+                        !context.DodgeImpactFinished &&
+                        context.DodgeImpactRequestId == requestId &&
+                        IsCurrentPresentationRequest(requestId) &&
+                        context.CameraCinematicOwned)
+                    {
+                        TryPlaySharedAttackImpactShake();
+                    }
+                },
                 () => CompleteDodgeFailedImpact(
                     context,
                     executionItem,
@@ -4464,6 +4478,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (!useNormalHitCamera)
         {
             director?.TryPlayGenericHitImpact(directionSign);
+            TryPlaySharedAttackImpactShake();
             return;
         }
 
@@ -4479,15 +4494,18 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 : 0f
         );
 
-        if (context.Route.HandlerKind ==
-            BattlePresentationHandlerKind.AttackVsAttack)
-        {
-            director?.TryPlayImpactShake(
-                attackVsAttackPresentationPlayer != null
-                    ? attackVsAttackPresentationPlayer.NormalHitProfile
-                    : null
-            );
-        }
+        TryPlaySharedAttackImpactShake();
+    }
+
+    private void TryPlaySharedAttackImpactShake()
+    {
+        BattleCameraDirector director = ResolveBattleCameraDirector();
+        BattleHitPresentationProfile profile =
+            attackVsAttackPresentationPlayer != null
+                ? attackVsAttackPresentationPlayer.NormalHitProfile
+                : null;
+
+        director?.TryPlayImpactShake(profile);
     }
 
     private void CompleteDefaultAttackImpact(

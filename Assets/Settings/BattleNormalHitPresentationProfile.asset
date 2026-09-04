@@ -22,7 +22,7 @@ MonoBehaviour:
   hitTiltAngle: 5
   hitTintColor: {r: 0.7, g: 0.03, b: 0.03, a: 1}
   hitTintStrength: 1
-  meleeHitFxSprite: {fileID: 0}
+  meleeHitFxSprite: {fileID: 21300000, guid: 46e48ae7f75fe1d4291e83b021db35d3, type: 3}
   shootHitFxSprite: {fileID: 0}
   hitFxBaseScale: 1
   hitFxHorizontalOffset: 0.12
@@ -30,7 +30,7 @@ MonoBehaviour:
   hitFxHoldDuration: 0.45
   hitFxFadeDuration: 0.14
   enableImpactCameraShake: 1
-  impactCameraShakeDuration: 0.1
+  impactCameraShakeDuration: 0.3
   impactCameraShakeHorizontalAmplitude: 0.045
-  impactCameraShakeVerticalAmplitude: 0.025
-  impactCameraShakeCycles: 1.5
+  impactCameraShakeVerticalAmplitude: 0.05
+  impactCameraShakeCycles: 6

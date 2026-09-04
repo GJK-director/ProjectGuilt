@@ -13,12 +13,12 @@ MonoBehaviour:
   m_Name: BattleSpecialLongRangeDuelPresentationProfile
   m_EditorClassIdentifier: Assembly-CSharp::BattleSpecialLongRangeDuelPresentationProfile
   fastApproachThreshold: 5.5
-  finalRollSeparation: 5
-  fastApproachDuration: 0.22
-  focusTransitionDuration: 0.18
+  finalRollSeparation: 3.8
+  fastApproachDuration: 0.15
+  focusTransitionDuration: 0.4
   enableShooterBiasedFinalFocus: 1
   finalShooterFramingWeight: 0.35
   finalFocusOrbitRadius: 8.5
   enableSpecialShotHitTuning: 1
-  specialFollowKnockbackDistance: 1.3
-  specialCameraHorizontalDistance: 0.99
+  specialFollowKnockbackDistance: 0.8
+  specialCameraHorizontalDistance: 1.6

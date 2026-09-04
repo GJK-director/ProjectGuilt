@@ -3267,6 +3267,7 @@ MonoBehaviour:
   attackVsDodgePresentationPlayer: {fileID: 833021974}
   longRangeShootVsAttackPresentationPlayer: {fileID: 0}
   clashEngagementProfile: {fileID: 11400000, guid: b9f30c692f87489f94c2b784d6e5ed65, type: 2}
+  specialLongRangeDuelPresentationProfile: {fileID: 11400000, guid: 30d8c998085248919b9fae8923680115, type: 2}
   battleCameraDirector: {fileID: 0}
   verboseLogging: 1
 --- !u!4 &833021970
@@ -3341,6 +3342,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsDodgePresentationPlayer
   presentationProfile: {fileID: 11400000, guid: 8f5ad35a90b944d19fc5e13f2bc41b78, type: 2}
+  normalHitProfile: {fileID: 0}
 --- !u!1 &906990934
 GameObject:
   m_ObjectHideFlags: 0

@@ -355,6 +355,23 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         Action completion
     )
     {
+        return TryPlayDodgeFailedImpact(
+            dodgeActor,
+            dodgeWorldRoot,
+            directionSign,
+            null,
+            completion
+        );
+    }
+
+    public bool TryPlayDodgeFailedImpact(
+        BattleCharacterPresentationController dodgeActor,
+        Transform dodgeWorldRoot,
+        float directionSign,
+        Action trueVisualImpactCallback,
+        Action completion
+    )
+    {
         if (normalHitProfile == null)
         {
             Debug.LogError(
@@ -377,7 +394,11 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         attackDirectionSign = directionSign >= 0f ? 1f : -1f;
         onImpactFinished = completion;
         hitCoroutine = StartCoroutine(
-            RunFailedHit(playbackVersion, dodgeWorldRoot)
+            RunFailedHit(
+                playbackVersion,
+                dodgeWorldRoot,
+                trueVisualImpactCallback
+            )
         );
         return true;
     }
@@ -490,10 +511,15 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
         }
     }
 
-    private IEnumerator RunFailedHit(int version, Transform dodgeWorldRoot)
+    private IEnumerator RunFailedHit(
+        int version,
+        Transform dodgeWorldRoot,
+        Action trueVisualImpactCallback
+    )
     {
         defender.FinishDodgePresentation();
         defender.SetHit();
+        trueVisualImpactCallback?.Invoke();
         BattleNormalHitFxPlayer.TrySpawn(
             normalHitProfile,
             defender,
