@@ -785,6 +785,10 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         if (loser != null)
         {
             loser.SetHit();
+            if (!resolvedWinnerUsesCloseRangeShoot)
+            {
+                SpawnNormalHitFx();
+            }
             loserHitCoroutine = StartCoroutine(
                 RunLoserSustainedHit(version)
             );
@@ -806,6 +810,58 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         onVisualImpact = null;
         trueImpactCallback?.Invoke();
         completionCallback?.Invoke();
+    }
+
+    private void SpawnNormalHitFx()
+    {
+        BattleHitPresentationProfile hitProfile =
+            presentationProfile != null
+                ? presentationProfile.NormalHitProfile
+                : null;
+        SpriteRenderer loserRenderer = loser != null
+            ? loser.CharacterSpriteRenderer
+            : null;
+        if (hitProfile == null || loserRenderer == null ||
+            loserWorldRoot == null)
+        {
+            return;
+        }
+
+        if (hitProfile.HitFxSprite == null)
+        {
+            Debug.LogWarning(
+                "[AttackVsAttackPresentationPlayer] Normal Hit FX skipped: " +
+                "HitFxSprite is not assigned.",
+                hitProfile
+            );
+            return;
+        }
+
+        Vector3 hitPosition = loserRenderer.bounds.center +
+            Vector3.right *
+                (-attackDirectionSign * hitProfile.HitFxHorizontalOffset) +
+            Vector3.up * hitProfile.HitFxVerticalOffset;
+        GameObject fxObject = new GameObject("NormalHitFx");
+        fxObject.transform.position = hitPosition;
+        fxObject.transform.rotation = Quaternion.identity;
+
+        SpriteRenderer fxRenderer = fxObject.AddComponent<SpriteRenderer>();
+        fxRenderer.sprite = hitProfile.HitFxSprite;
+        fxRenderer.color = Color.white;
+        fxRenderer.flipX = false;
+        fxRenderer.flipY = false;
+        fxRenderer.sortingLayerID = loserRenderer.sortingLayerID;
+        fxRenderer.sortingOrder = loserRenderer.sortingOrder + 10;
+
+        if (hitProfile.HitFxVariant ==
+            BattleNormalHitFxVariant.FollowTargetB)
+        {
+            fxObject.transform.SetParent(loserWorldRoot, true);
+        }
+
+        BattleNormalHitFxPlayer fxPlayer =
+            fxObject.AddComponent<BattleNormalHitFxPlayer>();
+        fxPlayer.Play(fxRenderer, hitProfile);
     }
 
     private IEnumerator RunLoserSustainedHit(int version)

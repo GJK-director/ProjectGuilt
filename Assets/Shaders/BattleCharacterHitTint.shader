@@ -88,13 +88,29 @@ Shader "ProjectGuilt/Battle/Character Hit Tint"
                     baseColor.rgb,
                     half3(0.299h, 0.587h, 0.114h)
                 );
-                half3 redizedRgb = baseColor.rgb * 0.35h +
-                    _HitTintColor.rgb * luminance * 0.65h;
+                luminance = saturate(luminance);
+
+                half shapedLuminance = pow(luminance, 0.8h);
+
+                half3 darkRed = _HitTintColor.rgb * 0.10h;
+
+                half3 brightRed = saturate(
+                    _HitTintColor.rgb * 1.25h +
+                    half3(0.15h, 0.02h, 0.02h)
+                );
+
+                half3 recoloredRgb = lerp(
+                    darkRed,
+                    brightRed,
+                    shapedLuminance
+                );
+
                 half3 finalRgb = lerp(
                     baseColor.rgb,
-                    redizedRgb,
+                    recoloredRgb,
                     saturate(_HitTintStrength)
                 );
+
                 return half4(finalRgb, baseColor.a);
             }
             ENDHLSL

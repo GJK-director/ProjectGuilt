@@ -21,4 +21,15 @@ MonoBehaviour:
   verticalShakeOscillations: 2
   hitTiltAngle: 5
   hitTintColor: {r: 0.7, g: 0.03, b: 0.03, a: 1}
-  hitTintStrength: 0.85
+  hitTintStrength: 1
+  hitFxSprite: {fileID: 0}
+  hitFxVariant: 0
+  hitFxBaseScale: 1
+  hitFxHorizontalOffset: 0.12
+  hitFxVerticalOffset: 0
+  hitFxADuration: 0.11
+  hitFxAStartScale: 0.75
+  hitFxAEndScale: 1.15
+  hitFxAHoldRatio: 0.25
+  hitFxBDuration: 0.14
+  hitFxBHoldRatio: 0.5
