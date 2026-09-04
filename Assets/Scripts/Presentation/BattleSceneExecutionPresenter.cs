@@ -4192,7 +4192,29 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        ResolveBattleCameraDirector()?.TryPlayGenericHitImpact(directionSign);
+        BattleCameraDirector director = ResolveBattleCameraDirector();
+        bool useNormalHitCamera = context.Route != null &&
+            context.Route.HandlerKind ==
+                BattlePresentationHandlerKind.AttackVsAttack &&
+            !context.Route.UsesLongRangeGrammar &&
+            sourceCardState.IsMeleeAttack();
+        if (!useNormalHitCamera)
+        {
+            director?.TryPlayGenericHitImpact(directionSign);
+            return;
+        }
+
+        Transform hitTargetWorldRoot = context.CurrentTargetHandle != null &&
+            context.CurrentTargetHandle.WorldRoot != null
+                ? context.CurrentTargetHandle.WorldRoot.transform
+                : null;
+        director?.TryPlayNormalHitImpact(
+            hitTargetWorldRoot,
+            directionSign,
+            attackVsAttackPresentationPlayer != null
+                ? attackVsAttackPresentationPlayer.NormalHitActiveDuration
+                : 0f
+        );
     }
 
     private void CompleteDefaultAttackImpact(

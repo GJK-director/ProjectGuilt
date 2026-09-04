@@ -6,6 +6,11 @@ using UnityEngine;
 // 控制单个战斗角色当前显示的静态姿态，不负责动画流程或角色移动。
 public sealed class BattleCharacterPresentationController : MonoBehaviour
 {
+    private static readonly int HitTintColorId =
+        Shader.PropertyToID("_HitTintColor");
+    private static readonly int HitTintStrengthId =
+        Shader.PropertyToID("_HitTintStrength");
+
     private enum HitBodyReactionMode
     {
         LegacyRandom,
@@ -69,9 +74,12 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     [SerializeField] private float dodgeDuration = 0.30f;
 
     private Vector3 bodyBaseLocalPosition;
+    private Quaternion bodyBaseLocalRotation;
     private Vector3 bodyMotionOffset;
     private Vector3 bodyShakeOffset;
     private Vector3 dodgeMotionOffset;
+    private float bodyHitRotationZ;
+    private MaterialPropertyBlock characterPropertyBlock;
     private Coroutine dodgeMotionCoroutine;
     private Action dodgeMotionFinishedCallback;
     private Coroutine muzzleFlashCoroutine;
@@ -151,6 +159,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     {
         CacheBodyVisualState();
         ApplyBodyVisualOffset();
+        ApplyBodyVisualRotation();
         CacheSlashEffectState();
         CachePerfectGuardEffectState();
         SetIdle();
@@ -167,6 +176,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         CancelMuzzleFlash();
         ClearSlashEffect();
         ClearPerfectGuardEffect();
+        ClearHitTint();
         SetIdle();
     }
 
@@ -228,6 +238,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         CancelMuzzleFlash();
         ClearSlashEffect();
         ClearPerfectGuardEffect();
+        ClearHitTint();
         SetIdle();
     }
 
@@ -313,7 +324,10 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         presentationPaused = false;
         bodyMotionOffset = Vector3.zero;
         bodyShakeOffset = Vector3.zero;
+        bodyHitRotationZ = 0f;
         ApplyBodyVisualOffset();
+        ApplyBodyVisualRotation();
+        ClearHitTint();
     }
 
     public void FinishGuardPresentation()
@@ -348,7 +362,9 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         bodyMotionOffset = Vector3.zero;
         bodyShakeOffset = Vector3.zero;
         dodgeMotionOffset = Vector3.zero;
+        bodyHitRotationZ = 0f;
         ApplyBodyVisualOffset();
+        ApplyBodyVisualRotation();
     }
 
     public bool PlayDodgeMotion(
@@ -637,7 +653,9 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         SetHit();
         bodyMotionOffset = Vector3.zero;
         bodyShakeOffset = Vector3.zero;
+        bodyHitRotationZ = 0f;
         ApplyBodyVisualOffset();
+        ApplyBodyVisualRotation();
 
         if (worldRoot == null || profile == null)
         {
@@ -650,23 +668,46 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         float burstTargetX = startX + direction * profile.ImpactBurstDistance;
         float finalTargetX = burstTargetX + direction *
             profile.FollowKnockbackDistance;
+        float impactBurstDuration = profile.ImpactBurstDuration;
+        float followKnockbackDuration = profile.FollowKnockbackDuration;
+        float activeHitDuration = impactBurstDuration + followKnockbackDuration;
+
+        bodyHitRotationZ = -direction * profile.HitTiltAngle;
+        ApplyBodyVisualRotation();
+        ApplyNormalHitBodyVisual(profile, 0f, activeHitDuration);
+        SetHitTint(profile.HitTintColor, profile.HitTintStrength);
 
         yield return MoveHitWorldRootX(
             worldRoot,
             startX,
             burstTargetX,
-            profile.ImpactBurstDuration,
-            false
+            impactBurstDuration,
+            false,
+            progress => ApplyNormalHitBodyVisual(
+                profile,
+                progress * impactBurstDuration,
+                activeHitDuration
+            )
         );
         yield return MoveHitWorldRootX(
             worldRoot,
             burstTargetX,
             finalTargetX,
-            profile.FollowKnockbackDuration,
-            true
+            followKnockbackDuration,
+            true,
+            progress => ApplyNormalHitBodyVisual(
+                profile,
+                impactBurstDuration + progress * followKnockbackDuration,
+                activeHitDuration
+            )
         );
 
         SetWorldRootPositionX(worldRoot, finalTargetX);
+        bodyShakeOffset = Vector3.zero;
+        bodyHitRotationZ = 0f;
+        ApplyBodyVisualOffset();
+        ApplyBodyVisualRotation();
+        ClearHitTint();
         float recoveryElapsed = 0f;
         float recoveryDuration = profile.RecoveryDuration;
         while (recoveryElapsed < recoveryDuration)
@@ -1110,13 +1151,15 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         float startX,
         float targetX,
         float duration,
-        bool useEaseOutQuad
+        bool useEaseOutQuad,
+        Action<float> progressCallback
     )
     {
         float safeDuration = Mathf.Max(0f, duration);
         if (safeDuration <= 0f)
         {
             SetWorldRootPositionX(worldRoot, targetX);
+            progressCallback?.Invoke(1f);
             yield break;
         }
 
@@ -1143,10 +1186,35 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
                 worldRoot,
                 Mathf.Lerp(startX, targetX, easedProgress)
             );
+            progressCallback?.Invoke(progress);
             yield return null;
         }
 
         SetWorldRootPositionX(worldRoot, targetX);
+        progressCallback?.Invoke(1f);
+    }
+
+    private void ApplyNormalHitBodyVisual(
+        BattleHitPresentationProfile profile,
+        float activeHitElapsed,
+        float activeHitDuration
+    )
+    {
+        if (profile == null || activeHitDuration <= 0f)
+        {
+            bodyShakeOffset = Vector3.zero;
+            ApplyBodyVisualOffset();
+            return;
+        }
+
+        float shakeT = Mathf.Clamp01(activeHitElapsed / activeHitDuration);
+        float phase = shakeT * Mathf.PI * 2f *
+            profile.VerticalShakeOscillations;
+        float envelope = 1f - BattlePresentationEasing.EaseOutQuad(shakeT);
+        float offsetY = profile.VerticalShakeAmplitude * envelope *
+            Mathf.Cos(phase);
+        bodyShakeOffset = new Vector3(0f, offsetY, 0f);
+        ApplyBodyVisualOffset();
     }
 
     private static void SetWorldRootPositionX(Transform worldRoot, float x)
@@ -1423,6 +1491,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         }
 
         bodyBaseLocalPosition = bodyVisualRoot.localPosition;
+        bodyBaseLocalRotation = bodyVisualRoot.localRotation;
         bodyBaseStateCached = true;
     }
 
@@ -1435,6 +1504,55 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
 
         bodyVisualRoot.localPosition = bodyBaseLocalPosition +
             bodyMotionOffset + bodyShakeOffset + dodgeMotionOffset;
+    }
+
+    private void ApplyBodyVisualRotation()
+    {
+        if (!bodyBaseStateCached || bodyVisualRoot == null)
+        {
+            return;
+        }
+
+        bodyVisualRoot.localRotation = bodyBaseLocalRotation *
+            Quaternion.Euler(0f, 0f, bodyHitRotationZ);
+    }
+
+    private void SetHitTint(Color color, float strength)
+    {
+        if (characterSprite == null)
+        {
+            return;
+        }
+
+        if (characterPropertyBlock == null)
+        {
+            characterPropertyBlock = new MaterialPropertyBlock();
+        }
+
+        characterSprite.GetPropertyBlock(characterPropertyBlock);
+        characterPropertyBlock.SetColor(HitTintColorId, color);
+        characterPropertyBlock.SetFloat(
+            HitTintStrengthId,
+            Mathf.Clamp01(strength)
+        );
+        characterSprite.SetPropertyBlock(characterPropertyBlock);
+    }
+
+    private void ClearHitTint()
+    {
+        if (characterSprite == null)
+        {
+            return;
+        }
+
+        if (characterPropertyBlock == null)
+        {
+            characterPropertyBlock = new MaterialPropertyBlock();
+        }
+
+        characterSprite.GetPropertyBlock(characterPropertyBlock);
+        characterPropertyBlock.SetFloat(HitTintStrengthId, 0f);
+        characterSprite.SetPropertyBlock(characterPropertyBlock);
     }
 
     private void CacheSlashEffectState()

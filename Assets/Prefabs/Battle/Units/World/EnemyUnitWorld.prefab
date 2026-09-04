@@ -331,7 +331,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10754, guid: 0000000000000000f000000000000000, type: 0}
+  - {fileID: 2100000, guid: 2957c32bbec113e44afff1d6816374db, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -446,6 +446,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleCharacterPresentationController
   presentationKey: enemy_default
   sourceFacesRight: 0
+  cameraFramingOffset: {x: 0, y: 0, z: 0}
   characterSprite: {fileID: 7026447746880092567}
   bodyVisualRoot: {fileID: 3272499011285696981}
   idleSprite: {fileID: 21300000, guid: 6ac4a9e2023429f4b98af80cae346458, type: 3}

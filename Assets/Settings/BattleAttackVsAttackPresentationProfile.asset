@@ -16,6 +16,6 @@ MonoBehaviour:
   afterimageSpawnInterval: 0.08
   slashHoldDuration: 0.5
   hitStopDuration: 0
-  normalHitProfile: {fileID: 0}
+  normalHitProfile: {fileID: 11400000, guid: 0df745a66f423884ca20384e8001b8d2, type: 2}
   tieRecoilDistance: 1.2
   tieRecoilDuration: 0.05

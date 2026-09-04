@@ -25,6 +25,11 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
     public float AfterimageSpawnInterval => presentationProfile != null
         ? presentationProfile.AfterimageSpawnInterval
         : 0f;
+    public float NormalHitActiveDuration => presentationProfile != null &&
+        presentationProfile.NormalHitProfile != null
+            ? presentationProfile.NormalHitProfile.ImpactBurstDuration +
+                presentationProfile.NormalHitProfile.FollowKnockbackDuration
+            : 0f;
 
     private PlaybackStage playbackStage;
     private BattleCharacterPresentationController firstActor;

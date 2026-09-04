@@ -19,6 +19,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         None,
         ClashImpact,
         HitImpact,
+        NormalHitImpact,
         GuardImpact,
         DodgeSway
     }
@@ -185,6 +186,16 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
     [SerializeField, Min(0f)]
     private float genericHitImpactHorizontalKickAmount = 0.12f;
+
+    [Header("Normal Hit Camera")]
+    [SerializeField, Range(0f, 1f)]
+    private float normalHitCameraFollowRatio = 0.35f;
+
+    [SerializeField, Min(0f)]
+    private float normalHitCameraHorizontalShakeAmplitude = 0.08f;
+
+    [SerializeField, Min(0f)]
+    private float normalHitCameraShakeCycles = 2f;
 
     [Header("Generic Guard Impact")]
     [SerializeField, Min(0f)]
@@ -772,6 +783,38 @@ public sealed class BattleCameraDirector : MonoBehaviour
         float normalizedDirection = directionSign >= 0f ? 1f : -1f;
         activeBattleActionEffectCoroutine = StartCoroutine(
             PlayGenericHitImpactSequence(normalizedDirection)
+        );
+        return true;
+    }
+
+    public bool TryPlayNormalHitImpact(
+        Transform hitTargetWorldRoot,
+        float directionSign,
+        float activeHitDuration
+    )
+    {
+        if (hitTargetWorldRoot == null ||
+            !TryBeginBattleActionEffect(
+                BattleActionEffectType.NormalHitImpact
+            ))
+        {
+            return false;
+        }
+
+        float safeDuration = Mathf.Max(0f, activeHitDuration);
+        if (safeDuration <= Mathf.Epsilon)
+        {
+            CompleteBattleActionEffect();
+            return true;
+        }
+
+        float normalizedDirection = directionSign >= 0f ? 1f : -1f;
+        activeBattleActionEffectCoroutine = StartCoroutine(
+            PlayNormalHitImpactSequence(
+                hitTargetWorldRoot,
+                normalizedDirection,
+                safeDuration
+            )
         );
         return true;
     }
@@ -2099,6 +2142,58 @@ public sealed class BattleCameraDirector : MonoBehaviour
             yield return null;
         }
 
+        CompleteBattleActionEffect();
+    }
+
+    private IEnumerator PlayNormalHitImpactSequence(
+        Transform hitTargetWorldRoot,
+        float directionSign,
+        float duration
+    )
+    {
+        float originalBaseWorldX = battleActionEffectBaseWorldX;
+        float targetStartX = hitTargetWorldRoot.position.x;
+        float followRatio = Mathf.Clamp01(normalHitCameraFollowRatio);
+        float shakeAmplitude = Mathf.Max(
+            0f,
+            normalHitCameraHorizontalShakeAmplitude
+        );
+        float shakeCycles = Mathf.Max(0f, normalHitCameraShakeCycles);
+        float lastValidFollowOffset = 0f;
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            if (hitTargetWorldRoot != null)
+            {
+                lastValidFollowOffset =
+                    (hitTargetWorldRoot.position.x - targetStartX) *
+                    followRatio;
+            }
+
+            float progress = Mathf.Clamp01(elapsed / duration);
+            float shake = directionSign * Mathf.Sin(
+                progress * Mathf.PI * 2f * shakeCycles
+            ) * shakeAmplitude * (1f - progress);
+            cameraController.SetCinematicHorizontalWorldX(
+                originalBaseWorldX + lastValidFollowOffset + shake
+            );
+
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (hitTargetWorldRoot != null)
+        {
+            lastValidFollowOffset =
+                (hitTargetWorldRoot.position.x - targetStartX) *
+                followRatio;
+        }
+
+        float finalCameraWorldX = originalBaseWorldX +
+            lastValidFollowOffset;
+        cameraController.SetCinematicHorizontalWorldX(finalCameraWorldX);
+        battleActionEffectBaseWorldX = finalCameraWorldX;
         CompleteBattleActionEffect();
     }
 
