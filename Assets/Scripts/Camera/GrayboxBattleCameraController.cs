@@ -291,6 +291,7 @@ public class GrayboxBattleCameraController : MonoBehaviour
     private bool isCinematicControlActive;
     private bool isReturningToManualHorizontalRange;
     private float manualHorizontalReturnVelocity;
+    private Vector2 presentationImpactShakeOffset = Vector2.zero;
     private EventSystem pointerEventSystem;
     private PointerEventData pointerEventData;
     private readonly List<RaycastResult> pointerRaycastResults =
@@ -450,6 +451,18 @@ public class GrayboxBattleCameraController : MonoBehaviour
         ApplyCameraTransform();
     }
 
+    public void SetPresentationImpactShakeOffset(Vector2 cameraSpaceOffset)
+    {
+        presentationImpactShakeOffset = cameraSpaceOffset;
+        ApplyCameraTransform();
+    }
+
+    public void ClearPresentationImpactShakeOffset()
+    {
+        presentationImpactShakeOffset = Vector2.zero;
+        ApplyCameraTransform();
+    }
+
     public void SetCinematicVerticalViewProgress(float progress)
     {
         if (!isCinematicControlActive)
@@ -557,6 +570,7 @@ public class GrayboxBattleCameraController : MonoBehaviour
         ClearCameraDragState();
         ClearPointerPressOwnership();
         ClearIdleHorizontalSway();
+        presentationImpactShakeOffset = Vector2.zero;
         isReturningToManualHorizontalRange = false;
         manualHorizontalReturnVelocity = 0f;
     }
@@ -1712,12 +1726,18 @@ public class GrayboxBattleCameraController : MonoBehaviour
         // Camera 世界坐标
         // -----------------------------------------------------
 
-        transform.position =
+        Vector3 baseCameraPosition =
             currentOrbitCenter
             + orbitOffset;
 
+        Vector3 impactShakeWorldOffset = cameraRotation * (
+            Vector3.right * presentationImpactShakeOffset.x +
+            Vector3.up * presentationImpactShakeOffset.y
+        );
+        transform.position = baseCameraPosition + impactShakeWorldOffset;
+
         distanceToOrbitCenter = Vector3.Distance(
-            transform.position,
+            baseCameraPosition,
             orbitCenter
         );
 
@@ -1781,6 +1801,7 @@ public class GrayboxBattleCameraController : MonoBehaviour
             defaultOrbitRadius;
         secondStageProgress = 0f;
         isInSecondStage = false;
+        presentationImpactShakeOffset = Vector2.zero;
 
         UpdateSecondStageAnglesFromProgress();
 

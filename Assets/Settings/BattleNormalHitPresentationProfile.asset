@@ -29,3 +29,8 @@ MonoBehaviour:
   hitFxVerticalOffset: 0
   hitFxHoldDuration: 0.45
   hitFxFadeDuration: 0.14
+  enableImpactCameraShake: 1
+  impactCameraShakeDuration: 0.1
+  impactCameraShakeHorizontalAmplitude: 0.045
+  impactCameraShakeVerticalAmplitude: 0.025
+  impactCameraShakeCycles: 1.5

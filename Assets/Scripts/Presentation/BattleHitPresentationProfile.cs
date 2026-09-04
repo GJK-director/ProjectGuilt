@@ -30,6 +30,15 @@ public sealed class BattleHitPresentationProfile : ScriptableObject
     [FormerlySerializedAs("hitFxBFadeDuration")]
     [SerializeField, Min(0f)] private float hitFxFadeDuration = 0.14f;
 
+    [Header("Impact Camera Shake Experiment")]
+    [SerializeField] private bool enableImpactCameraShake = true;
+    [SerializeField, Min(0f)] private float impactCameraShakeDuration = 0.10f;
+    [SerializeField, Min(0f)]
+    private float impactCameraShakeHorizontalAmplitude = 0.045f;
+    [SerializeField, Min(0f)]
+    private float impactCameraShakeVerticalAmplitude = 0.025f;
+    [SerializeField, Min(0f)] private float impactCameraShakeCycles = 1.5f;
+
     public float ImpactBurstDistance => Mathf.Max(0f, impactBurstDistance);
     public float ImpactBurstDuration => Mathf.Max(0f, impactBurstDuration);
     public float FollowKnockbackDistance => Mathf.Max(0f, followKnockbackDistance);
@@ -48,4 +57,13 @@ public sealed class BattleHitPresentationProfile : ScriptableObject
     public float HitFxVerticalOffset => hitFxVerticalOffset;
     public float HitFxHoldDuration => Mathf.Max(0f, hitFxHoldDuration);
     public float HitFxFadeDuration => Mathf.Max(0f, hitFxFadeDuration);
+    public bool EnableImpactCameraShake => enableImpactCameraShake;
+    public float ImpactCameraShakeDuration =>
+        Mathf.Max(0f, impactCameraShakeDuration);
+    public float ImpactCameraShakeHorizontalAmplitude =>
+        Mathf.Max(0f, impactCameraShakeHorizontalAmplitude);
+    public float ImpactCameraShakeVerticalAmplitude =>
+        Mathf.Max(0f, impactCameraShakeVerticalAmplitude);
+    public float ImpactCameraShakeCycles =>
+        Mathf.Max(0f, impactCameraShakeCycles);
 }

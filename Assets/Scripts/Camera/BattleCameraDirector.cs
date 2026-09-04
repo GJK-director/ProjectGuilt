@@ -230,6 +230,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
     private CanvasGroup overlayGroup;
     private Coroutine activePresentationCoroutine;
     private Coroutine activeBattleActionEffectCoroutine;
+    private Coroutine impactShakeCoroutine;
+    private int impactShakePlaybackVersion;
     private Coroutine anchoredApproachCoroutine;
     private bool isIntroPlaying;
     private TurnEndRecoveryPhase turnEndRecoveryPhase;
@@ -352,6 +354,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         CancelExternallyDrivenSingleActorApproach(false);
         CancelAnchoredTwoUnitApproach(false);
         CancelBattleActionEffect();
+        CancelImpactShake();
 
         HideOverlay();
         cameraController?.SetCinematicControl(false);
@@ -986,6 +989,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         CancelExternallyDrivenSingleActorApproach(false);
         CancelAnchoredTwoUnitApproach(false);
         CancelBattleActionEffect();
+        CancelImpactShake();
         if (IsPresentationPlaying)
         {
             return;
@@ -1036,6 +1040,51 @@ public sealed class BattleCameraDirector : MonoBehaviour
             0f,
             0f
         );
+    }
+
+    public bool TryPlayImpactShake(BattleHitPresentationProfile hitProfile)
+    {
+        ResolveReferences();
+        if (hitProfile == null ||
+            !hitProfile.EnableImpactCameraShake ||
+            hitProfile.ImpactCameraShakeDuration <= Mathf.Epsilon ||
+            (hitProfile.ImpactCameraShakeHorizontalAmplitude <= Mathf.Epsilon &&
+                hitProfile.ImpactCameraShakeVerticalAmplitude <= Mathf.Epsilon))
+        {
+            CancelImpactShake();
+            return false;
+        }
+
+        if (cameraController == null)
+        {
+            return false;
+        }
+
+        if (impactShakeCoroutine != null)
+        {
+            StopCoroutine(impactShakeCoroutine);
+            impactShakeCoroutine = null;
+        }
+
+        impactShakePlaybackVersion++;
+        cameraController.ClearPresentationImpactShakeOffset();
+        int playbackVersion = impactShakePlaybackVersion;
+        impactShakeCoroutine = StartCoroutine(
+            PlayImpactShakeSequence(hitProfile, playbackVersion)
+        );
+        return true;
+    }
+
+    public void CancelImpactShake()
+    {
+        impactShakePlaybackVersion++;
+        if (impactShakeCoroutine != null)
+        {
+            StopCoroutine(impactShakeCoroutine);
+            impactShakeCoroutine = null;
+        }
+
+        cameraController?.ClearPresentationImpactShakeOffset();
     }
 
     public bool TryPlayNormalHitImpact(
@@ -2556,6 +2605,48 @@ public sealed class BattleCameraDirector : MonoBehaviour
         cameraController.SetCinematicHorizontalWorldX(finalCameraWorldX);
         battleActionEffectBaseWorldX = finalCameraWorldX;
         CompleteBattleActionEffect();
+    }
+
+    private IEnumerator PlayImpactShakeSequence(
+        BattleHitPresentationProfile hitProfile,
+        int playbackVersion
+    )
+    {
+        float duration = hitProfile.ImpactCameraShakeDuration;
+        float horizontalAmplitude =
+            hitProfile.ImpactCameraShakeHorizontalAmplitude;
+        float verticalAmplitude =
+            hitProfile.ImpactCameraShakeVerticalAmplitude;
+        float cycles = hitProfile.ImpactCameraShakeCycles;
+        float elapsed = 0f;
+
+        while (elapsed < duration &&
+            playbackVersion == impactShakePlaybackVersion)
+        {
+            float progress = Mathf.Clamp01(elapsed / duration);
+            float phase = progress * cycles * Mathf.PI * 2f;
+            float decay = 1f - progress;
+            decay *= decay;
+            float horizontal = Mathf.Sin(phase) *
+                horizontalAmplitude * decay;
+            float vertical = Mathf.Sin(phase + Mathf.PI * 0.5f) *
+                verticalAmplitude * decay;
+
+            cameraController.SetPresentationImpactShakeOffset(
+                new Vector2(horizontal, vertical)
+            );
+
+            elapsed += Time.unscaledDeltaTime;
+            yield return null;
+        }
+
+        if (playbackVersion != impactShakePlaybackVersion)
+        {
+            yield break;
+        }
+
+        cameraController.ClearPresentationImpactShakeOffset();
+        impactShakeCoroutine = null;
     }
 
     private IEnumerator PlayGenericGuardImpactSequence(

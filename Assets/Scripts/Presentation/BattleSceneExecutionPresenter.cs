@@ -4478,6 +4478,16 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 ? attackVsAttackPresentationPlayer.NormalHitActiveDuration
                 : 0f
         );
+
+        if (context.Route.HandlerKind ==
+            BattlePresentationHandlerKind.AttackVsAttack)
+        {
+            director?.TryPlayImpactShake(
+                attackVsAttackPresentationPlayer != null
+                    ? attackVsAttackPresentationPlayer.NormalHitProfile
+                    : null
+            );
+        }
     }
 
     private void CompleteDefaultAttackImpact(
