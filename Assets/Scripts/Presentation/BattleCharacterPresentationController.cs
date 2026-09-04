@@ -628,6 +628,72 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         );
     }
 
+    public IEnumerator PlaySustainedHitReaction(
+        Transform worldRoot,
+        float recoilDirectionSign,
+        BattleHitPresentationProfile profile
+    )
+    {
+        SetHit();
+        bodyMotionOffset = Vector3.zero;
+        bodyShakeOffset = Vector3.zero;
+        ApplyBodyVisualOffset();
+
+        if (worldRoot == null || profile == null)
+        {
+            FinishHitReaction();
+            yield break;
+        }
+
+        float direction = recoilDirectionSign >= 0f ? 1f : -1f;
+        float startX = worldRoot.position.x;
+        float burstTargetX = startX + direction * profile.ImpactBurstDistance;
+        float finalTargetX = burstTargetX + direction *
+            profile.FollowKnockbackDistance;
+
+        yield return MoveHitWorldRootX(
+            worldRoot,
+            startX,
+            burstTargetX,
+            profile.ImpactBurstDuration,
+            false
+        );
+        yield return MoveHitWorldRootX(
+            worldRoot,
+            burstTargetX,
+            finalTargetX,
+            profile.FollowKnockbackDuration,
+            true
+        );
+
+        SetWorldRootPositionX(worldRoot, finalTargetX);
+        float recoveryElapsed = 0f;
+        float recoveryDuration = profile.RecoveryDuration;
+        while (recoveryElapsed < recoveryDuration)
+        {
+            if (!isActiveAndEnabled)
+            {
+                FinishHitReaction();
+                yield break;
+            }
+
+            if (presentationPaused)
+            {
+                yield return null;
+                continue;
+            }
+
+            recoveryElapsed = Mathf.Min(
+                recoveryDuration,
+                recoveryElapsed + Time.deltaTime
+            );
+            yield return null;
+        }
+
+        SetWorldRootPositionX(worldRoot, finalTargetX);
+        FinishHitReaction();
+    }
+
     public IEnumerator PlaySustainedDirectionalHitReaction(
         Transform worldRoot,
         float recoilDirectionSign,
@@ -1037,6 +1103,50 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         {
             FinishHitReaction();
         }
+    }
+
+    private IEnumerator MoveHitWorldRootX(
+        Transform worldRoot,
+        float startX,
+        float targetX,
+        float duration,
+        bool useEaseOutQuad
+    )
+    {
+        float safeDuration = Mathf.Max(0f, duration);
+        if (safeDuration <= 0f)
+        {
+            SetWorldRootPositionX(worldRoot, targetX);
+            yield break;
+        }
+
+        float elapsed = 0f;
+        while (elapsed < safeDuration)
+        {
+            if (!isActiveAndEnabled)
+            {
+                yield break;
+            }
+
+            if (presentationPaused)
+            {
+                yield return null;
+                continue;
+            }
+
+            elapsed = Mathf.Min(safeDuration, elapsed + Time.deltaTime);
+            float progress = elapsed / safeDuration;
+            float easedProgress = useEaseOutQuad
+                ? BattlePresentationEasing.EaseOutQuad(progress)
+                : progress;
+            SetWorldRootPositionX(
+                worldRoot,
+                Mathf.Lerp(startX, targetX, easedProgress)
+            );
+            yield return null;
+        }
+
+        SetWorldRootPositionX(worldRoot, targetX);
     }
 
     private static void SetWorldRootPositionX(Transform worldRoot, float x)

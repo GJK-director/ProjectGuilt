@@ -13,10 +13,7 @@ public sealed class BattleAttackVsAttackPresentationProfile : ScriptableObject
     [SerializeField, Min(0f)] private float hitStopDuration = 0.08f;
 
     [Header("Resolved Melee Hit")]
-    [SerializeField, Min(0f)] private float hitWorldKnockbackDistance = 1f;
-    [SerializeField, Min(0f)] private float hitBodyReactionAmplitude = 0.12f;
-    [SerializeField, Min(0f)] private float hitBodyReactionDuration = 0.18f;
-    [SerializeField, Min(0f)] private float hitBodyReactionOscillations = 2f;
+    [SerializeField] private BattleHitPresentationProfile normalHitProfile;
 
     [Header("Attack Tie")]
     [SerializeField, Min(0f)] private float tieRecoilDistance = 1.2f;
@@ -28,14 +25,7 @@ public sealed class BattleAttackVsAttackPresentationProfile : ScriptableObject
         Mathf.Max(0f, afterimageSpawnInterval);
     public float SlashHoldDuration => Mathf.Max(0f, slashHoldDuration);
     public float HitStopDuration => Mathf.Max(0f, hitStopDuration);
-    public float HitWorldKnockbackDistance =>
-        Mathf.Max(0f, hitWorldKnockbackDistance);
-    public float HitBodyReactionAmplitude =>
-        Mathf.Max(0f, hitBodyReactionAmplitude);
-    public float HitBodyReactionDuration =>
-        Mathf.Max(0f, hitBodyReactionDuration);
-    public float HitBodyReactionOscillations =>
-        Mathf.Max(0f, hitBodyReactionOscillations);
+    public BattleHitPresentationProfile NormalHitProfile => normalHitProfile;
     public float TieRecoilDistance => Mathf.Max(0f, tieRecoilDistance);
     public float TieRecoilDuration => Mathf.Max(0f, tieRecoilDuration);
 }

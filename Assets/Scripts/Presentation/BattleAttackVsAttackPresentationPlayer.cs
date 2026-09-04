@@ -290,6 +290,14 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             return false;
         }
 
+        if (!useCloseRangeShoot && presentationProfile.NormalHitProfile == null)
+        {
+            Debug.LogError(
+                requestName + " failed: NormalHitProfile is not assigned."
+            );
+            return false;
+        }
+
         if (IsRunning || winnerController == null || loserController == null ||
             loserRoot == null)
         {
@@ -729,6 +737,16 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             yield break;
         }
 
+        while (loserHitCoroutine != null && IsCurrentPlayback(version))
+        {
+            yield return null;
+        }
+
+        if (!IsCurrentPlayback(version))
+        {
+            yield break;
+        }
+
         FinishResolvedAttack(version);
     }
 
@@ -798,13 +816,10 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             }
             else
             {
-                yield return loser.PlaySustainedDirectionalHitReaction(
+                yield return loser.PlaySustainedHitReaction(
                     loserWorldRoot,
                     attackDirectionSign,
-                    presentationProfile.HitWorldKnockbackDistance,
-                    presentationProfile.HitBodyReactionAmplitude,
-                    presentationProfile.HitBodyReactionDuration,
-                    presentationProfile.HitBodyReactionOscillations
+                    presentationProfile.NormalHitProfile
                 );
             }
         }

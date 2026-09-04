@@ -15,6 +15,7 @@ MonoBehaviour:
   sprintDuration: 0.48
   afterimageSpawnInterval: 0.08
   slashHoldDuration: 0.5
-  hitStopDuration: 0.08
+  hitStopDuration: 0
+  normalHitProfile: {fileID: 0}
   tieRecoilDistance: 1.2
   tieRecoilDuration: 0.05
