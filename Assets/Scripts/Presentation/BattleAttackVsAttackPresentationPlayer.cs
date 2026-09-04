@@ -792,6 +792,7 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             loser.SetHit();
             BattleNormalHitFxPlayer.TrySpawn(
                 presentationProfile.NormalHitProfile,
+                presentationProfile.NormalHitProfile.MeleeHitFxSprite,
                 loser,
                 loserWorldRoot,
                 attackDirectionSign

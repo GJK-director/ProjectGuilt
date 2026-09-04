@@ -3085,7 +3085,13 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        ResolveBattleCameraDirector()?.TryPlayGenericHitImpact(directionSign);
+        ResolveBattleCameraDirector()?.TryPlayNormalHitImpact(
+            context.LongRangeMeleeHandle.WorldRoot.transform,
+            directionSign,
+            attackVsAttackPresentationPlayer != null
+                ? attackVsAttackPresentationPlayer.NormalHitActiveDuration
+                : 0f
+        );
     }
 
     private void CompleteLongRangeShotImpact(
@@ -4198,9 +4204,10 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         BattleCameraDirector director = ResolveBattleCameraDirector();
         bool useNormalHitCamera = context.Route != null &&
-            context.Route.HandlerKind ==
-                BattlePresentationHandlerKind.AttackVsAttack &&
-            !context.Route.UsesLongRangeGrammar &&
+            (context.Route.HandlerKind ==
+                    BattlePresentationHandlerKind.AttackVsAttack ||
+                context.Route.HandlerKind ==
+                    BattlePresentationHandlerKind.UnilateralAttack) &&
             sourceCardState.IsMeleeAttack();
         if (!useNormalHitCamera)
         {

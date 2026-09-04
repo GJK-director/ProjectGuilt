@@ -22,14 +22,10 @@ MonoBehaviour:
   hitTiltAngle: 5
   hitTintColor: {r: 0.7, g: 0.03, b: 0.03, a: 1}
   hitTintStrength: 1
-  hitFxSprite: {fileID: 0}
-  hitFxVariant: 0
+  meleeHitFxSprite: {fileID: 0}
+  shootHitFxSprite: {fileID: 0}
   hitFxBaseScale: 1
   hitFxHorizontalOffset: 0.12
   hitFxVerticalOffset: 0
   hitFxHoldDuration: 0.45
-  hitFxAExpandDuration: 0.11
-  hitFxAStartScale: 0.75
-  hitFxAEndScale: 1.15
-  hitFxAFadeDuration: 0.1
-  hitFxBFadeDuration: 0.14
+  hitFxFadeDuration: 0.14

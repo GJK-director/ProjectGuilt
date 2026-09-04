@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Serialization;
 
 [CreateAssetMenu(
     fileName = "BattleHitPresentationProfile",
@@ -19,22 +20,15 @@ public sealed class BattleHitPresentationProfile : ScriptableObject
     [SerializeField, Range(0f, 1f)] private float hitTintStrength = 0.65f;
 
     [Header("Normal Hit FX")]
-    [SerializeField] private Sprite hitFxSprite;
-    [SerializeField] private BattleNormalHitFxVariant hitFxVariant =
-        BattleNormalHitFxVariant.WorldBurstA;
+    [FormerlySerializedAs("hitFxSprite")]
+    [SerializeField] private Sprite meleeHitFxSprite;
+    [SerializeField] private Sprite shootHitFxSprite;
     [SerializeField, Min(0f)] private float hitFxBaseScale = 1f;
     [SerializeField, Min(0f)] private float hitFxHorizontalOffset = 0.12f;
     [SerializeField] private float hitFxVerticalOffset = 0f;
     [SerializeField, Min(0f)] private float hitFxHoldDuration = 0.45f;
-
-    [Header("Normal Hit FX A")]
-    [SerializeField, Min(0f)] private float hitFxAExpandDuration = 0.11f;
-    [SerializeField, Min(0f)] private float hitFxAStartScale = 0.75f;
-    [SerializeField, Min(0f)] private float hitFxAEndScale = 1.15f;
-    [SerializeField, Min(0f)] private float hitFxAFadeDuration = 0.10f;
-
-    [Header("Normal Hit FX B")]
-    [SerializeField, Min(0f)] private float hitFxBFadeDuration = 0.14f;
+    [FormerlySerializedAs("hitFxBFadeDuration")]
+    [SerializeField, Min(0f)] private float hitFxFadeDuration = 0.14f;
 
     public float ImpactBurstDistance => Mathf.Max(0f, impactBurstDistance);
     public float ImpactBurstDuration => Mathf.Max(0f, impactBurstDuration);
@@ -47,15 +41,11 @@ public sealed class BattleHitPresentationProfile : ScriptableObject
     public float HitTiltAngle => Mathf.Max(0f, hitTiltAngle);
     public Color HitTintColor => hitTintColor;
     public float HitTintStrength => Mathf.Clamp01(hitTintStrength);
-    public Sprite HitFxSprite => hitFxSprite;
-    public BattleNormalHitFxVariant HitFxVariant => hitFxVariant;
+    public Sprite MeleeHitFxSprite => meleeHitFxSprite;
+    public Sprite ShootHitFxSprite => shootHitFxSprite;
     public float HitFxBaseScale => Mathf.Max(0f, hitFxBaseScale);
     public float HitFxHorizontalOffset => Mathf.Max(0f, hitFxHorizontalOffset);
     public float HitFxVerticalOffset => hitFxVerticalOffset;
     public float HitFxHoldDuration => Mathf.Max(0f, hitFxHoldDuration);
-    public float HitFxAExpandDuration => Mathf.Max(0f, hitFxAExpandDuration);
-    public float HitFxAStartScale => Mathf.Max(0f, hitFxAStartScale);
-    public float HitFxAEndScale => Mathf.Max(0f, hitFxAEndScale);
-    public float HitFxAFadeDuration => Mathf.Max(0f, hitFxAFadeDuration);
-    public float HitFxBFadeDuration => Mathf.Max(0f, hitFxBFadeDuration);
+    public float HitFxFadeDuration => Mathf.Max(0f, hitFxFadeDuration);
 }

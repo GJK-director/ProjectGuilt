@@ -328,6 +328,7 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         hitTarget.SetHit();
         BattleNormalHitFxPlayer.TrySpawn(
             normalHitProfile,
+            normalHitProfile.ShootHitFxSprite,
             hitTarget,
             hitTargetWorldRoot,
             attackDirectionSign

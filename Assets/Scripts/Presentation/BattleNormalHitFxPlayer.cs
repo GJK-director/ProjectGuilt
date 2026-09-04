@@ -1,12 +1,6 @@
 using System.Collections;
 using UnityEngine;
 
-public enum BattleNormalHitFxVariant
-{
-    WorldBurstA,
-    FollowTargetB
-}
-
 public sealed class BattleNormalHitFxPlayer : MonoBehaviour
 {
     private SpriteRenderer fxRenderer;
@@ -14,6 +8,7 @@ public sealed class BattleNormalHitFxPlayer : MonoBehaviour
 
     public static bool TrySpawn(
         BattleHitPresentationProfile hitProfile,
+        Sprite hitFxSprite,
         BattleCharacterPresentationController hitTarget,
         Transform hitTargetWorldRoot,
         float attackDirectionSign
@@ -28,11 +23,11 @@ public sealed class BattleNormalHitFxPlayer : MonoBehaviour
             return false;
         }
 
-        if (hitProfile.HitFxSprite == null)
+        if (hitFxSprite == null)
         {
             Debug.LogWarning(
                 "[BattleNormalHitFxPlayer] Normal Hit FX skipped: " +
-                "HitFxSprite is not assigned.",
+                "the requested Hit FX Sprite is not assigned.",
                 hitProfile
             );
             return false;
@@ -49,23 +44,35 @@ public sealed class BattleNormalHitFxPlayer : MonoBehaviour
 
         SpriteRenderer spawnedRenderer =
             fxObject.AddComponent<SpriteRenderer>();
-        spawnedRenderer.sprite = hitProfile.HitFxSprite;
+        spawnedRenderer.sprite = hitFxSprite;
         spawnedRenderer.color = Color.white;
         spawnedRenderer.flipX = false;
         spawnedRenderer.flipY = false;
         spawnedRenderer.sortingLayerID = targetRenderer.sortingLayerID;
         spawnedRenderer.sortingOrder = targetRenderer.sortingOrder + 10;
 
-        if (hitProfile.HitFxVariant ==
-            BattleNormalHitFxVariant.FollowTargetB)
-        {
-            fxObject.transform.SetParent(hitTargetWorldRoot, true);
-        }
+        fxObject.transform.SetParent(hitTargetWorldRoot, true);
 
         BattleNormalHitFxPlayer fxPlayer =
             fxObject.AddComponent<BattleNormalHitFxPlayer>();
         fxPlayer.Play(spawnedRenderer, hitProfile);
         return true;
+    }
+
+    public static bool TrySpawn(
+        BattleHitPresentationProfile hitProfile,
+        BattleCharacterPresentationController hitTarget,
+        Transform hitTargetWorldRoot,
+        float attackDirectionSign
+    )
+    {
+        return TrySpawn(
+            hitProfile,
+            hitProfile != null ? hitProfile.MeleeHitFxSprite : null,
+            hitTarget,
+            hitTargetWorldRoot,
+            attackDirectionSign
+        );
     }
 
     public void Play(
@@ -86,78 +93,6 @@ public sealed class BattleNormalHitFxPlayer : MonoBehaviour
             yield break;
         }
 
-        if (profile.HitFxVariant == BattleNormalHitFxVariant.FollowTargetB)
-        {
-            yield return PlayFollowTargetB();
-        }
-        else
-        {
-            yield return PlayWorldBurstA();
-        }
-
-        SetAlpha(0f);
-        Destroy(gameObject);
-    }
-
-    private IEnumerator PlayWorldBurstA()
-    {
-        float baseScale = profile.HitFxBaseScale;
-        float startScale = baseScale * profile.HitFxAStartScale;
-        float endScale = baseScale * profile.HitFxAEndScale;
-        float holdDuration = profile.HitFxHoldDuration;
-        float expandDuration = Mathf.Min(
-            profile.HitFxAExpandDuration,
-            holdDuration
-        );
-        transform.localScale = Vector3.one * startScale;
-        SetAlpha(1f);
-
-        float elapsed = 0f;
-        while (elapsed < expandDuration)
-        {
-            float normalizedExpand = expandDuration > Mathf.Epsilon
-                ? elapsed / expandDuration
-                : 1f;
-            float easedScale = BattlePresentationEasing.EaseOutQuad(
-                normalizedExpand
-            );
-            transform.localScale = Vector3.one * Mathf.Lerp(
-                startScale,
-                endScale,
-                easedScale
-            );
-            yield return null;
-            elapsed = Mathf.Min(
-                expandDuration,
-                elapsed + Time.deltaTime
-            );
-        }
-
-        transform.localScale = Vector3.one * endScale;
-        while (elapsed < holdDuration)
-        {
-            yield return null;
-            elapsed = Mathf.Min(
-                holdDuration,
-                elapsed + Time.deltaTime
-            );
-        }
-
-        float fadeDuration = profile.HitFxAFadeDuration;
-        float fadeElapsed = 0f;
-        while (fadeElapsed < fadeDuration)
-        {
-            SetAlpha(1f - fadeElapsed / fadeDuration);
-            yield return null;
-            fadeElapsed = Mathf.Min(
-                fadeDuration,
-                fadeElapsed + Time.deltaTime
-            );
-        }
-    }
-
-    private IEnumerator PlayFollowTargetB()
-    {
         transform.localScale = Vector3.one * profile.HitFxBaseScale;
         SetAlpha(1f);
 
@@ -173,7 +108,7 @@ public sealed class BattleNormalHitFxPlayer : MonoBehaviour
         }
 
         float fadeElapsed = 0f;
-        float fadeDuration = profile.HitFxBFadeDuration;
+        float fadeDuration = profile.HitFxFadeDuration;
         while (fadeElapsed < fadeDuration)
         {
             SetAlpha(1f - fadeElapsed / fadeDuration);
@@ -183,6 +118,9 @@ public sealed class BattleNormalHitFxPlayer : MonoBehaviour
                 fadeElapsed + Time.deltaTime
             );
         }
+
+        SetAlpha(0f);
+        Destroy(gameObject);
     }
 
     private void SetAlpha(float alpha)
