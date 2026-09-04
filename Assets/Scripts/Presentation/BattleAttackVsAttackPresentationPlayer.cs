@@ -19,6 +19,10 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
 
     public bool IsRunning { get; private set; }
     public bool IsFinished { get; private set; }
+    public BattleHitPresentationProfile NormalHitProfile =>
+        presentationProfile != null
+            ? presentationProfile.NormalHitProfile
+            : null;
     public float SprintDuration => presentationProfile != null
         ? presentationProfile.SprintDuration
         : 0f;

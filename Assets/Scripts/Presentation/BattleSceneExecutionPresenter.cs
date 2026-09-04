@@ -3028,6 +3028,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.LongRangeShooterHandle,
             context.LongRangeMeleeHandle
         );
+        bool playShotVisual = context.Route != null &&
+            context.Route.HandlerKind ==
+                BattlePresentationHandlerKind.UnilateralAttack;
         long requestId = request.RequestId;
         BattleExecutionItem executionItem = request.ExecutionItem;
         context.LongRangeShotImpactStarted = true;
@@ -3041,6 +3044,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.LongRangeMeleePresentation,
             context.LongRangeMeleeHandle.WorldRoot.transform,
             directionSign,
+            playShotVisual,
             () => HandleLongRangeShotTrueVisualImpact(
                 context,
                 executionItem,
@@ -4398,6 +4402,22 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         {
             longRangeShootVsAttackPresentationPlayer = gameObject.AddComponent<
                 BattleLongRangeShootVsAttackPresentationPlayer>();
+        }
+
+        BattleHitPresentationProfile sharedNormalHitProfile =
+            attackVsAttackPresentationPlayer != null
+                ? attackVsAttackPresentationPlayer.NormalHitProfile
+                : null;
+        longRangeShootVsAttackPresentationPlayer.ConfigureNormalHitProfile(
+            sharedNormalHitProfile
+        );
+        if (sharedNormalHitProfile == null)
+        {
+            Debug.LogError(
+                "BattleSceneExecutionPresenter无法为LongRange Player注入" +
+                "共享NormalHitProfile。",
+                this
+            );
         }
     }
 

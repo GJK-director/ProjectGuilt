@@ -16,7 +16,6 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
     public bool IsRunning { get; private set; }
     public bool IsFinished { get; private set; }
 
-    [SerializeField]
     private BattleHitPresentationProfile normalHitProfile;
 
     private PlaybackStage playbackStage;
@@ -37,8 +36,17 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
     private bool hitReactionFinished;
     private bool visualImpactInvoked;
     private bool responseMotionFinished;
+    private bool playShotVisual;
+    private bool shotVisualFinished;
     private int playbackVersion;
     private float attackDirectionSign;
+
+    public void ConfigureNormalHitProfile(
+        BattleHitPresentationProfile profile
+    )
+    {
+        normalHitProfile = profile;
+    }
 
     void OnDisable()
     {
@@ -143,6 +151,7 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
             targetController,
             targetWorldRoot,
             directionSign,
+            false,
             null,
             visualImpactCallback,
             finishedCallback
@@ -154,6 +163,29 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         BattleCharacterPresentationController targetController,
         Transform targetWorldRoot,
         float directionSign,
+        Action trueVisualImpactCallback,
+        Action visualImpactCallback,
+        Action finishedCallback
+    )
+    {
+        return TryPlayShotHit(
+            shooterController,
+            targetController,
+            targetWorldRoot,
+            directionSign,
+            false,
+            trueVisualImpactCallback,
+            visualImpactCallback,
+            finishedCallback
+        );
+    }
+
+    public bool TryPlayShotHit(
+        BattleCharacterPresentationController shooterController,
+        BattleCharacterPresentationController targetController,
+        Transform targetWorldRoot,
+        float directionSign,
+        bool shouldPlayShotVisual,
         Action trueVisualImpactCallback,
         Action visualImpactCallback,
         Action finishedCallback
@@ -184,6 +216,8 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         onFinished = finishedCallback;
         hitReactionFinished = false;
         visualImpactInvoked = false;
+        playShotVisual = shouldPlayShotVisual;
+        shotVisualFinished = !shouldPlayShotVisual;
         IsRunning = true;
         IsFinished = false;
         playbackVersion++;
@@ -283,6 +317,14 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
 
     private IEnumerator RunShotHit(int version)
     {
+        if (playShotVisual)
+        {
+            shooter.SetShoot();
+            shooter.PlayMuzzleFlash(
+                () => MarkShotVisualFinished(version)
+            );
+        }
+
         hitTarget.SetHit();
         BattleNormalHitFxPlayer.TrySpawn(
             normalHitProfile,
@@ -295,7 +337,8 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         // 没有弹道时，目标进入Hit即作为正式Impact的视觉提交边界。
         ReachVisualImpact(version);
 
-        while (IsCurrentPlayback(version) && !hitReactionFinished)
+        while (IsCurrentPlayback(version) &&
+            (!hitReactionFinished || !shotVisualFinished))
         {
             yield return null;
         }
@@ -396,6 +439,14 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         }
     }
 
+    private void MarkShotVisualFinished(int version)
+    {
+        if (IsCurrentPlayback(version))
+        {
+            shotVisualFinished = true;
+        }
+    }
+
     private void ReachVisualImpact(int version)
     {
         if (!IsCurrentPlayback(version) || visualImpactInvoked)
@@ -482,6 +533,8 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         hitReactionFinished = false;
         visualImpactInvoked = false;
         responseMotionFinished = false;
+        playShotVisual = false;
+        shotVisualFinished = false;
     }
 
     private bool IsCurrentPlayback(int version)
