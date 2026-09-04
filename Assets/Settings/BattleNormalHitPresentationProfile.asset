@@ -14,11 +14,11 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleHitPresentationProfile
   impactBurstDistance: 0.35
   impactBurstDuration: 0.04
-  followKnockbackDistance: 0.65
+  followKnockbackDistance: 1.3
   followKnockbackDuration: 0.16
   recoveryDuration: 0.18
   verticalShakeAmplitude: 0.15
   verticalShakeOscillations: 2
   hitTiltAngle: 5
-  hitTintColor: {r: 1, g: 0.15, b: 0.15, a: 1}
-  hitTintStrength: 0.65
+  hitTintColor: {r: 0.7, g: 0.03, b: 0.03, a: 1}
+  hitTintStrength: 0.85

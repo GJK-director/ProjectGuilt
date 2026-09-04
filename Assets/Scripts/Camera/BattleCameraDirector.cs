@@ -189,7 +189,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
     [Header("Normal Hit Camera")]
     [SerializeField, Range(0f, 1f)]
-    private float normalHitCameraFollowRatio = 0.35f;
+    private float normalHitCameraFollowRatio = 0.6f;
 
     [SerializeField, Min(0f)]
     private float normalHitCameraHorizontalShakeAmplitude = 0.08f;
