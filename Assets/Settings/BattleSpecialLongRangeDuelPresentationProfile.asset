@@ -19,3 +19,6 @@ MonoBehaviour:
   enableShooterBiasedFinalFocus: 1
   finalShooterFramingWeight: 0.35
   finalFocusOrbitRadius: 8.5
+  enableSpecialShotHitTuning: 1
+  specialFollowKnockbackDistance: 1.3
+  specialCameraHorizontalDistance: 0.99

@@ -17,6 +17,8 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
     public bool IsFinished { get; private set; }
 
     private BattleHitPresentationProfile normalHitProfile;
+    private BattleSpecialLongRangeDuelPresentationProfile
+        specialShotHitProfile;
 
     private PlaybackStage playbackStage;
     private BattleCharacterPresentationController shooter;
@@ -191,6 +193,31 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         Action finishedCallback
     )
     {
+        return TryPlayShotHit(
+            shooterController,
+            targetController,
+            targetWorldRoot,
+            directionSign,
+            shouldPlayShotVisual,
+            null,
+            trueVisualImpactCallback,
+            visualImpactCallback,
+            finishedCallback
+        );
+    }
+
+    public bool TryPlayShotHit(
+        BattleCharacterPresentationController shooterController,
+        BattleCharacterPresentationController targetController,
+        Transform targetWorldRoot,
+        float directionSign,
+        bool shouldPlayShotVisual,
+        BattleSpecialLongRangeDuelPresentationProfile specialHitProfile,
+        Action trueVisualImpactCallback,
+        Action visualImpactCallback,
+        Action finishedCallback
+    )
+    {
         if (normalHitProfile == null)
         {
             Debug.LogError(
@@ -218,6 +245,10 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         visualImpactInvoked = false;
         playShotVisual = shouldPlayShotVisual;
         shotVisualFinished = !shouldPlayShotVisual;
+        specialShotHitProfile = specialHitProfile != null &&
+            specialHitProfile.EnableSpecialShotHitTuning
+                ? specialHitProfile
+                : null;
         IsRunning = true;
         IsFinished = false;
         playbackVersion++;
@@ -354,11 +385,23 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
     {
         if (hitTarget != null)
         {
-            yield return hitTarget.PlaySustainedHitReaction(
-                hitTargetWorldRoot,
-                attackDirectionSign,
-                normalHitProfile
-            );
+            if (specialShotHitProfile != null)
+            {
+                yield return hitTarget.PlaySustainedHitReaction(
+                    hitTargetWorldRoot,
+                    attackDirectionSign,
+                    normalHitProfile,
+                    specialShotHitProfile.SpecialFollowKnockbackDistance
+                );
+            }
+            else
+            {
+                yield return hitTarget.PlaySustainedHitReaction(
+                    hitTargetWorldRoot,
+                    attackDirectionSign,
+                    normalHitProfile
+                );
+            }
         }
 
         if (!IsCurrentPlayback(version))
@@ -536,6 +579,7 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         responseMotionFinished = false;
         playShotVisual = false;
         shotVisualFinished = false;
+        specialShotHitProfile = null;
     }
 
     private bool IsCurrentPlayback(int version)

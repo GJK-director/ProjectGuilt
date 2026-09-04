@@ -29,6 +29,16 @@ public sealed class BattleSpecialLongRangeDuelPresentationProfile :
     [SerializeField, Min(0f)]
     private float finalFocusOrbitRadius = 8.5f;
 
+    [Header("Special Shot Hit Tuning")]
+    [SerializeField]
+    private bool enableSpecialShotHitTuning = true;
+
+    [SerializeField, Min(0f)]
+    private float specialFollowKnockbackDistance = 1.30f;
+
+    [SerializeField, Min(0f)]
+    private float specialCameraHorizontalDistance = 0.99f;
+
     public float FinalRollSeparation => Mathf.Max(0f, finalRollSeparation);
     public float FastApproachThreshold => Mathf.Max(
         FinalRollSeparation,
@@ -43,4 +53,9 @@ public sealed class BattleSpecialLongRangeDuelPresentationProfile :
         Mathf.Clamp01(finalShooterFramingWeight);
     public float FinalFocusOrbitRadius =>
         Mathf.Max(0f, finalFocusOrbitRadius);
+    public bool EnableSpecialShotHitTuning => enableSpecialShotHitTuning;
+    public float SpecialFollowKnockbackDistance =>
+        Mathf.Max(0f, specialFollowKnockbackDistance);
+    public float SpecialCameraHorizontalDistance =>
+        Mathf.Max(0f, specialCameraHorizontalDistance);
 }

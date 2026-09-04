@@ -1028,6 +1028,43 @@ public sealed class BattleCameraDirector : MonoBehaviour
         float activeHitDuration
     )
     {
+        return TryPlayNormalHitImpactInternal(
+            hitTargetWorldRoot,
+            directionSign,
+            activeHitDuration,
+            false,
+            0f,
+            0f
+        );
+    }
+
+    public bool TryPlayNormalHitImpact(
+        Transform hitTargetWorldRoot,
+        float directionSign,
+        float activeHitDuration,
+        float expectedTargetTravelDistance,
+        float cameraHorizontalDistance
+    )
+    {
+        return TryPlayNormalHitImpactInternal(
+            hitTargetWorldRoot,
+            directionSign,
+            activeHitDuration,
+            true,
+            expectedTargetTravelDistance,
+            cameraHorizontalDistance
+        );
+    }
+
+    private bool TryPlayNormalHitImpactInternal(
+        Transform hitTargetWorldRoot,
+        float directionSign,
+        float activeHitDuration,
+        bool useFixedHorizontalDistance,
+        float expectedTargetTravelDistance,
+        float cameraHorizontalDistance
+    )
+    {
         if (hitTargetWorldRoot == null ||
             !TryBeginBattleActionEffect(
                 BattleActionEffectType.NormalHitImpact
@@ -1037,18 +1074,31 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
 
         float safeDuration = Mathf.Max(0f, activeHitDuration);
+        float normalizedDirection = directionSign >= 0f ? 1f : -1f;
         if (safeDuration <= Mathf.Epsilon)
         {
+            if (useFixedHorizontalDistance)
+            {
+                float finalCameraWorldX = battleActionEffectBaseWorldX +
+                    normalizedDirection *
+                    Mathf.Max(0f, cameraHorizontalDistance);
+                cameraController.SetCinematicHorizontalWorldX(
+                    finalCameraWorldX
+                );
+                battleActionEffectBaseWorldX = finalCameraWorldX;
+            }
             CompleteBattleActionEffect();
             return true;
         }
 
-        float normalizedDirection = directionSign >= 0f ? 1f : -1f;
         activeBattleActionEffectCoroutine = StartCoroutine(
             PlayNormalHitImpactSequence(
                 hitTargetWorldRoot,
                 normalizedDirection,
-                safeDuration
+                safeDuration,
+                useFixedHorizontalDistance,
+                Mathf.Max(0f, expectedTargetTravelDistance),
+                Mathf.Max(0f, cameraHorizontalDistance)
             )
         );
         return true;
@@ -2434,7 +2484,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
     private IEnumerator PlayNormalHitImpactSequence(
         Transform hitTargetWorldRoot,
         float directionSign,
-        float duration
+        float duration,
+        bool useFixedHorizontalDistance,
+        float expectedTargetTravelDistance,
+        float cameraHorizontalDistance
     )
     {
         float originalBaseWorldX = battleActionEffectBaseWorldX;
@@ -2452,9 +2505,26 @@ public sealed class BattleCameraDirector : MonoBehaviour
         {
             if (hitTargetWorldRoot != null)
             {
-                lastValidFollowOffset =
-                    (hitTargetWorldRoot.position.x - targetStartX) *
-                    followRatio;
+                if (useFixedHorizontalDistance)
+                {
+                    float actualTravel = Mathf.Abs(
+                        hitTargetWorldRoot.position.x - targetStartX
+                    );
+                    float travelProgress = expectedTargetTravelDistance >
+                        Mathf.Epsilon
+                            ? Mathf.Clamp01(
+                                actualTravel / expectedTargetTravelDistance
+                            )
+                            : 1f;
+                    lastValidFollowOffset = directionSign *
+                        cameraHorizontalDistance * travelProgress;
+                }
+                else
+                {
+                    lastValidFollowOffset =
+                        (hitTargetWorldRoot.position.x - targetStartX) *
+                        followRatio;
+                }
             }
 
             float progress = Mathf.Clamp01(elapsed / duration);
@@ -2469,7 +2539,12 @@ public sealed class BattleCameraDirector : MonoBehaviour
             yield return null;
         }
 
-        if (hitTargetWorldRoot != null)
+        if (useFixedHorizontalDistance)
+        {
+            lastValidFollowOffset = directionSign *
+                cameraHorizontalDistance;
+        }
+        else if (hitTargetWorldRoot != null)
         {
             lastValidFollowOffset =
                 (hitTargetWorldRoot.position.x - targetStartX) *

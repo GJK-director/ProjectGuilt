@@ -3239,6 +3239,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         bool playShotVisual = context.Route != null &&
             context.Route.HandlerKind ==
                 BattlePresentationHandlerKind.UnilateralAttack;
+        BattleSpecialLongRangeDuelPresentationProfile specialHitProfile =
+            ResolveSpecialLongRangeDuelHitProfile(context);
         long requestId = request.RequestId;
         BattleExecutionItem executionItem = request.ExecutionItem;
         context.LongRangeShotImpactStarted = true;
@@ -3253,10 +3255,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.LongRangeMeleeHandle.WorldRoot.transform,
             directionSign,
             playShotVisual,
+            specialHitProfile,
             () => HandleLongRangeShotTrueVisualImpact(
                 context,
                 executionItem,
-                directionSign
+                directionSign,
+                specialHitProfile
             ),
             () => CompleteLongRangeShotImpact(
                 context,
@@ -3283,7 +3287,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     private void HandleLongRangeShotTrueVisualImpact(
         ActionPresentationContext context,
         BattleExecutionItem executionItem,
-        float directionSign
+        float directionSign,
+        BattleSpecialLongRangeDuelPresentationProfile specialHitProfile
     )
     {
         if (!IsOwnedLongRangeShotImpact(context, executionItem) ||
@@ -3293,13 +3298,52 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        ResolveBattleCameraDirector()?.TryPlayNormalHitImpact(
+        BattleCameraDirector director = ResolveBattleCameraDirector();
+        BattleHitPresentationProfile normalHitProfile =
+            attackVsAttackPresentationPlayer != null
+                ? attackVsAttackPresentationPlayer.NormalHitProfile
+                : null;
+        float activeHitDuration = attackVsAttackPresentationPlayer != null
+            ? attackVsAttackPresentationPlayer.NormalHitActiveDuration
+            : 0f;
+        if (specialHitProfile != null && normalHitProfile != null)
+        {
+            float expectedTargetTravelDistance =
+                normalHitProfile.ImpactBurstDistance +
+                specialHitProfile.SpecialFollowKnockbackDistance;
+            director?.TryPlayNormalHitImpact(
+                context.LongRangeMeleeHandle.WorldRoot.transform,
+                directionSign,
+                activeHitDuration,
+                expectedTargetTravelDistance,
+                specialHitProfile.SpecialCameraHorizontalDistance
+            );
+            return;
+        }
+
+        director?.TryPlayNormalHitImpact(
             context.LongRangeMeleeHandle.WorldRoot.transform,
             directionSign,
-            attackVsAttackPresentationPlayer != null
-                ? attackVsAttackPresentationPlayer.NormalHitActiveDuration
-                : 0f
+            activeHitDuration
         );
+    }
+
+    private BattleSpecialLongRangeDuelPresentationProfile
+        ResolveSpecialLongRangeDuelHitProfile(
+            ActionPresentationContext context
+        )
+    {
+        BattleCardState shooterCard = context != null &&
+            context.LongRangeShooterSide != null
+                ? context.LongRangeShooterSide.cardState
+                : null;
+        return shooterCard != null &&
+            shooterCard.IsSpecialLongRangeDuelPresentation() &&
+            specialLongRangeDuelPresentationProfile != null &&
+            specialLongRangeDuelPresentationProfile
+                .EnableSpecialShotHitTuning
+                ? specialLongRangeDuelPresentationProfile
+                : null;
     }
 
     private void CompleteLongRangeShotImpact(

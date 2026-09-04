@@ -650,6 +650,21 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         BattleHitPresentationProfile profile
     )
     {
+        yield return PlaySustainedHitReaction(
+            worldRoot,
+            recoilDirectionSign,
+            profile,
+            profile != null ? profile.FollowKnockbackDistance : 0f
+        );
+    }
+
+    public IEnumerator PlaySustainedHitReaction(
+        Transform worldRoot,
+        float recoilDirectionSign,
+        BattleHitPresentationProfile profile,
+        float followKnockbackDistance
+    )
+    {
         SetHit();
         bodyMotionOffset = Vector3.zero;
         bodyShakeOffset = Vector3.zero;
@@ -667,7 +682,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         float startX = worldRoot.position.x;
         float burstTargetX = startX + direction * profile.ImpactBurstDistance;
         float finalTargetX = burstTargetX + direction *
-            profile.FollowKnockbackDistance;
+            Mathf.Max(0f, followKnockbackDistance);
         float impactBurstDuration = profile.ImpactBurstDuration;
         float followKnockbackDuration = profile.FollowKnockbackDuration;
         float activeHitDuration = impactBurstDuration + followKnockbackDuration;
