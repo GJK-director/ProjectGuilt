@@ -235,6 +235,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
     private TurnEndRecoveryPhase turnEndRecoveryPhase;
     private bool isTwoUnitFocusPlaying;
     private bool isAnchoredApproachPlaying;
+    private bool isExternallyDrivenSingleActorApproachPlaying;
     private BattleActionEffectType activeBattleActionEffectType;
     private bool presentationInteractionUnlocked;
     private float battleActionEffectBaseWorldX;
@@ -257,6 +258,24 @@ public sealed class BattleCameraDirector : MonoBehaviour
     private bool anchoredApproachEstablishesBattleFocusPose;
     private float anchoredApproachHorizontalVelocity;
     private float anchoredApproachRadiusVelocity;
+    private BattleUnitViewHandle externalApproachMovingHandle;
+    private BattleUnitViewHandle externalApproachStationaryHandle;
+    private Transform externalApproachMovingWorldRoot;
+    private Transform externalApproachStationaryWorldRoot;
+    private BattleCharacterPresentationController
+        externalApproachMovingPresentation;
+    private float externalApproachStartWorldX;
+    private float externalApproachStartRadius;
+    private float externalApproachStartVerticalProgress;
+    private float externalApproachBlendStartWorldX;
+    private float externalApproachBlendStartRadius;
+    private float externalApproachBlendStartVerticalProgress;
+    private float externalApproachHorizontalVelocity;
+    private float externalApproachRadiusVelocity;
+    private Transform externalApproachFocusWorldRoot;
+    private float externalApproachFocusWeight;
+    private float externalApproachFinalOrbitRadius;
+    private bool externalApproachBlendStarted;
 
     public bool IsIntroPlaying => isIntroPlaying;
     public float EngagementBlendStartSeparation =>
@@ -266,7 +285,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
         isIntroPlaying ||
         turnEndRecoveryPhase != TurnEndRecoveryPhase.None ||
         isTwoUnitFocusPlaying ||
-        isAnchoredApproachPlaying;
+        isAnchoredApproachPlaying ||
+        isExternallyDrivenSingleActorApproachPlaying;
 
     private bool IsBattleActionEffectPlaying =>
         activeBattleActionEffectType != BattleActionEffectType.None ||
@@ -329,6 +349,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
             activePresentationCoroutine = null;
         }
 
+        CancelExternallyDrivenSingleActorApproach(false);
         CancelAnchoredTwoUnitApproach(false);
         CancelBattleActionEffect();
 
@@ -747,8 +768,222 @@ public sealed class BattleCameraDirector : MonoBehaviour
         return true;
     }
 
+    public bool TryBeginExternallyDrivenSingleActorApproach(
+        BattleUnitViewHandle movingActor,
+        BattleUnitViewHandle stationaryActor
+    )
+    {
+        if (IsPresentationPlaying || IsBattleActionEffectPlaying ||
+            movingActor == null || stationaryActor == null ||
+            movingActor.WorldRoot == null || stationaryActor.WorldRoot == null)
+        {
+            return false;
+        }
+
+        ResolveReferences();
+        if (cameraController == null)
+        {
+            return false;
+        }
+
+        externalApproachMovingHandle = movingActor;
+        externalApproachStationaryHandle = stationaryActor;
+        externalApproachMovingWorldRoot = movingActor.WorldRoot.transform;
+        externalApproachStationaryWorldRoot =
+            stationaryActor.WorldRoot.transform;
+        externalApproachMovingPresentation =
+            movingActor.PresentationController;
+        externalApproachStartWorldX =
+            cameraController.CurrentHorizontalWorldX;
+        externalApproachStartRadius = cameraController.CurrentOrbitRadius;
+        externalApproachStartVerticalProgress =
+            cameraController.CurrentCinematicVerticalViewProgress;
+        externalApproachHorizontalVelocity = 0f;
+        externalApproachRadiusVelocity = 0f;
+        externalApproachBlendStarted = false;
+        cameraController.SetCinematicControl(true);
+        isExternallyDrivenSingleActorApproachPlaying = true;
+        return true;
+    }
+
+    public bool ApplyExternallyDrivenSingleActorFollow()
+    {
+        if (!HasValidExternallyDrivenApproachTargets() ||
+            externalApproachBlendStarted)
+        {
+            return false;
+        }
+
+        return ApplySingleActorFollowFraming(
+            externalApproachMovingPresentation,
+            externalApproachMovingWorldRoot,
+            ref externalApproachHorizontalVelocity,
+            ref externalApproachRadiusVelocity
+        );
+    }
+
+    public bool BeginExternallyDrivenTwoUnitBlend()
+    {
+        return BeginExternallyDrivenTwoUnitBlendInternal(
+            null,
+            0f,
+            twoUnitFocusOrbitRadius
+        );
+    }
+
+    public bool BeginExternallyDrivenTwoUnitBlend(
+        BattleUnitViewHandle focusActor,
+        float focusActorWeight,
+        float finalOrbitRadius
+    )
+    {
+        if (focusActor == null || focusActor.WorldRoot == null)
+        {
+            return false;
+        }
+
+        Transform focusWorldRoot = focusActor.WorldRoot.transform;
+        if (focusWorldRoot != externalApproachMovingWorldRoot &&
+            focusWorldRoot != externalApproachStationaryWorldRoot)
+        {
+            return false;
+        }
+
+        return BeginExternallyDrivenTwoUnitBlendInternal(
+            focusWorldRoot,
+            focusActorWeight,
+            finalOrbitRadius
+        );
+    }
+
+    private bool BeginExternallyDrivenTwoUnitBlendInternal(
+        Transform focusWorldRoot,
+        float focusActorWeight,
+        float finalOrbitRadius
+    )
+    {
+        if (!HasValidExternallyDrivenApproachTargets() ||
+            externalApproachBlendStarted)
+        {
+            return false;
+        }
+
+        externalApproachBlendStartWorldX =
+            cameraController.CurrentHorizontalWorldX;
+        externalApproachBlendStartRadius = cameraController.CurrentOrbitRadius;
+        externalApproachBlendStartVerticalProgress =
+            cameraController.CurrentCinematicVerticalViewProgress;
+        externalApproachFocusWorldRoot = focusWorldRoot;
+        externalApproachFocusWeight = Mathf.Clamp01(focusActorWeight);
+        externalApproachFinalOrbitRadius = Mathf.Max(0f, finalOrbitRadius);
+        externalApproachBlendStarted = true;
+        return true;
+    }
+
+    public bool ApplyExternallyDrivenTwoUnitBlend(float progress)
+    {
+        if (!HasValidExternallyDrivenApproachTargets() ||
+            !externalApproachBlendStarted)
+        {
+            return false;
+        }
+
+        float blendProgress = Mathf.Clamp01(progress);
+        float currentMidpointX =
+            (externalApproachMovingWorldRoot.position.x +
+                externalApproachStationaryWorldRoot.position.x) * 0.5f;
+        float targetWorldX = externalApproachFocusWorldRoot != null
+            ? Mathf.Lerp(
+                currentMidpointX,
+                externalApproachFocusWorldRoot.position.x,
+                externalApproachFocusWeight
+            )
+            : currentMidpointX;
+        cameraController.SetCinematicHorizontalWorldX(
+            Mathf.Lerp(
+                externalApproachBlendStartWorldX,
+                targetWorldX,
+                blendProgress
+            )
+        );
+        cameraController.SetCinematicOrbitRadius(
+            Mathf.Lerp(
+                externalApproachBlendStartRadius,
+                externalApproachFinalOrbitRadius,
+                blendProgress
+            )
+        );
+        cameraController.SetCinematicVerticalViewProgress(
+            Mathf.Lerp(
+                externalApproachBlendStartVerticalProgress,
+                twoUnitFocusVerticalViewProgress,
+                blendProgress
+            )
+        );
+        return true;
+    }
+
+    public void FinishExternallyDrivenSingleActorApproach()
+    {
+        if (!HasValidExternallyDrivenApproachTargets())
+        {
+            ClearExternallyDrivenSingleActorApproachState();
+            return;
+        }
+
+        float midpointX =
+            (externalApproachMovingWorldRoot.position.x +
+                externalApproachStationaryWorldRoot.position.x) * 0.5f;
+        float targetWorldX = externalApproachFocusWorldRoot != null
+            ? Mathf.Lerp(
+                midpointX,
+                externalApproachFocusWorldRoot.position.x,
+                externalApproachFocusWeight
+            )
+            : midpointX;
+        cameraController.SetCinematicHorizontalWorldX(targetWorldX);
+        cameraController.SetCinematicOrbitRadius(
+            externalApproachFinalOrbitRadius
+        );
+        cameraController.SetCinematicVerticalViewProgress(
+            twoUnitFocusVerticalViewProgress
+        );
+        ClearExternallyDrivenSingleActorApproachState();
+    }
+
+    public bool CancelExternallyDrivenSingleActorApproach(
+        bool restoreSnapshot
+    )
+    {
+        if (!isExternallyDrivenSingleActorApproachPlaying)
+        {
+            return false;
+        }
+
+        if (restoreSnapshot && cameraController != null)
+        {
+            cameraController.SetCinematicHorizontalWorldX(
+                externalApproachStartWorldX
+            );
+            cameraController.SetCinematicOrbitRadius(
+                externalApproachStartRadius
+            );
+            cameraController.SetCinematicVerticalViewProgress(
+                externalApproachStartVerticalProgress
+            );
+        }
+
+        ClearExternallyDrivenSingleActorApproachState();
+        if (restoreSnapshot)
+        {
+            cameraController?.SetCinematicControl(false);
+        }
+        return true;
+    }
+
     public void ReleaseBattleActionCinematicControl()
     {
+        CancelExternallyDrivenSingleActorApproach(false);
         CancelAnchoredTwoUnitApproach(false);
         CancelBattleActionEffect();
         if (IsPresentationPlaying)
@@ -1541,18 +1776,38 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
     private void ApplySingleActorFollowFraming()
     {
+        ApplySingleActorFollowFraming(
+            anchoredApproachAttackerPresentation,
+            anchoredApproachAttackerWorldRoot,
+            ref anchoredApproachHorizontalVelocity,
+            ref anchoredApproachRadiusVelocity
+        );
+    }
+
+    private bool ApplySingleActorFollowFraming(
+        BattleCharacterPresentationController movingPresentation,
+        Transform movingWorldRoot,
+        ref float horizontalVelocity,
+        ref float radiusVelocity
+    )
+    {
+        if (cameraController == null || movingWorldRoot == null)
+        {
+            return false;
+        }
+
         float followTime = Mathf.Max(0f, engagementHorizontalFollowTime);
         float deltaTime = Time.unscaledDeltaTime;
         float currentWorldX = cameraController.CurrentHorizontalWorldX;
         float targetWorldX = GetAnchoredApproachFramingWorldPosition(
-            anchoredApproachAttackerPresentation,
-            anchoredApproachAttackerWorldRoot
+            movingPresentation,
+            movingWorldRoot
         ).x;
         float nextWorldX = followTime > Mathf.Epsilon
             ? Mathf.SmoothDamp(
                 currentWorldX,
                 targetWorldX,
-                ref anchoredApproachHorizontalVelocity,
+                ref horizontalVelocity,
                 followTime,
                 Mathf.Infinity,
                 deltaTime
@@ -1565,7 +1820,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
             ? Mathf.SmoothDamp(
                 currentRadius,
                 targetRadius,
-                ref anchoredApproachRadiusVelocity,
+                ref radiusVelocity,
                 followTime,
                 Mathf.Infinity,
                 deltaTime
@@ -1574,6 +1829,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
         cameraController.SetCinematicHorizontalWorldX(nextWorldX);
         cameraController.SetCinematicOrbitRadius(nextRadius);
+        return true;
     }
 
     private void ApplyContinuousEngagementFraming(bool snapHorizontal = false)
@@ -1995,6 +2251,36 @@ public sealed class BattleCameraDirector : MonoBehaviour
         anchoredApproachEstablishesBattleFocusPose = false;
         anchoredApproachHorizontalVelocity = 0f;
         anchoredApproachRadiusVelocity = 0f;
+    }
+
+    private bool HasValidExternallyDrivenApproachTargets()
+    {
+        return isExternallyDrivenSingleActorApproachPlaying &&
+            cameraController != null &&
+            externalApproachMovingWorldRoot != null &&
+            externalApproachStationaryWorldRoot != null;
+    }
+
+    private void ClearExternallyDrivenSingleActorApproachState()
+    {
+        isExternallyDrivenSingleActorApproachPlaying = false;
+        externalApproachMovingHandle = null;
+        externalApproachStationaryHandle = null;
+        externalApproachMovingWorldRoot = null;
+        externalApproachStationaryWorldRoot = null;
+        externalApproachMovingPresentation = null;
+        externalApproachStartWorldX = 0f;
+        externalApproachStartRadius = 0f;
+        externalApproachStartVerticalProgress = 0f;
+        externalApproachBlendStartWorldX = 0f;
+        externalApproachBlendStartRadius = 0f;
+        externalApproachBlendStartVerticalProgress = 0f;
+        externalApproachHorizontalVelocity = 0f;
+        externalApproachRadiusVelocity = 0f;
+        externalApproachFocusWorldRoot = null;
+        externalApproachFocusWeight = 0f;
+        externalApproachFinalOrbitRadius = 0f;
+        externalApproachBlendStarted = false;
     }
 
     private IEnumerator PlayGenericClashImpactSequence()

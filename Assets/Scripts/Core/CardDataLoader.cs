@@ -38,6 +38,11 @@ public static class CardDataLoader
             return null;
         }
 
+        if (!ValidatePresentationVariants(cards))
+        {
+            return null;
+        }
+
         // showJsonLog = 是否显示完整 JSON 原文
         if (BattleDebugSettings.ShowJsonLog)
         {
@@ -85,6 +90,49 @@ public static class CardDataLoader
                     "，当前值：" +
                     serializedMode
                 );
+            }
+        }
+
+        return isValid;
+    }
+
+    static bool ValidatePresentationVariants(List<CardTestData> cards)
+    {
+        bool isValid = true;
+
+        foreach (CardTestData card in cards)
+        {
+            if (card == null)
+            {
+                continue;
+            }
+
+            string serializedVariant = card.presentationVariant;
+            if (!BattleCardPresentationVariant.IsKnownSerializedValue(
+                    serializedVariant
+                ))
+            {
+                Debug.LogError(
+                    "读取卡牌失败：presentationVariant 未知。卡牌ID：" +
+                    card.cardID +
+                    "，当前值：" +
+                    serializedVariant
+                );
+                isValid = false;
+                continue;
+            }
+
+            if (card.IsSpecialLongRangeDuelPresentation() &&
+                (card.cardType != CardType.Attack ||
+                    card.GetAttackDeliveryMode() !=
+                        AttackDeliveryMode.LongRangeShoot))
+            {
+                Debug.LogError(
+                    "读取卡牌失败：SpecialLongRangeDuel只允许配置在" +
+                    "LongRangeShoot Attack。卡牌ID：" +
+                    card.cardID
+                );
+                isValid = false;
             }
         }
 

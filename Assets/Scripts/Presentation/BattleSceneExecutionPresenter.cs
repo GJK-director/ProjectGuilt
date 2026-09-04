@@ -106,6 +106,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public bool LongRangeResponseImpactStarted;
         public long LongRangeResponseImpactRequestId;
         public bool LongRangeCameraFocusActive;
+        public bool SpecialLongRangeDuelPreRollActive;
 
         public bool UnavailableShootResponseIsLongRange;
         public BattleCharacterPresentationController
@@ -130,11 +131,16 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     [SerializeField]
     private BattleClashEngagementProfile clashEngagementProfile;
     [SerializeField]
+    private BattleSpecialLongRangeDuelPresentationProfile
+        specialLongRangeDuelPresentationProfile;
+    [SerializeField]
     private BattleCameraDirector battleCameraDirector;
     [SerializeField] private bool verboseLogging = false;
 
     private ActionPresentationContext activeContext;
     private Coroutine activePresentationCoroutine;
+    private BattleSpecialLongRangeDuelPresentationPlayer
+        specialLongRangeDuelPresentationPlayer;
     private long activePresentationRequestId;
     private bool battleActionCameraCarryPending;
     private readonly List<CharacterData> previousActionParticipants =
@@ -151,6 +157,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ValidateAttackVsGuardPresentationPlayer();
         ValidateAttackVsDodgePresentationPlayer();
         ResolveLongRangeShootVsAttackPresentationPlayer();
+        ResolveSpecialLongRangeDuelPresentationPlayer();
     }
 
     public void Initialize(BattleUnitViewSpawner spawner)
@@ -161,6 +168,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ValidateAttackVsGuardPresentationPlayer();
         ValidateAttackVsDodgePresentationPlayer();
         ResolveLongRangeShootVsAttackPresentationPlayer();
+        ResolveSpecialLongRangeDuelPresentationPlayer();
     }
 
     void OnDisable()
@@ -176,6 +184,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         {
             activeContext.Cancelled = true;
             ClearAttackVsAttackParallelBeginState(activeContext);
+            CancelSpecialLongRangeDuelForContext(activeContext);
             CancelOrReleaseCameraForContext(activeContext);
         }
         ReleasePendingBattleActionCamera();
@@ -184,6 +193,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         attackVsGuardPresentationPlayer?.CancelAndReset();
         attackVsDodgePresentationPlayer?.CancelAndReset();
         longRangeShootVsAttackPresentationPlayer?.CancelAndReset();
+        specialLongRangeDuelPresentationPlayer?.CancelAndReset();
         RestoreClashActorsToIdle(activeContext);
         BattleActionRollPanelHost.HideImmediate();
         activeContext = null;
@@ -244,6 +254,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         {
             cancellingContext.Cancelled = true;
             ClearAttackVsAttackParallelBeginState(cancellingContext);
+            CancelSpecialLongRangeDuelForContext(cancellingContext);
             CancelOrReleaseCameraForContext(cancellingContext);
         }
         ReleasePendingBattleActionCamera();
@@ -260,6 +271,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             attackVsGuardPresentationPlayer?.CancelAndReset();
             attackVsDodgePresentationPlayer?.CancelAndReset();
             longRangeShootVsAttackPresentationPlayer?.CancelAndReset();
+            specialLongRangeDuelPresentationPlayer?.CancelAndReset();
             RestoreClashActorsToIdle(activeContext);
         }
 
@@ -338,6 +350,16 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         if (route == null)
         {
             CompleteRequest(request, completion);
+            return;
+        }
+
+        if (TryStartSpecialLongRangeDuelActionBegin(
+                request,
+                completion,
+                activeContext,
+                route
+            ))
+        {
             return;
         }
 
@@ -501,6 +523,192 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         CompleteRequest(request, completion);
+    }
+
+    private bool TryStartSpecialLongRangeDuelActionBegin(
+        BattlePresentationRequest request,
+        BattlePresentationCompletion completion,
+        ActionPresentationContext context,
+        BattlePresentationRoute route
+    )
+    {
+        if (!TryResolveSpecialLongRangeDuelActors(
+                context,
+                route,
+                out BattleUnitViewHandle shooterHandle,
+                out BattleCharacterPresentationController shooterPresentation,
+                out BattleUnitViewHandle opponentHandle,
+                out BattleCharacterPresentationController opponentPresentation
+            ))
+        {
+            return false;
+        }
+
+        ResolveSpecialLongRangeDuelPresentationPlayer();
+        BattleCameraDirector director = ResolveBattleCameraDirector();
+        if (specialLongRangeDuelPresentationPlayer == null ||
+            specialLongRangeDuelPresentationProfile == null ||
+            director == null)
+        {
+            Debug.LogWarning(
+                "[ScenePresenter] SpecialLongRangeDuel ActionBegin缺少" +
+                "Player、Profile或Camera，回退现有ActionBegin。",
+                this
+            );
+            return false;
+        }
+
+        BattleExecutionItem executionItem = context.ExecutionItem;
+        long requestId = request.RequestId;
+        context.SpecialLongRangeDuelPreRollActive = true;
+        context.CameraCinematicOwned = true;
+        bool started = specialLongRangeDuelPresentationPlayer.TryPlay(
+            shooterHandle,
+            shooterPresentation,
+            opponentHandle,
+            opponentPresentation,
+            director,
+            specialLongRangeDuelPresentationProfile,
+            () => CompleteSpecialLongRangeDuelActionBegin(
+                context,
+                executionItem,
+                requestId,
+                completion
+            )
+        );
+        if (started)
+        {
+            return true;
+        }
+
+        context.SpecialLongRangeDuelPreRollActive = false;
+        context.CameraCinematicOwned = false;
+        specialLongRangeDuelPresentationPlayer.CancelAndReset();
+        director.CancelExternallyDrivenSingleActorApproach(true);
+        Debug.LogWarning(
+            "[ScenePresenter] SpecialLongRangeDuel ActionBegin启动失败，" +
+            "回退现有ActionBegin。",
+            this
+        );
+        return false;
+    }
+
+    private bool TryResolveSpecialLongRangeDuelActors(
+        ActionPresentationContext context,
+        BattlePresentationRoute route,
+        out BattleUnitViewHandle shooterHandle,
+        out BattleCharacterPresentationController shooterPresentation,
+        out BattleUnitViewHandle opponentHandle,
+        out BattleCharacterPresentationController opponentPresentation
+    )
+    {
+        shooterHandle = null;
+        shooterPresentation = null;
+        opponentHandle = null;
+        opponentPresentation = null;
+        BattlePresentationInteractionContext interaction = context != null
+            ? context.InteractionContext
+            : null;
+        if (interaction == null || route == null)
+        {
+            return false;
+        }
+
+        if (route.HandlerKind ==
+            BattlePresentationHandlerKind.AttackVsAttack)
+        {
+            BattleExecutionAction sideA = interaction.AttackActionA;
+            BattleExecutionAction sideB = interaction.AttackActionB;
+            bool sideASpecial = IsSpecialLongRangeDuelAction(sideA);
+            bool sideBSpecial = IsSpecialLongRangeDuelAction(sideB);
+            if (sideASpecial == sideBSpecial)
+            {
+                return false;
+            }
+
+            BattleExecutionAction opponentAction = sideASpecial
+                ? sideB
+                : sideA;
+            if (opponentAction == null ||
+                opponentAction.cardState == null ||
+                !opponentAction.cardState.IsMeleeAttack() ||
+                !TryResolveLongRangeShootVsMelee(context))
+            {
+                return false;
+            }
+
+            PrepareLongRangeEngagement(context);
+            if (context.ClashEngagement == null ||
+                !HasCompleteLongRangePresentationMapping(context))
+            {
+                Debug.LogWarning(
+                    "[ScenePresenter] SpecialLongRangeDuel无法建立现有" +
+                    "LongRange Context，回退现有ActionBegin。",
+                    this
+                );
+                return false;
+            }
+
+            shooterHandle = context.LongRangeShooterHandle;
+            shooterPresentation = context.LongRangeShooterPresentation;
+            opponentHandle = context.LongRangeMeleeHandle;
+            opponentPresentation = context.LongRangeMeleePresentation;
+            return true;
+        }
+
+        if (route.HandlerKind ==
+            BattlePresentationHandlerKind.AttackVsDefense)
+        {
+            BattleExecutionAction attackAction = interaction.AttackAction;
+            if (!IsSpecialLongRangeDuelAction(attackAction) ||
+                interaction.DefenseAction == null ||
+                !TryResolveDefensePresentationActors(context))
+            {
+                return false;
+            }
+
+            shooterHandle = context.DefenseAttackerHandle;
+            shooterPresentation = context.DefenseAttackerPresentation;
+            opponentHandle = context.DefenseDefenderHandle;
+            opponentPresentation = context.DefenseDefenderPresentation;
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsSpecialLongRangeDuelAction(
+        BattleExecutionAction action
+    )
+    {
+        return action != null && action.cardState != null &&
+            action.cardState.IsLongRangeShoot() &&
+            action.cardState.IsSpecialLongRangeDuelPresentation();
+    }
+
+    private void CompleteSpecialLongRangeDuelActionBegin(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        long requestId,
+        BattlePresentationCompletion completion
+    )
+    {
+        if (context == null ||
+            !context.SpecialLongRangeDuelPreRollActive ||
+            !IsCurrentPresentationRequest(requestId) ||
+            !object.ReferenceEquals(activeContext, context) ||
+            !object.ReferenceEquals(context.ExecutionItem, executionItem))
+        {
+            return;
+        }
+
+        context.SpecialLongRangeDuelPreRollActive = false;
+        BeginRollPanelEntrance(context, executionItem, requestId);
+        MarkActionBeginPresentationFinished(
+            context,
+            requestId,
+            completion
+        );
     }
 
     private void ApplyReadyState(BattlePresentationRoute route)
@@ -4428,6 +4636,21 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
     }
 
+    private void ResolveSpecialLongRangeDuelPresentationPlayer()
+    {
+        if (specialLongRangeDuelPresentationPlayer == null)
+        {
+            specialLongRangeDuelPresentationPlayer = GetComponent<
+                BattleSpecialLongRangeDuelPresentationPlayer>();
+        }
+
+        if (specialLongRangeDuelPresentationPlayer == null)
+        {
+            specialLongRangeDuelPresentationPlayer = gameObject.AddComponent<
+                BattleSpecialLongRangeDuelPresentationPlayer>();
+        }
+    }
+
     private ActionPresentationContext EnsureContext(
         BattlePresentationRequest request
     )
@@ -4543,6 +4766,23 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             .ReleaseBattleActionCinematicControl();
     }
 
+    private void CancelSpecialLongRangeDuelForContext(
+        ActionPresentationContext context
+    )
+    {
+        if (context == null ||
+            !context.SpecialLongRangeDuelPreRollActive)
+        {
+            return;
+        }
+
+        context.SpecialLongRangeDuelPreRollActive = false;
+        specialLongRangeDuelPresentationPlayer?.CancelAndReset();
+        ResolveBattleCameraDirector()?
+            .CancelExternallyDrivenSingleActorApproach(true);
+        context.CameraCinematicOwned = false;
+    }
+
     private void CancelOrReleaseCameraForContext(
         ActionPresentationContext context
     )
@@ -4567,7 +4807,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        if (!director.CancelTwoUnitFocus(true) &&
+        if (!director.CancelExternallyDrivenSingleActorApproach(true) &&
+            !director.CancelTwoUnitFocus(true) &&
             !director.CancelAnchoredTwoUnitApproach(true))
         {
             director.ReleaseBattleActionCinematicControl();

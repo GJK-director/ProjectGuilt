@@ -112,6 +112,7 @@
     "rarity": "White",
     "cardType": "Attack",
     "attackDeliveryMode": "LongRangeShoot",
+    "presentationVariant": "SpecialLongRangeDuel",
     "isClashable": true,
     "isSinCard": false,
     "minPoint": 1,

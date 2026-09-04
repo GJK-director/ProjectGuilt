@@ -98,6 +98,19 @@ public class BattleCardState
         return cardData != null && cardData.IsCloseRangeShoot();
     }
 
+    public string GetPresentationVariant()
+    {
+        return cardData != null
+            ? cardData.GetPresentationVariant()
+            : BattleCardPresentationVariant.Default;
+    }
+
+    public bool IsSpecialLongRangeDuelPresentation()
+    {
+        return cardData != null &&
+            cardData.IsSpecialLongRangeDuelPresentation();
+    }
+
     // HasTrait = 查询这张战斗卡实例对应的卡牌固有词条。
     public bool HasTrait(BattleCardTrait trait)
     {

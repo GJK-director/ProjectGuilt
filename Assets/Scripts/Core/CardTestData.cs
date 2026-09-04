@@ -35,6 +35,8 @@ public class CardTestData
     public string cardType;     // 卡牌类型
     // Attack 的空间 / 演出兑现方式。旧数据未填写时默认视为 Melee。
     public string attackDeliveryMode;
+    // 缺省时使用通用表现；特殊值只改变Presentation，不改变Combat语义。
+    public string presentationVariant;
     public bool isSinCard;      // 是否罪卡
     public bool consumeOnUse;   // 是否使用后消耗
     public CardUseConditionData[] useConditions;
@@ -115,5 +117,18 @@ public class CardTestData
     {
         return cardType == CardType.Attack &&
             GetAttackDeliveryMode() == AttackDeliveryMode.CloseRangeShoot;
+    }
+
+    public string GetPresentationVariant()
+    {
+        return BattleCardPresentationVariant.ResolveOrDefault(
+            presentationVariant
+        );
+    }
+
+    public bool IsSpecialLongRangeDuelPresentation()
+    {
+        return GetPresentationVariant() ==
+            BattleCardPresentationVariant.SpecialLongRangeDuel;
     }
 }
