@@ -4054,6 +4054,22 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                         IsCurrentPresentationRequest(requestId) &&
                         context.CameraCinematicOwned)
                     {
+                        BattleCameraDirector director =
+                            ResolveBattleCameraDirector();
+                        Transform hitTargetWorldRoot =
+                            context.DodgeDefenderHandle != null &&
+                            context.DodgeDefenderHandle.WorldRoot != null
+                                ? context.DodgeDefenderHandle.WorldRoot.transform
+                                : null;
+                        float activeHitDuration =
+                            attackVsDodgePresentationPlayer != null
+                                ? attackVsDodgePresentationPlayer.NormalHitActiveDuration
+                                : 0f;
+                        director?.TryPlayNormalHitImpact(
+                            hitTargetWorldRoot,
+                            directionSign,
+                            activeHitDuration
+                        );
                         TryPlaySharedAttackImpactShake();
                     }
                 },

@@ -26,6 +26,11 @@ public sealed class BattleAttackVsDodgePresentationPlayer : MonoBehaviour
 
     public bool IsRunning { get; private set; }
     public bool IsFinished { get; private set; }
+    public BattleHitPresentationProfile NormalHitProfile => normalHitProfile;
+    public float NormalHitActiveDuration => normalHitProfile != null
+        ? normalHitProfile.ImpactBurstDuration +
+            normalHitProfile.FollowKnockbackDuration
+        : 0f;
 
     private PlaybackStage playbackStage;
     private BattleCharacterPresentationController attacker;
