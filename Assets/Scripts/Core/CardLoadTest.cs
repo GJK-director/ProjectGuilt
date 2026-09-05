@@ -2332,7 +2332,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期 enemyCardUsed：True，实际是否符合：" + (result != null && result.enemyCardUsed));
         Debug.Log("预期 shouldCompleteItem：True，实际是否符合：" + (result != null && result.shouldCompleteItem));
         Debug.Log("预期 triggeredEventChain：True，实际是否符合：" + (result != null && result.triggeredEventChain));
-        Debug.Log("预期 Defense CD 进入运行时补偿值：" + (defenseCardState.currentCooldown == GetExpectedResolvedCooldown(defenseCardState)));
+        Debug.Log("预期 Defense CD 进入基础剩余值：" + (defenseCardState.currentCooldown == GetExpectedResolvedCooldown(defenseCardState)));
         Debug.Log("预期剩余攻击点数出现在 message：" + (result != null && result.message.Contains("剩余攻击点数")));
 
         if (expectedDamage == 0)
@@ -2444,7 +2444,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("预期防御者 HP 按最终伤害变化：" + (testDefender.currentHP == defenderHPBefore - expectedDamage));
         Debug.Log("预期 playerCardUsed：True，实际是否符合：" + (result != null && result.playerCardUsed));
         Debug.Log("预期 enemyCardUsed：False，实际是否符合：" + (result != null && !result.enemyCardUsed));
-        Debug.Log("预期 Defense 进入运行时补偿CD：" + (defenseCardState.currentCooldown == GetExpectedResolvedCooldown(defenseCardState)));
+        Debug.Log("预期 Defense 进入基础剩余CD：" + (defenseCardState.currentCooldown == GetExpectedResolvedCooldown(defenseCardState)));
         Debug.Log("预期敌人卡没有由该入口进入 CD：" + (enemyCardState.currentCooldown == enemyCooldownBefore));
         Debug.Log("预期敌人卡 UseCount 未变化：" + (enemyCardState.currentUseCount == enemyUseCountBefore));
         Debug.Log("预期 shouldCompleteItem：True，实际是否符合：" + (result != null && result.shouldCompleteItem));
@@ -5915,6 +5915,7 @@ public class CardLoadTest : MonoBehaviour
         RunFutureTurnCooldownDodgeSubTests();
         RunFutureTurnCooldownDefenseSubTests();
         RunFutureTurnCooldownSinAndIdempotentSubTests();
+        RunFutureTurnCooldownActiveReductionAndConsumedSubTests();
 
         Debug.Log("===== BattleCardCooldownFutureTurnSemanticsBasic 聚合测试结束 =====");
     }
@@ -12362,7 +12363,9 @@ public class CardLoadTest : MonoBehaviour
         );
 
         BattleCardManager.ApplyCooldownOnResolved(card);
-        bool test2 = card.currentCooldown == 2;
+        bool test2 =
+            card.currentCooldown == 1 &&
+            card.skipNextTurnEndCooldownTick;
 
         CompleteCooldownSemanticsTurn(context);
         BattleCardUIView coolingView = CreatePrimaryPreviewCardView(
@@ -12409,7 +12412,7 @@ public class CardLoadTest : MonoBehaviour
             readyEligibility != null &&
             readyEligibility.isEligible;
 
-        Debug.Log("模式63 测试2 CD1在Resolved时补偿为2：" + test2);
+        Debug.Log("模式63 测试2 CD1在Resolved时直接记录真实剩余值1：" + test2);
         Debug.Log("模式63 测试3 CD1下一回合剩余1且不可选择或安排：" + test3);
         Debug.Log("模式63 测试4 CD1经过一个完整未来回合后恢复：" + test4);
         Destroy(coolingView.gameObject);
@@ -12465,7 +12468,7 @@ public class CardLoadTest : MonoBehaviour
             ).isEligible;
 
         bool passed =
-            afterResolved == 3 &&
+            afterResolved == 2 &&
             firstFutureTurn == 2 &&
             firstFutureBlocked &&
             secondFutureTurn == 1 &&
@@ -12473,7 +12476,7 @@ public class CardLoadTest : MonoBehaviour
             thirdFutureTurn == 0 &&
             thirdFutureReady;
 
-        Debug.Log("模式63 测试5 CD2完整序列为3→2→1→0：" + passed);
+        Debug.Log("模式63 测试5 CD2完整序列为2→2→1→0：" + passed);
     }
 
     void RunFutureTurnCooldownPreviewSubTests()
@@ -12554,7 +12557,7 @@ public class CardLoadTest : MonoBehaviour
             card.cardData.cardType == CardType.Attack &&
             !card.cardData.isSinCard &&
             baseCooldown == 1 &&
-            resolvedCooldownByRule == 2 &&
+            resolvedCooldownByRule == 1 &&
             beforeCurrentCooldown == 0;
         bool assigned = fixtureValid &&
             BattleActionSlotManager.AssignFreeAction(
@@ -12690,7 +12693,7 @@ public class CardLoadTest : MonoBehaviour
                 newActionSlotsContainOldAssignment + "\n" +
             "DetailLogSettingFound: " + (debugSettings != null)
         );
-        Debug.Log("模式63 测试8 自动完整回合对CD1只Tick一次（2→1）：" + passed);
+        Debug.Log("模式63 测试8 自动完整回合跳过刚进入CD1的同回合自然Tick：" + passed);
 
         if (view != null)
         {
@@ -12901,11 +12904,156 @@ public class CardLoadTest : MonoBehaviour
         int cooldownAfterFirstResolved = normalCard.currentCooldown;
         BattleCardManager.ApplyCooldownOnResolved(normalCard);
         bool test14 =
-            cooldownAfterFirstResolved == 2 &&
-            normalCard.currentCooldown == 2;
+            cooldownAfterFirstResolved == 1 &&
+            normalCard.currentCooldown == 1;
 
         Debug.Log("模式63 测试13 罪卡继续走UseCount且不进入普通CD：" + test13);
         Debug.Log("模式63 测试14 重复Resolved不会把CD累加为base+2：" + test14);
+    }
+
+    void RunFutureTurnCooldownActiveReductionAndConsumedSubTests()
+    {
+        CharacterData owner = new CharacterData(
+            "cooldown63_state_owner",
+            30,
+            10,
+            10
+        );
+        CharacterData target = new CharacterData(
+            "cooldown63_state_target",
+            50,
+            5,
+            5
+        );
+        BattleCardState cooldownCard = CreateCooldownSemanticsCard(
+            owner,
+            "cooldown63_active_reduce",
+            CardType.Attack,
+            2,
+            1
+        );
+        bool newStateDefaultsSafe =
+            !cooldownCard.isConsumed &&
+            !cooldownCard.skipNextTurnEndCooldownTick;
+
+        BattleCardManager.ApplyCooldownOnResolved(cooldownCard);
+        BattleCardManager.ReduceCardCooldown(cooldownCard, 1);
+        bool activeReductionWorked =
+            cooldownCard.currentCooldown == 1 &&
+            cooldownCard.skipNextTurnEndCooldownTick;
+        BattleCardManager.ReduceCooldownsAtTurnEnd(owner);
+        bool naturalTickStillSkipped =
+            cooldownCard.currentCooldown == 1 &&
+            !cooldownCard.skipNextTurnEndCooldownTick;
+
+        BattleCardState selectableCard = CreateCooldownSemanticsCard(
+            owner,
+            "cooldown63_selectable",
+            CardType.Attack,
+            0,
+            1
+        );
+        BattleCardSelectionController selectionController =
+            new BattleCardSelectionController();
+        GameObject selectableObject = new GameObject(
+            "Cooldown63SelectableView",
+            typeof(RectTransform),
+            typeof(BattleCardUIView)
+        );
+        BattleCardUIView selectableView =
+            selectableObject.GetComponent<BattleCardUIView>();
+        selectableView.BindCard(
+            owner,
+            selectableCard,
+            BattleCardUIPreviewBuilder.Build(owner, target, selectableCard),
+            selectionController
+        );
+        bool selectableBeforeConsumed =
+            selectableView.CanSelect &&
+            selectionController.SelectCard(selectableView) &&
+            selectionController.HasSelection;
+
+        selectableCard.isConsumed = true;
+        selectableView.SetCard(
+            BattleCardUIPreviewBuilder.Build(owner, target, selectableCard)
+        );
+        CardEligibilityResult consumedEligibility =
+            BattleCardManager.EvaluateCardEligibility(
+                owner,
+                target,
+                selectableCard
+            );
+        CanvasGroup consumedGroup =
+            selectableObject.GetComponent<CanvasGroup>();
+        bool consumedStateBlocked =
+            consumedEligibility != null &&
+            !consumedEligibility.isEligible &&
+            consumedEligibility.failureReason ==
+                CardEligibilityFailureReason.CardConsumed &&
+            !selectableView.CanSelect &&
+            !selectionController.HasSelection &&
+            !selectionController.SelectCard(selectableView) &&
+            consumedGroup != null &&
+            consumedGroup.alpha < 1f;
+
+        CardTestData useCountData = new CardTestData
+        {
+            cardID = "cooldown63_consumed_sin_data",
+            cardName = "模式63一次性罪卡",
+            rarity = CardRarity.White,
+            cardType = "Ability",
+            isSinCard = true,
+            sinCardCategory = SinCardCategory.Ability,
+            sinCardUseRule = SinCardUseRule.UseCount,
+            maxUseCount = 1,
+            effects = new List<CardEffectData>()
+        };
+        BattleCardState useCountCard = BattleCardManager.CreateBattleCard(
+            owner,
+            useCountData,
+            "cooldown63_consumed_sin"
+        );
+        BattleCardManager.ApplyCooldownOnResolved(useCountCard);
+        BattleCardUIView useCountView = CreatePrimaryPreviewCardView(
+            "Cooldown63ConsumedSinView",
+            owner,
+            target,
+            useCountCard
+        );
+        CardEligibilityResult useCountEligibility =
+            BattleCardManager.EvaluateCardEligibility(
+                owner,
+                target,
+                useCountCard
+            );
+        bool useCountConsumedEverywhere =
+            useCountCard.isConsumed &&
+            useCountEligibility != null &&
+            useCountEligibility.failureReason ==
+                CardEligibilityFailureReason.CardConsumed &&
+            !useCountView.CanSelect &&
+            useCountView.GetComponent<CanvasGroup>() != null &&
+            useCountView.GetComponent<CanvasGroup>().alpha < 1f;
+
+        Debug.Log(
+            "模式63 测试15 主动ReduceCardCooldown不受自然Tick跳过标记阻止：" +
+            (activeReductionWorked && naturalTickStillSkipped)
+        );
+        Debug.Log(
+            "模式63 测试16 普通可用卡可选，Consumed后Core/UI/Selection均拒绝并降低透明度：" +
+            (selectableBeforeConsumed && consumedStateBlocked)
+        );
+        Debug.Log(
+            "模式63 测试17 UseCount罪卡达到上限后Core与UI均永久不可用：" +
+            useCountConsumedEverywhere
+        );
+        Debug.Log(
+            "模式63 测试18 新BattleCardState的Consumed与自然Tick标记默认安全：" +
+            newStateDefaultsSafe
+        );
+
+        Destroy(selectableObject);
+        Destroy(useCountView.gameObject);
     }
 
     BattleCardState CreateCooldownSemanticsCard(
@@ -12984,7 +13132,7 @@ public class CardLoadTest : MonoBehaviour
             ? BattleCardManager.GetBaseCooldown(cardState.cardData)
             : 0;
 
-        return baseCooldown > 0 ? baseCooldown + 1 : 0;
+        return baseCooldown;
     }
 
     void CompleteCooldownSemanticsTurn(BattleEndedTestContext context)
@@ -16127,7 +16275,7 @@ public class CardLoadTest : MonoBehaviour
              !firstFailDodge.isContinuousDodgeActive &&
              firstFailDodge.isCardUseFinalized &&
              firstFailDodge.isUsed &&
-             firstFailDodge.cardState.currentCooldown == 3 &&
+             firstFailDodge.cardState.currentCooldown == 2 &&
              !followDefense.isUsed)
         );
 

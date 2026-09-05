@@ -529,8 +529,8 @@ public static class FullBattleIntegrationRegressionTests
         );
         return result != null && result.isSuccess &&
             result.resultType == "DefenseFullBlock" && result.damage == 0 &&
-            fixture.attack.cardState.currentCooldown == 3 &&
-            fixture.response.cardState.currentCooldown == 3 &&
+            fixture.attack.cardState.currentCooldown == 2 &&
+            fixture.response.cardState.currentCooldown == 2 &&
             fixture.attack.actor.GetBuffStack(resource) == 1;
     }
 
@@ -551,8 +551,8 @@ public static class FullBattleIntegrationRegressionTests
         );
         return result != null && result.isSuccess &&
             result.resultType == "DodgeSuccess" && result.damage == 0 &&
-            fixture.attack.cardState.currentCooldown == 3 &&
-            fixture.response.cardState.currentCooldown == 3 &&
+            fixture.attack.cardState.currentCooldown == 2 &&
+            fixture.response.cardState.currentCooldown == 2 &&
             fixture.attack.actor.GetBuffStack(resource) == 1;
     }
 

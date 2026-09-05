@@ -17,6 +17,10 @@ public class BattleCardState
     // currentCooldown = 当前剩余 CD
     public int currentCooldown;
 
+    // 刚进入普通 CD 的卡跳过同回合末的一次自然 Tick。
+    // 主动减 CD 接口不读取这个标记。
+    public bool skipNextTurnEndCooldownTick;
+
     // isConsumed = 是否已经被消耗
     // 主要给“能力型罪卡”使用
     public bool isConsumed;
@@ -33,6 +37,7 @@ public class BattleCardState
         this.instanceID = instanceID;
 
         currentCooldown = 0;
+        skipNextTurnEndCooldownTick = false;
         isConsumed = false;
 
         currentUseCount = 0;

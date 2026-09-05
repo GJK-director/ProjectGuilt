@@ -139,7 +139,7 @@ public static class BattleResolutionPlanTests
         bool normalOnce = firstResult != null && object.ReferenceEquals(firstResult, secondResult) &&
             bulletAfterFirst == 4 && normal.ally.GetBuffStack("Bullet") == 4 &&
             clashBuffAfterFirst == 0 && normal.ally.GetBuffStack("NextClashPointUp") == 0 &&
-            cooldownAfterFirst == 2 && normal.playerCard.currentCooldown == 2 &&
+            cooldownAfterFirst == 1 && normal.playerCard.currentCooldown == 1 &&
             normal.ally.GetBuffStack("GuardUp") == 1;
 
         TestContext sin = CreateFinalizedContext("resolution82_d_sin", CardType.Attack, 6, 4);

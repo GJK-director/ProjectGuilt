@@ -17,11 +17,15 @@ public class BattleCardUIView : MonoBehaviour,
     [SerializeField] private TMP_Text cooldownText;
     [SerializeField] private BattleCardVisualStyle visualStyle;
     [SerializeField] private BattleCardMotionUIView motionView;
+    [SerializeField, Range(0f, 1f)] private float consumedAlpha = 0.45f;
 
     private CharacterData boundOwner;
     private BattleCardState boundCardState;
     private BattleCardSelectionController selectionController;
     private bool warnedMissingVisualStyle;
+    private CanvasGroup availabilityCanvasGroup;
+    private float availableCanvasGroupAlpha = 1f;
+    private bool hasCachedAvailableCanvasGroupAlpha;
     private readonly Dictionary<string, CardKeywordData>
         keywordByLinkID =
             new Dictionary<string, CardKeywordData>();
@@ -37,6 +41,7 @@ public class BattleCardUIView : MonoBehaviour,
         boundOwner.battleCards != null &&
         boundCardState != null &&
         boundCardState.cardData != null &&
+        !boundCardState.isConsumed &&
         boundCardState.currentCooldown <= 0 &&
         boundOwner.battleCards.Contains(boundCardState);
 
@@ -91,11 +96,14 @@ public class BattleCardUIView : MonoBehaviour,
             );
             warnedMissingVisualStyle = true;
         }
+
+        ApplyConsumedState();
     }
 
     public void SetEmpty()
     {
         selectionController?.ClearSelectionIfSelected(this);
+        ApplyConsumedVisual(false);
         boundOwner = null;
         boundCardState = null;
         selectionController = null;
@@ -106,6 +114,46 @@ public class BattleCardUIView : MonoBehaviour,
         SetText(typeText, "");
         SetText(descriptionText, "");
         HideLegacyCooldown();
+    }
+
+    void ApplyConsumedState()
+    {
+        bool isConsumed =
+            boundCardState != null && boundCardState.isConsumed;
+
+        if (isConsumed)
+        {
+            selectionController?.ClearSelectionIfSelected(this);
+        }
+
+        ApplyConsumedVisual(isConsumed);
+    }
+
+    void ApplyConsumedVisual(bool isConsumed)
+    {
+        if (!isConsumed && availabilityCanvasGroup == null)
+        {
+            return;
+        }
+
+        if (availabilityCanvasGroup == null)
+        {
+            availabilityCanvasGroup = GetComponent<CanvasGroup>();
+            if (availabilityCanvasGroup == null)
+            {
+                availabilityCanvasGroup = gameObject.AddComponent<CanvasGroup>();
+            }
+        }
+
+        if (!hasCachedAvailableCanvasGroupAlpha)
+        {
+            availableCanvasGroupAlpha = availabilityCanvasGroup.alpha;
+            hasCachedAvailableCanvasGroupAlpha = true;
+        }
+
+        availabilityCanvasGroup.alpha = isConsumed
+            ? availableCanvasGroupAlpha * Mathf.Clamp01(consumedAlpha)
+            : availableCanvasGroupAlpha;
     }
 
     public void OnPointerEnter(PointerEventData eventData)

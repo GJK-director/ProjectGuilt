@@ -539,7 +539,7 @@ public static class BattleGenericUnilateralAttackTests
     static int ExpectedCooldown(BattleCardState card)
     {
         int baseCooldown = BattleCardManager.GetBaseCooldown(card.cardData);
-        return baseCooldown > 0 ? baseCooldown + 1 : 0;
+        return baseCooldown;
     }
 
     sealed class Fixture

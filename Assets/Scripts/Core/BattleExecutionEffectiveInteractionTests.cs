@@ -421,7 +421,7 @@ public static class BattleExecutionEffectiveInteractionTests
         int baseCooldown = card != null
             ? BattleCardManager.GetBaseCooldown(card.cardData)
             : 0;
-        return baseCooldown > 0 ? baseCooldown + 1 : 0;
+        return baseCooldown;
     }
 
     static RespondedFixture CreateRespondedFixture(

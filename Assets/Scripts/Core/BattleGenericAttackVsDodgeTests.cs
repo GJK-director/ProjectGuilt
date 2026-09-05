@@ -596,7 +596,7 @@ public static class BattleGenericAttackVsDodgeTests
     static int ExpectedCooldown(BattleCardState card)
     {
         int baseCooldown = BattleCardManager.GetBaseCooldown(card.cardData);
-        return baseCooldown > 0 ? baseCooldown + 1 : 0;
+        return baseCooldown;
     }
 
     static void ConfigureSingleUseResource(
