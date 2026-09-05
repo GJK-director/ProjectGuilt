@@ -49,9 +49,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
     private bool meleeGuardReactionRunning;
     private Action onFinished;
     private Coroutine playbackCoroutine;
-    private Coroutine parryRecoilCoroutine;
     private bool perfectGuardFxRunning;
-    private Coroutine guardRecoilCoroutine;
     private Coroutine dualHitStopCoroutine;
     private int playbackVersion;
     private bool visualImpactReached;
@@ -547,46 +545,6 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         }
     }
 
-    private IEnumerator RunParryRecoil(int version)
-    {
-        if (attacker != null)
-        {
-            yield return attacker.PlayParryRecoil(attackDirectionSign);
-        }
-
-        if (IsCurrentPlayback(version))
-        {
-            parryRecoilCoroutine = null;
-        }
-    }
-
-    private IEnumerator RunGuardRecoil(int version)
-    {
-        if (defender != null)
-        {
-            yield return defender.PlayGuardRecoil(attackDirectionSign);
-        }
-
-        if (IsCurrentPlayback(version))
-        {
-            guardRecoilCoroutine = null;
-        }
-    }
-
-    private IEnumerator RunReducedGuardShake(int version)
-    {
-        if (defender != null)
-        {
-            // 普通近战的不完美防御只震动视觉，不增加任何后退位移。
-            yield return defender.PlayGuardShake();
-        }
-
-        if (IsCurrentPlayback(version))
-        {
-            guardRecoilCoroutine = null;
-        }
-    }
-
     private IEnumerator RunDualHitStop(int version, float duration)
     {
         float elapsed = 0f;
@@ -675,9 +633,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
 
     private bool HasActiveTail()
     {
-        return meleeGuardReactionRunning || parryRecoilCoroutine != null ||
-            perfectGuardFxRunning ||
-            guardRecoilCoroutine != null ||
+        return meleeGuardReactionRunning || perfectGuardFxRunning ||
             dualHitStopCoroutine != null;
     }
 
@@ -700,19 +656,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
             meleeGuardReactionCoroutine = null;
         }
         meleeGuardReactionRunning = false;
-        if (parryRecoilCoroutine != null)
-        {
-            StopCoroutine(parryRecoilCoroutine);
-            parryRecoilCoroutine = null;
-        }
-
         perfectGuardFxRunning = false;
-
-        if (guardRecoilCoroutine != null)
-        {
-            StopCoroutine(guardRecoilCoroutine);
-            guardRecoilCoroutine = null;
-        }
 
         if (dualHitStopCoroutine != null)
         {
@@ -733,9 +677,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         meleeGuardReactionCoroutine = null;
         meleeGuardReactionRunning = false;
         playbackCoroutine = null;
-        parryRecoilCoroutine = null;
         perfectGuardFxRunning = false;
-        guardRecoilCoroutine = null;
         dualHitStopCoroutine = null;
         visualImpactReached = false;
         attackerDelivery = BattlePresentationAttackDeliveryKind.None;

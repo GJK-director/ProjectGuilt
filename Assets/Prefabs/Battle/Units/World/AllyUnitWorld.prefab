@@ -685,16 +685,6 @@ MonoBehaviour:
   hitShakeAmplitude: 0.05
   hitShakeDuration: 0.2
   hitPoseHoldDuration: 0.4
-  parryRecoilDistance: 0.2
-  parryRecoilDuration: 0.12
-  parryShakeAmplitude: 0.03
-  parryShakeDuration: 0.1
-  parryHoldDuration: 0.1
-  guardRecoilDistance: 0.1
-  guardRecoilDuration: 0.12
-  guardShakeAmplitude: 0.025
-  guardShakeDuration: 0.1
-  guardHoldDuration: 0.1
   dodgeHorizontalDistance: 0.2
   dodgeDuration: 0.3
 --- !u!1 &6613608314988572749
