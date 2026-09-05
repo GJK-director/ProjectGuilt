@@ -1,2 +1,12 @@
 fileFormatVersion: 2
 guid: ab8a1f9feff74fc4a17ff5f4deca560e
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - meleeGuardReactionProfile: {fileID: 11400000, guid: 722d585753abdbe4eb692634890306ca, type: 2}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

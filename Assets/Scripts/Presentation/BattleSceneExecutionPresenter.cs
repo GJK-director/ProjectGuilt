@@ -3898,7 +3898,12 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 completion,
                 useMeleeGuardCamera
             ),
-            () => MarkDefenseGuardTailFinished(context, executionItem)
+            () => MarkDefenseGuardTailFinished(context, executionItem),
+            context.DefenseAttackerHandle?.WorldRoot != null
+                ? context.DefenseAttackerHandle.WorldRoot.transform : null,
+            context.DefenseDefenderHandle?.WorldRoot != null
+                ? context.DefenseDefenderHandle.WorldRoot.transform : null,
+            () => HandleDefenseGuardReactionStarted(context, executionItem, directionSign)
         );
 
         if (started)
@@ -3933,27 +3938,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         if (playGuardCameraImpact && context.CameraCinematicOwned)
         {
-            bool isFullBlock = context.GuardPresentationResult ==
-                BattleGuardPresentationResult.FullBlock;
             BattleCameraDirector director = ResolveBattleCameraDirector();
             director?.FinishAnchoredTwoUnitApproachTracking();
-            bool cameraImpactStarted = director != null &&
-                director.TryPlayGenericGuardImpact(
-                    isFullBlock,
-                    () => LogDefenseGuardCoordinateDiagnostic(
-                        "GuardImpactEnd",
-                        context,
-                        executionItem
-                    )
-                );
-            if (cameraImpactStarted)
-            {
-                LogDefenseGuardCoordinateDiagnostic(
-                    "GuardImpactStart",
-                    context,
-                    executionItem
-                );
-            }
         }
 
         CompleteDefenseGuardImpact(
@@ -3961,6 +3947,35 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             executionItem,
             requestId,
             completion
+        );
+    }
+
+    private void HandleDefenseGuardReactionStarted(
+        ActionPresentationContext context,
+        BattleExecutionItem executionItem,
+        float directionSign
+    )
+    {
+        // Reaction belongs to the Guard tail; the Impact request is already complete.
+        if (!IsOwnedGuardPresentationContext(context, executionItem) ||
+            !context.GuardImpactReached || context.GuardTailFinished ||
+            !context.CameraCinematicOwned ||
+            context.DefenseAttackerHandle?.WorldRoot == null ||
+            context.DefenseDefenderHandle?.WorldRoot == null ||
+            attackVsGuardPresentationPlayer == null ||
+            !attackVsGuardPresentationPlayer.IsRunning)
+        {
+            return;
+        }
+
+        bool fullBlock = context.GuardPresentationResult == BattleGuardPresentationResult.FullBlock;
+        Transform target = fullBlock
+            ? context.DefenseAttackerHandle.WorldRoot.transform
+            : context.DefenseDefenderHandle.WorldRoot.transform;
+        ResolveBattleCameraDirector()?.TryPlayNormalHitImpact(
+            target,
+            fullBlock ? -directionSign : directionSign,
+            attackVsGuardPresentationPlayer.MeleeGuardReactionActiveDuration
         );
     }
 

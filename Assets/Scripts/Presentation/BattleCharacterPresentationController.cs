@@ -665,6 +665,19 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         float followKnockbackDistance
     )
     {
+        yield return PlaySustainedHitReaction(
+            worldRoot, recoilDirectionSign, profile, followKnockbackDistance, true
+        );
+    }
+
+    public IEnumerator PlaySustainedHitReaction(
+        Transform worldRoot,
+        float recoilDirectionSign,
+        BattleHitPresentationProfile profile,
+        float followKnockbackDistance,
+        bool applyHitTint
+    )
+    {
         SetHit();
         bodyMotionOffset = Vector3.zero;
         bodyShakeOffset = Vector3.zero;
@@ -690,7 +703,14 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         bodyHitRotationZ = -direction * profile.HitTiltAngle;
         ApplyBodyVisualRotation();
         ApplyNormalHitBodyVisual(profile, 0f, activeHitDuration);
-        SetHitTint(profile.HitTintColor, profile.HitTintStrength);
+        if (applyHitTint)
+        {
+            SetHitTint(profile.HitTintColor, profile.HitTintStrength);
+        }
+        else
+        {
+            ClearHitTint();
+        }
 
         yield return MoveHitWorldRootX(
             worldRoot,

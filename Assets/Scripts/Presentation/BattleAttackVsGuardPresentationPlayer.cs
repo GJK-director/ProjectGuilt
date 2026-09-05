@@ -21,6 +21,12 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
 
     public bool IsRunning { get; private set; }
     public bool IsFinished { get; private set; }
+    public BattleHitPresentationProfile MeleeGuardReactionProfile =>
+        presentationProfile != null ? presentationProfile.MeleeGuardReactionProfile : null;
+    public float MeleeGuardReactionActiveDuration => MeleeGuardReactionProfile != null
+        ? MeleeGuardReactionProfile.ImpactBurstDuration +
+            MeleeGuardReactionProfile.FollowKnockbackDuration
+        : 0f;
     public float GuardApproachSeparation => presentationProfile != null
         ? presentationProfile.GuardApproachSeparation
         : 0f;
@@ -33,6 +39,11 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
     private BattleGuardPresentationResult presentationResult;
     private float attackDirectionSign = 1f;
     private Action onVisualImpact;
+    private Action onReactionStarted;
+    private Transform attackerWorldRoot;
+    private Transform defenderWorldRoot;
+    private Coroutine meleeGuardReactionCoroutine;
+    private bool meleeGuardReactionRunning;
     private Action onFinished;
     private Coroutine playbackCoroutine;
     private Coroutine parryRecoilCoroutine;
@@ -301,6 +312,25 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         Action completion
     )
     {
+        return TryPlayGuardImpact(
+            attackActor, guardActor, directionSign, result, attackDelivery,
+            onImpactReached, completion, null, null, null
+        );
+    }
+
+    public bool TryPlayGuardImpact(
+        BattleCharacterPresentationController attackActor,
+        BattleCharacterPresentationController guardActor,
+        float directionSign,
+        BattleGuardPresentationResult result,
+        BattlePresentationAttackDeliveryKind attackDelivery,
+        Action onImpactReached,
+        Action completion,
+        Transform attackWorldRoot,
+        Transform guardWorldRoot,
+        Action reactionStarted
+    )
+    {
         if (IsRunning || !isActiveAndEnabled || attackActor == null ||
             guardActor == null || !ValidatePresentationProfile() ||
             !IsSupportedAttackDelivery(attackDelivery))
@@ -314,6 +344,9 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         presentationResult = result;
         attackDirectionSign = directionSign >= 0f ? 1f : -1f;
         attackerDelivery = attackDelivery;
+        attackerWorldRoot = attackWorldRoot;
+        defenderWorldRoot = guardWorldRoot;
+        onReactionStarted = reactionStarted;
         onVisualImpact = onImpactReached;
         onFinished = completion;
         visualImpactReached = false;
@@ -415,17 +448,14 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
             perfectGuardEffectCoroutine = StartCoroutine(
                 RunPerfectGuardEffect(version)
             );
-            parryRecoilCoroutine = StartCoroutine(
-                RunParryRecoil(version)
-            );
+            if (!UsesMeleeVisual(attackerDelivery))
+            {
+                parryRecoilCoroutine = StartCoroutine(RunParryRecoil(version));
+            }
         }
-        else
+        else if (!UsesMeleeVisual(attackerDelivery))
         {
-            guardRecoilCoroutine = StartCoroutine(
-                !UsesMeleeVisual(attackerDelivery)
-                    ? RunGuardRecoil(version)
-                    : RunReducedGuardShake(version)
-            );
+            guardRecoilCoroutine = StartCoroutine(RunGuardRecoil(version));
         }
 
         float hitStopDuration = presentationProfile.HitStopDuration;
@@ -438,9 +468,61 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         }
 
         // 命中边界由当前攻击表现触发，并且每次播放最多通知一次宿主。
+        meleeGuardReactionRunning = UsesMeleeVisual(attackerDelivery);
         Action callback = onVisualImpact;
         onVisualImpact = null;
         callback?.Invoke();
+        if (IsCurrentPlayback(version) && meleeGuardReactionRunning)
+        {
+            Coroutine reaction = StartCoroutine(RunMeleeGuardReaction(version));
+            meleeGuardReactionCoroutine = meleeGuardReactionRunning ? reaction : null;
+        }
+    }
+
+    private IEnumerator RunMeleeGuardReaction(int version)
+    {
+        while (IsCurrentPlayback(version) && dualHitStopCoroutine != null)
+        {
+            yield return null;
+        }
+
+        if (!IsCurrentPlayback(version))
+        {
+            yield break;
+        }
+
+        BattleHitPresentationProfile profile = MeleeGuardReactionProfile;
+        if (profile == null || attackerWorldRoot == null || defenderWorldRoot == null)
+        {
+            Debug.LogError(
+                "[AttackVsGuardPresentationPlayer] Melee Guard Reaction skipped: " +
+                "bind MeleeGuardReactionProfile and provide both WorldRoots.", this
+            );
+        }
+        else
+        {
+            bool fullBlock = presentationResult == BattleGuardPresentationResult.FullBlock;
+            Action callback = onReactionStarted;
+            onReactionStarted = null;
+            callback?.Invoke();
+            if (!IsCurrentPlayback(version))
+            {
+                yield break;
+            }
+            yield return (fullBlock ? attacker : defender).PlaySustainedHitReaction(
+                fullBlock ? attackerWorldRoot : defenderWorldRoot,
+                fullBlock ? -attackDirectionSign : attackDirectionSign,
+                profile,
+                profile.FollowKnockbackDistance,
+                !fullBlock
+            );
+        }
+
+        if (IsCurrentPlayback(version))
+        {
+            meleeGuardReactionRunning = false;
+            meleeGuardReactionCoroutine = null;
+        }
     }
 
     private IEnumerator RunParryRecoil(int version)
@@ -587,7 +669,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
 
     private bool HasActiveTail()
     {
-        return parryRecoilCoroutine != null ||
+        return meleeGuardReactionRunning || parryRecoilCoroutine != null ||
             perfectGuardEffectCoroutine != null ||
             guardRecoilCoroutine != null ||
             dualHitStopCoroutine != null;
@@ -606,6 +688,12 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
 
     private void StopSecondaryCoroutines()
     {
+        if (meleeGuardReactionCoroutine != null)
+        {
+            StopCoroutine(meleeGuardReactionCoroutine);
+            meleeGuardReactionCoroutine = null;
+        }
+        meleeGuardReactionRunning = false;
         if (parryRecoilCoroutine != null)
         {
             StopCoroutine(parryRecoilCoroutine);
@@ -637,6 +725,11 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         defender = null;
         onVisualImpact = null;
         onFinished = null;
+        onReactionStarted = null;
+        attackerWorldRoot = null;
+        defenderWorldRoot = null;
+        meleeGuardReactionCoroutine = null;
+        meleeGuardReactionRunning = false;
         playbackCoroutine = null;
         parryRecoilCoroutine = null;
         perfectGuardEffectCoroutine = null;
