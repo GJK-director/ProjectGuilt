@@ -3342,7 +3342,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsDodgePresentationPlayer
   presentationProfile: {fileID: 11400000, guid: 8f5ad35a90b944d19fc5e13f2bc41b78, type: 2}
-  normalHitProfile: {fileID: 0}
+  normalHitProfile: {fileID: 11400000, guid: 0df745a66f423884ca20384e8001b8d2, type: 2}
 --- !u!1 &906990934
 GameObject:
   m_ObjectHideFlags: 0

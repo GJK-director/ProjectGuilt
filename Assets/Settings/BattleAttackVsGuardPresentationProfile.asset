@@ -14,4 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsGuardPresentationProfile
   sprintDuration: 0.48
   afterimageSpawnInterval: 0.08
+  guardApproachSeparation: 2.2
+  engagementFinalMoveSpeedScale: 0.5
   hitStopDuration: 0.08
+  meleeGuardReactionProfile: {fileID: 11400000, guid: 722d585753abdbe4eb692634890306ca, type: 2}

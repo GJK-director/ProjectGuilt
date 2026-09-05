@@ -23,7 +23,7 @@ MonoBehaviour:
   hitTintColor: {r: 0.7, g: 0.03, b: 0.03, a: 1}
   hitTintStrength: 1
   meleeHitFxSprite: {fileID: 21300000, guid: 46e48ae7f75fe1d4291e83b021db35d3, type: 3}
-  shootHitFxSprite: {fileID: 0}
+  shootHitFxSprite: {fileID: 21300000, guid: 589d47c993c1aed4e929e176c47b5b33, type: 3}
   hitFxBaseScale: 1
   hitFxHorizontalOffset: 0.12
   hitFxVerticalOffset: 0
