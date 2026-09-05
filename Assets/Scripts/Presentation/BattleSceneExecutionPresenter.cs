@@ -1752,33 +1752,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             context.SideBPresentation != null;
     }
 
-    private static BattleCardState GetDefenseAttackCardState(
-        BattleClashSession session
-    )
-    {
-        if (session == null ||
-            session.ClashType != BattleClashType.DefenseVsAttack)
-        {
-            return null;
-        }
-
-        if (session.SideA != null && session.SideA.cardState != null &&
-            session.SideA.cardState.cardData != null &&
-            session.SideA.cardState.cardData.cardType == CardType.Attack)
-        {
-            return session.SideA.cardState;
-        }
-
-        if (session.SideB != null && session.SideB.cardState != null &&
-            session.SideB.cardState.cardData != null &&
-            session.SideB.cardState.cardData.cardType == CardType.Attack)
-        {
-            return session.SideB.cardState;
-        }
-
-        return null;
-    }
-
     private bool TryStartDefenseVsAttackAnchoredApproach(
         BattlePresentationRequest request,
         BattlePresentationCompletion completion,
@@ -1819,10 +1792,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return false;
         }
 
-        BattleCardState attackCardState = context.InteractionContext != null &&
-            context.InteractionContext.AttackAction != null
-                ? context.InteractionContext.AttackAction.cardState
-                : GetDefenseAttackCardState(request.ClashSession);
+        BattleCardState attackCardState =
+            context.InteractionContext.AttackAction.cardState;
         bool useCloseRangeShoot = attackCardState != null &&
             attackCardState.IsCloseRangeShoot();
         float finalGap = context.ClashEngagement.FinalGap;
@@ -2061,10 +2032,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         long requestId = request.RequestId;
         BattleExecutionItem executionItem = request.ExecutionItem;
-        BattleCardState attackCardState = context.InteractionContext != null &&
-            context.InteractionContext.AttackAction != null
-                ? context.InteractionContext.AttackAction.cardState
-                : GetDefenseAttackCardState(request.ClashSession);
+        BattleCardState attackCardState =
+            context.InteractionContext.AttackAction.cardState;
         bool useCloseRangeShoot = attackCardState != null &&
             attackCardState.IsCloseRangeShoot();
         activePresentationRequestId = requestId;
@@ -2139,33 +2108,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 BattlePresentationContinuationPolicy.PreserveDodgePose;
     }
 
-    private static BattleCardState GetDodgeAttackCardState(
-        BattleClashSession session
-    )
-    {
-        if (session == null ||
-            session.ClashType != BattleClashType.DodgeVsAttack)
-        {
-            return null;
-        }
-
-        if (session.SideA != null && session.SideA.cardState != null &&
-            session.SideA.cardState.cardData != null &&
-            session.SideA.cardState.cardData.cardType == CardType.Attack)
-        {
-            return session.SideA.cardState;
-        }
-
-        if (session.SideB != null && session.SideB.cardState != null &&
-            session.SideB.cardState.cardData != null &&
-            session.SideB.cardState.cardData.cardType == CardType.Attack)
-        {
-            return session.SideB.cardState;
-        }
-
-        return null;
-    }
-
     private bool TryStartDodgeVsAttackApproach(
         BattlePresentationRequest request,
         BattlePresentationCompletion completion,
@@ -2196,9 +2138,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         long requestId = request.RequestId;
         BattleExecutionItem executionItem = request.ExecutionItem;
-        BattleCardState attackCardState = GetDodgeAttackCardState(
-            request.ClashSession
-        );
+        BattleCardState attackCardState =
+            context.InteractionContext.AttackAction.cardState;
         bool useCloseRangeShoot = attackCardState != null &&
             attackCardState.IsCloseRangeShoot();
         activePresentationRequestId = requestId;
@@ -2269,64 +2210,24 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         BattlePresentationInteractionContext interaction = context != null
             ? context.InteractionContext
             : null;
-        if (interaction != null && interaction.AttackAction != null &&
-            interaction.DefenseAction != null)
-        {
-            context.DefenseAttacker = interaction.AttackAction.actor;
-            context.DefenseDefender = interaction.DefenseAction.actor;
-            ResolvePresentation(
-                context.DefenseAttacker,
-                out context.DefenseAttackerHandle,
-                out context.DefenseAttackerPresentation
-            );
-            ResolvePresentation(
-                context.DefenseDefender,
-                out context.DefenseDefenderHandle,
-                out context.DefenseDefenderPresentation
-            );
-            return HasCompleteDefensePresentationMapping(context);
-        }
-
-        // 旧请求若没有冻结的中立Context，保留Session解析作为兼容兜底。
-        BattleClashSession session = context != null
-            ? context.ClashSession
-            : null;
-        if (session == null ||
-            session.ClashType != BattleClashType.DefenseVsAttack ||
-            session.SideA == null || session.SideB == null ||
-            session.SideA.cardState == null ||
-            session.SideB.cardState == null ||
-            session.SideA.cardState.cardData == null ||
-            session.SideB.cardState.cardData == null)
+        if (interaction == null || interaction.AttackAction == null ||
+            interaction.DefenseAction == null)
         {
             return false;
         }
 
-        string sideAType = session.SideA.cardState.cardData.cardType;
-        string sideBType = session.SideB.cardState.cardData.cardType;
-        if (sideAType == CardType.Defense && sideBType == CardType.Attack)
-        {
-            context.DefenseDefender = context.SideAActor;
-            context.DefenseDefenderHandle = context.SideAHandle;
-            context.DefenseDefenderPresentation = context.SideAPresentation;
-            context.DefenseAttacker = context.SideBActor;
-            context.DefenseAttackerHandle = context.SideBHandle;
-            context.DefenseAttackerPresentation = context.SideBPresentation;
-        }
-        else if (sideAType == CardType.Attack &&
-            sideBType == CardType.Defense)
-        {
-            context.DefenseAttacker = context.SideAActor;
-            context.DefenseAttackerHandle = context.SideAHandle;
-            context.DefenseAttackerPresentation = context.SideAPresentation;
-            context.DefenseDefender = context.SideBActor;
-            context.DefenseDefenderHandle = context.SideBHandle;
-            context.DefenseDefenderPresentation = context.SideBPresentation;
-        }
-        else
-        {
-            return false;
-        }
+        context.DefenseAttacker = interaction.AttackAction.actor;
+        context.DefenseDefender = interaction.DefenseAction.actor;
+        ResolvePresentation(
+            context.DefenseAttacker,
+            out context.DefenseAttackerHandle,
+            out context.DefenseAttackerPresentation
+        );
+        ResolvePresentation(
+            context.DefenseDefender,
+            out context.DefenseDefenderHandle,
+            out context.DefenseDefenderPresentation
+        );
 
         return HasCompleteDefensePresentationMapping(context);
     }
@@ -2352,64 +2253,24 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         BattlePresentationInteractionContext interaction = context != null
             ? context.InteractionContext
             : null;
-        if (interaction != null && interaction.AttackAction != null &&
-            interaction.DodgeAction != null)
-        {
-            context.DodgeAttacker = interaction.AttackAction.actor;
-            context.DodgeDefender = interaction.DodgeAction.actor;
-            ResolvePresentation(
-                context.DodgeAttacker,
-                out context.DodgeAttackerHandle,
-                out context.DodgeAttackerPresentation
-            );
-            ResolvePresentation(
-                context.DodgeDefender,
-                out context.DodgeDefenderHandle,
-                out context.DodgeDefenderPresentation
-            );
-            return HasCompleteDodgePresentationMapping(context);
-        }
-
-        // 旧请求若没有冻结的中立Context，保留Session解析作为兼容兜底。
-        BattleClashSession session = context != null
-            ? context.ClashSession
-            : null;
-        if (session == null ||
-            session.ClashType != BattleClashType.DodgeVsAttack ||
-            session.SideA == null || session.SideB == null ||
-            session.SideA.cardState == null ||
-            session.SideB.cardState == null ||
-            session.SideA.cardState.cardData == null ||
-            session.SideB.cardState.cardData == null)
+        if (interaction == null || interaction.AttackAction == null ||
+            interaction.DodgeAction == null)
         {
             return false;
         }
 
-        string sideAType = session.SideA.cardState.cardData.cardType;
-        string sideBType = session.SideB.cardState.cardData.cardType;
-        if (sideAType == CardType.Dodge && sideBType == CardType.Attack)
-        {
-            context.DodgeDefender = context.SideAActor;
-            context.DodgeDefenderHandle = context.SideAHandle;
-            context.DodgeDefenderPresentation = context.SideAPresentation;
-            context.DodgeAttacker = context.SideBActor;
-            context.DodgeAttackerHandle = context.SideBHandle;
-            context.DodgeAttackerPresentation = context.SideBPresentation;
-        }
-        else if (sideAType == CardType.Attack &&
-            sideBType == CardType.Dodge)
-        {
-            context.DodgeAttacker = context.SideAActor;
-            context.DodgeAttackerHandle = context.SideAHandle;
-            context.DodgeAttackerPresentation = context.SideAPresentation;
-            context.DodgeDefender = context.SideBActor;
-            context.DodgeDefenderHandle = context.SideBHandle;
-            context.DodgeDefenderPresentation = context.SideBPresentation;
-        }
-        else
-        {
-            return false;
-        }
+        context.DodgeAttacker = interaction.AttackAction.actor;
+        context.DodgeDefender = interaction.DodgeAction.actor;
+        ResolvePresentation(
+            context.DodgeAttacker,
+            out context.DodgeAttackerHandle,
+            out context.DodgeAttackerPresentation
+        );
+        ResolvePresentation(
+            context.DodgeDefender,
+            out context.DodgeDefenderHandle,
+            out context.DodgeDefenderPresentation
+        );
 
         return HasCompleteDodgePresentationMapping(context);
     }
@@ -2713,10 +2574,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         battleActionCameraCarryPending = false;
         context.CameraCinematicOwned = true;
         LogApproachStarted(requestId, context);
-        BattleCardState attackCardState = context.InteractionContext != null &&
-            context.InteractionContext.AttackAction != null
-                ? context.InteractionContext.AttackAction.cardState
-                : GetDodgeAttackCardState(request.ClashSession);
+        BattleCardState attackCardState =
+            context.InteractionContext.AttackAction.cardState;
         bool useCloseRangeShoot = attackCardState != null &&
             attackCardState.IsCloseRangeShoot();
         bool approachStarted = useCloseRangeShoot
@@ -4082,10 +3941,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         context.DodgeRollRequestId = requestId;
         activePresentationRequestId = requestId;
 
-        BattleCardState attackCardState = context.InteractionContext != null &&
-            context.InteractionContext.AttackAction != null
-                ? context.InteractionContext.AttackAction.cardState
-                : GetDodgeAttackCardState(context.ClashSession);
+        BattleCardState attackCardState =
+            context.InteractionContext.AttackAction.cardState;
         BattlePresentationAttackDeliveryKind attackDelivery =
             ResolveAttackDelivery(attackCardState);
         bool started = attackVsDodgePresentationPlayer
