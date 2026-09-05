@@ -462,14 +462,6 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
             {
                 perfectGuardFxRunning = false;
             }
-            if (!UsesMeleeVisual(attackerDelivery))
-            {
-                parryRecoilCoroutine = StartCoroutine(RunParryRecoil(version));
-            }
-        }
-        else if (!UsesMeleeVisual(attackerDelivery))
-        {
-            guardRecoilCoroutine = StartCoroutine(RunGuardRecoil(version));
         }
 
         float hitStopDuration = presentationProfile.HitStopDuration;
@@ -482,7 +474,8 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         }
 
         // 命中边界由当前攻击表现触发，并且每次播放最多通知一次宿主。
-        meleeGuardReactionRunning = UsesMeleeVisual(attackerDelivery);
+        meleeGuardReactionRunning = UsesMeleeVisual(attackerDelivery) ||
+            presentationResult == BattleGuardPresentationResult.ReducedDamage;
         Action callback = onVisualImpact;
         onVisualImpact = null;
         callback?.Invoke();

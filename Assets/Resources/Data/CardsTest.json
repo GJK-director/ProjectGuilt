@@ -93,7 +93,7 @@
     "cardType": "Defense",
     "isClashable": false,
     "minPoint": 2,
-    "maxPoint": 5,
+    "maxPoint": 8,
     "cooldown": 1,
     "guiltCost": 0,
     "defenseFormula": "PointAsDefense"
