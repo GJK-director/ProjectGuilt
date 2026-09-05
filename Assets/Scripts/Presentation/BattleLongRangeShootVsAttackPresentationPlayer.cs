@@ -32,7 +32,6 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
     private Coroutine playbackCoroutine;
     private Coroutine deflectionSlashCoroutine;
     private Coroutine hitReactionCoroutine;
-    private Coroutine responseEffectCoroutine;
     private bool muzzleFlashFinished;
     private bool deflectionSlashFinished;
     private bool hitReactionFinished;
@@ -264,6 +263,8 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
 
     public bool TryPlayGuardWinner(
         BattleCharacterPresentationController guardController,
+        float attackDirectionSign,
+        BattleAttackVsGuardPresentationProfile perfectGuardFxProfile,
         Action finishedCallback
     )
     {
@@ -276,7 +277,24 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         int version = playbackVersion;
         responseWinner.SetGuard();
         responseMotionFinished = false;
-        responseEffectCoroutine = StartCoroutine(RunGuardWinnerEffect(version));
+        bool fxStarted = BattlePerfectGuardFxPlayer.TrySpawn(
+            perfectGuardFxProfile,
+            responseWinner,
+            attackDirectionSign,
+            completion: () =>
+            {
+                if (this != null)
+                {
+                    MarkResponseMotionFinished(version);
+                }
+            },
+            isPlaybackCurrent: () => this != null &&
+                isActiveAndEnabled && IsCurrentPlayback(version)
+        );
+        if (!fxStarted)
+        {
+            responseMotionFinished = true;
+        }
         playbackCoroutine = StartCoroutine(RunResponseWinner(version, true));
         return true;
     }
@@ -438,21 +456,6 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         FinishNormally(version);
     }
 
-    private IEnumerator RunGuardWinnerEffect(int version)
-    {
-        if (responseWinner != null)
-        {
-            // 复用Guard成功结果的现有效果，但不启动近战攻击方反冲。
-            yield return responseWinner.PlayPerfectGuardEffect();
-        }
-
-        if (IsCurrentPlayback(version))
-        {
-            responseMotionFinished = true;
-            responseEffectCoroutine = null;
-        }
-    }
-
     private void BeginResponseWinner(
         BattleCharacterPresentationController winnerController,
         Action finishedCallback
@@ -551,10 +554,6 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
             StopCoroutine(hitReactionCoroutine);
         }
 
-        if (responseEffectCoroutine != null)
-        {
-            StopCoroutine(responseEffectCoroutine);
-        }
     }
 
     private void ClearPlaybackReferences()
@@ -571,7 +570,6 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         playbackCoroutine = null;
         deflectionSlashCoroutine = null;
         hitReactionCoroutine = null;
-        responseEffectCoroutine = null;
         muzzleFlashFinished = false;
         deflectionSlashFinished = false;
         hitReactionFinished = false;

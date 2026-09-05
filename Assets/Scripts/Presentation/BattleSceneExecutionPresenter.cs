@@ -3170,9 +3170,15 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         bool isGuardResponse = context.LongRangeMeleeSide.cardState.cardData
             .cardType == CardType.Defense;
+        BattleAttackVsGuardPresentationProfile perfectGuardFxProfile =
+            attackVsGuardPresentationPlayer != null
+                ? attackVsGuardPresentationPlayer.PresentationProfile
+                : null;
         bool started = isGuardResponse
             ? longRangeShootVsAttackPresentationPlayer.TryPlayGuardWinner(
                 context.LongRangeMeleePresentation,
+                directionSign,
+                perfectGuardFxProfile,
                 () => CompleteLongRangeResponseImpact(
                     context,
                     executionItem,
