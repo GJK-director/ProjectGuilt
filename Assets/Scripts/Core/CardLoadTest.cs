@@ -89,7 +89,8 @@ public enum BattleTestMode
     CharacterDefaultCardDataContractBasic = 101,
     CharacterPresentationBindingContractBasic = 102,
     FullBattleIntegrationRegressionBasic = 103,
-    BattleActionRollPanelLifecycleBasic = 104
+    BattleActionRollPanelLifecycleBasic = 104,
+    BattleCardCommonRulesPhaseOneBasic = 105
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -440,6 +441,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleActionRollPanelLifecycleBasic)
         {
             BattleActionRollPanelLifecycleTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardCommonRulesPhaseOneBasic)
+        {
+            RunBattleCardCommonRulesPhaseOneBasicTestSequence();
             return;
         }
 
@@ -8227,6 +8234,436 @@ public class CardLoadTest : MonoBehaviour
         Destroy(context.spriteTexture);
     }
 
+    void RunBattleCardCommonRulesPhaseOneBasicTestSequence()
+    {
+        bool[] results = new bool[16];
+
+        BattleEndedTestContext firstStrikeContext =
+            CreateBattleEndedTestContext(
+                "common105_first_strike",
+                30,
+                30,
+                50,
+                10,
+                9,
+                5
+            );
+        List<BattleActionSlot> firstStrikeSlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                firstStrikeContext.allyA,
+                firstStrikeContext.allyB,
+                3
+            );
+        firstStrikeContext.runtimeState.SetActionSlots(firstStrikeSlots);
+
+        BattleCardState firstStrikeA1 = CreateMode86AttackCard(
+            firstStrikeContext.allyA,
+            "common105_first_a1",
+            5,
+            true
+        );
+        BattleCardState firstStrikeA2 = CreateMode86AttackCard(
+            firstStrikeContext.allyA,
+            "common105_first_a2",
+            5,
+            true
+        );
+        BattleCardState normalA = CreateMode86AttackCard(
+            firstStrikeContext.allyA,
+            "common105_normal_a",
+            5,
+            false
+        );
+        BattleCardState firstStrikeB = CreateMode86AttackCard(
+            firstStrikeContext.allyB,
+            "common105_first_b",
+            5,
+            true
+        );
+
+        BattleActionAssignmentResult assignmentResult;
+        bool firstAssignment = BattleActionSlotManager.TryAssignToEnemy(
+            firstStrikeContext.runtimeState,
+            firstStrikeContext.allyA,
+            1,
+            firstStrikeA1,
+            firstStrikeContext.enemy,
+            out assignmentResult
+        );
+        bool sameSlotRefresh = BattleActionSlotManager.TryAssignToEnemy(
+            firstStrikeContext.runtimeState,
+            firstStrikeContext.allyA,
+            1,
+            firstStrikeA1,
+            firstStrikeContext.enemy,
+            out assignmentResult
+        );
+        results[0] = firstAssignment && sameSlotRefresh;
+
+        bool modernSecondRejected =
+            !BattleActionSlotManager.TryAssignToEnemy(
+                firstStrikeContext.runtimeState,
+                firstStrikeContext.allyA,
+                2,
+                firstStrikeA2,
+                firstStrikeContext.enemy,
+                out assignmentResult
+            );
+
+        List<BattleActionSlot> legacyFirstStrikeSlots =
+            BattleActionSlotManager.CreateCharacterActionSlots(
+                firstStrikeContext.allyA,
+                2
+            );
+        CardEligibilityResult legacyEligibility;
+        bool legacyFirstAssigned = BattleActionSlotManager.AssignFreeAction(
+            legacyFirstStrikeSlots,
+            firstStrikeContext.allyA,
+            1,
+            firstStrikeContext.allyA,
+            CreateMode86AttackCard(
+                firstStrikeContext.allyA,
+                "common105_legacy_first_a1",
+                5,
+                true
+            ),
+            firstStrikeContext.enemy,
+            out legacyEligibility
+        );
+        bool legacySecondRejected =
+            !BattleActionSlotManager.AssignFreeAction(
+                legacyFirstStrikeSlots,
+                firstStrikeContext.allyA,
+                2,
+                firstStrikeContext.allyA,
+                CreateMode86AttackCard(
+                    firstStrikeContext.allyA,
+                    "common105_legacy_first_a2",
+                    5,
+                    true
+                ),
+                firstStrikeContext.enemy,
+                out legacyEligibility
+            );
+        results[1] = modernSecondRejected &&
+            legacyFirstAssigned &&
+            legacySecondRejected;
+
+        results[3] = BattleActionSlotManager.TryAssignToEnemy(
+            firstStrikeContext.runtimeState,
+            firstStrikeContext.allyB,
+            1,
+            firstStrikeB,
+            firstStrikeContext.enemy,
+            out assignmentResult
+        );
+        results[4] = BattleActionSlotManager.TryAssignToEnemy(
+            firstStrikeContext.runtimeState,
+            firstStrikeContext.allyA,
+            3,
+            normalA,
+            firstStrikeContext.enemy,
+            out assignmentResult
+        );
+
+        bool cancelled = BattleActionSlotManager.TryCancelAssignment(
+            firstStrikeContext.runtimeState,
+            firstStrikeContext.allyA,
+            1,
+            out assignmentResult
+        );
+        bool secondAssignedAfterCancel =
+            BattleActionSlotManager.TryAssignToEnemy(
+                firstStrikeContext.runtimeState,
+                firstStrikeContext.allyA,
+                2,
+                firstStrikeA2,
+                firstStrikeContext.enemy,
+                out assignmentResult
+            );
+        results[2] = cancelled && secondAssignedAfterCancel;
+
+        BattleExecutionPlan firstStrikePlan =
+            BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+                firstStrikeContext.runtimeState.actionSlots,
+                firstStrikeContext.runtimeState.intentQueue,
+                firstStrikeContext.runtimeState
+            );
+        int firstStrikeIndex = FindMode105ActionSlotIndex(
+            firstStrikePlan,
+            firstStrikeSlots[1]
+        );
+        int normalIndex = FindMode105ActionSlotIndex(
+            firstStrikePlan,
+            firstStrikeSlots[2]
+        );
+        results[5] = firstStrikeIndex >= 0 &&
+            normalIndex >= 0 &&
+            firstStrikeIndex < normalIndex;
+
+        BattleEndedTestContext abilityContext =
+            CreateBattleEndedTestContext(
+                "common105_ability",
+                30,
+                30,
+                50,
+                10,
+                9,
+                5
+            );
+        List<BattleActionSlot> abilitySlots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                abilityContext.allyA,
+                abilityContext.allyB,
+                3
+            );
+        abilityContext.runtimeState.SetActionSlots(abilitySlots);
+
+        BattleCardState selfAbility = CreateMode105AbilityCard(
+            abilityContext.allyA,
+            "common105_ability_self"
+        );
+        results[6] = BattleActionSlotManager.TryAssignToSelf(
+            abilityContext.runtimeState,
+            abilityContext.allyA,
+            1,
+            selfAbility,
+            out assignmentResult
+        );
+        results[7] = !BattleActionSlotManager.TryAssignToEnemy(
+            abilityContext.runtimeState,
+            abilityContext.allyA,
+            2,
+            CreateMode105AbilityCard(
+                abilityContext.allyA,
+                "common105_ability_enemy_modern"
+            ),
+            abilityContext.enemy,
+            out assignmentResult
+        );
+
+        List<BattleActionSlot> legacyAbilitySlots =
+            BattleActionSlotManager.CreateCharacterActionSlots(
+                abilityContext.allyA,
+                3
+            );
+        results[8] = !BattleActionSlotManager.AssignFreeAction(
+            legacyAbilitySlots,
+            abilityContext.allyA,
+            1,
+            abilityContext.allyA,
+            CreateMode105AbilityCard(
+                abilityContext.allyA,
+                "common105_ability_ally_legacy"
+            ),
+            abilityContext.allyB,
+            out legacyEligibility
+        );
+        results[9] = !BattleActionSlotManager.AssignFreeAction(
+            legacyAbilitySlots,
+            abilityContext.allyA,
+            2,
+            abilityContext.allyA,
+            CreateMode105AbilityCard(
+                abilityContext.allyA,
+                "common105_ability_enemy_legacy"
+            ),
+            abilityContext.enemy,
+            out legacyEligibility
+        );
+
+        BattleEnemyIntent legacyIntent = new BattleEnemyIntent(
+            "common105_ability_response_intent",
+            abilityContext.enemy,
+            CreateMode86AttackCard(
+                abilityContext.enemy,
+                "common105_enemy_attack",
+                4,
+                false
+            ),
+            abilityContext.allyA,
+            3,
+            1
+        );
+        results[10] = !BattleActionSlotManager.AssignResponseToEnemyIntent(
+            legacyAbilitySlots,
+            abilityContext.allyA,
+            3,
+            abilityContext.allyA,
+            CreateMode105AbilityCard(
+                abilityContext.allyA,
+                "common105_ability_response"
+            ),
+            legacyIntent,
+            out legacyEligibility
+        );
+
+        bool legacySelfAbilityAssigned =
+            BattleActionSlotManager.AssignFreeAction(
+                legacyAbilitySlots,
+                abilityContext.allyA,
+                1,
+                abilityContext.allyA,
+                CreateMode105AbilityCard(
+                    abilityContext.allyA,
+                    "common105_ability_self_legacy"
+                ),
+                abilityContext.allyA,
+                out legacyEligibility
+            );
+
+        BattleActionSlot selfAbilitySlot = abilitySlots[0];
+        BattleActionRelationQueryService relationQuery =
+            new BattleActionRelationQueryService(
+                abilityContext.runtimeState
+            );
+        string selfSlotID = relationQuery.GetSlotID(
+            abilityContext.allyA,
+            1
+        );
+        results[11] = !selfAbilitySlot.IsEmpty() &&
+            selfAbilitySlot.slotType == BattleActionSlotType.FreeAction &&
+            selfAbilitySlot.placementType ==
+                BattleActionPlacementType.Self &&
+            object.ReferenceEquals(
+                selfAbilitySlot.target,
+                abilityContext.allyA
+            ) &&
+            relationQuery.GetRelationsForSlot(selfSlotID).Count == 0 &&
+            legacySelfAbilityAssigned &&
+            legacyAbilitySlots[0].placementType ==
+                BattleActionPlacementType.Self &&
+            object.ReferenceEquals(
+                legacyAbilitySlots[0].target,
+                abilityContext.allyA
+            );
+
+        Mode70BuffTestContext buffContext =
+            CreateMode70BuffTestContext(false);
+        BattleBuffGroupUIView buffGroup = buffContext.groupView;
+        CharacterData buffCharacter = buffContext.character;
+
+        SetMode70ActiveBuffs(
+            buffCharacter,
+            CreateMode70Buff("Bullet", 2)
+        );
+        buffGroup.SetCharacter(buffCharacter);
+        results[12] = CountMode70ActiveSlots(buffGroup) == 1;
+
+        SetMode70ActiveBuffs(
+            buffCharacter,
+            CreateMode70Buff("NextClashPointUp", 3)
+        );
+        buffGroup.SetCharacter(buffCharacter);
+        results[13] =
+            buffCharacter.GetBuffStack("NextClashPointUp") == 3 &&
+            CountMode70ActiveSlots(buffGroup) == 0;
+
+        SetMode64PrivateField(buffGroup, "columnsPerRow", 1);
+        SetMode64PrivateField(buffGroup, "maxRows", 1);
+        SetMode70ActiveBuffs(
+            buffCharacter,
+            CreateMode70Buff("Bullet", 1),
+            CreateMode70Buff("NextClashPointUp", 2),
+            CreateMode70Buff("NextCardPointUp", 4),
+            CreateMode70Buff("Strength", 8)
+        );
+        buffGroup.SetCharacter(buffCharacter);
+        results[14] = CountMode70ActiveSlots(buffGroup) == 1 &&
+            !HasMode70OverflowSlot(buffGroup);
+
+        SetMode70ActiveBuffs(
+            buffCharacter,
+            CreateMode70Buff("Bullet", 2),
+            CreateMode70Buff("Bullet", 3)
+        );
+        buffGroup.SetCharacter(buffCharacter);
+        BattleBuffIconUIView bulletSlot =
+            buffGroup.GetSlotForTesting(0);
+        results[15] = CountMode70ActiveSlots(buffGroup) == 1 &&
+            bulletSlot != null &&
+            GetMode70StackText(bulletSlot).text == "5";
+
+        string[] names =
+        {
+            "同角色第一张FirstStrike可绑定且同槽刷新不自冲突",
+            "同角色第二张FirstStrike在modern与legacy均被拒绝",
+            "解绑后第二张FirstStrike可绑定",
+            "不同角色可各自绑定FirstStrike",
+            "已有FirstStrike时普通卡仍可绑定",
+            "后槽FirstStrike在ExecutionPlan中优先",
+            "modern Ability可绑定自己",
+            "modern Ability不能绑定Enemy",
+            "legacy Ability不能绑定AllyB",
+            "legacy AssignFreeAction不能把Ability绑定Enemy",
+            "legacy AssignResponse不能用Ability响应Intent",
+            "Ability Self占槽且不产生Relation",
+            "公开Bullet Buff可显示",
+            "内部Buff机制存在但UI不显示",
+            "内部Buff不占UI容量且不制造Overflow",
+            "同buffID公开Buff继续聚合Stack"
+        };
+
+        bool allPassed = true;
+        for (int index = 0; index < results.Length; index++)
+        {
+            Debug.Log(
+                "模式105 Case " + (index + 1) + " " +
+                names[index] + "：" + results[index]
+            );
+            allPassed &= results[index];
+        }
+
+        Debug.Log(
+            "===== Mode105 BattleCardCommonRulesPhaseOneBasic ====="
+        );
+        Debug.Log("Passed: " + allPassed);
+
+        DestroyMode70BuffTestContext(buffContext);
+    }
+
+    BattleCardState CreateMode105AbilityCard(
+        CharacterData owner,
+        string instanceID
+    )
+    {
+        CardTestData cardData = new CardTestData
+        {
+            cardID = instanceID + "_data",
+            cardName = "模式105 Ability",
+            cardType = "Ability",
+            isClashable = false
+        };
+        return BattleCardManager.CreateBattleCard(
+            owner,
+            cardData,
+            instanceID
+        );
+    }
+
+    int FindMode105ActionSlotIndex(
+        BattleExecutionPlan plan,
+        BattleActionSlot slot
+    )
+    {
+        if (plan == null || plan.executionItems == null || slot == null)
+        {
+            return -1;
+        }
+
+        for (int index = 0; index < plan.executionItems.Count; index++)
+        {
+            BattleExecutionItem item = plan.executionItems[index];
+            if (item != null &&
+                object.ReferenceEquals(item.actionSlot, slot))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
     sealed class Mode70BuffTestContext
     {
         public GameObject rootObject;
@@ -9223,7 +9660,9 @@ public class CardLoadTest : MonoBehaviour
         return true;
     }
 
-    Mode70BuffTestContext CreateMode70BuffTestContext()
+    Mode70BuffTestContext CreateMode70BuffTestContext(
+        bool includeNonPublicBuffsForTesting = true
+    )
     {
         Mode70BuffTestContext context =
             new Mode70BuffTestContext();
@@ -9236,6 +9675,9 @@ public class CardLoadTest : MonoBehaviour
         context.rootObject.SetActive(false);
         context.groupView =
             context.rootObject.AddComponent<BattleBuffGroupUIView>();
+        context.groupView.SetIncludeNonPublicBuffsForTesting(
+            includeNonPublicBuffsForTesting
+        );
         context.firstOriginalSlot = CreateMode70BuffIconView(
             context.rootObject.transform,
             "Mode70Buff_1"

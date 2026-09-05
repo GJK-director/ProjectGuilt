@@ -484,8 +484,17 @@ public static class BattleActionSlotManager
     {
         // 检查槽位能不能放这张卡。
         // 例如槽位不能为空、同一张卡不能重复安排。
-        if (!CanAssignCardToSlot(slots, slot, cardState, out result))
+        if (!CanAssignCardToSlot(slots, slot, actor, cardState, out result))
         {
+            return false;
+        }
+
+        if (IsAbilityCard(cardState))
+        {
+            result = CreateFailure(
+                CardEligibilityFailureReason.UnsupportedCondition,
+                "安排响应行动失败：Ability 只能安排到使用者自己的行动槽"
+            );
             return false;
         }
 
@@ -646,7 +655,7 @@ public static class BattleActionSlotManager
     )
     {
         // 检查槽位是否为空、卡牌是否为空、卡牌是否已经被安排过。
-        if (!CanAssignCardToSlot(slots, slot, cardState, out result))
+        if (!CanAssignCardToSlot(slots, slot, actor, cardState, out result))
         {
             return false;
         }
@@ -656,6 +665,18 @@ public static class BattleActionSlotManager
         {
             result = CreateFailure(CardEligibilityFailureReason.InvalidActor, "安排自由行动失败：行动者为空");
             Debug.LogWarning(result.failureMessage);
+            return false;
+        }
+
+        if (IsAbilityCard(cardState) &&
+            (!object.ReferenceEquals(actor, target) ||
+                (slot.owner != null &&
+                    !object.ReferenceEquals(slot.owner, actor))))
+        {
+            result = CreateFailure(
+                CardEligibilityFailureReason.UnsupportedCondition,
+                "安排自由行动失败：Ability 只能以使用者自己为目标并占用自己的行动槽"
+            );
             return false;
         }
 
@@ -765,7 +786,7 @@ public static class BattleActionSlotManager
             return false;
         }
 
-        if (!CanAssignCardToSlot(slots, slot, cardState, out result))
+        if (!CanAssignCardToSlot(slots, slot, actor, cardState, out result))
         {
             return false;
         }
@@ -1177,6 +1198,19 @@ public static class BattleActionSlotManager
             result = CreateAssignmentFailure(
                 "准备阶段安排失败：同一张卡已经安排在其他槽位",
                 CardEligibilityFailureReason.CardAlreadyAssigned
+            );
+            return false;
+        }
+
+        if (HasOtherFirstStrikeAssignment(
+                runtimeState.actionSlots,
+                slot,
+                owner,
+                cardState))
+        {
+            result = CreateAssignmentFailure(
+                "准备阶段安排失败：同一角色每回合最多只能安排一张 FirstStrike 卡",
+                CardEligibilityFailureReason.UnsupportedCondition
             );
             return false;
         }
@@ -1717,6 +1751,40 @@ public static class BattleActionSlotManager
         return false;
     }
 
+    static bool HasOtherFirstStrikeAssignment(
+        List<BattleActionSlot> slots,
+        BattleActionSlot targetSlot,
+        CharacterData actor,
+        BattleCardState cardState
+    )
+    {
+        if (slots == null || actor == null || cardState == null ||
+            !cardState.HasTrait(BattleCardTrait.FirstStrike))
+        {
+            return false;
+        }
+
+        foreach (BattleActionSlot slot in slots)
+        {
+            if (slot == null || slot.IsEmpty() ||
+                object.ReferenceEquals(slot, targetSlot) ||
+                !slot.cardState.HasTrait(BattleCardTrait.FirstStrike))
+            {
+                continue;
+            }
+
+            CharacterData assignedActor = slot.actor != null
+                ? slot.actor
+                : slot.owner;
+            if (object.ReferenceEquals(assignedActor, actor))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     static long GetNextAssignmentSequence(List<BattleActionSlot> slots)
     {
         long maxSequence = 0;
@@ -1863,6 +1931,7 @@ public static class BattleActionSlotManager
     static bool CanAssignCardToSlot(
         List<BattleActionSlot> slots,
         BattleActionSlot targetSlot,
+        CharacterData actor,
         BattleCardState cardState,
         out CardEligibilityResult result
     )
@@ -1894,6 +1963,19 @@ public static class BattleActionSlotManager
         {
             result = CreateFailure(CardEligibilityFailureReason.CardAlreadyAssigned, "同一张卡本回合已经被安排");
             Debug.Log(result.failureMessage);
+            return false;
+        }
+
+        if (HasOtherFirstStrikeAssignment(
+                slots,
+                targetSlot,
+                actor,
+                cardState))
+        {
+            result = CreateFailure(
+                CardEligibilityFailureReason.UnsupportedCondition,
+                "安排行动失败：同一角色每回合最多只能安排一张 FirstStrike 卡"
+            );
             return false;
         }
 

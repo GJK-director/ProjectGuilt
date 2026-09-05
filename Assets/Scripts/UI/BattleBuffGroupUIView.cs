@@ -26,6 +26,12 @@ internal sealed class BattleBuffDisplayEntry
 
 public class BattleBuffGroupUIView : MonoBehaviour
 {
+    private static readonly HashSet<string> PubliclyVisibleBuffIDs =
+        new HashSet<string>(StringComparer.Ordinal)
+        {
+            "Bullet"
+        };
+
     [SerializeField] private BattleBuffIconBinding[] buffBindings;
 
     [Header("槽位来源")]
@@ -68,6 +74,7 @@ public class BattleBuffGroupUIView : MonoBehaviour
     private bool warnedNestedSlots;
     private bool warnedInvalidDirectSlot;
     private int configurationWarningCount;
+    private bool includeNonPublicBuffsForTesting;
 
     internal int SlotPoolCount => slotPool.Count;
     internal int RuntimeSlotCount => slotPool.Count;
@@ -77,6 +84,11 @@ public class BattleBuffGroupUIView : MonoBehaviour
     internal int ConfigurationWarningCount =>
         configurationWarningCount;
     internal Vector2 ResolvedSlotSize => resolvedSlotSize;
+
+    internal void SetIncludeNonPublicBuffsForTesting(bool include)
+    {
+        includeNonPublicBuffsForTesting = include;
+    }
 
     void Awake()
     {
@@ -537,7 +549,9 @@ public class BattleBuffGroupUIView : MonoBehaviour
             BuffData buff = characterData.buffs[index];
             if (buff == null ||
                 string.IsNullOrEmpty(buff.buffID) ||
-                buff.stack <= 0)
+                buff.stack <= 0 ||
+                (!includeNonPublicBuffsForTesting &&
+                    !PubliclyVisibleBuffIDs.Contains(buff.buffID)))
             {
                 continue;
             }
