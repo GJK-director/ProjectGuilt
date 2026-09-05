@@ -11,12 +11,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     private static readonly int HitTintStrengthId =
         Shader.PropertyToID("_HitTintStrength");
 
-    private enum HitBodyReactionMode
-    {
-        LegacyRandom,
-        DirectionalDamped
-    }
-
     private sealed class ActiveAfterimage
     {
         public GameObject root;
@@ -565,10 +559,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
             worldRoot,
             recoilDirectionSign,
             hitRecoilDistance,
-            HitBodyReactionMode.LegacyRandom,
-            0f,
-            0f,
-            0f,
             true
         );
     }
@@ -582,10 +572,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
             worldRoot,
             recoilDirectionSign,
             hitRecoilDistance,
-            HitBodyReactionMode.LegacyRandom,
-            0f,
-            0f,
-            0f,
             false
         );
     }
@@ -600,10 +586,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
             worldRoot,
             recoilDirectionSign,
             Mathf.Max(0f, worldKnockbackDistance),
-            HitBodyReactionMode.LegacyRandom,
-            0f,
-            0f,
-            0f,
             false
         );
     }
@@ -734,35 +716,10 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         FinishHitReaction();
     }
 
-    public IEnumerator PlaySustainedDirectionalHitReaction(
-        Transform worldRoot,
-        float recoilDirectionSign,
-        float worldKnockbackDistance,
-        float bodyReactionAmplitude,
-        float bodyReactionDuration,
-        float bodyReactionOscillations
-    )
-    {
-        yield return PlayHitReactionInternal(
-            worldRoot,
-            recoilDirectionSign,
-            Mathf.Max(0f, worldKnockbackDistance),
-            HitBodyReactionMode.DirectionalDamped,
-            Mathf.Max(0f, bodyReactionAmplitude),
-            Mathf.Max(0f, bodyReactionDuration),
-            Mathf.Max(0f, bodyReactionOscillations),
-            false
-        );
-    }
-
     private IEnumerator PlayHitReactionInternal(
         Transform worldRoot,
         float recoilDirectionSign,
         float worldKnockbackDistance,
-        HitBodyReactionMode bodyReactionMode,
-        float bodyReactionAmplitude,
-        float bodyReactionDuration,
-        float bodyReactionOscillations,
         bool finishAutomatically
     )
     {
@@ -786,10 +743,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         float recoilTargetX = recoilStartX +
             normalizedDirection * worldKnockbackDistance;
         float recoilDuration = Mathf.Max(0f, hitRecoilDuration);
-        float shakeDuration = bodyReactionMode ==
-                HitBodyReactionMode.DirectionalDamped
-            ? Mathf.Max(0f, bodyReactionDuration)
-            : Mathf.Max(0f, hitShakeDuration);
+        float shakeDuration = Mathf.Max(0f, hitShakeDuration);
         float holdDuration = finishAutomatically
             ? Mathf.Max(0f, hitPoseHoldDuration)
             : 0f;
@@ -852,29 +806,14 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
                     shakeElapsed + deltaTime
                 );
                 float shakeT = shakeElapsed / shakeDuration;
-                if (bodyReactionMode == HitBodyReactionMode.DirectionalDamped)
-                {
-                    float phase = shakeT * Mathf.PI * 2f *
-                        Mathf.Max(0f, bodyReactionOscillations);
-                    float envelope = 1f - BattlePresentationEasing.EaseOutQuad(
-                        shakeT
-                    );
-                    float offsetX = normalizedDirection *
-                        Mathf.Max(0f, bodyReactionAmplitude) * envelope *
-                        Mathf.Cos(phase);
-                    bodyShakeOffset = new Vector3(offsetX, 0f, 0f);
-                }
-                else
-                {
-                    float currentAmplitude = Mathf.Max(0f, hitShakeAmplitude) *
-                        (1f - BattlePresentationEasing.EaseOutQuad(shakeT));
-                    Vector2 randomDirection = UnityEngine.Random.insideUnitCircle;
-                    bodyShakeOffset = new Vector3(
-                        randomDirection.x,
-                        randomDirection.y,
-                        0f
-                    ) * currentAmplitude;
-                }
+                float currentAmplitude = Mathf.Max(0f, hitShakeAmplitude) *
+                    (1f - BattlePresentationEasing.EaseOutQuad(shakeT));
+                Vector2 randomDirection = UnityEngine.Random.insideUnitCircle;
+                bodyShakeOffset = new Vector3(
+                    randomDirection.x,
+                    randomDirection.y,
+                    0f
+                ) * currentAmplitude;
             }
             else
             {
