@@ -4,7 +4,8 @@ using UnityEngine;
 
 // 正式战斗表现协议：按 Cue 解析运行时角色，并逐步接入异步战斗表现。
 public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
-    IBattleExecutionPresenter
+    IBattleExecutionPresenter,
+    IBattleImpactCommitObserver
 {
     private sealed class ActionPresentationContext
     {
@@ -2808,6 +2809,17 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             out context.CurrentTargetHandle,
             out context.CurrentTargetPresentation
         );
+        if (impact != null && impact.hpDisplayStageCount > 1 &&
+            context.CurrentTargetHandle != null &&
+            context.CurrentTargetHandle.StatusView != null &&
+            context.CurrentTarget != null)
+        {
+            context.CurrentTargetHandle.StatusView.BeginStagedHpTransition(
+                context.CurrentTarget.currentHP,
+                context.CurrentTarget.maxHP,
+                impact.hpDisplayStageCount
+            );
+        }
 
         bool unavailableShootResponse =
             TryResolveUnavailableShootResponse(context);
@@ -2901,6 +2913,35 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         {
             CompleteRequest(request, completion);
         }
+    }
+
+    public void OnImpactCommitted(
+        BattleImpact impact,
+        int startHp,
+        int finalHp
+    )
+    {
+        if (impact == null || impact.hpDisplayStageCount <= 1 ||
+            impact.target == null || unitViewSpawner == null)
+        {
+            return;
+        }
+
+        BattleUnitViewHandle handle = unitViewSpawner.GetHandle(impact.target);
+        if (handle == null || handle.StatusView == null)
+        {
+            return;
+        }
+
+        handle.StatusView.BeginStagedHpTransition(
+            startHp,
+            impact.target.maxHP,
+            impact.hpDisplayStageCount
+        );
+        handle.StatusView.CompleteStagedHpTransition(
+            finalHp,
+            impact.target.maxHP
+        );
     }
 
     private void HandleLongRangeImpact(

@@ -7,8 +7,8 @@
     "rarity": "White",
     "cardType": "Attack",
     "isClashable": true,
-    "minPoint": 10,
-    "maxPoint": 10,
+    "minPoint": 4,
+    "maxPoint": 7,
     "cooldown": 0,
     "guiltCost": 0,
     "isSinCard": false,
@@ -58,7 +58,7 @@
   },
   {
     "cardID": "dodge_001",
-    "cardName": "基础闪避",
+    "cardName": "调整呼吸",
     "description": "",
     "keywords": [],
     "rarity": "White",
@@ -66,8 +66,94 @@
     "isClashable": true,
     "minPoint": 1,
     "maxPoint": 12,
+    "cooldown": 2,
+    "guiltCost": 0,
+    "traits": [
+      "GrantNextClashPointUpOnSuccessfulDodge"
+    ]
+  },
+  {
+    "cardID": "knife_stab_001",
+    "cardName": "刺",
+    "description": "与防御卡拼点时，胜负比较点数翻倍，但伤害仍使用原始点数。",
+    "keywords": [],
+    "rarity": "White",
+    "cardType": "Attack",
+    "attackDeliveryMode": "Melee",
+    "isClashable": true,
+    "minPoint": 3,
+    "maxPoint": 6,
     "cooldown": 1,
-    "guiltCost": 0
+    "guiltCost": 0,
+    "isSinCard": false,
+    "damageFormula": "PointAsDamage",
+    "traits": [
+      "DoubleClashAgainstDefense"
+    ],
+    "effects": []
+  },
+  {
+    "cardID": "knife_double_slash_001",
+    "cardName": "双斩",
+    "description": "造成点数两倍的单次逻辑伤害，HP分两段显示。",
+    "keywords": [],
+    "rarity": "White",
+    "cardType": "Attack",
+    "attackDeliveryMode": "Melee",
+    "isClashable": true,
+    "minPoint": 3,
+    "maxPoint": 5,
+    "cooldown": 2,
+    "guiltCost": 0,
+    "isSinCard": false,
+    "damageFormula": "DoublePointDamage",
+    "hpDisplayStageCount": 2,
+    "effects": []
+  },
+  {
+    "cardID": "knife_heavy_001",
+    "cardName": "重击",
+    "description": "有愤怒时强化点数并在结算后消耗1层愤怒。",
+    "keywords": [],
+    "rarity": "White",
+    "cardType": "Attack",
+    "attackDeliveryMode": "Melee",
+    "isClashable": true,
+    "minPoint": 6,
+    "maxPoint": 10,
+    "cooldown": 3,
+    "guiltCost": 0,
+    "isSinCard": false,
+    "damageFormula": "PointAsDamage",
+    "traits": [
+      "HeavyAnger"
+    ],
+    "effects": []
+  },
+  {
+    "cardID": "sin_iai_001",
+    "cardName": "拔刀斩",
+    "description": "根据行动开始时的愤怒提高点数；结算完成后清空愤怒。",
+    "keywords": [],
+    "rarity": "Sin",
+    "cardType": "Attack",
+    "attackDeliveryMode": "Melee",
+    "isClashable": true,
+    "minPoint": 5,
+    "maxPoint": 5,
+    "cooldown": 10,
+    "guiltCost": 0,
+    "guiltGain": 0,
+    "isSinCard": true,
+    "consumeOnUse": false,
+    "maxUseCount": 0,
+    "sinCardUseRule": "Permanent",
+    "sinCardCategory": "Clash",
+    "damageFormula": "PointAsDamage",
+    "traits": [
+      "IaiAnger"
+    ],
+    "effects": []
   },
   {
     "cardID": "enemy_atk_001",

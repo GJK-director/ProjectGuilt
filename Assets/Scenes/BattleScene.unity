@@ -1785,6 +1785,7 @@ MonoBehaviour:
   normal03: {fileID: 614553428}
   normal04: {fileID: 1004756680}
   normal05: {fileID: 970785288}
+  normal06: {fileID: 1006692922}
   matchSlotSize: 1
   matchSlotRotation: 1
   matchSlotScale: 1

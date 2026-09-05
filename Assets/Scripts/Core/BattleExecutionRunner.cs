@@ -853,6 +853,16 @@ public sealed class BattleExecutionRunner
             return Fail("Resolution提交失败：当前步骤未能完成", out failureMessage);
         }
 
+        if (pendingImpact != null && pendingImpact.target != null &&
+            presenter is IBattleImpactCommitObserver impactObserver)
+        {
+            impactObserver.OnImpactCommitted(
+                pendingImpact,
+                hpBefore,
+                pendingImpact.target.currentHP
+            );
+        }
+
         if (pendingImpact != null && CurrentResolutionPlan.planKind ==
             BattleResolutionPlanKind.FreeActionAttack)
         {

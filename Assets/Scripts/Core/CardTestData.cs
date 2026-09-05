@@ -4,7 +4,11 @@ using System.Collections.Generic;
 // BattleCardTrait = 卡牌固有词条，不属于角色运行时 Buff。
 public enum BattleCardTrait
 {
-    FirstStrike
+    FirstStrike,
+    DoubleClashAgainstDefense,
+    HeavyAnger,
+    IaiAnger,
+    GrantNextClashPointUpOnSuccessfulDodge
 }
 
 // CardResourceRuleData = 卡牌软资源规则
@@ -67,6 +71,8 @@ public class CardTestData
                                 // guiltGain = 使用罪卡后增加的负罪感
                                 // 注意：这不是消耗，而是累计增加
     public int guiltGain;
+    // 逻辑伤害仍只提交一次；大于1时只把HP显示拆成多段。
+    public int hpDisplayStageCount;
 
     public List<CardEffectData> effects; // 卡牌效果列表
     public CardKeywordData[] keywords;   // 本卡描述中涉及的词条说明，由策划手写

@@ -38,6 +38,8 @@ public sealed class BattleImpact
     public bool didKill;
     public bool usesPrecalculatedDamage;
     public int precalculatedDamage;
+    public int damageMultiplierPercent = 100;
+    public int hpDisplayStageCount = 1;
 
     public BattleImpact(
         int impactIndex,
@@ -60,6 +62,10 @@ public sealed class BattleImpact
         this.clashResult = clashResult;
         this.allowsDamage = allowsDamage;
         this.shouldTriggerHit = shouldTriggerHit;
+        hpDisplayStageCount = sourceCardState != null &&
+            sourceCardState.cardData != null
+            ? System.Math.Max(1, sourceCardState.cardData.hpDisplayStageCount)
+            : 1;
         state = BattleImpactState.Pending;
     }
 

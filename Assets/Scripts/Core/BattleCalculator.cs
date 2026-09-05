@@ -363,7 +363,8 @@ public static class BattleCalculator
         int damageMultiplier = Mathf.RoundToInt(
             100f +
             attacker.GetBuffPercentModifier(StatDamageDealt) +
-            defender.GetBuffPercentModifier(StatDamageTaken)
+            defender.GetBuffPercentModifier(StatDamageTaken) +
+            BattleAngerRules.GetIncomingDamagePercent(defender)
         );
 
         if (damageMultiplier < 0)
@@ -372,6 +373,10 @@ public static class BattleCalculator
         }
 
         int finalDamageScaled = baseDamageScaled * damageMultiplier / 100;
+        if (BattleAngerRules.GetAnger(attacker) == BattleAngerRules.MaxStack)
+        {
+            finalDamageScaled = finalDamageScaled * 120 / 100;
+        }
 
         if (BattleDebugSettings.ShowDamageLog)
         {
@@ -508,5 +513,188 @@ public static class BattleCalculator
         }
 
         return finalDefenseScaled;
+    }
+}
+
+public static class BattleAngerRules
+{
+    public const int MaxStack = 5;
+    public const int IncomingDamagePercentPerStack = 10;
+
+    public static int GetAnger(CharacterData character)
+    {
+        if (character == null || !character.IsAngerMechanicEnabled)
+        {
+            return 0;
+        }
+
+        return Mathf.Clamp(
+            character.GetBuffStack(BattleResourceID.Anger),
+            0,
+            MaxStack
+        );
+    }
+
+    public static int GetIncomingDamagePercent(CharacterData character)
+    {
+        return GetAnger(character) * IncomingDamagePercentPerStack;
+    }
+
+    public static void AddAnger(CharacterData character, int amount)
+    {
+        if (character == null || !character.IsAngerMechanicEnabled || amount <= 0)
+        {
+            return;
+        }
+
+        int addAmount = Mathf.Min(amount, MaxStack - GetAnger(character));
+        if (addAmount > 0)
+        {
+            character.AddBuff(BattleResourceID.Anger, addAmount, -1);
+        }
+    }
+
+    public static void RemoveAnger(CharacterData character, int amount)
+    {
+        if (character == null || amount <= 0)
+        {
+            return;
+        }
+
+        character.TryConsumeBuffStackAsResource(
+            BattleResourceID.Anger,
+            Mathf.Min(amount, character.GetBuffStack(BattleResourceID.Anger)),
+            out _
+        );
+    }
+
+    public static void ClearAnger(CharacterData character)
+    {
+        if (character != null)
+        {
+            RemoveAnger(character, character.GetBuffStack(BattleResourceID.Anger));
+        }
+    }
+
+    public static void ApplyCommittedDamage(
+        CharacterData attacker,
+        CharacterData target,
+        int preHitAnger,
+        int actualDamage
+    )
+    {
+        if (actualDamage <= 0)
+        {
+            return;
+        }
+
+        AddAnger(attacker, 1);
+        if (target != null && target.IsAngerMechanicEnabled && preHitAnger > 0 &&
+            actualDamage >= 7 - Mathf.Clamp(preHitAnger, 1, MaxStack))
+        {
+            RemoveAnger(target, 1);
+        }
+    }
+
+    public static void GetClashRangeBonus(
+        int anger,
+        out int minBonus,
+        out int maxBonus
+    )
+    {
+        minBonus = anger >= 4 ? 1 : 0;
+        maxBonus = anger >= 3 ? 1 : 0;
+    }
+}
+
+public static class BattleKnifeCardRules
+{
+    public static void CaptureActionStart(BattleCardState cardState)
+    {
+        if (cardState == null)
+        {
+            return;
+        }
+
+        cardState.ClearResolutionRuleState();
+        int anger = BattleAngerRules.GetAnger(cardState.owner);
+        cardState.preResolutionAnger = anger;
+        cardState.hasPreResolutionAngerSnapshot = true;
+
+        if (cardState.HasTrait(BattleCardTrait.HeavyAnger) && anger > 0)
+        {
+            cardState.resolvedCooldownOverride = 2;
+            cardState.pendingHeavyAngerSpend = true;
+        }
+        if (cardState.HasTrait(BattleCardTrait.IaiAnger))
+        {
+            cardState.pendingIaiAngerClear = true;
+        }
+    }
+
+    public static void ResolveRuntimePointRange(
+        BattleCardState cardState,
+        bool formalClash,
+        out int minPoint,
+        out int maxPoint
+    )
+    {
+        CardTestData card = cardState != null ? cardState.cardData : null;
+        minPoint = card != null ? card.minPoint : 0;
+        maxPoint = card != null ? card.maxPoint : 0;
+        int anger = cardState != null && cardState.hasPreResolutionAngerSnapshot
+            ? cardState.preResolutionAnger
+            : BattleAngerRules.GetAnger(cardState != null ? cardState.owner : null);
+
+        if (cardState != null && cardState.HasTrait(BattleCardTrait.HeavyAnger) && anger > 0)
+        {
+            minPoint += 2;
+            maxPoint += 2;
+        }
+        if (cardState != null && cardState.HasTrait(BattleCardTrait.IaiAnger))
+        {
+            maxPoint += anger * 2;
+        }
+        if (formalClash)
+        {
+            BattleAngerRules.GetClashRangeBonus(
+                anger,
+                out int minBonus,
+                out int maxBonus
+            );
+            minPoint += minBonus;
+            maxPoint += maxBonus;
+        }
+    }
+
+    public static int GetComparisonPoint(
+        BattleCardState cardState,
+        CardTestData opposingCard,
+        int resolvedPoint
+    )
+    {
+        return cardState != null &&
+            cardState.HasTrait(BattleCardTrait.DoubleClashAgainstDefense) &&
+            opposingCard != null && opposingCard.cardType == CardType.Defense
+            ? resolvedPoint * 2
+            : resolvedPoint;
+    }
+
+    public static void FinalizeCompletedInteraction(BattleCardState cardState)
+    {
+        if (cardState == null)
+        {
+            return;
+        }
+
+        if (cardState.pendingHeavyAngerSpend)
+        {
+            BattleAngerRules.RemoveAnger(cardState.owner, 1);
+        }
+        if (cardState.pendingIaiAngerClear)
+        {
+            BattleAngerRules.ClearAnger(cardState.owner);
+        }
+        cardState.ClearResolutionRuleState();
     }
 }

@@ -99,6 +99,20 @@ public class BattleCharacterStatusUIView : MonoBehaviour
 
     public bool IsEnemyView => isEnemy;
 
+    public void BeginStagedHpTransition(int startHp, int maxHp, int stageCount)
+    {
+        hpView?.BeginStagedHpTransition(startHp, maxHp, stageCount);
+    }
+
+    public void CompleteStagedHpTransition(
+        int finalHp,
+        int maxHp,
+        float stepDelayOverride = -1f
+    )
+    {
+        hpView?.CompleteStagedHpTransition(finalHp, maxHp, stepDelayOverride);
+    }
+
     private void RefreshSelfTargetBinding()
     {
         if (selfActionDropZone != null)

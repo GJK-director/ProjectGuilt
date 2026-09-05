@@ -285,7 +285,7 @@ public static class BattleCardManager
             return;
         }
 
-        // 罪卡默认不进入普通 CD
+        // 罪卡默认不进入普通 CD；显式配置CD的Permanent罪卡仍遵守真实CD语义。
         if (cardState.IsSinCard())
         {
             // 罪卡成功结算后，增加负罪感
@@ -314,12 +314,18 @@ public static class BattleCardManager
                 }
             }
 
-            // 罪卡处理完后直接结束，不继续进入普通 CD 逻辑
+            int sinCooldown = GetResolvedCooldown(cardState);
+            if (sinCooldown > 0)
+            {
+                cardState.currentCooldown = sinCooldown;
+                cardState.skipNextTurnEndCooldownTick = true;
+            }
+            cardState.resolvedCooldownOverride = -1;
             return;
         }
 
         // 普通卡：根据卡牌数据或品质计算基础 CD。
-        int baseCooldown = GetBaseCooldown(cardState.cardData);
+        int baseCooldown = GetResolvedCooldown(cardState);
 
         cardState.currentCooldown = baseCooldown;
         cardState.skipNextTurnEndCooldownTick = baseCooldown > 0;
@@ -332,6 +338,20 @@ public static class BattleCardManager
                 cardState.currentCooldown
             );
         }
+    }
+
+    static int GetResolvedCooldown(BattleCardState cardState)
+    {
+        if (cardState == null)
+        {
+            return 0;
+        }
+
+        int cooldown = cardState.resolvedCooldownOverride >= 0
+            ? cardState.resolvedCooldownOverride
+            : GetBaseCooldown(cardState.cardData);
+        cardState.resolvedCooldownOverride = -1;
+        return Mathf.Max(0, cooldown);
     }
 
     // ReduceCooldownsAtTurnEnd = 回合结束时减少某个角色所有卡牌的 CD

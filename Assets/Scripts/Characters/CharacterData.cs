@@ -63,6 +63,15 @@ public class CharacterData
     // 每张复制品都是一个 BattleCardState
     public List<BattleCardState> battleCards = new List<BattleCardState>();
 
+    // Anger数值仍由buffs承载；此开关只声明本场是否启用该机制。
+    private bool angerMechanicEnabled;
+    public bool IsAngerMechanicEnabled => angerMechanicEnabled;
+
+    public void SetAngerMechanicEnabledForBattle(bool enabled)
+    {
+        angerMechanicEnabled = enabled;
+    }
+
     // 旧版构造函数：只有一个固定速度
     // 为了兼容旧代码，保留它
     // 如果只传一个速度，就让最低速度和最高速度都等于它

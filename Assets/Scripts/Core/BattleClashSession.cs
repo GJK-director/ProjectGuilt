@@ -106,6 +106,8 @@ public sealed class BattleClashSession
     public int AttackTieCount { get; private set; }
     public int SideAPoint { get; private set; }
     public int SideBPoint { get; private set; }
+    public int SideADamagePoint { get; private set; }
+    public int SideBDamagePoint { get; private set; }
     public int SideADefensePointScaled { get; private set; }
     public int RemainingAttackPoint { get; private set; }
     public bool IsFullBlock { get; private set; }
@@ -223,8 +225,18 @@ public sealed class BattleClashSession
 
     void RollAttackAttempt()
     {
-        SideAPoint = RollClashPoint(SideA);
-        SideBPoint = RollClashPoint(SideB);
+        SideADamagePoint = RollClashPoint(SideA);
+        SideBDamagePoint = RollClashPoint(SideB);
+        SideAPoint = BattleKnifeCardRules.GetComparisonPoint(
+            SideA.cardState,
+            SideB.cardState.cardData,
+            SideADamagePoint
+        );
+        SideBPoint = BattleKnifeCardRules.GetComparisonPoint(
+            SideB.cardState,
+            SideA.cardState.cardData,
+            SideBDamagePoint
+        );
 
         if (SideAPoint > SideBPoint)
         {
@@ -263,6 +275,8 @@ public sealed class BattleClashSession
         SideBPoint = UsesKnownSideBPoint
             ? KnownSideBPoint
             : RollClashPoint(SideB);
+        SideADamagePoint = SideAPoint;
+        SideBDamagePoint = SideBPoint;
 
         // 闪避点数相等也算闪避成功，不进入AttackTie或TieLimit。
         if (SideAPoint >= SideBPoint)
@@ -293,7 +307,7 @@ public sealed class BattleClashSession
         SideAPoint = BattleCalculator.ConvertScaledDamageToHPDamage(
             SideADefensePointScaled
         );
-        SideBPoint = UsesKnownSideBPoint
+        SideBDamagePoint = UsesKnownSideBPoint
             ? KnownSideBPoint
             : BattleCalculator.GetFinalAttackPointWithoutClash(
                 SideB.actor,
@@ -303,12 +317,22 @@ public sealed class BattleClashSession
                 SideB.resourceSnapshot.selectedMaxPoint,
                 SideB.resourceSnapshot.pointModifierFromResource
             );
+        SideBPoint = BattleKnifeCardRules.GetComparisonPoint(
+            SideB.cardState,
+            SideA.cardState.cardData,
+            SideBDamagePoint
+        );
         RemainingAttackPoint = BattleCalculator
             .CalculateRemainingAttackPointAfterDefense(
                 SideBPoint,
                 SideADefensePointScaled
             );
         IsFullBlock = RemainingAttackPoint == 0;
+        if (!IsFullBlock && SideB.cardState.HasTrait(
+                BattleCardTrait.DoubleClashAgainstDefense))
+        {
+            RemainingAttackPoint = SideBDamagePoint;
+        }
         FinalizeResult(
             IsFullBlock
                 ? BattleClashAttemptResult.DefenseFullBlock

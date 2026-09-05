@@ -114,3 +114,9 @@ public interface IBattleExecutionPresenter
         BattlePresentationCompletion completion
     );
 }
+
+// 可选的逻辑Impact提交观察口；只同步HP显示，不参与战斗规则或Runner推进。
+public interface IBattleImpactCommitObserver
+{
+    void OnImpactCommitted(BattleImpact impact, int startHp, int finalHp);
+}

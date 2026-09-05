@@ -21,6 +21,13 @@ public class BattleCardState
     // 主动减 CD 接口不读取这个标记。
     public bool skipNextTurnEndCooldownTick;
 
+    // 单次行动快照。由ActionStart捕获，由Resolution完成或下一次ActionStart清理。
+    public int preResolutionAnger;
+    public bool hasPreResolutionAngerSnapshot;
+    public int resolvedCooldownOverride = -1;
+    public bool pendingHeavyAngerSpend;
+    public bool pendingIaiAngerClear;
+
     // isConsumed = 是否已经被消耗
     // 主要给“能力型罪卡”使用
     public bool isConsumed;
@@ -38,6 +45,7 @@ public class BattleCardState
 
         currentCooldown = 0;
         skipNextTurnEndCooldownTick = false;
+        ClearResolutionRuleState();
         isConsumed = false;
 
         currentUseCount = 0;
@@ -79,6 +87,15 @@ public class BattleCardState
         }
 
         return cardData.consumeOnUse;
+    }
+
+    public void ClearResolutionRuleState()
+    {
+        preResolutionAnger = 0;
+        hasPreResolutionAngerSnapshot = false;
+        resolvedCooldownOverride = -1;
+        pendingHeavyAngerSpend = false;
+        pendingIaiAngerClear = false;
     }
 
     public string GetAttackDeliveryMode()

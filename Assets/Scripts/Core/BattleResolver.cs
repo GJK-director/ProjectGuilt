@@ -287,7 +287,8 @@ public static class BattleResolver
         // 只影响后续行动。卡牌设计应避免依赖 BeforeUse 修改自身资源计算。
         BattleClashResourceSnapshot resourceSnapshot = CaptureResourceSnapshot(
             user,
-            attackAction.cardState
+            attackAction.cardState,
+            false
         );
         if (attackAction.cardState.IsLongRangeShoot() &&
             resourceSnapshot.hasRule && !resourceSnapshot.normalVersionEnabled)
@@ -1416,13 +1417,15 @@ public static class BattleResolver
         plan.sourceCardState = playerWon
             ? session.SideA.cardState
             : session.SideB.cardState;
-        int winnerPoint = playerWon ? session.SideAPoint : session.SideBPoint;
+        int winnerPoint = playerWon
+            ? session.SideADamagePoint
+            : session.SideBDamagePoint;
         bool winnerIsAttack = plan.sourceCardState != null &&
             plan.sourceCardState.cardData != null &&
             plan.sourceCardState.cardData.cardType == CardType.Attack;
         if (winnerIsAttack)
         {
-            plan.impacts.Add(new BattleImpact(
+            BattleImpact impact = new BattleImpact(
                 0,
                 plan.attacker,
                 plan.target,
@@ -1432,7 +1435,16 @@ public static class BattleResolver
                 ClashResult.Win,
                 winnerIsAttack,
                 winnerIsAttack
-            ));
+            );
+            BattleClashSideState loser = playerWon
+                ? session.SideB
+                : session.SideA;
+            if (loser.cardState != null &&
+                loser.cardState.HasTrait(BattleCardTrait.IaiAnger))
+            {
+                impact.damageMultiplierPercent = 150;
+            }
+            plan.impacts.Add(impact);
         }
     }
 
@@ -1517,7 +1529,7 @@ public static class BattleResolver
             plan.attacker,
             plan.target,
             plan.sourceCardState,
-            session.SideBPoint,
+            session.SideBDamagePoint,
             session.SideBPoint,
             ClashResult.Win,
             true,
@@ -1612,9 +1624,9 @@ public static class BattleResolver
                 impact.sourceCardState.cardData,
                 impact.basePower
             );
-            hpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(
-                damageScaled
-            );
+            damageScaled = damageScaled *
+                Mathf.Max(0, impact.damageMultiplierPercent) / 100;
+            hpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
         }
 
         if (impact.shouldTriggerHit)
@@ -1634,7 +1646,16 @@ public static class BattleResolver
 
         if (impact.allowsDamage && hpDamage > 0)
         {
+            int hpBefore = impact.target.currentHP;
+            int preHitAnger = BattleAngerRules.GetAnger(impact.target);
             impact.target.TakeDamage(hpDamage);
+            int actualDamage = Mathf.Max(0, hpBefore - impact.target.currentHP);
+            BattleAngerRules.ApplyCommittedDamage(
+                impact.attacker,
+                impact.target,
+                preHitAnger,
+                actualDamage
+            );
             bool didKill = !wasDeadBeforeImpact && impact.target.IsDead();
             TriggerBattleEvent(
                 BattleTiming.AfterDamage,
@@ -1914,6 +1935,7 @@ public static class BattleResolver
         }
 
         BattleClashSession session = plan.clashSession;
+        FinalizeCardInteractionRules(plan);
         BattleResolveResult result = new BattleResolveResult
         {
             isSuccess = true,
@@ -1994,6 +2016,41 @@ public static class BattleResolver
         plan.State = BattleResolutionPlanState.Completed;
         Debug.Log(result.message);
         return result;
+    }
+
+    static void FinalizeCardInteractionRules(BattleResolutionPlan plan)
+    {
+        if (plan == null)
+        {
+            return;
+        }
+
+        if (plan.clashSession != null)
+        {
+            if (plan.clashSession.FinalResult != BattleClashFinalResult.TieLimit)
+            {
+                BattleKnifeCardRules.FinalizeCompletedInteraction(
+                    plan.clashSession.SideA.cardState
+                );
+                BattleKnifeCardRules.FinalizeCompletedInteraction(
+                    plan.clashSession.SideB.cardState
+                );
+            }
+            if (plan.clashSession.ClashType == BattleClashType.DodgeVsAttack &&
+                plan.clashSession.FinalResult == BattleClashFinalResult.DodgeSuccess &&
+                plan.clashSession.SideA.cardState.HasTrait(
+                    BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge))
+            {
+                plan.clashSession.SideA.actor.AddBuff(
+                    BuffNextClashPointUp,
+                    2,
+                    1
+                );
+            }
+            return;
+        }
+
+        BattleKnifeCardRules.FinalizeCompletedInteraction(plan.sourceCardState);
     }
 
     static string BuildResolutionMessage(
@@ -3610,7 +3667,11 @@ public static class BattleResolver
         return snapshot;
     }
 
-    static BattleClashResourceSnapshot CaptureResourceSnapshot(CharacterData unit, BattleCardState cardState)
+    static BattleClashResourceSnapshot CaptureResourceSnapshot(
+        CharacterData unit,
+        BattleCardState cardState,
+        bool formalClash = true
+    )
     {
         BattleClashResourceSnapshot snapshot = new BattleClashResourceSnapshot();
         snapshot.cardState = cardState;
@@ -3620,8 +3681,12 @@ public static class BattleResolver
             return snapshot;
         }
 
-        snapshot.selectedMinPoint = cardState.cardData.minPoint;
-        snapshot.selectedMaxPoint = cardState.cardData.maxPoint;
+        BattleKnifeCardRules.ResolveRuntimePointRange(
+            cardState,
+            formalClash,
+            out snapshot.selectedMinPoint,
+            out snapshot.selectedMaxPoint
+        );
 
         CardResourceRuleData rule = GetFirstResourceRule(cardState.cardData);
 
@@ -3644,8 +3709,12 @@ public static class BattleResolver
 
         if (snapshot.normalVersionEnabled)
         {
-            snapshot.selectedMinPoint = cardState.cardData.minPoint;
-            snapshot.selectedMaxPoint = cardState.cardData.maxPoint;
+            BattleKnifeCardRules.ResolveRuntimePointRange(
+                cardState,
+                formalClash,
+                out snapshot.selectedMinPoint,
+                out snapshot.selectedMaxPoint
+            );
         }
         else
         {
@@ -3696,6 +3765,7 @@ public static class BattleResolver
 
     static void TriggerActionStart(CharacterData user, CharacterData target, BattleCardState cardState)
     {
+        BattleKnifeCardRules.CaptureActionStart(cardState);
         TriggerBattleEvent(BattleTiming.ActionStart, user, target, cardState, 0, 0, false, false);
     }
 

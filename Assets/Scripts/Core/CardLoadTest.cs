@@ -1,4 +1,5 @@
 ﻿// 脚本中文说明：卡牌读取和战斗测试入口。负责在 Unity 场景启动时创建测试角色、读取卡牌并运行指定测试流程。
+using System.Collections;
 using System.Collections.Generic;
 using Newtonsoft.Json;
 using UnityEngine;
@@ -91,7 +92,604 @@ public enum BattleTestMode
     FullBattleIntegrationRegressionBasic = 103,
     BattleActionRollPanelLifecycleBasic = 104,
     BattleCardCommonRulesPhaseOneBasic = 105,
-    BattleResourceFoundationAndBasicKnife = 106
+    BattleResourceFoundationAndBasicKnife = 106,
+    BattleAngerAndKnifeCardsBasic = 107
+}
+
+public static class BattleAngerAndKnifeCardsBasicTests
+{
+    public static IEnumerator Run(List<CardTestData> cards)
+    {
+        bool[] groups = new bool[11];
+        groups[0] = VerifyCardData(cards);
+        groups[1] = VerifyAngerStacking();
+        groups[2] = VerifyAngerClashRanges(cards);
+        groups[3] = VerifyAngerDamageRules();
+        groups[4] = VerifyStab(cards);
+        groups[5] = VerifyDoubleSlash(cards);
+        groups[6] = VerifyHeavy(cards);
+        groups[7] = VerifyAdjustBreathing(cards);
+        groups[8] = VerifyIai(cards);
+        yield return VerifyStagedHp(cards, passed => groups[9] = passed);
+        groups[10] = VerifyRegressions();
+
+        string[] names =
+        {
+            "卡牌数据",
+            "Anger叠层",
+            "Anger拼点阶段",
+            "Anger伤害规则",
+            "刺",
+            "双斩",
+            "重击",
+            "调整呼吸",
+            "拔刀斩",
+            "HP分段显示",
+            "回归"
+        };
+        bool passed = true;
+        Debug.Log("===== Mode107 BattleAngerAndKnifeCardsBasic =====");
+        for (int index = 0; index < groups.Length; index++)
+        {
+            Debug.Log(names[index] + "：" + groups[index]);
+            passed &= groups[index];
+        }
+        Debug.Log("Passed: " + passed);
+    }
+
+    static bool VerifyCardData(List<CardTestData> cards)
+    {
+        CardTestData attack = Find(cards, "atk_001");
+        CardTestData stab = Find(cards, "knife_stab_001");
+        CardTestData doubleSlash = Find(cards, "knife_double_slash_001");
+        CardTestData heavy = Find(cards, "knife_heavy_001");
+        CardTestData defense = Find(cards, "def_001");
+        CardTestData dodge = Find(cards, "dodge_001");
+        CardTestData iai = Find(cards, "sin_iai_001");
+        return IsCard(attack, CardType.Attack, 4, 7, 0, "PointAsDamage") &&
+            IsCard(stab, CardType.Attack, 3, 6, 1, "PointAsDamage") &&
+            stab.HasTrait(BattleCardTrait.DoubleClashAgainstDefense) &&
+            IsCard(doubleSlash, CardType.Attack, 3, 5, 2, "DoublePointDamage") &&
+            doubleSlash.hpDisplayStageCount == 2 &&
+            IsCard(heavy, CardType.Attack, 6, 10, 3, "PointAsDamage") &&
+            heavy.HasTrait(BattleCardTrait.HeavyAnger) &&
+            defense != null && defense.cardType == CardType.Defense &&
+            defense.minPoint == 2 && defense.maxPoint == 8 &&
+            defense.cooldown == 1 && defense.defenseFormula == "PointAsDefense" &&
+            dodge != null && dodge.cardName == "调整呼吸" &&
+            dodge.cardType == CardType.Dodge && dodge.minPoint == 1 &&
+            dodge.maxPoint == 12 && dodge.cooldown == 2 &&
+            dodge.HasTrait(BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge) &&
+            iai != null && iai.cardType == CardType.Attack && iai.isSinCard &&
+            iai.sinCardCategory == SinCardCategory.Clash &&
+            iai.sinCardUseRule == SinCardUseRule.Permanent &&
+            !iai.consumeOnUse && iai.maxUseCount == 0 && iai.minPoint == 5 &&
+            iai.maxPoint == 5 && iai.cooldown == 10 && iai.guiltGain == 0 &&
+            iai.HasTrait(BattleCardTrait.IaiAnger) &&
+            !iai.HasTrait(BattleCardTrait.FirstStrike);
+    }
+
+    static bool VerifyAngerStacking()
+    {
+        CardTestData attack = FixedAttack("mode107_anger_attack", 3);
+        CharacterData disabled = Unit("mode107_disabled", false);
+        CharacterData enabled = Unit("mode107_enabled", true);
+        CharacterData target = Unit("mode107_target", false);
+        CommitDamage(disabled, target, attack, 3);
+        bool disabledStayedZero = disabled.GetBuffStack(BattleResourceID.Anger) == 0;
+
+        target.currentHP = target.maxHP;
+        CommitDamage(enabled, target, attack, 3);
+        bool gainedOne = BattleAngerRules.GetAnger(enabled) == 1;
+
+        CommitDamage(enabled, target, FixedAttack("mode107_zero", 0), 0);
+        bool zeroDidNotGain = BattleAngerRules.GetAnger(enabled) == 1;
+
+        BattleAngerRules.AddAnger(enabled, 3);
+        target.currentHP = target.maxHP;
+        CommitDamage(enabled, target, attack, 3);
+        bool fourToFive = BattleAngerRules.GetAnger(enabled) == 5;
+        target.currentHP = target.maxHP;
+        CommitDamage(enabled, target, attack, 3);
+        bool capped = BattleAngerRules.GetAnger(enabled) == 5;
+        return disabledStayedZero && gainedOne && zeroDidNotGain &&
+            fourToFive && capped;
+    }
+
+    static bool VerifyAngerClashRanges(List<CardTestData> cards)
+    {
+        CardTestData attack = Find(cards, "atk_001");
+        return CheckRange(attack, 2, true, 4, 7) &&
+            CheckRange(attack, 3, true, 4, 8) &&
+            CheckRange(attack, 4, true, 5, 8) &&
+            CheckRange(attack, 5, true, 5, 8) &&
+            CheckRange(attack, 5, false, 4, 7);
+    }
+
+    static bool VerifyAngerDamageRules()
+    {
+        CardTestData ten = FixedAttack("mode107_damage_ten", 10);
+        CharacterData attacker = Unit("mode107_damage_attacker", true);
+        CharacterData target = Unit("mode107_damage_target", true);
+
+        BattleAngerRules.AddAnger(target, 1);
+        bool oneIncoming = Damage( attacker, target, ten, 10) == 11;
+        BattleAngerRules.ClearAnger(target);
+        BattleAngerRules.AddAnger(target, 5);
+        bool fiveIncoming = Damage(attacker, target, ten, 10) == 15;
+        BattleAngerRules.ClearAnger(target);
+        BattleAngerRules.AddAnger(attacker, 5);
+        bool fiveOutgoing = Damage(attacker, target, ten, 10) == 12;
+
+        CharacterData thresholdTarget = Unit("mode107_threshold", true);
+        CharacterData neutral = Unit("mode107_threshold_attacker", false);
+        BattleAngerRules.AddAnger(thresholdTarget, 3);
+        CommitDamage(neutral, thresholdTarget, FixedAttack("mode107_four", 3), 3);
+        bool thresholdDrops = BattleAngerRules.GetAnger(thresholdTarget) == 2;
+
+        BattleAngerRules.ClearAnger(thresholdTarget);
+        BattleAngerRules.AddAnger(thresholdTarget, 3);
+        thresholdTarget.currentHP = thresholdTarget.maxHP;
+        CommitDamage(neutral, thresholdTarget, FixedAttack("mode107_three", 2), 2);
+        bool belowKeeps = BattleAngerRules.GetAnger(thresholdTarget) == 3;
+
+        thresholdTarget.currentHP = thresholdTarget.maxHP;
+        CommitDamage(neutral, thresholdTarget, FixedAttack("mode107_large", 30), 30);
+        bool largeDropsOne = BattleAngerRules.GetAnger(thresholdTarget) == 2;
+        return oneIncoming && fiveIncoming && fiveOutgoing &&
+            thresholdDrops && belowKeeps && largeDropsOne;
+    }
+
+    static bool VerifyStab(List<CardTestData> cards)
+    {
+        CardTestData stab = Find(cards, "knife_stab_001");
+        CardTestData defense = Find(cards, "def_001");
+        CardTestData attack = Find(cards, "atk_001");
+        CharacterData owner = Unit("mode107_stab", false);
+        BattleCardState state = new BattleCardState(owner, stab, "mode107_stab");
+        int comparisonDefense = BattleKnifeCardRules.GetComparisonPoint(
+            state,
+            defense,
+            5
+        );
+        int comparisonAttack = BattleKnifeCardRules.GetComparisonPoint(
+            state,
+            attack,
+            5
+        );
+        int damage = Damage(owner, Unit("mode107_stab_target", false), stab, 5);
+        return comparisonDefense == 10 && comparisonAttack == 5 && damage == 5;
+    }
+
+    static bool VerifyDoubleSlash(List<CardTestData> cards)
+    {
+        CardTestData doubleSlash = Find(cards, "knife_double_slash_001");
+        CharacterData attacker = Unit("mode107_double_attacker", true);
+        CharacterData target = Unit("mode107_double_target", false);
+        BattleCardState state = new BattleCardState(
+            attacker,
+            FixedCopy(doubleSlash, 4, 4),
+            "mode107_double"
+        );
+        BattleResolutionPlan plan = ActivePlan();
+        BattleImpact impact = new BattleImpact(
+            0,
+            attacker,
+            target,
+            state,
+            4,
+            4,
+            ClashResult.Win,
+            true,
+            true
+        );
+        plan.impacts.Add(impact);
+        int before = target.currentHP;
+        bool committed = BattleResolver.CommitImpact(plan, impact);
+        return Damage(attacker, Unit("mode107_double_math", false), doubleSlash, 4) == 8 &&
+            plan.impacts.Count == 1 && committed &&
+            before - target.currentHP == 8 && impact.committedDamage == 8 &&
+            BattleAngerRules.GetAnger(attacker) == 1 &&
+            impact.hpDisplayStageCount == 2;
+    }
+
+    static bool VerifyHeavy(List<CardTestData> cards)
+    {
+        CardTestData heavy = Find(cards, "knife_heavy_001");
+        bool baseRange = CheckRange(heavy, 0, true, 6, 10);
+        bool oneRange = CheckRange(heavy, 1, true, 8, 12);
+        bool fourRange = CheckRange(heavy, 4, true, 9, 13);
+
+        CharacterData owner = Unit("mode107_heavy", true);
+        BattleAngerRules.AddAnger(owner, 1);
+        BattleCardState state = new BattleCardState(owner, heavy, "mode107_heavy");
+        BattleKnifeCardRules.CaptureActionStart(state);
+        bool snapshotKept = state.preResolutionAnger == 1 &&
+            BattleAngerRules.GetAnger(owner) == 1;
+        BattleCardManager.ApplyCooldownOnResolved(state);
+        bool cooldownOverride = state.currentCooldown == 2 &&
+            state.skipNextTurnEndCooldownTick;
+        BattleAngerRules.AddAnger(owner, 1);
+        BattleKnifeCardRules.FinalizeCompletedInteraction(state);
+        bool gainThenSpend = BattleAngerRules.GetAnger(owner) == 1;
+
+        CharacterData cancelledOwner = Unit("mode107_heavy_cancel", true);
+        BattleAngerRules.AddAnger(cancelledOwner, 2);
+        BattleCardState cancelled = new BattleCardState(
+            cancelledOwner,
+            heavy,
+            "mode107_heavy_cancel"
+        );
+        BattleKnifeCardRules.CaptureActionStart(cancelled);
+        bool cancelledKeeps = BattleAngerRules.GetAnger(cancelledOwner) == 2;
+        return baseRange && oneRange && fourRange && snapshotKept &&
+            cooldownOverride && gainThenSpend && cancelledKeeps;
+    }
+
+    static bool VerifyAdjustBreathing(List<CardTestData> cards)
+    {
+        CardTestData dodge = Find(cards, "dodge_001");
+        CharacterData dodger = Unit("mode107_dodger", false);
+        CharacterData attacker = Unit("mode107_dodge_attacker", false);
+        BattleCardState dodgeState = new BattleCardState(
+            dodger,
+            FixedCopy(dodge, 12, 12),
+            "mode107_dodge"
+        );
+        BattleCardState attackState = new BattleCardState(
+            attacker,
+            FixedAttack("mode107_dodge_attack", 1),
+            "mode107_dodge_attack"
+        );
+        BattleClashSession success = BattleClashSession.CreateDodgeVsAttack(
+            Side(dodger, dodgeState),
+            Side(attacker, attackState),
+            dodger
+        );
+        success.RollNextAttempt();
+        BattleResolutionPlan successPlan = PlanForSession(success, dodgeState, attackState);
+        CompletePlan(successPlan);
+        int rewarded = dodger.GetBuffStack("NextClashPointUp");
+        BattleResolver.TryCommitNextResolutionStep(successPlan, out _);
+        bool exactlyOnce = rewarded == 2 &&
+            dodger.GetBuffStack("NextClashPointUp") == 2;
+
+        CharacterData failedDodger = Unit("mode107_failed_dodger", false);
+        BattleCardState failedDodge = new BattleCardState(
+            failedDodger,
+            FixedCopy(dodge, 1, 1),
+            "mode107_failed_dodge"
+        );
+        BattleClashSession failed = BattleClashSession.CreateDodgeVsAttack(
+            Side(failedDodger, failedDodge),
+            Side(attacker, new BattleCardState(attacker,
+                FixedAttack("mode107_dodge_attack_high", 12), "mode107_high")),
+            failedDodger
+        );
+        failed.RollNextAttempt();
+        CompletePlan(PlanForSession(failed, failedDodge, failed.SideB.cardState));
+        bool failureNoReward = failedDodger.GetBuffStack("NextClashPointUp") == 0;
+        return exactlyOnce && failureNoReward;
+    }
+
+    static bool VerifyIai(List<CardTestData> cards)
+    {
+        CardTestData iai = Find(cards, "sin_iai_001");
+        bool ranges = CheckRange(iai, 0, true, 5, 5) &&
+            CheckRange(iai, 3, true, 5, 12) &&
+            CheckRange(iai, 4, true, 6, 14) &&
+            CheckRange(iai, 5, true, 6, 16);
+        CharacterData owner = Unit("mode107_iai", true);
+        BattleAngerRules.AddAnger(owner, 5);
+        bool damage = Damage(owner, Unit("mode107_iai_target", false), iai, 5) == 6;
+        BattleCardState state = new BattleCardState(owner, iai, "mode107_iai");
+        BattleKnifeCardRules.CaptureActionStart(state);
+        bool retainedBeforeFinish = BattleAngerRules.GetAnger(owner) == 5;
+        BattleCardManager.ApplyCooldownOnResolved(state);
+        BattleKnifeCardRules.FinalizeCompletedInteraction(state);
+        bool clearedAndCooldown = BattleAngerRules.GetAnger(owner) == 0 &&
+            state.currentCooldown == 10 && !state.isConsumed;
+
+        CharacterData tieOwner = Unit("mode107_iai_tie", true);
+        BattleAngerRules.AddAnger(tieOwner, 3);
+        BattleCardState tie = new BattleCardState(tieOwner, iai, "mode107_tie");
+        BattleKnifeCardRules.CaptureActionStart(tie);
+        bool tieKeeps = BattleAngerRules.GetAnger(tieOwner) == 3;
+
+        CharacterData loser = Unit("mode107_iai_loser", true);
+        CharacterData winner = Unit("mode107_iai_winner", false);
+        BattleAngerRules.AddAnger(loser, 5);
+        BattleCardState loserCard = new BattleCardState(
+            loser,
+            FixedCopy(iai, 5, 5),
+            "mode107_iai_loser"
+        );
+        BattleCardState winnerCard = new BattleCardState(
+            winner,
+            FixedAttack("mode107_iai_winner", 6),
+            "mode107_iai_winner"
+        );
+        BattleKnifeCardRules.CaptureActionStart(loserCard);
+        BattleClashSession session = BattleClashSession.CreateAttackVsAttack(
+            Side(loser, loserCard),
+            Side(winner, winnerCard),
+            loser
+        );
+        session.RollNextAttempt();
+        BattleResolutionPlan lossPlan = PlanForSession(session, loserCard, winnerCard);
+        bool contextual = lossPlan.impacts.Count == 1 &&
+            lossPlan.impacts[0].damageMultiplierPercent == 150;
+        CompletePlan(lossPlan);
+        bool lossAppliedThenCleared = lossPlan.CompletedResult.damage == 14 &&
+            BattleAngerRules.GetAnger(loser) == 0;
+
+        CharacterData cancelledOwner = Unit("mode107_iai_cancel", true);
+        BattleAngerRules.AddAnger(cancelledOwner, 2);
+        BattleKnifeCardRules.CaptureActionStart(new BattleCardState(
+            cancelledOwner,
+            iai,
+            "mode107_iai_cancel"
+        ));
+        bool cancelledKeeps = BattleAngerRules.GetAnger(cancelledOwner) == 2;
+        return ranges && damage && retainedBeforeFinish && clearedAndCooldown &&
+            tieKeeps && contextual && lossAppliedThenCleared && cancelledKeeps;
+    }
+
+    static IEnumerator VerifyStagedHp(
+        List<CardTestData> cards,
+        System.Action<bool> complete
+    )
+    {
+        List<int> values = BattleHpUIView.BuildStagedHpValues(100, 91, 2);
+        bool split = values.Count == 2 && values[0] == 96 && values[1] == 91;
+        GameObject root = new GameObject("Mode107StagedHp");
+        BattleHpUIView view = root.AddComponent<BattleHpUIView>();
+        view.SetHp(100, 100);
+        view.BeginStagedHpTransition(100, 100, 2);
+        view.SetHp(91, 100);
+        bool held = view.IsStaging && view.DisplayedHp == 100;
+        view.CompleteStagedHpTransition(91, 100, 0f);
+        bool intermediate = view.IsStaging && view.DisplayedHp == 96;
+        yield return null;
+        bool finished = !view.IsStaging && view.DisplayedHp == 91;
+
+        view.BeginStagedHpTransition(91, 100, 2);
+        view.SetHp(80, 100);
+        view.CancelStagedHpTransition();
+        view.SetHp(80, 100);
+        bool cancelReleased = !view.IsStaging && view.DisplayedHp == 80;
+        Object.Destroy(root);
+
+        CardTestData doubleSlash = Find(cards, "knife_double_slash_001");
+        BattleImpact impact = new BattleImpact(
+            0,
+            Unit("mode107_hp_attacker", false),
+            Unit("mode107_hp_target", false),
+            new BattleCardState(Unit("mode107_hp_owner", false), doubleSlash,
+                "mode107_hp_card"),
+            4,
+            4,
+            ClashResult.Win,
+            true,
+            true
+        );
+        complete(split && held && intermediate && finished && cancelReleased &&
+            impact.hpDisplayStageCount == 2);
+    }
+
+    static bool VerifyRegressions()
+    {
+        bool firstStrike = BattleExecutionPlanFirstStrikePolicyTests.Run();
+        CharacterData owner = Unit("mode107_cd_owner", false);
+        BattleCardState cd1 = new BattleCardState(
+            owner,
+            FixedCard("mode107_cd1", CardType.Defense, 1, 1, 1),
+            "mode107_cd1"
+        );
+        BattleCardState cd2 = new BattleCardState(
+            owner,
+            FixedCard("mode107_cd2", CardType.Dodge, 1, 1, 2),
+            "mode107_cd2"
+        );
+        BattleCardManager.ApplyCooldownOnResolved(cd1);
+        BattleCardManager.ApplyCooldownOnResolved(cd2);
+        bool cooldowns = cd1.currentCooldown == 1 && cd2.currentCooldown == 2 &&
+            cd1.skipNextTurnEndCooldownTick && cd2.skipNextTurnEndCooldownTick;
+        BattleCardState consumed = new BattleCardState(
+            owner,
+            FixedAttack("mode107_consumed", 1),
+            "mode107_consumed"
+        );
+        consumed.isConsumed = true;
+        return firstStrike && cooldowns && !BattleCardManager.CanUseCard(consumed);
+    }
+
+    static BattleResolutionPlan PlanForSession(
+        BattleClashSession session,
+        BattleCardState playerCard,
+        BattleCardState enemyCard
+    )
+    {
+        BattleEnemyIntent intent = new BattleEnemyIntent(
+            "mode107_intent",
+            enemyCard.owner,
+            enemyCard,
+            playerCard.owner,
+            1
+        );
+        BattleActionSlot slot = new BattleActionSlot(playerCard.owner, 1);
+        slot.AssignResponse(playerCard.owner, playerCard, intent, false);
+        return BattleResolver.BuildRespondedClashResolutionPlan(
+            slot,
+            intent,
+            session
+        );
+    }
+
+    static void CompletePlan(BattleResolutionPlan plan)
+    {
+        int guard = 0;
+        while (plan != null && plan.State != BattleResolutionPlanState.Completed &&
+            guard++ < 8)
+        {
+            BattleResolver.TryCommitNextResolutionStep(plan, out _);
+        }
+    }
+
+    static BattleClashSideState Side(CharacterData actor, BattleCardState card)
+    {
+        return new BattleClashSideState(
+            actor,
+            card,
+            new BattleClashPointSnapshot(),
+            new BattleClashResourceSnapshot
+            {
+                cardState = card,
+                selectedMinPoint = card.cardData.minPoint,
+                selectedMaxPoint = card.cardData.maxPoint
+            }
+        );
+    }
+
+    static bool CheckRange(
+        CardTestData card,
+        int anger,
+        bool formalClash,
+        int expectedMin,
+        int expectedMax
+    )
+    {
+        CharacterData owner = Unit("mode107_range_" + anger, true);
+        BattleAngerRules.AddAnger(owner, anger);
+        BattleCardState state = new BattleCardState(owner, card, "mode107_range_card");
+        BattleKnifeCardRules.CaptureActionStart(state);
+        BattleKnifeCardRules.ResolveRuntimePointRange(
+            state,
+            formalClash,
+            out int min,
+            out int max
+        );
+        return min == expectedMin && max == expectedMax;
+    }
+
+    static int CommitDamage(
+        CharacterData attacker,
+        CharacterData target,
+        CardTestData card,
+        int point
+    )
+    {
+        BattleResolutionPlan plan = ActivePlan();
+        BattleImpact impact = new BattleImpact(
+            0,
+            attacker,
+            target,
+            new BattleCardState(attacker, card, "mode107_impact"),
+            point,
+            point,
+            ClashResult.Win,
+            true,
+            true
+        );
+        plan.impacts.Add(impact);
+        BattleResolver.CommitImpact(plan, impact);
+        return impact.committedDamage;
+    }
+
+    static BattleResolutionPlan ActivePlan()
+    {
+        BattleResolutionPlan plan = new BattleResolutionPlan(null, null, null, null);
+        plan.State = BattleResolutionPlanState.Activated;
+        return plan;
+    }
+
+    static int Damage(
+        CharacterData attacker,
+        CharacterData target,
+        CardTestData card,
+        int point
+    )
+    {
+        return BattleCalculator.ConvertScaledDamageToHPDamage(
+            BattleCalculator.GetFinalDamageScaled(attacker, target, card, point)
+        );
+    }
+
+    static CharacterData Unit(string id, bool angerEnabled)
+    {
+        CharacterData unit = new CharacterData(id, 100, 5, 5, id);
+        unit.SetAngerMechanicEnabledForBattle(angerEnabled);
+        return unit;
+    }
+
+    static CardTestData Find(List<CardTestData> cards, string id)
+    {
+        return CardDataLoader.FindCardByID(cards, id);
+    }
+
+    static bool IsCard(
+        CardTestData card,
+        string type,
+        int min,
+        int max,
+        int cooldown,
+        string formula
+    )
+    {
+        return card != null && card.cardType == type && card.minPoint == min &&
+            card.maxPoint == max && card.cooldown == cooldown &&
+            card.damageFormula == formula;
+    }
+
+    static CardTestData FixedAttack(string id, int point)
+    {
+        return FixedCard(id, CardType.Attack, point, point, 0);
+    }
+
+    static CardTestData FixedCard(
+        string id,
+        string type,
+        int min,
+        int max,
+        int cooldown
+    )
+    {
+        return new CardTestData
+        {
+            cardID = id,
+            cardName = id,
+            cardType = type,
+            attackDeliveryMode = AttackDeliveryMode.Melee,
+            isClashable = true,
+            minPoint = min,
+            maxPoint = max,
+            cooldown = cooldown,
+            damageFormula = type == CardType.Attack ? "PointAsDamage" : "",
+            defenseFormula = type == CardType.Defense ? "PointAsDefense" : ""
+        };
+    }
+
+    static CardTestData FixedCopy(CardTestData source, int min, int max)
+    {
+        return new CardTestData
+        {
+            cardID = source.cardID,
+            cardName = source.cardName,
+            cardType = source.cardType,
+            attackDeliveryMode = source.attackDeliveryMode,
+            isClashable = source.isClashable,
+            minPoint = min,
+            maxPoint = max,
+            cooldown = source.cooldown,
+            damageFormula = source.damageFormula,
+            defenseFormula = source.defenseFormula,
+            hpDisplayStageCount = source.hpDisplayStageCount,
+            isSinCard = source.isSinCard,
+            sinCardCategory = source.sinCardCategory,
+            sinCardUseRule = source.sinCardUseRule,
+            traits = source.traits
+        };
+    }
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -454,6 +1052,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleResourceFoundationAndBasicKnife)
         {
             RunBattleResourceFoundationAndBasicKnifeTestSequence(cards);
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleAngerAndKnifeCardsBasic)
+        {
+            StartCoroutine(BattleAngerAndKnifeCardsBasicTests.Run(cards));
             return;
         }
 
@@ -8792,8 +9396,8 @@ public class CardLoadTest : MonoBehaviour
             basicAttack.cardType == CardType.Attack &&
             basicAttack.cooldown == 0;
         results[10] = basicAttack != null &&
-            basicAttack.minPoint == 10 &&
-            basicAttack.maxPoint == 10 &&
+            basicAttack.minPoint == 4 &&
+            basicAttack.maxPoint == 7 &&
             basicAttack.damageFormula == "PointAsDamage";
 
         CardTestData basicDefense = CardDataLoader.FindCardByID(
@@ -8837,7 +9441,7 @@ public class CardLoadTest : MonoBehaviour
             "四种正式资源全部进入公开Buff UI",
             "NextClashPointUp机制保留但UI隐藏",
             "atk_001加载且基础攻击CD为0",
-            "atk_001保持10/10与PointAsDamage",
+            "atk_001更新为4/7与PointAsDamage",
             "def_001保持Defense 2/8 CD1基线",
             "6张手牌全部保持Active",
             "第6张使用normal06",
