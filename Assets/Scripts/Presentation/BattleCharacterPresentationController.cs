@@ -101,6 +101,7 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     public string PresentationKey => presentationKey ?? string.Empty;
     public bool SourceFacesRight => sourceFacesRight;
     public SpriteRenderer CharacterSpriteRenderer => characterSprite;
+    public bool IsPresentationPaused => presentationPaused;
     public float DodgeMotionDuration => Mathf.Max(0f, dodgeDuration);
 
     public BattleCharacterPresentationBindingSnapshot GetBindingSnapshot()
