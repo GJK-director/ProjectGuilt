@@ -116,8 +116,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
     [SerializeField] private BattleUnitViewSpawner unitViewSpawner;
     [SerializeField]
-    private BattleDefaultAttackPresentationPlayer defaultAttackPresentationPlayer;
-    [SerializeField]
     private BattleAttackVsAttackPresentationPlayer attackVsAttackPresentationPlayer;
     [SerializeField]
     private BattleAttackVsGuardPresentationPlayer attackVsGuardPresentationPlayer;
@@ -150,7 +148,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
     void Awake()
     {
-        ResolveDefaultAttackPresentationPlayer();
         ResolveAttackVsAttackPresentationPlayer();
         ValidateAttackVsGuardPresentationPlayer();
         ValidateAttackVsDodgePresentationPlayer();
@@ -161,7 +158,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     public void Initialize(BattleUnitViewSpawner spawner)
     {
         unitViewSpawner = spawner;
-        ResolveDefaultAttackPresentationPlayer();
         ResolveAttackVsAttackPresentationPlayer();
         ValidateAttackVsGuardPresentationPlayer();
         ValidateAttackVsDodgePresentationPlayer();
@@ -4537,15 +4533,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             attackerHandle.WorldRenderer.flipX
                 ? -1f
                 : 1f;
-    }
-
-    private void ResolveDefaultAttackPresentationPlayer()
-    {
-        if (defaultAttackPresentationPlayer == null)
-        {
-            defaultAttackPresentationPlayer =
-                GetComponent<BattleDefaultAttackPresentationPlayer>();
-        }
     }
 
     private void ResolveAttackVsAttackPresentationPlayer()

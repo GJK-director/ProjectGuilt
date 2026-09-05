@@ -3237,7 +3237,6 @@ GameObject:
   m_Component:
   - component: {fileID: 833021970}
   - component: {fileID: 833021969}
-  - component: {fileID: 833021971}
   - component: {fileID: 833021972}
   - component: {fileID: 833021973}
   - component: {fileID: 833021974}
@@ -3261,7 +3260,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleSceneExecutionPresenter
   unitViewSpawner: {fileID: 0}
-  defaultAttackPresentationPlayer: {fileID: 0}
   attackVsAttackPresentationPlayer: {fileID: 833021972}
   attackVsGuardPresentationPlayer: {fileID: 833021973}
   attackVsDodgePresentationPlayer: {fileID: 833021974}
@@ -3286,22 +3284,6 @@ Transform:
   - {fileID: 705466853}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &833021971
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 833021968}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 92368c41af7d4df08d35e602715ca9be, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::BattleDefaultAttackPresentationPlayer
-  preAttackHoldDuration: 0.12
-  postImpactHoldDuration: 0.16
-  hitStopDuration: 0.08
-  minimumAttackPresentationDuration: 0.2
 --- !u!114 &833021972
 MonoBehaviour:
   m_ObjectHideFlags: 0
