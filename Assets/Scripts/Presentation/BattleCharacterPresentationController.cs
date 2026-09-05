@@ -42,7 +42,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     [SerializeField] private Transform closeRangeMuzzleFlashAnchor;
     [SerializeField] private SpriteRenderer closeRangeMuzzleFlashEffect;
     [SerializeField] private float muzzleFlashDuration = 0.08f;
-    [SerializeField] private SpriteRenderer perfectGuardEffect;
     [SerializeField] private SpriteRenderer slashBackEffect;
     [SerializeField] private SpriteRenderer slashFrontEffect;
     [SerializeField] private float slashEffectFadeInDuration = 0.05f;
@@ -68,8 +67,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     [SerializeField] private float guardShakeAmplitude = 0.025f;
     [SerializeField] private float guardShakeDuration = 0.10f;
     [SerializeField] private float guardHoldDuration = 0.10f;
-    [SerializeField] private float perfectGuardEffectHoldDuration = 0.06f;
-    [SerializeField] private float perfectGuardEffectFadeOutDuration = 0.10f;
     [SerializeField] private float dodgeHorizontalDistance = 0.20f;
     [SerializeField] private float dodgeDuration = 0.30f;
 
@@ -92,8 +89,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     private Color slashFrontOriginalColor;
     private bool slashBackStateCached;
     private bool slashFrontStateCached;
-    private Color perfectGuardEffectOriginalColor;
-    private bool perfectGuardEffectStateCached;
     private bool presentationPaused;
     private readonly List<ActiveAfterimage> activeAfterimages =
         new List<ActiveAfterimage>();
@@ -125,7 +120,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
                 closeRangeMuzzleFlashAnchor != null,
             HasCloseRangeMuzzleFlashEffect =
                 closeRangeMuzzleFlashEffect != null,
-            HasPerfectGuardEffect = perfectGuardEffect != null,
             HasSlashBackEffect = slashBackEffect != null,
             HasSlashFrontEffect = slashFrontEffect != null
         };
@@ -162,11 +156,9 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         ApplyBodyVisualOffset();
         ApplyBodyVisualRotation();
         CacheSlashEffectState();
-        CachePerfectGuardEffectState();
         SetIdle();
         ClearMuzzleFlashVisual();
         ClearSlashEffect();
-        ClearPerfectGuardEffect();
     }
 
     void OnDisable()
@@ -176,7 +168,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         ClearAfterimages();
         CancelMuzzleFlash();
         ClearSlashEffect();
-        ClearPerfectGuardEffect();
         ClearHitTint();
         SetIdle();
     }
@@ -238,7 +229,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         ClearAfterimages();
         CancelMuzzleFlash();
         ClearSlashEffect();
-        ClearPerfectGuardEffect();
         ClearHitTint();
         SetIdle();
     }
@@ -335,26 +325,9 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
     {
         // Guard正常结束后关闭瞬时反馈，但保留最后的Guard Pose。
         presentationPaused = false;
-        ClearPerfectGuardEffect();
         bodyMotionOffset = Vector3.zero;
         bodyShakeOffset = Vector3.zero;
         ApplyBodyVisualOffset();
-    }
-
-    public void ClearPerfectGuardEffect()
-    {
-        CachePerfectGuardEffectState();
-        if (perfectGuardEffect == null)
-        {
-            return;
-        }
-
-        if (perfectGuardEffectStateCached)
-        {
-            perfectGuardEffect.color = perfectGuardEffectOriginalColor;
-        }
-
-        perfectGuardEffect.enabled = false;
     }
 
     public void ClearBodyVisualOffsets()
@@ -1017,29 +990,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         ApplyBodyVisualOffset();
     }
 
-    public IEnumerator PlayPerfectGuardEffect()
-    {
-        CachePerfectGuardEffectState();
-        if (!perfectGuardEffectStateCached || perfectGuardEffect == null)
-        {
-            yield break;
-        }
-
-        SetPerfectGuardEffectAlpha(1f);
-        perfectGuardEffect.enabled = true;
-
-        yield return WaitForPerfectGuardEffect(
-            perfectGuardEffectHoldDuration
-        );
-        yield return RunPerfectGuardEffectPhase(
-            perfectGuardEffectFadeOutDuration,
-            1f,
-            0f
-        );
-
-        ClearPerfectGuardEffect();
-    }
-
     private IEnumerator PlayHitReactionInternal(
         Transform worldRoot,
         float recoilDirectionSign,
@@ -1608,93 +1558,6 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
             slashFrontOriginalColor = slashFrontEffect.color;
             slashFrontStateCached = true;
         }
-    }
-
-    private void CachePerfectGuardEffectState()
-    {
-        if (perfectGuardEffectStateCached || perfectGuardEffect == null)
-        {
-            return;
-        }
-
-        perfectGuardEffectOriginalColor = perfectGuardEffect.color;
-        perfectGuardEffectStateCached = true;
-    }
-
-    private IEnumerator RunPerfectGuardEffectPhase(
-        float duration,
-        float startAlpha,
-        float targetAlpha
-    )
-    {
-        float safeDuration = Mathf.Max(0f, duration);
-        if (safeDuration <= 0f)
-        {
-            SetPerfectGuardEffectAlpha(targetAlpha);
-            yield break;
-        }
-
-        float elapsed = 0f;
-        while (elapsed < safeDuration)
-        {
-            if (!isActiveAndEnabled || perfectGuardEffect == null)
-            {
-                ClearPerfectGuardEffect();
-                yield break;
-            }
-
-            if (presentationPaused)
-            {
-                yield return null;
-                continue;
-            }
-
-            elapsed = Mathf.Min(safeDuration, elapsed + Time.deltaTime);
-            float easedT = BattlePresentationEasing.EaseOutQuad(
-                elapsed / safeDuration
-            );
-            SetPerfectGuardEffectAlpha(
-                startAlpha + (targetAlpha - startAlpha) * easedT
-            );
-            yield return null;
-        }
-
-        SetPerfectGuardEffectAlpha(targetAlpha);
-    }
-
-    private IEnumerator WaitForPerfectGuardEffect(float duration)
-    {
-        float safeDuration = Mathf.Max(0f, duration);
-        float elapsed = 0f;
-        while (elapsed < safeDuration)
-        {
-            if (!isActiveAndEnabled || perfectGuardEffect == null)
-            {
-                ClearPerfectGuardEffect();
-                yield break;
-            }
-
-            if (presentationPaused)
-            {
-                yield return null;
-                continue;
-            }
-
-            elapsed = Mathf.Min(safeDuration, elapsed + Time.deltaTime);
-            yield return null;
-        }
-    }
-
-    private void SetPerfectGuardEffectAlpha(float alpha)
-    {
-        if (!perfectGuardEffectStateCached || perfectGuardEffect == null)
-        {
-            return;
-        }
-
-        Color color = perfectGuardEffectOriginalColor;
-        color.a *= Mathf.Clamp01(alpha);
-        perfectGuardEffect.color = color;
     }
 
     private void ApplySlashEffectShake(float elapsed)

@@ -630,12 +630,10 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
     {
         attacker.SetPresentationPaused(false);
         attacker.ClearSlashEffect();
-        attacker.ClearPerfectGuardEffect();
         attacker.ClearBodyVisualOffsets();
 
         defender.SetPresentationPaused(false);
         defender.ClearSlashEffect();
-        defender.ClearPerfectGuardEffect();
         defender.ClearBodyVisualOffsets();
     }
 
@@ -658,7 +656,6 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         if (defender != null)
         {
             defender.SetPresentationPaused(false);
-            defender.ClearPerfectGuardEffect();
             defender.FinishGuardPresentation();
         }
     }

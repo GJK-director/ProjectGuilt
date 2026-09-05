@@ -101,7 +101,6 @@ public sealed class BattleCharacterPresentationBindingSnapshot
     public bool HasLongRangeMuzzleFlashEffect;
     public bool HasCloseRangeMuzzleFlashAnchor;
     public bool HasCloseRangeMuzzleFlashEffect;
-    public bool HasPerfectGuardEffect;
     public bool HasSlashBackEffect;
     public bool HasSlashFrontEffect;
 }

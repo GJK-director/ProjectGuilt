@@ -671,7 +671,6 @@ MonoBehaviour:
   closeRangeMuzzleFlashAnchor: {fileID: 4947219310612981021}
   closeRangeMuzzleFlashEffect: {fileID: 3749156857363774611}
   muzzleFlashDuration: 0.08
-  perfectGuardEffect: {fileID: 0}
   slashBackEffect: {fileID: 810000000000000003}
   slashFrontEffect: {fileID: 810000000000000013}
   slashEffectFadeInDuration: 0.05
@@ -696,8 +695,6 @@ MonoBehaviour:
   guardShakeAmplitude: 0.025
   guardShakeDuration: 0.1
   guardHoldDuration: 0.1
-  perfectGuardEffectHoldDuration: 0.06
-  perfectGuardEffectFadeOutDuration: 0.1
   dodgeHorizontalDistance: 0.2
   dodgeDuration: 0.3
 --- !u!1 &6613608314988572749

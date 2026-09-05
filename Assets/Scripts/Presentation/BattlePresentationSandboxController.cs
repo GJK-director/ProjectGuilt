@@ -314,7 +314,6 @@ public sealed class BattlePresentationSandboxController : MonoBehaviour
             character.ClearBodyVisualOffsets();
             character.ClearAfterimages();
             character.ClearSlashEffect();
-            character.ClearPerfectGuardEffect();
             character.SetIdle();
         }
 
