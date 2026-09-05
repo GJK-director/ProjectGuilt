@@ -8,6 +8,7 @@ public class BattleCardManualLayout : MonoBehaviour
     [SerializeField] private RectTransform normal03;
     [SerializeField] private RectTransform normal04;
     [SerializeField] private RectTransform normal05;
+    [SerializeField] private RectTransform normal06;
 
     [SerializeField] private bool matchSlotSize = true;
     [SerializeField] private bool matchSlotRotation = true;
@@ -26,7 +27,8 @@ public class BattleCardManualLayout : MonoBehaviour
             normal04,
             normal02,
             normal05,
-            normal01
+            normal01,
+            normal06
         };
 
         List<RectTransform> placedCards = new List<RectTransform>();
@@ -42,7 +44,7 @@ public class BattleCardManualLayout : MonoBehaviour
 
             if (i >= placementOrder.Length)
             {
-                Debug.LogWarning("BattleCardManualLayout 当前最多显示5张手牌，超出的卡牌已隐藏。");
+                Debug.LogWarning("BattleCardManualLayout 当前最多显示6张手牌，超出的卡牌已隐藏。");
                 cardView.gameObject.SetActive(false);
                 continue;
             }

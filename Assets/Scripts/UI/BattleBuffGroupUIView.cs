@@ -29,7 +29,10 @@ public class BattleBuffGroupUIView : MonoBehaviour
     private static readonly HashSet<string> PubliclyVisibleBuffIDs =
         new HashSet<string>(StringComparer.Ordinal)
         {
-            "Bullet"
+            BattleResourceID.Bullet,
+            BattleResourceID.Anger,
+            BattleResourceID.Modification,
+            BattleResourceID.Conservation
         };
 
     [SerializeField] private BattleBuffIconBinding[] buffBindings;

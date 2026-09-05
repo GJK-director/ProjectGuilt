@@ -9,7 +9,7 @@
     "isClashable": true,
     "minPoint": 10,
     "maxPoint": 10,
-    "cooldown": 1,
+    "cooldown": 0,
     "guiltCost": 0,
     "isSinCard": false,
     "damageFormula": "PointAsDamage",

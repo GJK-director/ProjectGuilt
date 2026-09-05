@@ -13,6 +13,15 @@ public static class CardType
     public const string Dodge = "Dodge";
 }
 
+// BattleResourceID = 由 CharacterData.buffs 承载的稳定战斗资源标识。
+public static class BattleResourceID
+{
+    public const string Bullet = "Bullet";
+    public const string Anger = "Anger";
+    public const string Modification = "Modification";
+    public const string Conservation = "Conservation";
+}
+
 // AttackDeliveryMode = Attack 卡的空间 / 演出兑现方式常量表。
 // 它与 CardType 正交，不改变攻击、防御、闪避的规则分类。
 public static class AttackDeliveryMode

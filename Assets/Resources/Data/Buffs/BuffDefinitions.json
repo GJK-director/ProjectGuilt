@@ -84,6 +84,42 @@
     "description": "子弹是一种常驻战斗资源；卡牌可以按规则检查、加成或消耗其层数。"
   },
   {
+    "buffID": "Anger",
+    "buffName": "愤怒",
+    "buffCategory": "AbilityBuff",
+    "effectType": "Resource",
+    "targetStat": "Anger",
+    "valuePerStack": 1,
+    "defaultCheckTiming": "None",
+    "defaultExpireRule": "Permanent",
+    "consumeRule": "None",
+    "description": "愤怒是一种常驻战斗状态资源，具体阶段效果由对应战斗规则处理。"
+  },
+  {
+    "buffID": "Modification",
+    "buffName": "改装",
+    "buffCategory": "AbilityBuff",
+    "effectType": "Resource",
+    "targetStat": "Modification",
+    "valuePerStack": 1,
+    "defaultCheckTiming": "None",
+    "defaultExpireRule": "Permanent",
+    "consumeRule": "None",
+    "description": "改装是一种常驻战斗状态资源，具体阶段效果由对应战斗规则处理。"
+  },
+  {
+    "buffID": "Conservation",
+    "buffName": "节约",
+    "buffCategory": "AbilityBuff",
+    "effectType": "Resource",
+    "targetStat": "Conservation",
+    "valuePerStack": 1,
+    "defaultCheckTiming": "None",
+    "defaultExpireRule": "Permanent",
+    "consumeRule": "None",
+    "description": "节约是一种常驻战斗状态资源，具体阶段效果由对应战斗规则处理。"
+  },
+  {
     "buffID": "GuardUp",
     "buffName": "守势",
     "buffCategory": "UpBuff",

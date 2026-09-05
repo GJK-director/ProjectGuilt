@@ -90,7 +90,8 @@ public enum BattleTestMode
     CharacterPresentationBindingContractBasic = 102,
     FullBattleIntegrationRegressionBasic = 103,
     BattleActionRollPanelLifecycleBasic = 104,
-    BattleCardCommonRulesPhaseOneBasic = 105
+    BattleCardCommonRulesPhaseOneBasic = 105,
+    BattleResourceFoundationAndBasicKnife = 106
 }
 
 public class CardLoadTest : MonoBehaviour
@@ -447,6 +448,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleCardCommonRulesPhaseOneBasic)
         {
             RunBattleCardCommonRulesPhaseOneBasicTestSequence();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleResourceFoundationAndBasicKnife)
+        {
+            RunBattleResourceFoundationAndBasicKnifeTestSequence(cards);
             return;
         }
 
@@ -8662,6 +8669,369 @@ public class CardLoadTest : MonoBehaviour
         }
 
         return -1;
+    }
+
+    void RunBattleResourceFoundationAndBasicKnifeTestSequence(
+        List<CardTestData> cards
+    )
+    {
+        bool[] results = new bool[16];
+        BuffDefinitionLoader.ClearCacheForTest();
+        List<BuffDefinitionData> definitions =
+            BuffDefinitionLoader.LoadBuffDefinitions();
+
+        results[0] = IsMode106ResourceDefinition(
+            definitions,
+            BattleResourceID.Bullet,
+            "子弹"
+        );
+        results[1] = IsMode106ResourceDefinition(
+            definitions,
+            BattleResourceID.Anger,
+            "愤怒"
+        );
+        results[2] = IsMode106ResourceDefinition(
+            definitions,
+            BattleResourceID.Modification,
+            "改装"
+        );
+        results[3] = IsMode106ResourceDefinition(
+                definitions,
+                BattleResourceID.Conservation,
+                "节约"
+            ) &&
+            AreBuffDefinitionIDsUnique(definitions);
+
+        CharacterData resourceCharacter = new CharacterData(
+            "mode106_resource_owner",
+            30,
+            5,
+            5
+        );
+        resourceCharacter.AddBuff(
+            BattleResourceID.Anger,
+            3,
+            -1
+        );
+        results[4] = resourceCharacter.GetBuffStack(
+            BattleResourceID.Anger
+        ) == 3;
+
+        int consumedAmount;
+        results[5] = resourceCharacter.TryConsumeBuffStackAsResource(
+                BattleResourceID.Anger,
+                1,
+                out consumedAmount
+            ) &&
+            consumedAmount == 1 &&
+            resourceCharacter.GetBuffStack(BattleResourceID.Anger) == 2;
+
+        resourceCharacter.AddBuff(BattleResourceID.Bullet, 3, -1);
+        resourceCharacter.AddBuff(
+            BattleResourceID.Modification,
+            1,
+            -1
+        );
+        resourceCharacter.AddBuff(
+            BattleResourceID.Conservation,
+            1,
+            -1
+        );
+        bool spentModification =
+            resourceCharacter.TryConsumeBuffStackAsResource(
+                BattleResourceID.Modification,
+                1,
+                out consumedAmount
+            );
+        results[6] = spentModification && consumedAmount == 1 &&
+            resourceCharacter.GetBuffStack(BattleResourceID.Bullet) == 3 &&
+            resourceCharacter.GetBuffStack(BattleResourceID.Anger) == 2 &&
+            resourceCharacter.GetBuffStack(
+                BattleResourceID.Modification
+            ) == 0 &&
+            resourceCharacter.GetBuffStack(
+                BattleResourceID.Conservation
+            ) == 1;
+
+        Mode70BuffTestContext buffContext =
+            CreateMode70BuffTestContext(false);
+        CharacterData buffCharacter = buffContext.character;
+        buffCharacter.AddBuff(BattleResourceID.Bullet, 1, -1);
+        buffCharacter.AddBuff(BattleResourceID.Anger, 2, -1);
+        buffCharacter.AddBuff(BattleResourceID.Modification, 3, -1);
+        buffCharacter.AddBuff(BattleResourceID.Conservation, 4, -1);
+        buffContext.groupView.SetCharacter(buffCharacter);
+        results[7] = CountMode70ActiveSlots(buffContext.groupView) == 4 &&
+            GetMode70StackText(
+                buffContext.groupView.GetSlotForTesting(0)
+            ).text == "1" &&
+            GetMode70StackText(
+                buffContext.groupView.GetSlotForTesting(1)
+            ).text == "2" &&
+            GetMode70StackText(
+                buffContext.groupView.GetSlotForTesting(2)
+            ).text == "3" &&
+            GetMode70StackText(
+                buffContext.groupView.GetSlotForTesting(3)
+            ).text == "4";
+
+        buffCharacter.AddBuff("NextClashPointUp", 5, 1);
+        buffContext.groupView.SetCharacter(buffCharacter);
+        results[8] = buffCharacter.GetBuffStack(
+                "NextClashPointUp"
+            ) == 5 &&
+            CountMode70ActiveSlots(buffContext.groupView) == 4;
+
+        CardTestData basicAttack = CardDataLoader.FindCardByID(
+            cards,
+            "atk_001"
+        );
+        results[9] = cards != null &&
+            basicAttack != null &&
+            basicAttack.cardName == "基础攻击" &&
+            basicAttack.cardType == CardType.Attack &&
+            basicAttack.cooldown == 0;
+        results[10] = basicAttack != null &&
+            basicAttack.minPoint == 10 &&
+            basicAttack.maxPoint == 10 &&
+            basicAttack.damageFormula == "PointAsDamage";
+
+        CardTestData basicDefense = CardDataLoader.FindCardByID(
+            cards,
+            "def_001"
+        );
+        results[11] = basicDefense != null &&
+            basicDefense.cardType == CardType.Defense &&
+            basicDefense.minPoint == 2 &&
+            basicDefense.maxPoint == 8 &&
+            basicDefense.cooldown == 1 &&
+            basicDefense.defenseFormula == "PointAsDefense";
+
+        Mode106HandLayoutTestContext handContext =
+            CreateMode106HandLayoutTestContext();
+        handContext.layout.ApplyLayout(handContext.cardViews);
+        results[12] = handContext.referencesConfigured &&
+            AreMode106CardViewsActive(handContext.cardViews, 0, 6);
+        RectTransform sixthCardRect =
+            handContext.cardViews[5].transform as RectTransform;
+        results[13] = sixthCardRect != null &&
+            sixthCardRect.anchoredPosition ==
+                handContext.placementSlots[5].anchoredPosition &&
+            sixthCardRect.localRotation ==
+                handContext.placementSlots[5].localRotation;
+        results[14] =
+            AreMode106CardViewsActive(handContext.cardViews, 0, 6) &&
+            !handContext.cardViews[6].gameObject.activeSelf;
+        results[15] = handContext.owner.battleCards != null &&
+            handContext.owner.battleCards.Count == 7;
+
+        string[] names =
+        {
+            "Bullet正式Resource Definition",
+            "Anger正式Resource Definition",
+            "Modification正式Resource Definition",
+            "Conservation正式Definition且buffID无重复",
+            "Anger可Add并按稳定ID查询",
+            "Anger可通过现有资源接口Spend",
+            "四种资源Stack互不污染",
+            "四种正式资源全部进入公开Buff UI",
+            "NextClashPointUp机制保留但UI隐藏",
+            "atk_001加载且基础攻击CD为0",
+            "atk_001保持10/10与PointAsDamage",
+            "def_001保持Defense 2/8 CD1基线",
+            "6张手牌全部保持Active",
+            "第6张使用normal06",
+            "第7张手牌隐藏",
+            "CharacterData可持有7张卡且无6张硬上限"
+        };
+
+        bool allPassed = true;
+        for (int index = 0; index < results.Length; index++)
+        {
+            Debug.Log(
+                "模式106 Case " + (index + 1) + " " +
+                names[index] + "：" + results[index]
+            );
+            allPassed &= results[index];
+        }
+
+        Debug.Log(
+            "===== Mode106 BattleResourceFoundationAndBasicKnife ====="
+        );
+        Debug.Log("资源定义通过：" +
+            (results[0] && results[1] && results[2] && results[3]));
+        Debug.Log("资源Stack通过：" +
+            (results[4] && results[5] && results[6]));
+        Debug.Log("Buff公开白名单通过：" +
+            (results[7] && results[8]));
+        Debug.Log("基础攻击数据通过：" +
+            (results[9] && results[10]));
+        Debug.Log("基础防御回归通过：" + results[11]);
+        Debug.Log("6卡UI通过：" +
+            (results[12] && results[13]));
+        Debug.Log("第7张隐藏通过：" + results[14]);
+        Debug.Log("Passed: " + allPassed);
+
+        DestroyMode70BuffTestContext(buffContext);
+        Destroy(handContext.rootObject);
+    }
+
+    bool IsMode106ResourceDefinition(
+        List<BuffDefinitionData> definitions,
+        string resourceID,
+        string expectedName
+    )
+    {
+        BuffDefinitionData definition = GetBuffDefinition(
+            definitions,
+            resourceID
+        );
+        return definition != null &&
+            definition.buffID == resourceID &&
+            definition.buffName == expectedName &&
+            definition.buffCategory == BuffCategory.AbilityBuff &&
+            definition.effectType == "Resource" &&
+            definition.targetStat == resourceID &&
+            definition.valuePerStack == 1f &&
+            definition.defaultCheckTiming == "None" &&
+            definition.defaultExpireRule == "Permanent" &&
+            definition.consumeRule == "None";
+    }
+
+    sealed class Mode106HandLayoutTestContext
+    {
+        public GameObject rootObject;
+        public BattleCardManualLayout layout;
+        public CharacterData owner;
+        public List<RectTransform> placementSlots;
+        public List<BattleCardUIView> cardViews;
+        public bool referencesConfigured;
+    }
+
+    Mode106HandLayoutTestContext CreateMode106HandLayoutTestContext()
+    {
+        Mode106HandLayoutTestContext context =
+            new Mode106HandLayoutTestContext
+            {
+                rootObject = new GameObject(
+                    "Mode106HandLayout",
+                    typeof(RectTransform)
+                ),
+                placementSlots = new List<RectTransform>(),
+                cardViews = new List<BattleCardUIView>(),
+                owner = new CharacterData(
+                    "mode106_hand_owner",
+                    30,
+                    5,
+                    5
+                )
+            };
+        context.rootObject.SetActive(false);
+        context.layout =
+            context.rootObject.AddComponent<BattleCardManualLayout>();
+
+        for (int index = 0; index < 6; index++)
+        {
+            GameObject slotObject = new GameObject(
+                "Mode106Normal_0" + (index + 1),
+                typeof(RectTransform)
+            );
+            slotObject.transform.SetParent(
+                context.rootObject.transform,
+                false
+            );
+            RectTransform slot =
+                slotObject.GetComponent<RectTransform>();
+            slot.anchoredPosition = new Vector2(
+                -250f + index * 100f,
+                -Mathf.Abs(index - 2.5f) * 10f
+            );
+            slot.localRotation = Quaternion.Euler(
+                0f,
+                0f,
+                -6f + index * 2f
+            );
+            context.placementSlots.Add(slot);
+        }
+
+        string[] fieldNames =
+        {
+            "normal01",
+            "normal02",
+            "normal03",
+            "normal04",
+            "normal05",
+            "normal06"
+        };
+        bool layoutConfigured = true;
+        for (int index = 0; index < fieldNames.Length; index++)
+        {
+            layoutConfigured &= SetMode64PrivateField(
+                context.layout,
+                fieldNames[index],
+                context.placementSlots[index]
+            );
+        }
+
+        for (int index = 0; index < 7; index++)
+        {
+            BattleCardState cardState = CreateMode86AttackCard(
+                context.owner,
+                "mode106_hand_card_" + (index + 1),
+                index + 1,
+                false
+            );
+            GameObject cardObject = new GameObject(
+                "Mode106CardView_" + (index + 1),
+                typeof(RectTransform)
+            );
+            cardObject.transform.SetParent(
+                context.rootObject.transform,
+                false
+            );
+            BattleCardUIView cardView =
+                cardObject.AddComponent<BattleCardUIView>();
+            cardView.BindCard(
+                context.owner,
+                cardState,
+                BattleCardUIPreviewBuilder.Build(
+                    context.owner,
+                    context.owner,
+                    cardState
+                )
+            );
+            context.cardViews.Add(cardView);
+        }
+
+        context.referencesConfigured = layoutConfigured;
+        context.rootObject.SetActive(true);
+        return context;
+    }
+
+    bool AreMode106CardViewsActive(
+        List<BattleCardUIView> cardViews,
+        int startIndex,
+        int count
+    )
+    {
+        if (cardViews == null || startIndex < 0 || count < 0 ||
+            startIndex + count > cardViews.Count)
+        {
+            return false;
+        }
+
+        for (int index = startIndex;
+            index < startIndex + count;
+            index++)
+        {
+            if (cardViews[index] == null ||
+                !cardViews[index].gameObject.activeSelf)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     sealed class Mode70BuffTestContext
@@ -20047,7 +20417,7 @@ public class CardLoadTest : MonoBehaviour
         BuffDefinitionLoader.ClearCacheForTest();
         List<BuffDefinitionData> definitions = BuffDefinitionLoader.LoadBuffDefinitions();
 
-        bool loaded13 = definitions != null && definitions.Count == 13;
+        bool loaded16 = definitions != null && definitions.Count == 16;
         bool uniqueIDs = AreBuffDefinitionIDsUnique(definitions);
         bool requiredFieldsFilled = AreBuffDefinitionRequiredFieldsFilled(definitions);
         bool speedDownName = GetBuffDefinition(definitions, "SpeedDown") != null &&
@@ -20061,7 +20431,7 @@ public class CardLoadTest : MonoBehaviour
             GetBuffDefinition(definitions, "NextCardPointUp") != null &&
             GetBuffDefinition(definitions, "NextCardPointUp").buffCategory == BuffCategory.UpBuff;
 
-        Debug.Log("BuffDefinitions加载13种：" + loaded13);
+        Debug.Log("BuffDefinitions加载16种：" + loaded16);
         Debug.Log("Buff定义ID无重复：" + uniqueIDs);
         Debug.Log("Buff定义必填字段不为空：" + requiredFieldsFilled);
         Debug.Log("SpeedDown名称为缓慢：" + speedDownName);
@@ -20191,7 +20561,7 @@ public class CardLoadTest : MonoBehaviour
             BuffDefinitionLoader.GetDefinition("AbilityPower") == null &&
             legacyCharacter.GetBuffStack("AbilityPower") == 1 &&
             legacyCharacter.GetActiveBuffBatches("AbilityPower").Count == 1 &&
-            loaded13;
+            loaded16;
         Debug.Log("Legacy AbilityPower兼容：" + legacyWorked);
 
         CharacterData copyCharacter = CreateBuffDataLayerCharacter("buff_layer_copy");
