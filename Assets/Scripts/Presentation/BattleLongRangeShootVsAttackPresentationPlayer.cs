@@ -9,8 +9,7 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
     {
         None,
         TerminalClash,
-        ShotHit,
-        ResponseWinner
+        ShotHit
     }
 
     public bool IsRunning { get; private set; }
@@ -24,7 +23,6 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
     private BattleCharacterPresentationController shooter;
     private BattleCharacterPresentationController meleeActor;
     private BattleCharacterPresentationController hitTarget;
-    private BattleCharacterPresentationController responseWinner;
     private Transform hitTargetWorldRoot;
     private Action onTrueVisualImpact;
     private Action onVisualImpact;
@@ -36,7 +34,6 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
     private bool deflectionSlashFinished;
     private bool hitReactionFinished;
     private bool visualImpactInvoked;
-    private bool responseMotionFinished;
     private bool playShotVisual;
     private bool shotVisualFinished;
     private int playbackVersion;
@@ -261,66 +258,6 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         return true;
     }
 
-    public bool TryPlayGuardWinner(
-        BattleCharacterPresentationController guardController,
-        float attackDirectionSign,
-        BattleAttackVsGuardPresentationProfile perfectGuardFxProfile,
-        Action finishedCallback
-    )
-    {
-        if (IsRunning || guardController == null)
-        {
-            return false;
-        }
-
-        BeginResponseWinner(guardController, finishedCallback);
-        int version = playbackVersion;
-        responseWinner.SetGuard();
-        responseMotionFinished = false;
-        bool fxStarted = BattlePerfectGuardFxPlayer.TrySpawn(
-            perfectGuardFxProfile,
-            responseWinner,
-            attackDirectionSign,
-            completion: () =>
-            {
-                if (this != null)
-                {
-                    MarkResponseMotionFinished(version);
-                }
-            },
-            isPlaybackCurrent: () => this != null &&
-                isActiveAndEnabled && IsCurrentPlayback(version)
-        );
-        if (!fxStarted)
-        {
-            responseMotionFinished = true;
-        }
-        playbackCoroutine = StartCoroutine(RunResponseWinner(version, true));
-        return true;
-    }
-
-    public bool TryPlayDodgeWinner(
-        BattleCharacterPresentationController dodgeController,
-        float directionSign,
-        Action finishedCallback
-    )
-    {
-        if (IsRunning || dodgeController == null)
-        {
-            return false;
-        }
-
-        BeginResponseWinner(dodgeController, finishedCallback);
-        int version = playbackVersion;
-        responseWinner.SetDodge();
-        responseMotionFinished = !responseWinner.PlayDodgeMotion(
-            directionSign,
-            () => MarkResponseMotionFinished(version)
-        );
-        playbackCoroutine = StartCoroutine(RunResponseWinner(version, false));
-        return true;
-    }
-
     public void CancelAndReset()
     {
         playbackVersion++;
@@ -431,53 +368,6 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         hitReactionCoroutine = null;
     }
 
-    private IEnumerator RunResponseWinner(int version, bool isGuard)
-    {
-        // Guard至少保留到下一帧；Dodge等待角色层真实Motion结束。
-        yield return null;
-        while (IsCurrentPlayback(version) && !responseMotionFinished)
-        {
-            yield return null;
-        }
-
-        if (!IsCurrentPlayback(version))
-        {
-            yield break;
-        }
-
-        if (isGuard)
-        {
-            responseWinner?.FinishGuardPresentation();
-        }
-        else
-        {
-            responseWinner?.FinishDodgePresentation();
-        }
-        FinishNormally(version);
-    }
-
-    private void BeginResponseWinner(
-        BattleCharacterPresentationController winnerController,
-        Action finishedCallback
-    )
-    {
-        playbackStage = PlaybackStage.ResponseWinner;
-        responseWinner = winnerController;
-        onFinished = finishedCallback;
-        responseMotionFinished = false;
-        IsRunning = true;
-        IsFinished = false;
-        playbackVersion++;
-    }
-
-    private void MarkResponseMotionFinished(int version)
-    {
-        if (IsCurrentPlayback(version))
-        {
-            responseMotionFinished = true;
-        }
-    }
-
     private void MarkMuzzleFlashFinished(int version)
     {
         if (IsCurrentPlayback(version))
@@ -534,7 +424,6 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         shooter?.ResetToStableIdlePresentation();
         meleeActor?.ResetToStableIdlePresentation();
         hitTarget?.ResetToStableIdlePresentation();
-        responseWinner?.ResetToStableIdlePresentation();
     }
 
     private void StopOwnedCoroutines()
@@ -562,7 +451,6 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         shooter = null;
         meleeActor = null;
         hitTarget = null;
-        responseWinner = null;
         hitTargetWorldRoot = null;
         onTrueVisualImpact = null;
         onVisualImpact = null;
@@ -574,7 +462,6 @@ public sealed class BattleLongRangeShootVsAttackPresentationPlayer : MonoBehavio
         deflectionSlashFinished = false;
         hitReactionFinished = false;
         visualImpactInvoked = false;
-        responseMotionFinished = false;
         playShotVisual = false;
         shotVisualFinished = false;
         specialShotHitProfile = null;

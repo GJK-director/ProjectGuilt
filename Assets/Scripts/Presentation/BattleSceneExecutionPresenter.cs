@@ -103,8 +103,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         public bool LongRangeShotImpactReached;
         public bool LongRangeShotImpactFinished;
         public long LongRangeShotImpactRequestId;
-        public bool LongRangeResponseImpactStarted;
-        public long LongRangeResponseImpactRequestId;
         public bool LongRangeCameraFocusActive;
         public bool SpecialLongRangeDuelPreRollActive;
 
@@ -298,11 +296,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 attackVsDodgePresentationPlayer.CancelAndReset();
             }
             if (activeContext.LongRangeShotImpactStarted &&
-                longRangeShootVsAttackPresentationPlayer != null)
-            {
-                longRangeShootVsAttackPresentationPlayer.CancelAndReset();
-            }
-            if (activeContext.LongRangeResponseImpactStarted &&
                 longRangeShootVsAttackPresentationPlayer != null)
             {
                 longRangeShootVsAttackPresentationPlayer.CancelAndReset();
@@ -1244,16 +1237,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     private static bool IsLongRangeOpponentCard(BattleCardState cardState)
     {
         return cardState != null && cardState.cardData != null &&
-            (cardState.IsMeleeAttack() ||
-                cardState.cardData.cardType == CardType.Defense ||
-                cardState.cardData.cardType == CardType.Dodge);
-    }
-
-    private static bool IsLongRangeResponseWinnerCard(BattleCardState cardState)
-    {
-        return cardState != null && cardState.cardData != null &&
-            (cardState.cardData.cardType == CardType.Defense ||
-                cardState.cardData.cardType == CardType.Dodge);
+            cardState.IsMeleeAttack();
     }
 
     private bool TryResolveUnavailableShootResponse(
@@ -1708,28 +1692,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             requestId,
             completion
         );
-    }
-
-    private void CompleteLongRangeResponseImpact(
-        ActionPresentationContext context,
-        BattleExecutionItem executionItem,
-        long requestId,
-        BattlePresentationCompletion completion
-    )
-    {
-        if (!IsCurrentPresentationRequest(requestId) ||
-            !object.ReferenceEquals(activeContext, context) ||
-            !object.ReferenceEquals(context.ExecutionItem, executionItem) ||
-            !context.LongRangeResponseImpactStarted ||
-            context.LongRangeResponseImpactRequestId != requestId)
-        {
-            return;
-        }
-
-        context.LongRangeResponseImpactStarted = false;
-        context.LongRangeResponseImpactRequestId = 0L;
-        activePresentationRequestId = 0L;
-        completion.TryComplete(requestId);
     }
 
     private bool IsOwnedAttackVsAttackParallelBegin(
@@ -3119,21 +3081,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
             return;
         }
 
-        if (IsLongRangeResponseWinnerCard(
-                context.LongRangeMeleeSide.cardState
-            ))
-        {
-            if (!TryStartLongRangeResponseImpact(
-                    request,
-                    completion,
-                    context
-                ))
-            {
-                CompleteRequest(request, completion);
-            }
-            return;
-        }
-
         if (!object.ReferenceEquals(
                 context.CurrentAttacker,
                 context.LongRangeMeleeActor) ||
@@ -3144,80 +3091,6 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         {
             CompleteRequest(request, completion);
         }
-    }
-
-    private bool TryStartLongRangeResponseImpact(
-        BattlePresentationRequest request,
-        BattlePresentationCompletion completion,
-        ActionPresentationContext context
-    )
-    {
-        if (longRangeShootVsAttackPresentationPlayer == null ||
-            !longRangeShootVsAttackPresentationPlayer.isActiveAndEnabled)
-        {
-            return false;
-        }
-
-        long requestId = request.RequestId;
-        BattleExecutionItem executionItem = request.ExecutionItem;
-        float directionSign = GetAttackDirectionSign(
-            context.LongRangeShooterHandle,
-            context.LongRangeMeleeHandle
-        );
-        activePresentationRequestId = requestId;
-        context.LongRangeResponseImpactStarted = true;
-        context.LongRangeResponseImpactRequestId = requestId;
-
-        bool isGuardResponse = context.LongRangeMeleeSide.cardState.cardData
-            .cardType == CardType.Defense;
-        BattleAttackVsGuardPresentationProfile perfectGuardFxProfile =
-            attackVsGuardPresentationPlayer != null
-                ? attackVsGuardPresentationPlayer.PresentationProfile
-                : null;
-        bool started = isGuardResponse
-            ? longRangeShootVsAttackPresentationPlayer.TryPlayGuardWinner(
-                context.LongRangeMeleePresentation,
-                directionSign,
-                perfectGuardFxProfile,
-                () => CompleteLongRangeResponseImpact(
-                    context,
-                    executionItem,
-                    requestId,
-                    completion
-                )
-            )
-            : longRangeShootVsAttackPresentationPlayer.TryPlayDodgeWinner(
-                context.LongRangeMeleePresentation,
-                directionSign,
-                () => CompleteLongRangeResponseImpact(
-                    context,
-                    executionItem,
-                    requestId,
-                    completion
-                )
-            );
-        if (!started)
-        {
-            context.LongRangeResponseImpactStarted = false;
-            context.LongRangeResponseImpactRequestId = 0L;
-            if (activePresentationRequestId == requestId)
-            {
-                activePresentationRequestId = 0L;
-            }
-            return false;
-        }
-
-        // 响应胜利复用既有结果镜头；镜头失败不阻塞角色反馈与正式结算。
-        BattleCameraDirector director = ResolveBattleCameraDirector();
-        if (!isGuardResponse &&
-            context.CameraCinematicOwned && director != null)
-        {
-            director.TryPlayDodgeCameraSway(
-                directionSign,
-                context.LongRangeMeleePresentation.DodgeMotionDuration
-            );
-        }
-        return true;
     }
 
     private bool TryStartLongRangeShotImpact(
