@@ -17,6 +17,8 @@ MonoBehaviour:
   guardApproachSeparation: 2.2
   engagementFinalMoveSpeedScale: 0.5
   hitStopDuration: 0.08
+  longRangeGuardPreImpactHoldDuration: 0.10
+  longRangeReducedCameraFollowRatio: 0.60
   meleeGuardReactionProfile: {fileID: 11400000, guid: 722d585753abdbe4eb692634890306ca, type: 2}
   perfectGuardFxSprite: {fileID: 21300000, guid: a4a343140b9415d458e80458f37bcaf1, type: 3}
   perfectGuardFxHorizontalOffset: 1.12

@@ -1032,13 +1032,24 @@ public sealed class BattleCameraDirector : MonoBehaviour
         float activeHitDuration
     )
     {
+        return TryPlayNormalHitImpact(hitTargetWorldRoot, directionSign, activeHitDuration, null);
+    }
+
+    public bool TryPlayNormalHitImpact(
+        Transform hitTargetWorldRoot,
+        float directionSign,
+        float activeHitDuration,
+        float? followRatioOverride
+    )
+    {
         return TryPlayNormalHitImpactInternal(
             hitTargetWorldRoot,
             directionSign,
             activeHitDuration,
             false,
             0f,
-            0f
+            0f,
+            followRatioOverride
         );
     }
 
@@ -1111,7 +1122,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
         float activeHitDuration,
         bool useFixedHorizontalDistance,
         float expectedTargetTravelDistance,
-        float cameraHorizontalDistance
+        float cameraHorizontalDistance,
+        float? followRatioOverride = null
     )
     {
         if (hitTargetWorldRoot == null ||
@@ -1147,7 +1159,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
                 safeDuration,
                 useFixedHorizontalDistance,
                 Mathf.Max(0f, expectedTargetTravelDistance),
-                Mathf.Max(0f, cameraHorizontalDistance)
+                Mathf.Max(0f, cameraHorizontalDistance),
+                followRatioOverride
             )
         );
         return true;
@@ -2536,12 +2549,15 @@ public sealed class BattleCameraDirector : MonoBehaviour
         float duration,
         bool useFixedHorizontalDistance,
         float expectedTargetTravelDistance,
-        float cameraHorizontalDistance
+        float cameraHorizontalDistance,
+        float? followRatioOverride
     )
     {
         float originalBaseWorldX = battleActionEffectBaseWorldX;
         float targetStartX = hitTargetWorldRoot.position.x;
-        float followRatio = Mathf.Clamp01(normalHitCameraFollowRatio);
+        float followRatio = followRatioOverride.HasValue
+            ? Mathf.Max(0f, followRatioOverride.Value)
+            : Mathf.Clamp01(normalHitCameraFollowRatio);
         float shakeAmplitude = Mathf.Max(
             0f,
             normalHitCameraHorizontalShakeAmplitude

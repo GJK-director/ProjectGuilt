@@ -3903,7 +3903,9 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 ? context.DefenseAttackerHandle.WorldRoot.transform : null,
             context.DefenseDefenderHandle?.WorldRoot != null
                 ? context.DefenseDefenderHandle.WorldRoot.transform : null,
-            () => HandleDefenseGuardReactionStarted(context, executionItem, directionSign)
+            () => HandleDefenseGuardReactionStarted(
+                context, executionItem, directionSign, attackDelivery
+            )
         );
 
         if (started)
@@ -3953,7 +3955,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     private void HandleDefenseGuardReactionStarted(
         ActionPresentationContext context,
         BattleExecutionItem executionItem,
-        float directionSign
+        float directionSign,
+        BattlePresentationAttackDeliveryKind attackDelivery
     )
     {
         // Reaction belongs to the Guard tail; the Impact request is already complete.
@@ -3972,10 +3975,17 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         Transform target = fullBlock
             ? context.DefenseAttackerHandle.WorldRoot.transform
             : context.DefenseDefenderHandle.WorldRoot.transform;
+        float? followRatioOverride = context.Route != null &&
+            context.Route.HandlerKind == BattlePresentationHandlerKind.AttackVsDefense &&
+            attackDelivery == BattlePresentationAttackDeliveryKind.LongRangeShoot &&
+            context.GuardPresentationResult == BattleGuardPresentationResult.ReducedDamage
+                ? (float?)attackVsGuardPresentationPlayer.LongRangeReducedCameraFollowRatio
+                : null;
         ResolveBattleCameraDirector()?.TryPlayNormalHitImpact(
             target,
             fullBlock ? -directionSign : directionSign,
-            attackVsGuardPresentationPlayer.MeleeGuardReactionActiveDuration
+            attackVsGuardPresentationPlayer.MeleeGuardReactionActiveDuration,
+            followRatioOverride
         );
     }
 

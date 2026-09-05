@@ -16,6 +16,15 @@ public sealed class BattleAttackVsGuardPresentationProfile : ScriptableObject
     [SerializeField, Min(0f)] private float hitStopDuration = 0.08f;
     [SerializeField] private BattleHitPresentationProfile meleeGuardReactionProfile;
 
+    [Header("Long Range Guard")]
+    [SerializeField, Min(0f)] private float longRangeGuardPreImpactHoldDuration = 0.10f;
+    [SerializeField, Min(0f)] private float longRangeReducedCameraFollowRatio = 0.60f;
+
+    public float LongRangeGuardPreImpactHoldDuration =>
+        Mathf.Max(0f, longRangeGuardPreImpactHoldDuration);
+    public float LongRangeReducedCameraFollowRatio =>
+        Mathf.Max(0f, longRangeReducedCameraFollowRatio);
+
     [Header("Perfect Guard FX")]
     [SerializeField] private Sprite perfectGuardFxSprite;
     [SerializeField, Min(0f)] private float perfectGuardFxHorizontalOffset = 1.12f;

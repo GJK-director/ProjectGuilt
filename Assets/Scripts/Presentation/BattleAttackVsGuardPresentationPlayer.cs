@@ -21,6 +21,8 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
 
     public bool IsRunning { get; private set; }
     public bool IsFinished { get; private set; }
+    public float LongRangeReducedCameraFollowRatio => presentationProfile != null
+        ? presentationProfile.LongRangeReducedCameraFollowRatio : 0.60f;
     public BattleHitPresentationProfile MeleeGuardReactionProfile =>
         presentationProfile != null ? presentationProfile.MeleeGuardReactionProfile : null;
     public float MeleeGuardReactionActiveDuration => MeleeGuardReactionProfile != null
@@ -390,6 +392,18 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
         }
         else if (UsesLongRangeShootVisual(attackerDelivery))
         {
+            float holdDuration = presentationProfile.LongRangeGuardPreImpactHoldDuration;
+            float holdElapsed = 0f;
+            while (holdElapsed < holdDuration && IsCurrentPlayback(version))
+            {
+                holdElapsed = Mathf.Min(holdDuration, holdElapsed + Time.deltaTime);
+                yield return null;
+            }
+            if (!IsCurrentPlayback(version))
+            {
+                yield break;
+            }
+
             attacker.SetShoot();
             bool muzzleFlashFinished = false;
             attacker.PlayMuzzleFlash(() => muzzleFlashFinished = true);
