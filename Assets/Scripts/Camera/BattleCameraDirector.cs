@@ -20,7 +20,6 @@ public sealed class BattleCameraDirector : MonoBehaviour
         ClashImpact,
         HitImpact,
         NormalHitImpact,
-        GuardImpact,
         DodgeSway
     }
 
@@ -196,31 +195,6 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
     [SerializeField, Min(0f)]
     private float normalHitCameraShakeCycles = 2f;
-
-    [Header("Generic Guard Impact")]
-    [SerializeField, Min(0f)]
-    private float fullBlockGuardImpactDuration = 0.14f;
-
-    [SerializeField, Min(0f)]
-    private float fullBlockGuardImpactPushInRadiusAmount = 0.22f;
-
-    [SerializeField, Min(0f)]
-    private float fullBlockGuardImpactHorizontalShakeAmplitude = 0.055f;
-
-    [SerializeField, Min(0f)]
-    private float fullBlockGuardImpactShakeCycles = 1.0f;
-
-    [SerializeField, Min(0f)]
-    private float reducedDamageGuardImpactDuration = 0.16f;
-
-    [SerializeField, Min(0f)]
-    private float reducedDamageGuardImpactPushInRadiusAmount = 0.30f;
-
-    [SerializeField, Min(0f)]
-    private float reducedDamageGuardImpactHorizontalShakeAmplitude = 0.045f;
-
-    [SerializeField, Min(0f)]
-    private float reducedDamageGuardImpactShakeCycles = 1.0f;
 
     [Header("Dodge Camera Sway")]
     [SerializeField, Min(0f)]
@@ -1162,22 +1136,6 @@ public sealed class BattleCameraDirector : MonoBehaviour
                 Mathf.Max(0f, cameraHorizontalDistance),
                 followRatioOverride
             )
-        );
-        return true;
-    }
-
-    public bool TryPlayGenericGuardImpact(
-        bool isFullBlock,
-        System.Action completion = null
-    )
-    {
-        if (!TryBeginBattleActionEffect(BattleActionEffectType.GuardImpact))
-        {
-            return false;
-        }
-
-        activeBattleActionEffectCoroutine = StartCoroutine(
-            PlayGenericGuardImpactSequence(isFullBlock, completion)
         );
         return true;
     }
@@ -2663,65 +2621,6 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
         cameraController.ClearPresentationImpactShakeOffset();
         impactShakeCoroutine = null;
-    }
-
-    private IEnumerator PlayGenericGuardImpactSequence(
-        bool isFullBlock,
-        System.Action completion
-    )
-    {
-        float duration = Mathf.Max(
-            0f,
-            isFullBlock
-                ? fullBlockGuardImpactDuration
-                : reducedDamageGuardImpactDuration
-        );
-        float pushInAmount = Mathf.Max(
-            0f,
-            isFullBlock
-                ? fullBlockGuardImpactPushInRadiusAmount
-                : reducedDamageGuardImpactPushInRadiusAmount
-        );
-        float shakeAmplitude = Mathf.Max(
-            0f,
-            isFullBlock
-                ? fullBlockGuardImpactHorizontalShakeAmplitude
-                : reducedDamageGuardImpactHorizontalShakeAmplitude
-        );
-        float shakeCycles = Mathf.Max(
-            0f,
-            isFullBlock
-                ? fullBlockGuardImpactShakeCycles
-                : reducedDamageGuardImpactShakeCycles
-        );
-        float pushInRadius = battleActionEffectBaseRadius - pushInAmount;
-        float elapsed = 0f;
-
-        while (elapsed < duration)
-        {
-            float progress = duration > Mathf.Epsilon
-                ? Mathf.Clamp01(elapsed / duration)
-                : 1f;
-            float radius = EvaluateImpactRadius(
-                progress,
-                battleActionEffectBaseRadius,
-                pushInRadius
-            );
-            float shake = Mathf.Sin(
-                progress * Mathf.PI * 2f * shakeCycles
-            ) * shakeAmplitude * (1f - progress);
-
-            cameraController.SetCinematicOrbitRadius(radius);
-            cameraController.SetCinematicHorizontalWorldX(
-                battleActionEffectBaseWorldX + shake
-            );
-
-            elapsed += Time.unscaledDeltaTime;
-            yield return null;
-        }
-
-        CompleteBattleActionEffect();
-        completion?.Invoke();
     }
 
     private static float EvaluateImpactRadius(

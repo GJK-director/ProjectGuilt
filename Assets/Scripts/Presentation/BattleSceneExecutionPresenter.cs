@@ -3209,19 +3209,13 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
         // 响应胜利复用既有结果镜头；镜头失败不阻塞角色反馈与正式结算。
         BattleCameraDirector director = ResolveBattleCameraDirector();
-        if (context.CameraCinematicOwned && director != null)
+        if (!isGuardResponse &&
+            context.CameraCinematicOwned && director != null)
         {
-            if (isGuardResponse)
-            {
-                director.TryPlayGenericGuardImpact(true);
-            }
-            else
-            {
-                director.TryPlayDodgeCameraSway(
-                    directionSign,
-                    context.LongRangeMeleePresentation.DodgeMotionDuration
-                );
-            }
+            director.TryPlayDodgeCameraSway(
+                directionSign,
+                context.LongRangeMeleePresentation.DodgeMotionDuration
+            );
         }
         return true;
     }
