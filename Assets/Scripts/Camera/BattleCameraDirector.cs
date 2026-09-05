@@ -74,17 +74,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
     [SerializeField]
     private float recoveryStartOrbitRadius = 8.5f;
 
-    // 当前正式Opening固定零Delay；保留旧字段，避免丢失既有Inspector数据。
-#pragma warning disable CS0414
-    [SerializeField, Min(0f)]
-    private float recoveryCameraDelay = 0.10f;
-
     [SerializeField, Min(0.01f)]
     private float recoveryCameraDuration = 1.00f;
-
-    [SerializeField, Min(0f)]
-    private float recoveryFadeDelay = 0.05f;
-#pragma warning restore CS0414
 
     [SerializeField, Min(0.01f)]
     private float recoveryFadeDuration = 1.00f;
@@ -143,20 +134,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
     [SerializeField, Range(0f, 0.05f)]
     private float engagementViewportCenterTolerance = 0.005f;
 
-    [Header("Battle Action Camera Entry")]
-    [SerializeField, Min(0f)]
-    private float battleActionEntryDuration = 0.10f;
-
-    [SerializeField, Min(0f)]
-    private float battleActionEstablishingRadiusOffset = 1.5f;
-
-    [SerializeField, Min(0f)]
-    private float battleActionEstablishingDuration = 0.14f;
-
     [Header("Anchored Two Unit Approach")]
-    [SerializeField, Range(0f, 0.5f)]
-    private float anchoredApproachAttackerFramingWeight = 0.30f;
-
     [SerializeField, Min(0f)]
     private float anchoredApproachFarRadius = 9.5f;
 
@@ -230,7 +208,6 @@ public sealed class BattleCameraDirector : MonoBehaviour
     private float anchoredApproachStartWorldX;
     private float anchoredApproachStartRadius;
     private float anchoredApproachStartVerticalProgress;
-    private bool anchoredApproachUsesContinuousFraming;
     private bool anchoredApproachEstablishesBattleFocusPose;
     private float anchoredApproachHorizontalVelocity;
     private float anchoredApproachRadiusVelocity;
@@ -253,7 +230,6 @@ public sealed class BattleCameraDirector : MonoBehaviour
     private float externalApproachFinalOrbitRadius;
     private bool externalApproachBlendStarted;
 
-    public bool IsIntroPlaying => isIntroPlaying;
     public float EngagementBlendStartSeparation =>
         Mathf.Max(0f, engagementBlendStartSeparation);
 
@@ -533,49 +509,6 @@ public sealed class BattleCameraDirector : MonoBehaviour
         return true;
     }
 
-    public bool TryPlayAnchoredTwoUnitApproach(
-        BattleUnitViewHandle attacker,
-        BattleUnitViewHandle defender,
-        float nearSeparation
-    )
-    {
-        if (!TryBeginAnchoredTwoUnitApproach(
-                attacker,
-                defender,
-                nearSeparation
-            ))
-        {
-            return false;
-        }
-
-        ApplyAnchoredTwoUnitApproachFraming();
-        anchoredApproachCoroutine = StartCoroutine(
-            PlayAnchoredTwoUnitApproachSequence()
-        );
-        return true;
-    }
-
-    public bool TryPlaySingleActorApproachFollow(
-        BattleUnitViewHandle attacker,
-        BattleUnitViewHandle defender,
-        float nearSeparation,
-        System.Action<bool> approachReady,
-        System.Action engagementBegan,
-        System.Action<bool> engagementReady
-    )
-    {
-        return TryPlaySingleActorApproachFollow(
-            attacker,
-            defender,
-            nearSeparation,
-            true,
-            approachReady,
-            engagementBegan,
-            engagementReady,
-            false
-        );
-    }
-
     public bool TryPlayImmediateSingleActorApproachFollow(
         BattleUnitViewHandle attacker,
         BattleUnitViewHandle defender,
@@ -589,8 +522,6 @@ public sealed class BattleCameraDirector : MonoBehaviour
             attacker,
             defender,
             nearSeparation,
-            false,
-            null,
             engagementBegan,
             engagementReady,
             establishBattleFocusPose
@@ -601,8 +532,6 @@ public sealed class BattleCameraDirector : MonoBehaviour
         BattleUnitViewHandle attacker,
         BattleUnitViewHandle defender,
         float nearSeparation,
-        bool useBattleActionEntry,
-        System.Action<bool> approachReady,
         System.Action engagementBegan,
         System.Action<bool> engagementReady,
         bool establishBattleFocusPose
@@ -617,13 +546,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
             return false;
         }
 
-        anchoredApproachUsesContinuousFraming = true;
         anchoredApproachEstablishesBattleFocusPose =
             establishBattleFocusPose;
         anchoredApproachCoroutine = StartCoroutine(
             PlaySingleActorApproachFollowSequence(
-                useBattleActionEntry,
-                approachReady,
                 engagementBegan,
                 engagementReady,
                 establishBattleFocusPose
@@ -691,15 +617,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
 
         // Approach结束时用最终WorldRoot再计算一次，随后保留该构图。
-        if (anchoredApproachUsesContinuousFraming)
-        {
-            ApplyContinuousEngagementFraming();
-            ApplyFinalEngagementFramingCorrectionWithinTolerance();
-        }
-        else
-        {
-            ApplyAnchoredTwoUnitApproachFraming();
-        }
+        ApplyContinuousEngagementFraming();
+        ApplyFinalEngagementFramingCorrectionWithinTolerance();
         if (anchoredApproachCoroutine != null)
         {
             StopCoroutine(anchoredApproachCoroutine);
@@ -1442,35 +1361,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         );
     }
 
-    private IEnumerator PlayAnchoredTwoUnitApproachSequence()
-    {
-        while (isAnchoredApproachPlaying)
-        {
-            if (anchoredApproachAttackerWorldRoot == null ||
-                anchoredApproachDefenderWorldRoot == null)
-            {
-                if (cameraController != null)
-                {
-                    cameraController.SetCinematicHorizontalWorldX(
-                        anchoredApproachStartWorldX
-                    );
-                    cameraController.SetCinematicOrbitRadius(
-                        anchoredApproachStartRadius
-                    );
-                }
-
-                ClearAnchoredTwoUnitApproachState();
-                yield break;
-            }
-
-            ApplyAnchoredTwoUnitApproachFraming();
-            yield return null;
-        }
-    }
-
     private IEnumerator PlaySingleActorApproachFollowSequence(
-        bool useBattleActionEntry,
-        System.Action<bool> approachReady,
         System.Action engagementBegan,
         System.Action<bool> engagementReady,
         bool establishBattleFocusPose
@@ -1480,148 +1371,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
             anchoredApproachNearSeparation,
             engagementBlendStartSeparation
         );
-        bool startsInEngagement =
-            anchoredApproachInitialSeparation <= blendTrigger;
         float elapsed = 0f;
-
-        if (useBattleActionEntry && !startsInEngagement)
-        {
-            float entryStartWorldX =
-                cameraController.CurrentHorizontalWorldX;
-            float entryStartRadius = cameraController.CurrentOrbitRadius;
-            float entryStartVerticalProgress =
-                cameraController.CurrentCinematicVerticalViewProgress;
-            float defaultWorldX = cameraController.DefaultHorizontalWorldX;
-            float defaultRadius = cameraController.DefaultOrbitRadius;
-            float safeEntryDuration = Mathf.Max(
-                0f,
-                battleActionEntryDuration
-            );
-
-            while (elapsed < safeEntryDuration && isAnchoredApproachPlaying)
-            {
-            if (!HasValidAnchoredApproachTargets())
-            {
-                AbortAnchoredTwoUnitApproach(approachReady);
-                yield break;
-            }
-
-            elapsed = Mathf.Min(
-                safeEntryDuration,
-                elapsed + Time.unscaledDeltaTime
-            );
-            float progress = safeEntryDuration > Mathf.Epsilon
-                ? elapsed / safeEntryDuration
-                : 1f;
-            float easedProgress = Mathf.SmoothStep(0f, 1f, progress);
-            cameraController.SetCinematicHorizontalWorldX(
-                Mathf.Lerp(
-                    entryStartWorldX,
-                    defaultWorldX,
-                    easedProgress
-                )
-            );
-            cameraController.SetCinematicOrbitRadius(
-                Mathf.Lerp(
-                    entryStartRadius,
-                    defaultRadius,
-                    easedProgress
-                )
-            );
-            cameraController.SetCinematicVerticalViewProgress(
-                Mathf.Lerp(
-                    entryStartVerticalProgress,
-                    0f,
-                    easedProgress
-                )
-            );
-                yield return null;
-            }
-
-            if (!isAnchoredApproachPlaying)
-            {
-                yield break;
-            }
-
-            cameraController.SetCinematicHorizontalWorldX(defaultWorldX);
-            cameraController.SetCinematicOrbitRadius(defaultRadius);
-            cameraController.SetCinematicVerticalViewProgress(0f);
-
-            float establishingStartRadius =
-                cameraController.CurrentOrbitRadius;
-            float establishingTargetRadius = defaultRadius +
-                Mathf.Max(0f, battleActionEstablishingRadiusOffset);
-            float safeEstablishingDuration = Mathf.Max(
-                0f,
-                battleActionEstablishingDuration
-            );
-            elapsed = 0f;
-            while (elapsed < safeEstablishingDuration &&
-                isAnchoredApproachPlaying)
-            {
-            if (!HasValidAnchoredApproachTargets())
-            {
-                AbortAnchoredTwoUnitApproach(approachReady);
-                yield break;
-            }
-
-            elapsed = Mathf.Min(
-                safeEstablishingDuration,
-                elapsed + Time.unscaledDeltaTime
-            );
-            float progress = safeEstablishingDuration > Mathf.Epsilon
-                ? elapsed / safeEstablishingDuration
-                : 1f;
-            float easedProgress = Mathf.SmoothStep(0f, 1f, progress);
-            cameraController.SetCinematicHorizontalWorldX(defaultWorldX);
-            cameraController.SetCinematicOrbitRadius(
-                Mathf.Lerp(
-                    establishingStartRadius,
-                    establishingTargetRadius,
-                    easedProgress
-                )
-            );
-            cameraController.SetCinematicVerticalViewProgress(0f);
-                yield return null;
-            }
-
-            if (!isAnchoredApproachPlaying)
-            {
-                yield break;
-            }
-
-            cameraController.SetCinematicHorizontalWorldX(defaultWorldX);
-            cameraController.SetCinematicOrbitRadius(
-                establishingTargetRadius
-            );
-            cameraController.SetCinematicVerticalViewProgress(0f);
-
-            if (safeEntryDuration <= Mathf.Epsilon &&
-                safeEstablishingDuration <= Mathf.Epsilon)
-            {
-                // 避免零时长配置在StartCoroutine返回前同步重入Presenter。
-                yield return null;
-            }
-
-            approachReady?.Invoke(true);
-            if (!isAnchoredApproachPlaying)
-            {
-                yield break;
-            }
-        }
-        else
-        {
-            if (approachReady != null)
-            {
-                // 避免跳过Entry时在StartCoroutine返回前同步重入调用方。
-                yield return null;
-                approachReady.Invoke(true);
-                if (!isAnchoredApproachPlaying)
-                {
-                    yield break;
-                }
-            }
-        }
 
         while (isAnchoredApproachPlaying)
         {
@@ -1672,8 +1422,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
             if (!TryGetAnchoredTwoUnitApproachFraming(
                     out float targetWorldX,
                     out float targetRadius,
-                    out _,
-                    true
+                    out _
                 ))
             {
                 AbortAnchoredTwoUnitApproach(engagementReady);
@@ -1907,8 +1656,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         if (!TryGetAnchoredTwoUnitApproachFraming(
                 out float targetWorldX,
                 out float targetRadius,
-                out _,
-                true
+                out _
             ))
         {
             return;
@@ -1932,8 +1680,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         if (!TryGetAnchoredTwoUnitApproachFraming(
                 out float fallbackWorldX,
                 out float targetRadius,
-                out _,
-                true
+                out _
             ))
         {
             return;
@@ -2076,26 +1823,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
             : correctedWorldX;
     }
 
-    private void ApplyAnchoredTwoUnitApproachFraming()
-    {
-        if (!TryGetAnchoredTwoUnitApproachFraming(
-                out float targetWorldX,
-                out float targetRadius,
-                out _
-            ))
-        {
-            return;
-        }
-
-        cameraController.SetCinematicHorizontalWorldX(targetWorldX);
-        cameraController.SetCinematicOrbitRadius(targetRadius);
-    }
-
     private bool TryGetAnchoredTwoUnitApproachFraming(
         out float targetWorldX,
         out float targetRadius,
-        out float separation,
-        bool useContinuousFraming = false
+        out float separation
     )
     {
         targetWorldX = 0f;
@@ -2121,17 +1852,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
             anchoredApproachDefenderPresentation,
             anchoredApproachDefenderWorldRoot
         ).x;
-        float framingWeight = useContinuousFraming
-            ? 0.5f
-            : Mathf.Clamp(
-                anchoredApproachAttackerFramingWeight,
-                0f,
-                0.5f
-            );
         targetWorldX = Mathf.Lerp(
             attackerFramingX,
             defenderFramingX,
-            framingWeight
+            0.5f
         );
         float separationRange = anchoredApproachStartSeparation -
             anchoredApproachNearSeparation;
@@ -2148,8 +1872,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         );
 
         targetRadius = Mathf.Lerp(nearRadius, farRadius, farProgress);
-        if (useContinuousFraming &&
-            anchoredApproachEstablishesBattleFocusPose)
+        if (anchoredApproachEstablishesBattleFocusPose)
         {
             targetRadius = twoUnitFocusOrbitRadius;
         }
@@ -2317,7 +2040,6 @@ public sealed class BattleCameraDirector : MonoBehaviour
         anchoredApproachInitialSeparation = 0f;
         anchoredApproachStartSeparation = 0f;
         anchoredApproachStartVerticalProgress = 0f;
-        anchoredApproachUsesContinuousFraming = false;
         anchoredApproachEstablishesBattleFocusPose = false;
         anchoredApproachHorizontalVelocity = 0f;
         anchoredApproachRadiusVelocity = 0f;
