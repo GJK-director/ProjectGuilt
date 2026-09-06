@@ -128,6 +128,7 @@ public static class BattleModificationRules
         return rule != null &&
             rule.resourceType == "BuffStack" &&
             rule.resourceID == BattleResourceID.Bullet &&
-            rule.consumeAmountOnSuccess > 0;
+            (rule.consumeAmountOnSuccess > 0 ||
+                rule.consumeAllCapturedOnSuccess);
     }
 }

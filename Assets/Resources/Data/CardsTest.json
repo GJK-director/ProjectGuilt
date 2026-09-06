@@ -253,6 +253,41 @@
     "effects": []
   },
   {
+    "cardID": "shoot_all_in_001",
+    "cardName": "ALL IN",
+    "description": "消耗当前全部子弹。点数随当前子弹增加；成功时造成对应总倍率伤害。",
+    "keywords": [],
+    "rarity": "White",
+    "cardType": "Attack",
+    "attackDeliveryMode": "CloseRangeShoot",
+    "presentationVariant": "Default",
+    "isClashable": true,
+    "isSinCard": false,
+    "minPoint": 2,
+    "maxPoint": 5,
+    "cooldown": 3,
+    "guiltCost": 0,
+    "damageFormula": "PointAsDamage",
+    "resourceRule": {
+      "resourceType": "BuffStack",
+      "resourceID": "Bullet",
+      "requiredStackForNormalVersion": 1,
+      "fallbackMinPoint": 0,
+      "fallbackMaxPoint": 0,
+      "pointPerStack": 1,
+      "exactStackForBonus": 0,
+      "exactStackPointBonus": 0,
+      "consumeAmountOnSuccess": 0,
+      "consumeAllCapturedOnSuccess": true,
+      "insufficientBehavior": "ActionUnavailable",
+      "consumeTiming": "OnSuccessfulUse"
+    },
+    "traits": [
+      "AllInBulletDump"
+    ],
+    "effects": []
+  },
+  {
     "cardID": "shoot_disengage_001",
     "cardName": "抽身",
     "description": "闪避成功后获得1枚子弹。",

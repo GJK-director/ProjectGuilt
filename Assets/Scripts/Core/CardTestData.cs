@@ -10,7 +10,8 @@ public enum BattleCardTrait
     IaiAnger,
     GrantNextClashPointUpOnSuccessfulDodge,
     GrantBulletOnSuccessfulDodge,
-    ReloadBulletOnDodgeResolution
+    ReloadBulletOnDodgeResolution,
+    AllInBulletDump
 }
 
 public static class CardResourceInsufficientBehavior
@@ -42,8 +43,48 @@ public class CardResourceRuleData
     public int exactStackForBonus;
     public int exactStackPointBonus;
     public int consumeAmountOnSuccess;
+    public bool consumeAllCapturedOnSuccess;
     public string insufficientBehavior;
     public string consumeTiming;
+}
+
+// ALL IN 的卡牌固有规则：把本次资源快照捕获的子弹作为一次攻击的倍率与显示分段。
+public static class BattleAllInRules
+{
+    public static bool IsAllIn(CardTestData cardData)
+    {
+        return cardData != null && cardData.HasTrait(BattleCardTrait.AllInBulletDump);
+    }
+
+    public static bool IsAllIn(BattleCardState cardState)
+    {
+        return cardState != null && IsAllIn(cardState.cardData);
+    }
+
+    public static int GetDamageMultiplierPercent(int capturedBullet)
+    {
+        switch (UnityEngine.Mathf.Clamp(capturedBullet, 0, 6))
+        {
+            case 1: return 100;
+            case 2: return 180;
+            case 3: return 230;
+            case 4: return 270;
+            case 5: return 300;
+            case 6: return 320;
+            default: return 0;
+        }
+    }
+
+    public static int GetHpDisplayStageCount(int capturedBullet)
+    {
+        return UnityEngine.Mathf.Max(1, capturedBullet);
+    }
+
+    public static int CombineDamageMultiplierPercent(int current, int additional)
+    {
+        return UnityEngine.Mathf.Max(0, current) *
+            UnityEngine.Mathf.Max(0, additional) / 100;
+    }
 }
 
 // CardTestData = 卡牌测试数据

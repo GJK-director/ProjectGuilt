@@ -399,7 +399,11 @@ public static class BattleResolver
             rolledPoint
         );
         int finalHpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(
-            damageScaled
+            ApplyAllInDamageMultiplier(
+                damageScaled,
+                plan.sourceCardState,
+                resourceSnapshot
+            )
         );
 
         plan.freeActionPoint = rolledPoint;
@@ -419,6 +423,7 @@ public static class BattleResolver
         );
         // Roll时固定点数与伤害，HP仍只在Impact提交边界写入。
         impact.SetPrecalculatedDamage(finalHpDamage);
+        ApplyAllInImpactData(impact, plan.sourceCardState, resourceSnapshot);
         plan.impacts.Add(impact);
         return true;
     }
@@ -1467,6 +1472,14 @@ public static class BattleResolver
             {
                 impact.damageMultiplierPercent = 150;
             }
+            BattleClashSideState winner = playerWon
+                ? session.SideA
+                : session.SideB;
+            ApplyAllInImpactData(
+                impact,
+                plan.sourceCardState,
+                winner.resourceSnapshot
+            );
             plan.impacts.Add(impact);
         }
     }
@@ -3814,12 +3827,60 @@ public static class BattleResolver
         }
 
         snapshot.plannedConsumeAmount = Mathf.Max(0, rule.consumeAmountOnSuccess);
+        if (rule.consumeAllCapturedOnSuccess)
+        {
+            snapshot.plannedConsumeAmount = Mathf.Max(0, snapshot.capturedStack);
+        }
         snapshot.shouldConsumeOnSuccess = snapshot.normalVersionEnabled && snapshot.plannedConsumeAmount > 0;
         snapshot.consumeTiming = string.IsNullOrEmpty(rule.consumeTiming)
             ? CardResourceConsumeTiming.OnSuccessfulUse
             : rule.consumeTiming;
 
         return snapshot;
+    }
+
+    static int ApplyAllInDamageMultiplier(
+        int damageScaled,
+        BattleCardState cardState,
+        BattleClashResourceSnapshot resourceSnapshot
+    )
+    {
+        if (!BattleAllInRules.IsAllIn(cardState) || resourceSnapshot == null)
+        {
+            return damageScaled;
+        }
+
+        int allInMultiplier = BattleAllInRules.GetDamageMultiplierPercent(
+            resourceSnapshot.capturedStack
+        );
+        return BattleAllInRules.CombineDamageMultiplierPercent(
+            damageScaled,
+            allInMultiplier
+        );
+    }
+
+    static void ApplyAllInImpactData(
+        BattleImpact impact,
+        BattleCardState cardState,
+        BattleClashResourceSnapshot resourceSnapshot
+    )
+    {
+        if (impact == null || !BattleAllInRules.IsAllIn(cardState) ||
+            resourceSnapshot == null)
+        {
+            return;
+        }
+
+        impact.damageMultiplierPercent =
+            BattleAllInRules.CombineDamageMultiplierPercent(
+                impact.damageMultiplierPercent,
+                BattleAllInRules.GetDamageMultiplierPercent(
+                    resourceSnapshot.capturedStack
+                )
+            );
+        impact.hpDisplayStageCount = BattleAllInRules.GetHpDisplayStageCount(
+            resourceSnapshot.capturedStack
+        );
     }
 
     static CardResourceRuleData GetFirstResourceRule(CardTestData cardData)
