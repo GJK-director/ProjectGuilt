@@ -95,6 +95,28 @@ public static class BattleDefinitionBootstrap
         );
     }
 
+    public static BattleDefinitionBootstrapResult CreateRuntimeState(
+        string encounterID,
+        BattleDeckPreset playerDeckPreset,
+        bool useSingleUnitDemo = false
+    )
+    {
+        List<CardTestData> cards = CardDataLoader.LoadCardData();
+        List<CharacterDefinitionData> characterDefinitions = CharacterDefinitionLoader.LoadDefinitions();
+        List<EnemyDefinitionData> enemyDefinitions = EnemyDefinitionLoader.LoadDefinitions();
+        List<EncounterDefinitionData> encounterDefinitions = EncounterDefinitionLoader.LoadDefinitions();
+
+        return CreateRuntimeStateFromDefinitions(
+            encounterID,
+            cards,
+            characterDefinitions,
+            enemyDefinitions,
+            encounterDefinitions,
+            useSingleUnitDemo,
+            playerDeckPreset
+        );
+    }
+
     public static BattleDefinitionBootstrapResult CreateRuntimeStateFromDefinitions(
         string encounterID,
         List<CardTestData> cards,
@@ -120,6 +142,27 @@ public static class BattleDefinitionBootstrap
         List<EnemyDefinitionData> enemyDefinitions,
         List<EncounterDefinitionData> encounterDefinitions,
         bool useSingleUnitDemo
+    )
+    {
+        return CreateRuntimeStateFromDefinitions(
+            encounterID,
+            cards,
+            characterDefinitions,
+            enemyDefinitions,
+            encounterDefinitions,
+            useSingleUnitDemo,
+            null
+        );
+    }
+
+    public static BattleDefinitionBootstrapResult CreateRuntimeStateFromDefinitions(
+        string encounterID,
+        List<CardTestData> cards,
+        List<CharacterDefinitionData> characterDefinitions,
+        List<EnemyDefinitionData> enemyDefinitions,
+        List<EncounterDefinitionData> encounterDefinitions,
+        bool useSingleUnitDemo,
+        BattleDeckPreset? playerDeckPreset
     )
     {
         if (cards == null)
@@ -171,7 +214,25 @@ public static class BattleDefinitionBootstrap
             );
         EnemyDefinitionData enemyDefinition = EnemyDefinitionLoader.FindByID(enemyDefinitions, encounterDefinition.enemyID);
 
-        BattleUnitFactoryResult allyAResult = BattleUnitFactory.CreatePlayer(allyADefinition, cards);
+        List<string> presetCardIDs = null;
+        if (playerDeckPreset.HasValue)
+        {
+            BattleDeckManifest manifest = BattleDeckManifests.Get(playerDeckPreset.Value);
+            List<string> missingCardIDs = new List<string>();
+            presetCardIDs = manifest.ResolveAvailableCardIDs(cards, missingCardIDs);
+            if (missingCardIDs.Count > 0)
+            {
+                return BattleDefinitionBootstrapResult.Failure(
+                    playerDeckPreset.Value +
+                    " Deck初始化失败，缺少模板：" +
+                    string.Join(", ", missingCardIDs)
+                );
+            }
+        }
+
+        BattleUnitFactoryResult allyAResult = playerDeckPreset.HasValue
+            ? BattleUnitFactory.CreatePlayer(allyADefinition, cards, presetCardIDs)
+            : BattleUnitFactory.CreatePlayer(allyADefinition, cards);
 
         if (!allyAResult.isSuccess)
         {
@@ -180,7 +241,9 @@ public static class BattleDefinitionBootstrap
 
         BattleUnitFactoryResult allyBResult = useSingleUnitDemo
             ? null
-            : BattleUnitFactory.CreatePlayer(allyBDefinition, cards);
+            : playerDeckPreset.HasValue
+                ? BattleUnitFactory.CreatePlayer(allyBDefinition, cards, presetCardIDs)
+                : BattleUnitFactory.CreatePlayer(allyBDefinition, cards);
 
         if (allyBResult != null && !allyBResult.isSuccess)
         {
@@ -208,6 +271,15 @@ public static class BattleDefinitionBootstrap
             return BattleDefinitionBootstrapResult.Failure(
                 enemy2Result.errorMessage
             );
+        }
+
+        if (playerDeckPreset.HasValue)
+        {
+            ApplyPlayerDeckPresetInitialState(allyAResult.unit, playerDeckPreset.Value);
+            if (allyBResult != null)
+            {
+                ApplyPlayerDeckPresetInitialState(allyBResult.unit, playerDeckPreset.Value);
+            }
         }
 
         Dictionary<string, CharacterData> allyByID = new Dictionary<string, CharacterData>();
@@ -261,6 +333,42 @@ public static class BattleDefinitionBootstrap
             enemyDefinition,
             allyByID
         );
+    }
+
+    internal static void ApplyPlayerDeckPresetInitialState(
+        CharacterData player,
+        BattleDeckPreset preset
+    )
+    {
+        if (player == null)
+        {
+            return;
+        }
+
+        ClearResourceStack(player, BattleResourceID.Modification);
+        ClearResourceStack(player, BattleResourceID.Bullet);
+        ClearResourceStack(player, BattleResourceID.Anger);
+        BattleConservationRules.Clear(player);
+        player.SetAngerMechanicEnabledForBattle(false);
+
+        if (preset == BattleDeckPreset.Shooting)
+        {
+            BattleBulletRules.ReloadToCapacity(player);
+        }
+    }
+
+    static void ClearResourceStack(CharacterData character, string resourceID)
+    {
+        if (character == null || string.IsNullOrEmpty(resourceID))
+        {
+            return;
+        }
+
+        int stack = character.GetBuffStack(resourceID);
+        if (stack > 0)
+        {
+            character.TryConsumeBuffStackAsResource(resourceID, stack, out _);
+        }
     }
 
     public static BattleDefinitionIntentQueueResult CreateIntentQueueForTurn(

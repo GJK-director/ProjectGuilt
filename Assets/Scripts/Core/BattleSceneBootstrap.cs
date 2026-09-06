@@ -7,6 +7,8 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
     [SerializeField] private BattleFormalPresentationTestHarness formalPresentationTestHarness;
     [SerializeField] private bool useDebugTestInitialization = false;
     [SerializeField] private bool useSingleUnitDemo = false;
+    [Header("Player Test Deck")]
+    [SerializeField] private BattleDeckPreset playerDeckPreset = BattleDeckPreset.Knife;
 
     private bool hasStartedInitialization;
     private BattleDefinitionBootstrapResult activeBootstrapResult;
@@ -19,6 +21,7 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
     public bool HasStartedInitialization => hasStartedInitialization;
     public bool UseDebugTestInitialization => useDebugTestInitialization;
     public bool UseSingleUnitDemo => useSingleUnitDemo;
+    public BattleDeckPreset PlayerDeckPreset => playerDeckPreset;
     public string EncounterID => encounterID;
 
     private void Start()
@@ -74,6 +77,7 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
         BattleDefinitionBootstrapResult bootstrapResult =
             BattleDefinitionBootstrap.CreateRuntimeState(
                 encounterID,
+                playerDeckPreset,
                 useSingleUnitDemo
             );
 

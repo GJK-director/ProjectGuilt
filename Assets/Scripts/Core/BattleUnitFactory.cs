@@ -45,6 +45,35 @@ public static class BattleUnitFactory
         string runtimeUnitID
     )
     {
+        return CreatePlayer(
+            definition,
+            cards,
+            runtimeUnitID,
+            definition != null ? definition.startingCardIDs : null
+        );
+    }
+
+    public static BattleUnitFactoryResult CreatePlayer(
+        CharacterDefinitionData definition,
+        List<CardTestData> cards,
+        IReadOnlyList<string> startingCardIDs
+    )
+    {
+        return CreatePlayer(
+            definition,
+            cards,
+            definition != null ? definition.characterID : null,
+            startingCardIDs
+        );
+    }
+
+    static BattleUnitFactoryResult CreatePlayer(
+        CharacterDefinitionData definition,
+        List<CardTestData> cards,
+        string runtimeUnitID,
+        IReadOnlyList<string> startingCardIDs
+    )
+    {
         if (definition == null)
         {
             return BattleUnitFactoryResult.Failure("角色定义为空");
@@ -58,9 +87,13 @@ public static class BattleUnitFactory
         List<CardTestData> resolvedCards;
         string errorMessage;
 
+        string[] explicitCardIDs = startingCardIDs != null
+            ? new List<string>(startingCardIDs).ToArray()
+            : null;
+
         if (!CharacterDefaultCardValidator.TryResolve(
                 definition.characterID,
-                definition.startingCardIDs,
+                explicitCardIDs,
                 cards,
                 out resolvedCards,
                 out errorMessage))
