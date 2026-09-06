@@ -93,7 +93,8 @@ public enum BattleTestMode
     BattleActionRollPanelLifecycleBasic = 104,
     BattleCardCommonRulesPhaseOneBasic = 105,
     BattleResourceFoundationAndBasicKnife = 106,
-    BattleAngerAndKnifeCardsBasic = 107
+    BattleAngerAndKnifeCardsBasic = 107,
+    BattleBasicShootingLoop = 108
 }
 
 public static class BattleAngerAndKnifeCardsBasicTests
@@ -408,13 +409,73 @@ public static class BattleAngerAndKnifeCardsBasicTests
         CharacterData owner = Unit("mode107_iai", true);
         BattleAngerRules.AddAnger(owner, 5);
         bool damage = Damage(owner, Unit("mode107_iai_target", false), iai, 5) == 6;
-        BattleCardState state = new BattleCardState(owner, iai, "mode107_iai");
+        BattleCardState state = BattleCardManager.CreateBattleCard(
+            owner,
+            iai,
+            "mode107_iai"
+        );
         BattleKnifeCardRules.CaptureActionStart(state);
         bool retainedBeforeFinish = BattleAngerRules.GetAnger(owner) == 5;
         BattleCardManager.ApplyCooldownOnResolved(state);
         BattleKnifeCardRules.FinalizeCompletedInteraction(state);
         bool clearedAndCooldown = BattleAngerRules.GetAnger(owner) == 0 &&
             state.currentCooldown == 10 && !state.isConsumed;
+        BattleCardManager.ReduceCooldownsAtTurnEnd(owner);
+        bool sameTurnCooldownHeld = state.currentCooldown == 10 &&
+            !state.skipNextTurnEndCooldownTick;
+        BattleCardManager.ReduceCooldownsAtTurnEnd(owner);
+        bool nextTurnCooldownReduced = state.currentCooldown == 9;
+
+        CardTestData permanentNoCooldown = FixedCopy(iai, 5, 5);
+        permanentNoCooldown.cardID = "mode107_iai_permanent_no_cooldown";
+        permanentNoCooldown.rarity = CardRarity.Green;
+        permanentNoCooldown.cooldown = 0;
+        BattleCardState permanentNoCooldownState =
+            BattleCardManager.CreateBattleCard(
+                owner,
+                permanentNoCooldown,
+                "mode107_iai_permanent_no_cooldown"
+            );
+        BattleCardManager.ApplyCooldownOnResolved(permanentNoCooldownState);
+
+        CardTestData useCountNoCooldown = FixedCopy(iai, 5, 5);
+        useCountNoCooldown.cardID = "mode107_iai_use_count_no_cooldown";
+        useCountNoCooldown.rarity = CardRarity.Green;
+        useCountNoCooldown.cooldown = 0;
+        useCountNoCooldown.sinCardUseRule = SinCardUseRule.UseCount;
+        useCountNoCooldown.maxUseCount = 1;
+        BattleCardState useCountNoCooldownState =
+            BattleCardManager.CreateBattleCard(
+                owner,
+                useCountNoCooldown,
+                "mode107_iai_use_count_no_cooldown"
+            );
+        BattleCardManager.ApplyCooldownOnResolved(useCountNoCooldownState);
+
+        CardTestData explicitNormalCooldown = FixedCard(
+            "mode107_explicit_normal_cooldown",
+            CardType.Attack,
+            1,
+            1,
+            3
+        );
+        explicitNormalCooldown.rarity = CardRarity.Green;
+        CardTestData fallbackNormalCooldown = FixedCard(
+            "mode107_fallback_normal_cooldown",
+            CardType.Attack,
+            1,
+            1,
+            0
+        );
+        fallbackNormalCooldown.rarity = CardRarity.Green;
+        bool cooldownRegressions = sameTurnCooldownHeld &&
+            nextTurnCooldownReduced &&
+            permanentNoCooldownState.currentCooldown == 0 &&
+            !permanentNoCooldownState.skipNextTurnEndCooldownTick &&
+            useCountNoCooldownState.currentCooldown == 0 &&
+            !useCountNoCooldownState.skipNextTurnEndCooldownTick &&
+            BattleCardManager.GetBaseCooldown(explicitNormalCooldown) == 3 &&
+            BattleCardManager.GetBaseCooldown(fallbackNormalCooldown) == 2;
 
         CharacterData tieOwner = Unit("mode107_iai_tie", true);
         BattleAngerRules.AddAnger(tieOwner, 3);
@@ -475,7 +536,18 @@ public static class BattleAngerAndKnifeCardsBasicTests
             "mode107_iai_cancel"
         ));
         bool cancelledKeeps = BattleAngerRules.GetAnger(cancelledOwner) == 2;
+
+        Debug.Log("Iai Range：" + ranges);
+        Debug.Log("Iai 5怒伤害：" + damage);
+        Debug.Log("Iai 结算前保怒：" + retainedBeforeFinish);
+        Debug.Log("Iai 清怒+CD10：" + clearedAndCooldown);
+        Debug.Log("Iai CD路径回归：" + cooldownRegressions);
+        Debug.Log("Iai Tie保怒：" + tieKeeps);
+        Debug.Log("Iai Loss contextual x1.5：" + contextual);
+        Debug.Log("Iai Loss伤害后清怒：" + lossAppliedThenCleared);
+        Debug.Log("Iai Cancel不清怒：" + cancelledKeeps);
         return ranges && damage && retainedBeforeFinish && clearedAndCooldown &&
+            cooldownRegressions &&
             tieKeeps && contextual && lossAppliedThenCleared && cancelledKeeps;
     }
 
@@ -733,6 +805,356 @@ public static class BattleAngerAndKnifeCardsBasicTests
             sinCardUseRule = source.sinCardUseRule,
             traits = source.traits
         };
+    }
+}
+
+public static class BattleBasicShootingLoopTests
+{
+    public static void Run(List<CardTestData> cards)
+    {
+        bool cardData = VerifyCardData(cards);
+        bool capacity = VerifyCapacity();
+        bool blind = VerifyBlindShoot(cards);
+        bool close = VerifyCloseShoot(cards);
+        bool disengage = VerifyDisengage(cards);
+        bool reload = VerifyReload(cards);
+        bool aim = VerifyAimShoot(cards);
+        bool unavailable = VerifyActionUnavailable(cards);
+        bool fallback = VerifyRespondedFallbackSeam(cards);
+        bool resourceCooldown = VerifyResourceAndCooldown(cards);
+        bool regression = BattleExecutionPlanFirstStrikePolicyTests.Run() &&
+            BattleExecutionInteractionContextTests.Run();
+        bool passed = cardData && capacity && blind && close && disengage &&
+            reload && aim && unavailable && fallback && resourceCooldown &&
+            regression;
+
+        Debug.Log("===== Mode108 BattleBasicShootingLoop =====");
+        Debug.Log("射击卡数据：" + cardData);
+        Debug.Log("Bullet基础容量：" + capacity);
+        Debug.Log("盲射：" + blind);
+        Debug.Log("抵近射击：" + close);
+        Debug.Log("抽身：" + disengage);
+        Debug.Log("装填：" + reload);
+        Debug.Log("瞄准射击：" + aim);
+        Debug.Log("0弹ActionUnavailable：" + unavailable);
+        Debug.Log("Responded空枪回落：" + fallback);
+        Debug.Log("Resource/CD回归：" + resourceCooldown);
+        Debug.Log("回归：" + regression);
+        Debug.Log("Passed: " + passed);
+    }
+
+    static bool VerifyCardData(List<CardTestData> cards)
+    {
+        CardTestData blind = Find(cards, "atk_bullet_001");
+        CardTestData close = Find(cards, "shoot_close_001");
+        CardTestData disengage = Find(cards, "shoot_disengage_001");
+        CardTestData reload = Find(cards, "shoot_reload_001");
+        CardTestData aim = Find(cards, "shoot_aim_001");
+        return blind != null && blind.cardName == "盲射" &&
+            IsShoot(blind, AttackDeliveryMode.LongRangeShoot, 1, 12, 0) &&
+            close != null && IsShoot(close, AttackDeliveryMode.CloseRangeShoot, 5, 8, 1) &&
+            disengage != null && disengage.cardType == CardType.Dodge &&
+            disengage.minPoint == 4 && disengage.maxPoint == 8 &&
+            disengage.cooldown == 1 &&
+            disengage.HasTrait(BattleCardTrait.GrantBulletOnSuccessfulDodge) &&
+            reload != null && reload.cardType == CardType.Dodge &&
+            reload.minPoint == 1 && reload.maxPoint == 3 && reload.cooldown == 4 &&
+            reload.HasTrait(BattleCardTrait.ReloadBulletOnDodgeResolution) &&
+            aim != null && IsShoot(aim, AttackDeliveryMode.LongRangeShoot, 8, 14, 3) &&
+            aim.GetPresentationVariant() ==
+                BattleCardPresentationVariant.SpecialLongRangeDuel;
+    }
+
+    static bool VerifyCapacity()
+    {
+        CharacterData unit = Unit("mode108_capacity");
+        bool empty = BattleBulletRules.GetBullet(unit) == 0 &&
+            BattleBulletRules.GetMagazineCapacity(unit) == 6;
+        BattleBulletRules.AddBulletCapped(unit, 5);
+        bool fiveToSix = BattleBulletRules.AddBulletCapped(unit, 1) == 6;
+        bool sixStaysSix = BattleBulletRules.AddBulletCapped(unit, 1) == 6;
+        unit.TryConsumeBuffStackAsResource(BattleResourceID.Bullet, 6, out _);
+        bool reloadZero = BattleBulletRules.ReloadToCapacity(unit) == 6;
+        unit.TryConsumeBuffStackAsResource(BattleResourceID.Bullet, 4, out _);
+        bool reloadTwo = BattleBulletRules.ReloadToCapacity(unit) == 6;
+        return empty && fiveToSix && sixStaysSix && reloadZero && reloadTwo;
+    }
+
+    static bool VerifyBlindShoot(List<CardTestData> cards)
+    {
+        CardTestData blind = Find(cards, "atk_bullet_001");
+        bool win = ResolveRespondedShoot(blind, 12, 1, 1, out int winBullet,
+            out BattleResolveResult winResult) && winBullet == 0 &&
+            winResult.resultType == "PlayerWin";
+        bool loss = ResolveRespondedShoot(blind, 1, 12, 1, out int lossBullet,
+            out BattleResolveResult lossResult) && lossBullet == 0 &&
+            lossResult.resultType == "EnemyWin";
+        bool tie = TryRollTie(blind, 6, 1);
+        return win && loss && tie;
+    }
+
+    static bool VerifyCloseShoot(List<CardTestData> cards)
+    {
+        CardTestData close = Find(cards, "shoot_close_001");
+        bool win = ResolveRespondedShoot(close, 8, 1, 1, out int winBullet,
+            out BattleResolveResult winResult) && winBullet == 0 &&
+            winResult.resultType == "PlayerWin";
+        bool loss = ResolveRespondedShoot(close, 1, 8, 1, out int lossBullet,
+            out BattleResolveResult lossResult) && lossBullet == 1 &&
+            lossResult.resultType == "EnemyWin";
+        return win && loss;
+    }
+
+    static bool VerifyDisengage(List<CardTestData> cards)
+    {
+        CardTestData disengage = Find(cards, "shoot_disengage_001");
+        bool zero = ResolveDodge(disengage, 8, 1, 0, out int afterZero,
+            out BattleResolutionPlan _) && afterZero == 1;
+        bool capped = ResolveDodge(disengage, 8, 1, 5, out int afterFive,
+            out BattleResolutionPlan _) && afterFive == 6 &&
+            ResolveDodge(disengage, 8, 1, 6, out int afterSix,
+                out BattleResolutionPlan _) && afterSix == 6;
+        bool failure = ResolveDodge(disengage, 1, 8, 3, out int afterFailure,
+            out BattleResolutionPlan _) && afterFailure == 3;
+        return zero && capped && failure;
+    }
+
+    static bool VerifyReload(List<CardTestData> cards)
+    {
+        CardTestData reload = Find(cards, "shoot_reload_001");
+        bool success = ResolveDodge(reload, 3, 1, 0, out int afterSuccess,
+            out BattleResolutionPlan successPlan) && afterSuccess == 6 &&
+            successPlan.CompletedResult.resultType == "DodgeSuccess";
+        bool failure = ResolveDodge(reload, 1, 10, 2, out int afterFailure,
+            out BattleResolutionPlan failurePlan) && afterFailure == 6 &&
+            failurePlan.CompletedResult.resultType == "DodgeFailed" &&
+            failurePlan.CompletedResult.damage == 15;
+        return success && failure;
+    }
+
+    static bool VerifyAimShoot(List<CardTestData> cards)
+    {
+        CardTestData aim = Find(cards, "shoot_aim_001");
+        return ResolveRespondedShoot(aim, 14, 1, 1, out int bullet,
+            out BattleResolveResult result) && bullet == 0 &&
+            result.resultType == "PlayerWin" && aim.cooldown == 3;
+    }
+
+    static bool VerifyActionUnavailable(List<CardTestData> cards)
+    {
+        CardTestData blind = Find(cards, "atk_bullet_001");
+        CharacterData player = Unit("mode108_unavailable_player");
+        CharacterData enemy = Unit("mode108_unavailable_enemy");
+        BattleCardState playerCard = State(player, Clone(blind, 1, 12), "player");
+        BattleCardState enemyCard = State(enemy, Attack("enemy", 4), "enemy");
+        BattleEnemyIntent intent = new BattleEnemyIntent("intent", enemy, enemyCard, player, 1);
+        BattleActionSlot slot = new BattleActionSlot(player, 1);
+        slot.AssignResponse(player, playerCard, intent, false);
+        BattleResolveResult result = BattleResolver.TryBeginRespondedClash(
+            slot, intent, out BattleClashSession session
+        );
+        return session == null && result != null &&
+            result.resultType == "ActionUnavailable" && playerCard.currentCooldown == 0 &&
+            BattleBulletRules.GetBullet(player) == 0;
+    }
+
+    static bool VerifyRespondedFallbackSeam(List<CardTestData> cards)
+    {
+        CardTestData blind = Find(cards, "atk_bullet_001");
+        CharacterData player = Unit("mode108_fallback_player");
+        CharacterData originalTarget = Unit("mode108_fallback_target");
+        CharacterData enemy = Unit("mode108_fallback_enemy");
+        BattleCardState playerCard = State(player, Clone(blind, 1, 12), "player");
+        BattleCardState enemyCard = State(enemy, Attack("enemy", 6), "enemy");
+        BattleEnemyIntent intent = new BattleEnemyIntent("intent", enemy, enemyCard, originalTarget, 2);
+        BattleActionSlot slot = new BattleActionSlot(player, 1);
+        slot.AssignResponse(player, playerCard, intent, false);
+        BattleExecutionPlan plan = new BattleExecutionPlan();
+        BattleExecutionItem item = new BattleExecutionItem(
+            1, BattleExecutionItemType.RespondedEnemyIntent, intent, slot
+        );
+        plan.AddItem(item);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(plan);
+        bool attackFallback = item.isCompleted &&
+            item.outcomeReason ==
+                BattleExecutionItemOutcomeReason.ResponseUnavailableFallbackToUnresponded &&
+            originalTarget.currentHP == 94 && playerCard.currentCooldown == 0 &&
+            BattleBulletRules.GetBullet(player) == 0;
+
+        BattleCardState defenseCard = State(enemy, new CardTestData
+        {
+            cardID = "mode108_reactive_defense", cardName = "defense",
+            cardType = CardType.Defense, minPoint = 1, maxPoint = 1,
+            defenseFormula = "PointAsDefense"
+        }, "defense");
+        BattleEnemyIntent defenseIntent = new BattleEnemyIntent(
+            "defense_intent", enemy, defenseCard, originalTarget, 2
+        );
+        BattleActionSlot defenseResponseSlot = new BattleActionSlot(player, 2);
+        BattleCardState secondEmptyShoot = State(
+            player, Clone(blind, 1, 12), "second_empty"
+        );
+        defenseResponseSlot.AssignResponse(
+            player, secondEmptyShoot, defenseIntent, false
+        );
+        BattleExecutionPlan defensePlan = new BattleExecutionPlan();
+        BattleExecutionItem defenseItem = new BattleExecutionItem(
+            2, BattleExecutionItemType.RespondedEnemyIntent,
+            defenseIntent, defenseResponseSlot
+        );
+        defensePlan.AddItem(defenseItem);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(defensePlan);
+        bool reactiveGuardPreserved = defenseItem.isCompleted &&
+            defenseItem.outcomeReason ==
+                BattleExecutionItemOutcomeReason.ResponseUnavailableFallbackToUnresponded &&
+            defenseCard.currentCooldown == 0 &&
+            object.ReferenceEquals(
+                defenseIntent.actualTargetCharacter,
+                defenseIntent.originalTargetCharacter
+            );
+        return attackFallback && reactiveGuardPreserved &&
+            object.ReferenceEquals(intent.originalTargetCharacter, originalTarget) &&
+            intent.originalTargetSlotIndex == 2;
+    }
+
+    static bool VerifyResourceAndCooldown(List<CardTestData> cards)
+    {
+        CardTestData close = Find(cards, "shoot_close_001");
+        CharacterData owner = Unit("mode108_cd");
+        BattleCardState state = BattleCardManager.CreateBattleCard(owner, close, "close");
+        BattleCardManager.ApplyCooldownOnResolved(state);
+        bool truthfulCooldown = state.currentCooldown == 1 &&
+            state.skipNextTurnEndCooldownTick;
+        BattleCardManager.ReduceCooldownsAtTurnEnd(owner);
+        bool sameTurnHeld = state.currentCooldown == 1 &&
+            !state.skipNextTurnEndCooldownTick;
+        BattleCardManager.ReduceCooldownsAtTurnEnd(owner);
+        return truthfulCooldown && sameTurnHeld && state.currentCooldown == 0;
+    }
+
+    static bool ResolveRespondedShoot(
+        CardTestData source,
+        int playerPoint,
+        int enemyPoint,
+        int bullet,
+        out int bulletAfter,
+        out BattleResolveResult result
+    )
+    {
+        CharacterData player = Unit("mode108_shoot_player");
+        CharacterData enemy = Unit("mode108_shoot_enemy");
+        BattleBulletRules.AddBulletCapped(player, bullet);
+        BattleCardState playerCard = State(player, Clone(source, playerPoint, playerPoint), "player");
+        BattleCardState enemyCard = State(enemy, Attack("enemy", enemyPoint), "enemy");
+        BattleEnemyIntent intent = new BattleEnemyIntent("intent", enemy, enemyCard, player, 1);
+        BattleActionSlot slot = new BattleActionSlot(player, 1);
+        slot.AssignResponse(player, playerCard, intent, false);
+        BattleResolveResult begin = BattleResolver.TryBeginRespondedClash(slot, intent, out BattleClashSession session);
+        result = begin;
+        bulletAfter = BattleBulletRules.GetBullet(player);
+        if (begin != null || session == null || !session.RollNextAttempt() || !session.IsFinalized)
+        {
+            return false;
+        }
+        BattleResolutionPlan plan = BattleResolver.BuildRespondedClashResolutionPlan(slot, intent, session);
+        Complete(plan);
+        result = plan != null ? plan.CompletedResult : null;
+        bulletAfter = BattleBulletRules.GetBullet(player);
+        return result != null && result.isSuccess;
+    }
+
+    static bool TryRollTie(CardTestData source, int point, int bullet)
+    {
+        CharacterData player = Unit("mode108_tie_player");
+        CharacterData enemy = Unit("mode108_tie_enemy");
+        BattleBulletRules.AddBulletCapped(player, bullet);
+        BattleCardState playerCard = State(player, Clone(source, point, point), "player");
+        BattleCardState enemyCard = State(enemy, Attack("enemy", point), "enemy");
+        BattleEnemyIntent intent = new BattleEnemyIntent("intent", enemy, enemyCard, player, 1);
+        BattleActionSlot slot = new BattleActionSlot(player, 1);
+        slot.AssignResponse(player, playerCard, intent, false);
+        if (BattleResolver.TryBeginRespondedClash(slot, intent, out BattleClashSession session) != null ||
+            session == null || !session.RollNextAttempt())
+        {
+            return false;
+        }
+        return session.RequiresAnotherRoll && !session.IsFinalized &&
+            BattleBulletRules.GetBullet(player) == bullet;
+    }
+
+    static bool ResolveDodge(
+        CardTestData source,
+        int dodgePoint,
+        int enemyPoint,
+        int bullet,
+        out int bulletAfter,
+        out BattleResolutionPlan plan
+    )
+    {
+        CharacterData player = Unit("mode108_dodge_player");
+        CharacterData enemy = Unit("mode108_dodge_enemy");
+        BattleBulletRules.AddBulletCapped(player, bullet);
+        BattleCardState dodge = State(player, Clone(source, dodgePoint, dodgePoint), "dodge");
+        BattleCardState attack = State(enemy, Attack("enemy", enemyPoint), "enemy");
+        BattleEnemyIntent intent = new BattleEnemyIntent("intent", enemy, attack, player, 1);
+        BattleActionSlot slot = new BattleActionSlot(player, 1);
+        slot.AssignResponse(player, dodge, intent, false);
+        BattleClashSession session = BattleClashSession.CreateDodgeVsAttack(
+            Side(player, dodge), Side(enemy, attack), player
+        );
+        session.RollNextAttempt();
+        plan = BattleResolver.BuildRespondedClashResolutionPlan(slot, intent, session);
+        Complete(plan);
+        bulletAfter = BattleBulletRules.GetBullet(player);
+        return plan != null && plan.CompletedResult != null && plan.CompletedResult.isSuccess;
+    }
+
+    static void Complete(BattleResolutionPlan plan)
+    {
+        int guard = 0;
+        while (plan != null && plan.State != BattleResolutionPlanState.Completed && guard++ < 8)
+        {
+            BattleResolver.TryCommitNextResolutionStep(plan, out _);
+        }
+    }
+
+    static BattleClashSideState Side(CharacterData actor, BattleCardState card)
+    {
+        return new BattleClashSideState(actor, card, new BattleClashPointSnapshot(),
+            new BattleClashResourceSnapshot { cardState = card, selectedMinPoint = card.cardData.minPoint, selectedMaxPoint = card.cardData.maxPoint });
+    }
+
+    static bool IsShoot(CardTestData card, string delivery, int min, int max, int cooldown)
+    {
+        return card.cardType == CardType.Attack && card.GetAttackDeliveryMode() == delivery &&
+            card.minPoint == min && card.maxPoint == max && card.cooldown == cooldown &&
+            card.resourceRule != null && card.resourceRule.resourceID == BattleResourceID.Bullet &&
+            card.resourceRule.insufficientBehavior == CardResourceInsufficientBehavior.ActionUnavailable;
+    }
+
+    static CardTestData Clone(CardTestData source, int min, int max)
+    {
+        return new CardTestData { cardID = source.cardID, cardName = source.cardName, cardType = source.cardType, attackDeliveryMode = source.attackDeliveryMode, presentationVariant = source.presentationVariant, isClashable = true, minPoint = min, maxPoint = max, cooldown = source.cooldown, damageFormula = source.damageFormula, resourceRule = source.resourceRule, traits = source.traits };
+    }
+
+    static CardTestData Attack(string id, int point)
+    {
+        return new CardTestData { cardID = id, cardName = id, cardType = CardType.Attack, attackDeliveryMode = AttackDeliveryMode.Melee, isClashable = true, minPoint = point, maxPoint = point, damageFormula = "PointAsDamage" };
+    }
+
+    static BattleCardState State(CharacterData owner, CardTestData card, string suffix)
+    {
+        return BattleCardManager.CreateBattleCard(owner, card, "mode108_" + suffix);
+    }
+
+    static CharacterData Unit(string id)
+    {
+        return new CharacterData(id, 100, 5, 5, id);
+    }
+
+    static CardTestData Find(List<CardTestData> cards, string id)
+    {
+        return CardDataLoader.FindCardByID(cards, id);
     }
 }
 
@@ -1102,6 +1524,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleAngerAndKnifeCardsBasic)
         {
             StartCoroutine(BattleAngerAndKnifeCardsBasicTests.Run(cards));
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleBasicShootingLoop)
+        {
+            BattleBasicShootingLoopTests.Run(cards);
             return;
         }
 

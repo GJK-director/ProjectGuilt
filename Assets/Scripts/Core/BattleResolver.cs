@@ -290,11 +290,10 @@ public static class BattleResolver
             attackAction.cardState,
             false
         );
-        if (attackAction.cardState.IsLongRangeShoot() &&
-            resourceSnapshot.hasRule && !resourceSnapshot.normalVersionEnabled)
+        if (IsResourceUnavailableForExecution(resourceSnapshot))
         {
             failureResult = CreateActionUnavailableResult(
-                "ResolveUnilateralAttack：LongRangeShoot资源不足，本次攻击不进入成功结算"
+                "ResolveUnilateralAttack：执行资源不足，本次攻击不进入成功结算"
             );
             return null;
         }
@@ -943,6 +942,19 @@ public static class BattleResolver
         CardTestData playerCard = actionSlot.cardState.cardData;
         CardTestData enemyCard = enemyIntent.enemyCardState.cardData;
 
+        if (IsResourceUnavailableForExecution(CaptureResourceSnapshot(
+                actionSlot.actor,
+                actionSlot.cardState
+            )))
+        {
+            return CreateActionUnavailableResult(
+                "ResolveRespondedEnemyIntent：响应卡执行资源不足，本次响应变为空卡。" +
+                actionSlot.actor.characterName +
+                " 的卡牌不能使用：" +
+                actionSlot.cardState.GetCardName()
+            );
+        }
+
         BattleExecutionInteractionContext interactionContext =
             CreateRespondedInteractionContext(actionSlot, enemyIntent);
         if (interactionContext.effectiveInteractionType ==
@@ -1160,6 +1172,17 @@ public static class BattleResolver
             actionSlot.cardState
         );
         return true;
+    }
+
+    internal static bool IsResourceUnavailableForExecution(
+        BattleClashResourceSnapshot resourceSnapshot
+    )
+    {
+        return resourceSnapshot != null &&
+            resourceSnapshot.hasRule &&
+            !resourceSnapshot.normalVersionEnabled &&
+            GetInsufficientBehavior(resourceSnapshot) ==
+                CardResourceInsufficientBehavior.ActionUnavailable;
     }
 
     // 同步入口也走同一套Plan提交路径，避免Pausable与旧API形成两套结算规则。
@@ -1470,7 +1493,7 @@ public static class BattleResolver
             BattleTiming.ClashStart,
             BuffGuardDown
         );
-        plan.impacts.Add(new BattleImpact(
+        BattleImpact impact = new BattleImpact(
             0,
             plan.attacker,
             plan.target,
@@ -1480,7 +1503,8 @@ public static class BattleResolver
             ClashResult.None,
             !session.IsFullBlock,
             true
-        ));
+        );
+        plan.impacts.Add(impact);
     }
 
     static void BuildDodgeResolutionPlan(BattleResolutionPlan plan)
@@ -1524,7 +1548,7 @@ public static class BattleResolver
         plan.attacker = session.SideB.actor;
         plan.target = session.ActualTarget;
         plan.sourceCardState = session.SideB.cardState;
-        plan.impacts.Add(new BattleImpact(
+        BattleImpact impact = new BattleImpact(
             0,
             plan.attacker,
             plan.target,
@@ -1534,7 +1558,14 @@ public static class BattleResolver
             ClashResult.Win,
             true,
             true
-        ));
+        );
+        if (session.SideA.cardState != null &&
+            session.SideA.cardState.HasTrait(
+                BattleCardTrait.ReloadBulletOnDodgeResolution))
+        {
+            impact.damageMultiplierPercent = 150;
+        }
+        plan.impacts.Add(impact);
     }
 
     internal static bool TryCommitNextResolutionStep(
@@ -1753,6 +1784,10 @@ public static class BattleResolver
             plan.attacker,
             plan.freeActionResourceSnapshot
         );
+        PayResolvedParticipationResourceCost(
+            plan.attacker,
+            plan.freeActionResourceSnapshot
+        );
         TriggerBattleEvent(
             BattleTiming.Resolved,
             plan.attacker,
@@ -1785,6 +1820,7 @@ public static class BattleResolver
 
         ConsumeSuccessfulPointCardBuffs(winner.actor, winner.pointSnapshot);
         PayDefaultResourceCostOnSuccessfulUse(winner.actor, winner.resourceSnapshot);
+        PayResolvedParticipationResourceCost(winner.actor, winner.resourceSnapshot);
         // LongRangeShoot无论拼点胜负都代表实际开火；只有资源支付随终局发生，
         // 不因此改变胜负卡牌、Damage或事件归属。
         PayLongRangeShootResourceOnTerminalUse(loser);
@@ -1812,6 +1848,10 @@ public static class BattleResolver
         );
         ConsumeSuccessfulPointCardBuffs(player, session.SideA.pointSnapshot);
         PayDefaultResourceCostOnSuccessfulUse(player, session.SideA.resourceSnapshot);
+        PayResolvedParticipationResourceCost(
+            player,
+            session.SideA.resourceSnapshot
+        );
 
         if (!session.UsesKnownSideBPoint)
         {
@@ -1820,6 +1860,10 @@ public static class BattleResolver
                 session.SideB.pointSnapshot
             );
             PayDefaultResourceCostOnSuccessfulUse(
+                session.SideB.actor,
+                session.SideB.resourceSnapshot
+            );
+            PayResolvedParticipationResourceCost(
                 session.SideB.actor,
                 session.SideB.resourceSnapshot
             );
@@ -1842,6 +1886,10 @@ public static class BattleResolver
             ConsumeClashPointBuffs(session.SideA.actor, session.SideA.pointSnapshot);
             ConsumeSuccessfulPointCardBuffs(session.SideA.actor, session.SideA.pointSnapshot);
             PayDefaultResourceCostOnSuccessfulUse(
+                session.SideA.actor,
+                session.SideA.resourceSnapshot
+            );
+            PayResolvedParticipationResourceCost(
                 session.SideA.actor,
                 session.SideA.resourceSnapshot
             );
@@ -1870,6 +1918,10 @@ public static class BattleResolver
         ConsumeClashPointBuffs(session.SideB.actor, session.SideB.pointSnapshot);
         ConsumeSuccessfulPointCardBuffs(session.SideB.actor, session.SideB.pointSnapshot);
         PayDefaultResourceCostOnSuccessfulUse(
+            session.SideB.actor,
+            session.SideB.resourceSnapshot
+        );
+        PayResolvedParticipationResourceCost(
             session.SideB.actor,
             session.SideB.resourceSnapshot
         );
@@ -2046,6 +2098,25 @@ public static class BattleResolver
                     2,
                     1
                 );
+            }
+            if (plan.clashSession.ClashType == BattleClashType.DodgeVsAttack)
+            {
+                BattleClashSideState dodgeSide = plan.clashSession.SideA;
+                if (dodgeSide.cardState != null &&
+                    dodgeSide.cardState.HasTrait(
+                        BattleCardTrait.GrantBulletOnSuccessfulDodge) &&
+                    plan.clashSession.FinalResult ==
+                        BattleClashFinalResult.DodgeSuccess)
+                {
+                    BattleBulletRules.AddBulletCapped(dodgeSide.actor, 1);
+                }
+
+                if (dodgeSide.cardState != null &&
+                    dodgeSide.cardState.HasTrait(
+                        BattleCardTrait.ReloadBulletOnDodgeResolution))
+                {
+                    BattleBulletRules.ReloadToCapacity(dodgeSide.actor);
+                }
             }
             return;
         }
@@ -3739,6 +3810,9 @@ public static class BattleResolver
 
         snapshot.plannedConsumeAmount = Mathf.Max(0, rule.consumeAmountOnSuccess);
         snapshot.shouldConsumeOnSuccess = snapshot.normalVersionEnabled && snapshot.plannedConsumeAmount > 0;
+        snapshot.consumeTiming = string.IsNullOrEmpty(rule.consumeTiming)
+            ? CardResourceConsumeTiming.OnSuccessfulUse
+            : rule.consumeTiming;
 
         return snapshot;
     }
@@ -3774,7 +3848,23 @@ public static class BattleResolver
         // 默认资源成本只在本次卡牌被视为成功使用时支付。
         // Attack拼点失败、ActionUnavailable、TieLimit和死亡跳过不会支付。
         // 无资源降级版本即使成功使用，也不会凭空扣除资源。
-        PayCapturedResourceCost(unit, snapshot);
+        if (GetConsumeTiming(snapshot) ==
+            CardResourceConsumeTiming.OnSuccessfulUse)
+        {
+            PayCapturedResourceCost(unit, snapshot);
+        }
+    }
+
+    static void PayResolvedParticipationResourceCost(
+        CharacterData unit,
+        BattleClashResourceSnapshot snapshot
+    )
+    {
+        if (GetConsumeTiming(snapshot) ==
+            CardResourceConsumeTiming.OnResolvedParticipation)
+        {
+            PayCapturedResourceCost(unit, snapshot);
+        }
     }
 
     static void PayLongRangeShootResourceOnTerminalUse(BattleClashSideState side)
@@ -3787,6 +3877,26 @@ public static class BattleResolver
 
         // LongRangeShoot终局即代表实际开火；败方只支付资源，不触发胜者事件或伤害。
         PayCapturedResourceCost(side.actor, side.resourceSnapshot);
+    }
+
+    static string GetConsumeTiming(BattleClashResourceSnapshot snapshot)
+    {
+        return snapshot != null && !string.IsNullOrEmpty(snapshot.consumeTiming)
+            ? snapshot.consumeTiming
+            : CardResourceConsumeTiming.OnSuccessfulUse;
+    }
+
+    static string GetInsufficientBehavior(
+        BattleClashResourceSnapshot snapshot
+    )
+    {
+        CardResourceRuleData rule = snapshot != null && snapshot.cardState != null &&
+            snapshot.cardState.cardData != null
+            ? GetFirstResourceRule(snapshot.cardState.cardData)
+            : null;
+        return rule != null && !string.IsNullOrEmpty(rule.insufficientBehavior)
+            ? rule.insufficientBehavior
+            : CardResourceInsufficientBehavior.SoftFallback;
     }
 
     static void PayCapturedResourceCost(

@@ -8,13 +8,29 @@ public enum BattleCardTrait
     DoubleClashAgainstDefense,
     HeavyAnger,
     IaiAnger,
-    GrantNextClashPointUpOnSuccessfulDodge
+    GrantNextClashPointUpOnSuccessfulDodge,
+    GrantBulletOnSuccessfulDodge,
+    ReloadBulletOnDodgeResolution
 }
 
-// CardResourceRuleData = 卡牌软资源规则
-// 软资源规则不会阻止卡牌安排或执行。
-// 资源不足时选择降级基础点数，而不是返回ActionUnavailable。
-// 硬性使用条件仍由useConditions系统处理。
+public static class CardResourceInsufficientBehavior
+{
+    // 保持旧资源卡的缺省行为：资源不足时改用fallback点数范围。
+    public const string SoftFallback = "SoftFallback";
+    // 只在真实执行时判定不可用；Planning仍然可以安排该卡。
+    public const string ActionUnavailable = "ActionUnavailable";
+}
+
+public static class CardResourceConsumeTiming
+{
+    // 保持旧卡语义：只有成功使用时才支付资源。
+    public const string OnSuccessfulUse = "OnSuccessfulUse";
+    // 终局射击参与即支付，胜负不影响本次支付。
+    public const string OnResolvedParticipation = "OnResolvedParticipation";
+}
+
+// CardResourceRuleData = 卡牌资源规则。
+// 缺省值保持旧的软资源fallback与成功使用支付语义。
 public class CardResourceRuleData
 {
     public string resourceType;
@@ -26,6 +42,8 @@ public class CardResourceRuleData
     public int exactStackForBonus;
     public int exactStackPointBonus;
     public int consumeAmountOnSuccess;
+    public string insufficientBehavior;
+    public string consumeTiming;
 }
 
 // CardTestData = 卡牌测试数据

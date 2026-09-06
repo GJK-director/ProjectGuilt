@@ -53,6 +53,7 @@ public sealed class BattleClashResourceSnapshot
     public int pointModifierFromResource;
     public int plannedConsumeAmount;
     public bool shouldConsumeOnSuccess;
+    public string consumeTiming;
 }
 
 public sealed class BattleClashSideState

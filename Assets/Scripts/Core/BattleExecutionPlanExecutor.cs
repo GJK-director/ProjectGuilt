@@ -1308,8 +1308,9 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
-        bool unavailable = resourceSnapshot == null ||
-            !resourceSnapshot.normalVersionEnabled;
+        bool unavailable = BattleResolver.IsResourceUnavailableForExecution(
+            resourceSnapshot
+        );
         item.SetResponseAttempt(
             unavailable
                 ? BattleResponseAttemptState.UnavailableResource
@@ -1573,6 +1574,17 @@ public static class BattleExecutionPlanExecutor
             enemyIntent.originalTargetCharacter,
             enemyIntent.originalTargetSlotIndex
         );
+
+        // Enemy Defense / Dodge 是后续Attack的reactive guard候选，不存在独立的
+        // Unresponded攻击结算。空枪只取消响应方，不能把该守备意图误消费。
+        if (enemyIntent.enemyCardState != null &&
+            enemyIntent.enemyCardState.cardData != null &&
+            enemyIntent.enemyCardState.cardData.cardType != CardType.Attack)
+        {
+            item.actionSlot.MarkUsed();
+            item.MarkExecuted(executedReason);
+            return true;
+        }
 
         if (TryCompleteEnemyItemBecauseActualTargetDead(item))
         {

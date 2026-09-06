@@ -615,17 +615,16 @@ public static class BattleCardManager
             return 0;
         }
 
-        // 罪卡默认无普通 CD
-        // 罪卡的使用限制由 UseCount / Permanent 等规则处理。
-        if (cardData.isSinCard)
-        {
-            return 0;
-        }
-
         // 如果 JSON 里手动填了大于 0 的 cooldown，就优先使用
         if (cardData.cooldown > 0)
         {
             return cardData.cooldown;
+        }
+
+        // 没有显式 CD 的罪卡继续由 UseCount / Permanent 等规则处理。
+        if (cardData.isSinCard)
+        {
+            return 0;
         }
 
         return GetCooldownByRarity(cardData.rarity);
