@@ -28,6 +28,11 @@ public class BattleCardState
     public bool pendingHeavyAngerSpend;
     public bool pendingIaiAngerClear;
 
+    // 节约只属于这张卡牌实例的一次行动，不写入 CardTestData 或角色点数 Buff。
+    public int conservationPointBonus;
+    public bool hasConservationPointBonus;
+    public bool conservationKillReloadArmed;
+
     // isConsumed = 是否已经被消耗
     // 主要给“能力型罪卡”使用
     public bool isConsumed;
@@ -96,6 +101,9 @@ public class BattleCardState
         resolvedCooldownOverride = -1;
         pendingHeavyAngerSpend = false;
         pendingIaiAngerClear = false;
+        conservationPointBonus = 0;
+        hasConservationPointBonus = false;
+        conservationKillReloadArmed = false;
     }
 
     public string GetAttackDeliveryMode()

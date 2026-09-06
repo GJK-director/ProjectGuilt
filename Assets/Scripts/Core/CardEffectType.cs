@@ -14,4 +14,7 @@ public static class CardEffectType
 
     // ActivateModification = 开启改装状态并压缩弹仓
     public const string ActivateModification = "ActivateModification";
+
+    // ActivateConservation = 激活本回合节约状态并准备下一张射击强化。
+    public const string ActivateConservation = "ActivateConservation";
 }

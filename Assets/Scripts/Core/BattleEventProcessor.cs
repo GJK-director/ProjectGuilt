@@ -18,6 +18,7 @@ public static class BattleEventProcessor
         PrintEventLog(context);
 
         BattleCardManager.HandleEvent(context);      // 卡牌 CD / 消耗
+        BattleConservationRules.HandleEvent(context);
         // 后面会在这里逐步接入：
         // CardEffectExecutor.HandleEvent(context);     // 卡牌效果
         // BuffSystem.HandleEvent(context);             // 特殊 Buff 响应

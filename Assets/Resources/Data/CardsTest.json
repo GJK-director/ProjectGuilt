@@ -417,5 +417,39 @@
         "target": "Self"
       }
     ]
+  },
+  {
+    "cardID": "sin_conservation_001",
+    "cardName": "节约",
+    "description": "根据当前子弹强化下一张射击，并在回合结束时结算剩余子弹。",
+    "keywords": [],
+    "rarity": "Sin",
+    "cardType": "Ability",
+    "isClashable": false,
+    "minPoint": 0,
+    "maxPoint": 0,
+    "cooldown": 3,
+    "guiltCost": 0,
+    "guiltGain": 0,
+    "isSinCard": true,
+    "consumeOnUse": false,
+    "maxUseCount": 0,
+    "sinCardUseRule": "Permanent",
+    "sinCardCategory": "Ability",
+    "useConditions": [
+      {
+        "conditionType": "BuffStackAtLeast",
+        "target": "Self",
+        "buffType": "Bullet",
+        "value": 1
+      }
+    ],
+    "effects": [
+      {
+        "trigger": "OnPlay",
+        "effectType": "ActivateConservation",
+        "target": "Self"
+      }
+    ]
   }
 ]

@@ -96,6 +96,14 @@ public static class CardEffectExecutor
                     BattleModificationRules.Activate(effectTarget);
                 }
             }
+            else if (effect.effectType == CardEffectType.ActivateConservation)
+            {
+                CharacterData effectTarget = GetEffectTarget(user, target, effect.target);
+                if (effectTarget != null)
+                {
+                    BattleConservationRules.Activate(effectTarget);
+                }
+            }
             else
             {
                 // 未知效果类型暂时只打印警告，避免静默失败。

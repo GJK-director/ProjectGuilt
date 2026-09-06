@@ -67,6 +67,9 @@ public class CharacterData
     private bool angerMechanicEnabled;
     public bool IsAngerMechanicEnabled => angerMechanicEnabled;
 
+    // 节约的激活状态与下一张射击的待转移资格分开保存。
+    public bool conservationPointGrantPending;
+
     public void SetAngerMechanicEnabledForBattle(bool enabled)
     {
         angerMechanicEnabled = enabled;

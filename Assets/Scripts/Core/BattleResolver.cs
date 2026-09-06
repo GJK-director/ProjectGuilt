@@ -285,6 +285,7 @@ public static class BattleResolver
         // ActionStart 中产生或减少的资源可以影响当前卡。
         // BeforeUse 中产生或减少的资源不会回头改变当前卡资源快照，
         // 只影响后续行动。卡牌设计应避免依赖 BeforeUse 修改自身资源计算。
+        BattleConservationRules.TryAssignPendingBonus(user, attackAction.cardState);
         BattleClashResourceSnapshot resourceSnapshot = CaptureResourceSnapshot(
             user,
             attackAction.cardState,
@@ -2479,6 +2480,9 @@ public static class BattleResolver
         TriggerActionStart(enemyUnit, actualTarget, enemyCardState);
         TriggerActionStart(playerUnit, enemyUnit, playerCardState);
 
+        BattleConservationRules.TryAssignPendingBonus(enemyUnit, enemyCardState);
+        BattleConservationRules.TryAssignPendingBonus(playerUnit, playerCardState);
+
         BattleClashResourceSnapshot playerResourceSnapshot =
             CaptureResourceSnapshot(playerUnit, playerCardState);
         BattleClashResourceSnapshot enemyResourceSnapshot =
@@ -2887,6 +2891,15 @@ public static class BattleResolver
         TriggerActionStart(
             defenseAction.actor,
             attackAction.actor,
+            defenseAction.cardState
+        );
+
+        BattleConservationRules.TryAssignPendingBonus(
+            attackAction.actor,
+            attackAction.cardState
+        );
+        BattleConservationRules.TryAssignPendingBonus(
+            defenseAction.actor,
             defenseAction.cardState
         );
 
@@ -3384,6 +3397,18 @@ public static class BattleResolver
             );
         }
 
+        BattleConservationRules.TryAssignPendingBonus(
+            attackAction.actor,
+            attackAction.cardState
+        );
+        if (!isContinuousDodgeContinuation)
+        {
+            BattleConservationRules.TryAssignPendingBonus(
+                dodgeAction.actor,
+                dodgeAction.cardState
+            );
+        }
+
         BattleClashResourceSnapshot dodgeResourceSnapshot =
             isContinuousDodgeContinuation
                 ? new BattleClashResourceSnapshot
@@ -3771,6 +3796,9 @@ public static class BattleResolver
             out snapshot.selectedMinPoint,
             out snapshot.selectedMaxPoint
         );
+
+        snapshot.pointModifierFromResource +=
+            BattleConservationRules.GetAssignedPointBonus(cardState);
 
         CardResourceRuleData rule = GetFirstResourceRule(cardState.cardData);
 

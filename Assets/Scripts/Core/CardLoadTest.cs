@@ -98,7 +98,8 @@ public enum BattleTestMode
     BattleDeckManifestBasic = 109,
     BattleAbilityPhaseBasic = 110,
     BattleAngerAndModificationAbility = 111,
-    BattleAllInBasic = 112
+    BattleAllInBasic = 112,
+    BattleConservationAbility = 113
 }
 
 public static class BattleAngerAndKnifeCardsBasicTests
@@ -1633,6 +1634,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleAllInBasic)
         {
             BattleAllInBasicTests.Run(cards);
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleConservationAbility)
+        {
+            BattleConservationAbilityTests.Run(cards);
             return;
         }
 
