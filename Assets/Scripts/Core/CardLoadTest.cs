@@ -95,7 +95,8 @@ public enum BattleTestMode
     BattleResourceFoundationAndBasicKnife = 106,
     BattleAngerAndKnifeCardsBasic = 107,
     BattleBasicShootingLoop = 108,
-    BattleDeckManifestBasic = 109
+    BattleDeckManifestBasic = 109,
+    BattleAbilityPhaseBasic = 110
 }
 
 public static class BattleAngerAndKnifeCardsBasicTests
@@ -1612,6 +1613,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleDeckManifestBasic)
         {
             BattleDeckManifestTests.Run(cards);
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleAbilityPhaseBasic)
+        {
+            BattleAbilityPhaseBasicTests.Run();
             return;
         }
 
@@ -25691,5 +25698,188 @@ public class CardLoadTest : MonoBehaviour
     bool RunBattleActionRelationInteractionFixTestSequence()
     {
         return BattleActionRelationInteractionMode75Tests.Run();
+    }
+}
+
+// 脚本中文说明：验证 Ability Phase 的执行计划排序与现有 FreeAction Resolver 生命周期。
+public static class BattleAbilityPhaseBasicTests
+{
+    public static bool Run()
+    {
+        bool[] results = new bool[8];
+        results[0] = VerifyAbilityFirstStrikeNormalOrder();
+        results[1] = VerifyAbilityIgnoresSpeed();
+        results[2] = VerifyAbilitySlotOrder();
+        results[3] = VerifyAbilityDoesNotNeedFirstStrike();
+        results[4] = BattleExecutionPlanFirstStrikePolicyTests.Run();
+        results[5] = VerifyAbilityUsesExistingResolver();
+        results[6] = VerifyUnavailableAbilityDoesNotBlockFollowingAction();
+        results[7] = BattleExecutionInteractionContextTests.Run();
+
+        string[] names =
+        {
+            "Ability > FirstStrike > Normal",
+            "Ability忽略Speed",
+            "多Ability槽位顺序",
+            "Ability无需FirstStrike",
+            "现有FirstStrike回归",
+            "Ability现有Resolver执行",
+            "Invalid Ability不阻断后续",
+            "Interaction回归"
+        };
+
+        bool passed = true;
+        Debug.Log("===== Mode110 BattleAbilityPhaseBasic =====");
+        for (int index = 0; index < results.Length; index++)
+        {
+            Debug.Log(names[index] + "：" + results[index]);
+            passed &= results[index];
+        }
+
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyAbilityFirstStrikeNormalOrder()
+    {
+        TestContext context = CreateContext();
+        BattleActionSlot ability = CreateFreeSlot(
+            context.actor, 2, CreateAbility(context.actor, "mode110_ability_order"), context.actor);
+        BattleActionSlot firstStrike = CreateFreeSlot(
+            context.actor, 3, CreateAttack(context.actor, "mode110_first_order", true), context.enemy);
+        BattleActionSlot normal = CreateFreeSlot(
+            context.actor, 1, CreateAttack(context.actor, "mode110_normal_order", false), context.enemy);
+        BattleExecutionPlan plan = CreatePlan(ability, firstStrike, normal);
+        return plan.executionItems.Count == 3 &&
+            plan.executionItems[0].priorityTier == BattleExecutionPriorityTier.AbilityPhase &&
+            object.ReferenceEquals(plan.executionItems[0].actionSlot, ability) &&
+            plan.executionItems[1].priorityTier == BattleExecutionPriorityTier.FirstStrike &&
+            object.ReferenceEquals(plan.executionItems[1].actionSlot, firstStrike) &&
+            plan.executionItems[2].priorityTier == BattleExecutionPriorityTier.Normal &&
+            object.ReferenceEquals(plan.executionItems[2].actionSlot, normal);
+    }
+
+    static bool VerifyAbilityIgnoresSpeed()
+    {
+        TestContext context = CreateContext();
+        BattleActionSlot ability = CreateFreeSlot(
+            context.actor, 1, CreateAbility(context.actor, "mode110_ability_speed"), context.actor);
+        BattleActionSlot normal = CreateFreeSlot(
+            context.enemy, 2, CreateAttack(context.enemy, "mode110_fast_normal", false), context.actor);
+        BattleExecutionPlan plan = CreatePlan(ability, normal);
+        return plan.executionItems.Count == 2 &&
+            object.ReferenceEquals(plan.executionItems[0].actionSlot, ability);
+    }
+
+    static bool VerifyAbilitySlotOrder()
+    {
+        TestContext context = CreateContext();
+        BattleActionSlot slot2 = CreateFreeSlot(
+            context.actor, 2, CreateAbility(context.actor, "mode110_ability_slot2"), context.actor);
+        BattleActionSlot slot1 = CreateFreeSlot(
+            context.actor, 1, CreateAbility(context.actor, "mode110_ability_slot1"), context.actor);
+        BattleExecutionPlan plan = CreatePlan(slot2, slot1);
+        return plan.executionItems.Count == 2 &&
+            object.ReferenceEquals(plan.executionItems[0].actionSlot, slot1) &&
+            object.ReferenceEquals(plan.executionItems[1].actionSlot, slot2);
+    }
+
+    static bool VerifyAbilityDoesNotNeedFirstStrike()
+    {
+        TestContext context = CreateContext();
+        BattleActionSlot slot = CreateFreeSlot(
+            context.actor, 1, CreateAbility(context.actor, "mode110_ability_trait"), context.actor);
+        BattleExecutionPlan plan = CreatePlan(slot);
+        return !slot.cardState.HasTrait(BattleCardTrait.FirstStrike) &&
+            plan.executionItems[0].priorityTier == BattleExecutionPriorityTier.AbilityPhase;
+    }
+
+    static bool VerifyAbilityUsesExistingResolver()
+    {
+        TestContext context = CreateContext();
+        BattleCardState abilityState = CreateAbility(context.actor, "mode110_ability_resolver");
+        BattleCardState attackState = CreateAttack(context.actor, "mode110_follow_attack", false);
+        BattleActionSlot ability = CreateFreeSlot(context.actor, 1, abilityState, context.actor);
+        BattleActionSlot attack = CreateFreeSlot(context.actor, 2, attackState, context.enemy);
+        int enemyHpBefore = context.enemy.currentHP;
+        BattleExecutionPlan plan = CreatePlan(ability, attack);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(plan);
+        return plan.isCompleted && ability.isUsed && abilityState.currentUseCount == 0 &&
+            attack.isUsed && context.enemy.currentHP < enemyHpBefore &&
+            plan.executionItems[0].status == BattleExecutionItemStatus.Executed &&
+            plan.executionItems[1].status == BattleExecutionItemStatus.Executed;
+    }
+
+    static bool VerifyUnavailableAbilityDoesNotBlockFollowingAction()
+    {
+        TestContext context = CreateContext();
+        BattleCardState abilityState = CreateAbility(context.actor, "mode110_ability_unavailable");
+        abilityState.currentCooldown = 1;
+        BattleActionSlot ability = CreateFreeSlot(context.actor, 1, abilityState, context.actor);
+        BattleActionSlot attack = CreateFreeSlot(
+            context.actor, 2, CreateAttack(context.actor, "mode110_after_unavailable", false), context.enemy);
+        int enemyHpBefore = context.enemy.currentHP;
+        BattleExecutionPlan plan = CreatePlan(ability, attack);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(plan);
+        return plan.isCompleted && !ability.isUsed &&
+            plan.executionItems[0].status == BattleExecutionItemStatus.Skipped &&
+            attack.isUsed && plan.executionItems[1].status == BattleExecutionItemStatus.Executed &&
+            context.enemy.currentHP < enemyHpBefore;
+    }
+
+    static BattleExecutionPlan CreatePlan(params BattleActionSlot[] slots)
+    {
+        return BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot>(slots), new List<BattleEnemyIntent>());
+    }
+
+    static BattleActionSlot CreateFreeSlot(
+        CharacterData actor, int slotIndex, BattleCardState cardState, CharacterData target)
+    {
+        BattleActionSlot slot = new BattleActionSlot(actor, slotIndex);
+        slot.AssignFreeAction(actor, cardState, target);
+        return slot;
+    }
+
+    static BattleCardState CreateAbility(CharacterData owner, string id)
+    {
+        return new BattleCardState(owner, new CardTestData
+        {
+            cardID = id,
+            cardName = id,
+            cardType = "Ability",
+            isClashable = false
+        }, id);
+    }
+
+    static BattleCardState CreateAttack(CharacterData owner, string id, bool firstStrike)
+    {
+        return new BattleCardState(owner, new CardTestData
+        {
+            cardID = id,
+            cardName = id,
+            cardType = CardType.Attack,
+            attackDeliveryMode = AttackDeliveryMode.Melee,
+            isClashable = true,
+            minPoint = 1,
+            maxPoint = 1,
+            damageFormula = "PointAsDamage",
+            traits = firstStrike ? new[] { BattleCardTrait.FirstStrike } : null
+        }, id);
+    }
+
+    static TestContext CreateContext()
+    {
+        return new TestContext
+        {
+            actor = new CharacterData("mode110_actor", 100, 1, 1),
+            enemy = new CharacterData("mode110_enemy", 100, 999, 999)
+        };
+    }
+
+    sealed class TestContext
+    {
+        public CharacterData actor;
+        public CharacterData enemy;
     }
 }

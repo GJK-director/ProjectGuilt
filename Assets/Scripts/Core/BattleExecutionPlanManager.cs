@@ -640,6 +640,18 @@ public static class BattleExecutionPlanManager
             return result;
         }
 
+        if (left.priorityTier == BattleExecutionPriorityTier.AbilityPhase &&
+            right.priorityTier == BattleExecutionPriorityTier.AbilityPhase)
+        {
+            result = left.actionSlotOrder.CompareTo(right.actionSlotOrder);
+            if (result != 0)
+            {
+                return result;
+            }
+
+            return left.stableOrder.CompareTo(right.stableOrder);
+        }
+
         result = right.effectiveSpeed.CompareTo(left.effectiveSpeed);
         if (result != 0)
         {
@@ -669,9 +681,24 @@ public static class BattleExecutionPlanManager
 
     static BattleExecutionPriorityTier GetPriorityTier(BattleExecutionItem item)
     {
+        if (IsAbilityPhaseItem(item))
+        {
+            return BattleExecutionPriorityTier.AbilityPhase;
+        }
+
         return ItemHasTrait(item, BattleCardTrait.FirstStrike)
             ? BattleExecutionPriorityTier.FirstStrike
             : BattleExecutionPriorityTier.Normal;
+    }
+
+    static bool IsAbilityPhaseItem(BattleExecutionItem item)
+    {
+        return item != null &&
+            item.executionType == BattleExecutionItemType.FreeAction &&
+            item.actionSlot != null &&
+            item.actionSlot.cardState != null &&
+            item.actionSlot.cardState.cardData != null &&
+            item.actionSlot.cardState.cardData.cardType == "Ability";
     }
 
     // Responded Item 的双方卡牌共同决定整个已配对 Item 的先攻层级，不拆开原有 pairing。

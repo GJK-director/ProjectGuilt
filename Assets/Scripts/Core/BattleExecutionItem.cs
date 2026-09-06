@@ -31,6 +31,7 @@ public enum BattleExecutionItemStatus
 // 同一层级内继续使用原有速度、响应和稳定顺序。
 public enum BattleExecutionPriorityTier
 {
+    AbilityPhase,
     FirstStrike,
     Normal
 }
@@ -68,7 +69,7 @@ public class BattleExecutionItem
     // 数字越小，越先处理。
     public int order;
 
-    // FirstStrike 卡牌先于 Normal 执行，但不改变 Item 已建立的配对关系。
+    // Ability 先于 FirstStrike，FirstStrike 先于 Normal；不改变 Item 已建立的配对关系。
     public BattleExecutionPriorityTier priorityTier;
 
     // 以下字段保存计划生成时使用的稳定排序键，便于日志和测试直接核对顺序。
