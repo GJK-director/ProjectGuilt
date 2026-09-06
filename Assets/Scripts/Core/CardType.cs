@@ -11,6 +11,9 @@ public static class CardType
 
     // Dodge = 闪避卡
     public const string Dodge = "Dodge";
+
+    // Ability = 能力卡
+    public const string Ability = "Ability";
 }
 
 // BattleResourceID = 由 CharacterData.buffs 承载的稳定战斗资源标识。

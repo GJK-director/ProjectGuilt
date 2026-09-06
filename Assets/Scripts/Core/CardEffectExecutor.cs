@@ -80,6 +80,22 @@ public static class CardEffectExecutor
 
                 ApplyReduceCooldownEffect(effectTarget, effect);
             }
+            else if (effect.effectType == CardEffectType.EnableAngerMechanic)
+            {
+                CharacterData effectTarget = GetEffectTarget(user, target, effect.target);
+                if (effectTarget != null)
+                {
+                    effectTarget.SetAngerMechanicEnabledForBattle(true);
+                }
+            }
+            else if (effect.effectType == CardEffectType.ActivateModification)
+            {
+                CharacterData effectTarget = GetEffectTarget(user, target, effect.target);
+                if (effectTarget != null)
+                {
+                    BattleModificationRules.Activate(effectTarget);
+                }
+            }
             else
             {
                 // 未知效果类型暂时只打印警告，避免静默失败。

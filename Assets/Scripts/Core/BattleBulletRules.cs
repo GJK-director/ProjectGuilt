@@ -14,7 +14,9 @@ public static class BattleBulletRules
 
     public static int GetMagazineCapacity(CharacterData character)
     {
-        return BaseMagazineCapacity;
+        return BattleModificationRules.IsActive(character)
+            ? BattleModificationRules.ModifiedMagazineCapacity
+            : BaseMagazineCapacity;
     }
 
     public static int AddBulletCapped(CharacterData character, int amount)
@@ -59,5 +61,73 @@ public static class BattleBulletRules
                 out _
             );
         }
+    }
+}
+
+public static class BattleModificationRules
+{
+    public const int ModifiedMagazineCapacity = 4;
+    public const int BulletConsumingCardPointBonus = 2;
+
+    public static bool IsActive(CharacterData character)
+    {
+        return character != null &&
+            character.GetBuffStack(BattleResourceID.Modification) > 0;
+    }
+
+    public static void Activate(CharacterData character)
+    {
+        if (character == null || IsActive(character))
+        {
+            return;
+        }
+
+        character.AddBuff(BattleResourceID.Modification, 1, -1);
+        ClampToCapacity(character);
+    }
+
+    public static int GetCardPointBonus(CharacterData character, CardTestData card)
+    {
+        return IsActive(character) && UsesBullet(card)
+            ? BulletConsumingCardPointBonus
+            : 0;
+    }
+
+    public static void ClampToCapacity(CharacterData character)
+    {
+        if (character == null)
+        {
+            return;
+        }
+
+        int current = BattleBulletRules.GetBullet(character);
+        int capacity = BattleBulletRules.GetMagazineCapacity(character);
+        if (current > capacity)
+        {
+            character.TryConsumeBuffStackAsResource(
+                BattleResourceID.Bullet,
+                current - capacity,
+                out _
+            );
+        }
+    }
+
+    static bool UsesBullet(CardTestData card)
+    {
+        if (card == null)
+        {
+            return false;
+        }
+
+        CardResourceRuleData rule = card.resourceRule;
+        if (rule == null && card.resourceRules != null && card.resourceRules.Length > 0)
+        {
+            rule = card.resourceRules[0];
+        }
+
+        return rule != null &&
+            rule.resourceType == "BuffStack" &&
+            rule.resourceID == BattleResourceID.Bullet &&
+            rule.consumeAmountOnSuccess > 0;
     }
 }

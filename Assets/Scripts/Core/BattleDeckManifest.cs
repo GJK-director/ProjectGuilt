@@ -127,7 +127,9 @@ public static class BattleDeckManifestTests
         BattleDeckManifest knife = BattleDeckManifests.Get(BattleDeckPreset.Knife);
         BattleDeckManifest shooting = BattleDeckManifests.Get(BattleDeckPreset.Shooting);
         List<string> shootingMissing = new List<string>();
+        List<string> knifeMissing = new List<string>();
         List<string> availableShooting = shooting.ResolveAvailableCardIDs(cards, shootingMissing);
+        List<string> availableKnife = knife.ResolveAvailableCardIDs(cards, knifeMissing);
         bool knifeValues = VerifyKnifeValues(cards);
         bool manifests = !object.ReferenceEquals(knife, shooting) &&
             HasExactly(knife.normalCardIDs,
@@ -145,8 +147,10 @@ public static class BattleDeckManifestTests
             !Contains(shooting.specialCardIDs, "sin_anger_001") &&
             !SharesCardID(knife, shooting);
         bool missingTemplatesAreSafe = Contains(shootingMissing, "shoot_all_in_001") &&
-            Contains(shootingMissing, "ability_modification_001") &&
             Contains(shootingMissing, "sin_conservation_001") &&
+            Contains(availableShooting, "ability_modification_001") &&
+            Contains(availableKnife, "sin_anger_001") &&
+            Contains(availableKnife, "sin_iai_001") &&
             !Contains(availableShooting, "shoot_all_in_001");
         bool firstStrike = HasTrait(cards, "atk_bullet_001", BattleCardTrait.FirstStrike) &&
             HasTrait(cards, "shoot_aim_001", BattleCardTrait.FirstStrike) &&

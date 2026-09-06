@@ -77,7 +77,7 @@ public static class BattleResolver
             return CreateInvalidResolveResult("ResolveFreeAction 失败：卡牌数据为空");
         }
 
-        bool isAbilityCard = actionSlot.cardState.cardData.cardType == "Ability" || actionSlot.cardState.IsAbilitySinCard();
+        bool isAbilityCard = actionSlot.cardState.cardData.cardType == CardType.Ability || actionSlot.cardState.IsAbilitySinCard();
         bool isAttackCard = actionSlot.cardState.cardData.cardType == CardType.Attack;
 
         if (isAbilityCard)
@@ -3801,6 +3801,11 @@ public static class BattleResolver
         }
 
         snapshot.pointModifierFromResource = snapshot.capturedStack * rule.pointPerStack;
+
+        snapshot.pointModifierFromResource += BattleModificationRules.GetCardPointBonus(
+            unit,
+            cardState.cardData
+        );
 
         if (rule.exactStackForBonus > 0 &&
             snapshot.capturedStack == rule.exactStackForBonus)

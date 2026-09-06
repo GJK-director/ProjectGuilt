@@ -96,7 +96,8 @@ public enum BattleTestMode
     BattleAngerAndKnifeCardsBasic = 107,
     BattleBasicShootingLoop = 108,
     BattleDeckManifestBasic = 109,
-    BattleAbilityPhaseBasic = 110
+    BattleAbilityPhaseBasic = 110,
+    BattleAngerAndModificationAbility = 111
 }
 
 public static class BattleAngerAndKnifeCardsBasicTests
@@ -1619,6 +1620,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleAbilityPhaseBasic)
         {
             BattleAbilityPhaseBasicTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleAngerAndModificationAbility)
+        {
+            BattleAngerAndModificationAbilityTests.Run(cards);
             return;
         }
 
@@ -25881,5 +25888,261 @@ public static class BattleAbilityPhaseBasicTests
     {
         public CharacterData actor;
         public CharacterData enemy;
+    }
+}
+
+public static class BattleAngerAndModificationAbilityTests
+{
+    public static bool Run(IReadOnlyList<CardTestData> cards)
+    {
+        bool[] results = new bool[26];
+        CardTestData anger = Find(cards, "sin_anger_001");
+        CardTestData modification = Find(cards, "ability_modification_001");
+        results[0] = anger != null && anger.cardName == "愤怒" &&
+            anger.cardType == CardType.Ability && anger.minPoint == 0 && anger.maxPoint == 0 &&
+            anger.cooldown == 0 && anger.isSinCard && anger.sinCardCategory == SinCardCategory.Ability &&
+            anger.sinCardUseRule == SinCardUseRule.UseCount && anger.consumeOnUse &&
+            anger.maxUseCount == 1 && anger.guiltGain == 0;
+        results[1] = modification != null && modification.cardName == "改装" &&
+            modification.cardType == CardType.Ability && modification.minPoint == 0 &&
+            modification.maxPoint == 0 && modification.cooldown == 0 && !modification.isSinCard &&
+            modification.consumeOnUse && modification.maxUseCount == 1;
+        results[2] = anger != null && modification != null &&
+            !anger.HasTrait(BattleCardTrait.FirstStrike) &&
+            !modification.HasTrait(BattleCardTrait.FirstStrike);
+
+        CharacterData initialAngerOwner = Unit("mode111_initial_anger");
+        results[3] = !initialAngerOwner.IsAngerMechanicEnabled &&
+            BattleAngerRules.GetAnger(initialAngerOwner) == 0;
+
+        CharacterData angerOwner = Unit("mode111_anger_owner");
+        BattleCardState angerState = State(angerOwner, anger, "mode111_anger");
+        BattleActionSlot angerSlot = FreeSlot(angerOwner, 1, angerState, angerOwner);
+        BattleExecutionPlan angerPlan = Plan(angerSlot);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(angerPlan);
+        results[4] = angerOwner.IsAngerMechanicEnabled;
+        results[5] = BattleAngerRules.GetAnger(angerOwner) == 0;
+        results[6] = angerState.isConsumed && angerState.currentUseCount == 1;
+
+        CharacterData samePlanOwner = Unit("mode111_same_plan_owner");
+        CharacterData samePlanTarget = Unit("mode111_same_plan_target");
+        BattleCardState samePlanAnger = State(samePlanOwner, anger, "mode111_same_plan_anger");
+        BattleCardState samePlanAttack = State(
+            samePlanOwner,
+            FixedAttack("mode111_same_plan_attack", 4),
+            "mode111_same_plan_attack"
+        );
+        BattleExecutionPlan samePlan = Plan(
+            FreeSlot(samePlanOwner, 1, samePlanAnger, samePlanOwner),
+            FreeSlot(samePlanOwner, 2, samePlanAttack, samePlanTarget)
+        );
+        int samePlanHP = samePlanTarget.currentHP;
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(samePlan);
+        results[7] = samePlanOwner.IsAngerMechanicEnabled &&
+            BattleAngerRules.GetAnger(samePlanOwner) > 0 &&
+            samePlanTarget.currentHP < samePlanHP;
+
+        CharacterData modificationOwner = Unit("mode111_modification_owner");
+        BattleBulletRules.AddBulletCapped(modificationOwner, 6);
+        results[8] = BattleBulletRules.GetBullet(modificationOwner) == 6 &&
+            BattleBulletRules.GetMagazineCapacity(modificationOwner) == 6;
+        BattleCardState modificationState = State(
+            modificationOwner,
+            modification,
+            "mode111_modification"
+        );
+        BattleExecutionPlan modificationPlan = Plan(
+            FreeSlot(modificationOwner, 1, modificationState, modificationOwner)
+        );
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(modificationPlan);
+        results[9] = BattleModificationRules.IsActive(modificationOwner);
+        results[10] = BattleBulletRules.GetMagazineCapacity(modificationOwner) == 4;
+        results[11] = BattleBulletRules.GetBullet(modificationOwner) == 4;
+        results[12] = modificationState.isConsumed && modificationState.currentUseCount == 1;
+        results[13] = BattleBulletRules.ReloadToCapacity(modificationOwner) == 4 &&
+            BattleBulletRules.GetBullet(modificationOwner) == 4;
+        results[14] = BattleBulletRules.AddBulletCapped(modificationOwner, 2) == 4 &&
+            BattleBulletRules.GetBullet(modificationOwner) == 4;
+
+        CardTestData blind = Find(cards, "atk_bullet_001");
+        CardTestData close = Find(cards, "shoot_close_001");
+        CardTestData aim = Find(cards, "shoot_aim_001");
+        results[15] = BattleModificationRules.GetCardPointBonus(modificationOwner, blind) == 2;
+        results[16] = BattleModificationRules.GetCardPointBonus(modificationOwner, close) == 2;
+        results[17] = BattleModificationRules.GetCardPointBonus(modificationOwner, aim) == 2;
+        CharacterData noModificationOwner = Unit("mode111_no_modification");
+        results[18] = BattleModificationRules.GetCardPointBonus(noModificationOwner, blind) == 0 &&
+            BattleModificationRules.GetCardPointBonus(noModificationOwner, close) == 0 &&
+            BattleModificationRules.GetCardPointBonus(noModificationOwner, aim) == 0;
+        results[19] = BattleModificationRules.GetCardPointBonus(modificationOwner, anger) == 0 &&
+            BattleModificationRules.GetCardPointBonus(modificationOwner, FixedAttack("mode111_knife", 5)) == 0;
+        results[20] = VerifyModifiedBulletThroughResolver();
+
+        BattleCardState normalAbility = State(
+            noModificationOwner,
+            new CardTestData
+            {
+                cardID = "mode111_normal_ability",
+                cardName = "mode111_normal_ability",
+                cardType = CardType.Ability,
+                consumeOnUse = true,
+                maxUseCount = 1
+            },
+            "mode111_normal_ability"
+        );
+        BattleResolveResult normalAbilityResult = BattleResolver.ResolveFreeAction(
+            FreeSlot(noModificationOwner, 1, normalAbility, noModificationOwner)
+        );
+        results[21] = normalAbilityResult.isSuccess && normalAbility.isConsumed;
+
+        BattleCardState nonConsumingAbility = State(
+            noModificationOwner,
+            new CardTestData
+            {
+                cardID = "mode111_non_consuming_ability",
+                cardName = "mode111_non_consuming_ability",
+                cardType = CardType.Ability,
+                consumeOnUse = false,
+                maxUseCount = 1
+            },
+            "mode111_non_consuming_ability"
+        );
+        BattleResolveResult nonConsumingResult = BattleResolver.ResolveFreeAction(
+            FreeSlot(noModificationOwner, 2, nonConsumingAbility, noModificationOwner)
+        );
+        results[22] = nonConsumingResult.isSuccess && !nonConsumingAbility.isConsumed &&
+            nonConsumingAbility.currentUseCount == 0;
+
+        BattleCardState unavailableAbility = State(
+            noModificationOwner,
+            new CardTestData
+            {
+                cardID = "mode111_unavailable_ability",
+                cardName = "mode111_unavailable_ability",
+                cardType = CardType.Ability,
+                consumeOnUse = true,
+                maxUseCount = 1
+            },
+            "mode111_unavailable_ability"
+        );
+        unavailableAbility.currentCooldown = 1;
+        BattleResolveResult unavailableResult = BattleResolver.ResolveFreeAction(
+            FreeSlot(noModificationOwner, 3, unavailableAbility, noModificationOwner)
+        );
+        results[23] = !unavailableResult.isSuccess && !unavailableAbility.isConsumed &&
+            unavailableAbility.currentUseCount == 0;
+        results[24] = BattleAbilityPhaseBasicTests.Run();
+        results[25] = BattleDeckManifestTests.Run(cards);
+
+        string[] names =
+        {
+            "愤怒数据正确", "改装数据正确", "Ability无FirstStrike",
+            "初始AngerMechanic关闭", "愤怒成功开启机制", "愤怒不凭空加怒",
+            "愤怒成功后消费", "同计划后续攻击获得怒层",
+            "初始Bullet6/Capacity6", "改装激活", "改装Capacity4", "Bullet Clamp为4",
+            "改装成功后消费", "Reload不超过4", "AddBulletCapped不超过4",
+            "盲射+2", "抵近射击+2", "瞄准射击+2", "无改装不加点", "刀牌不加点",
+            "真实Resolver验证+2", "普通一次性Ability消费", "非消费Ability保持", "不可用Ability不消费",
+            "Mode110 AbilityPhase回归", "Mode109 DeckManifest回归"
+        };
+        bool passed = true;
+        Debug.Log("===== Mode111 BattleAngerAndModificationAbility =====");
+        for (int index = 0; index < results.Length; index++)
+        {
+            Debug.Log(names[index] + "：" + results[index]);
+            passed &= results[index];
+        }
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyModifiedBulletThroughResolver()
+    {
+        CharacterData owner = Unit("mode111_resolver_owner");
+        CharacterData target = Unit("mode111_resolver_target");
+        BattleBulletRules.AddBulletCapped(owner, 6);
+        BattleModificationRules.Activate(owner);
+        CardTestData card = new CardTestData
+        {
+            cardID = "mode111_bullet_resolver",
+            cardName = "mode111_bullet_resolver",
+            cardType = CardType.Attack,
+            attackDeliveryMode = AttackDeliveryMode.LongRangeShoot,
+            isClashable = true,
+            minPoint = 5,
+            maxPoint = 5,
+            damageFormula = "PointAsDamage",
+            resourceRule = new CardResourceRuleData
+            {
+                resourceType = "BuffStack",
+                resourceID = BattleResourceID.Bullet,
+                requiredStackForNormalVersion = 1,
+                fallbackMinPoint = 0,
+                fallbackMaxPoint = 0,
+                consumeAmountOnSuccess = 1,
+                consumeTiming = CardResourceConsumeTiming.OnSuccessfulUse
+            }
+        };
+        BattleCardState state = State(owner, card, "mode111_bullet_resolver");
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(
+            FreeSlot(owner, 1, state, target)
+        );
+        return result.isSuccess && result.playerPoint == 7 &&
+            BattleBulletRules.GetBullet(owner) == 5;
+    }
+
+    static BattleExecutionPlan Plan(params BattleActionSlot[] slots)
+    {
+        return BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
+            new List<BattleActionSlot>(slots), new List<BattleEnemyIntent>());
+    }
+
+    static BattleActionSlot FreeSlot(
+        CharacterData owner, int index, BattleCardState state, CharacterData target)
+    {
+        BattleActionSlot slot = new BattleActionSlot(owner, index);
+        slot.AssignFreeAction(owner, state, target);
+        return slot;
+    }
+
+    static BattleCardState State(CharacterData owner, CardTestData card, string id)
+    {
+        return new BattleCardState(owner, card, id);
+    }
+
+    static CardTestData FixedAttack(string id, int point)
+    {
+        return new CardTestData
+        {
+            cardID = id,
+            cardName = id,
+            cardType = CardType.Attack,
+            attackDeliveryMode = AttackDeliveryMode.Melee,
+            isClashable = true,
+            minPoint = point,
+            maxPoint = point,
+            damageFormula = "PointAsDamage"
+        };
+    }
+
+    static CharacterData Unit(string id)
+    {
+        return new CharacterData(id, 100, 5, 5);
+    }
+
+    static CardTestData Find(IReadOnlyList<CardTestData> cards, string id)
+    {
+        if (cards == null)
+        {
+            return null;
+        }
+        foreach (CardTestData card in cards)
+        {
+            if (card != null && card.cardID == id)
+            {
+                return card;
+            }
+        }
+        return null;
     }
 }

@@ -698,7 +698,7 @@ public static class BattleExecutionPlanManager
             item.actionSlot != null &&
             item.actionSlot.cardState != null &&
             item.actionSlot.cardState.cardData != null &&
-            item.actionSlot.cardState.cardData.cardType == "Ability";
+            item.actionSlot.cardState.cardData.cardType == CardType.Ability;
     }
 
     // Responded Item 的双方卡牌共同决定整个已配对 Item 的先攻层级，不拆开原有 pairing。

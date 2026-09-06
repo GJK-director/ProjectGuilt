@@ -325,6 +325,11 @@ public static class BattleCardManager
         }
 
         // 普通卡：根据卡牌数据或品质计算基础 CD。
+        if (cardState.ConsumeOnUse())
+        {
+            ConsumeCardUse(cardState);
+        }
+
         int baseCooldown = GetResolvedCooldown(cardState);
 
         cardState.currentCooldown = baseCooldown;

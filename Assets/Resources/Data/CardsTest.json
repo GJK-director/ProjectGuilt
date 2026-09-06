@@ -333,5 +333,54 @@
     "guiltGain": 2,
     "damageFormula": "PointAsDamage",
     "effects": []
+  },
+  {
+    "cardID": "sin_anger_001",
+    "cardName": "愤怒",
+    "description": "开启本场战斗的愤怒机制。",
+    "keywords": [],
+    "rarity": "Sin",
+    "cardType": "Ability",
+    "isClashable": false,
+    "minPoint": 0,
+    "maxPoint": 0,
+    "cooldown": 0,
+    "guiltCost": 0,
+    "guiltGain": 0,
+    "isSinCard": true,
+    "consumeOnUse": true,
+    "maxUseCount": 1,
+    "sinCardUseRule": "UseCount",
+    "sinCardCategory": "Ability",
+    "effects": [
+      {
+        "trigger": "OnPlay",
+        "effectType": "EnableAngerMechanic",
+        "target": "Self"
+      }
+    ]
+  },
+  {
+    "cardID": "ability_modification_001",
+    "cardName": "改装",
+    "description": "将弹仓容量改为4，并强化消耗子弹的卡牌。",
+    "keywords": [],
+    "rarity": "White",
+    "cardType": "Ability",
+    "isClashable": false,
+    "minPoint": 0,
+    "maxPoint": 0,
+    "cooldown": 0,
+    "guiltCost": 0,
+    "isSinCard": false,
+    "consumeOnUse": true,
+    "maxUseCount": 1,
+    "effects": [
+      {
+        "trigger": "OnPlay",
+        "effectType": "ActivateModification",
+        "target": "Self"
+      }
+    ]
   }
 ]

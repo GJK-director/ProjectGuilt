@@ -8,4 +8,10 @@ public static class CardEffectType
 
     // ReduceCooldown = 减少卡牌冷却
     public const string ReduceCooldown = "ReduceCooldown";
+
+    // EnableAngerMechanic = 开启本场战斗的愤怒机制
+    public const string EnableAngerMechanic = "EnableAngerMechanic";
+
+    // ActivateModification = 开启改装状态并压缩弹仓
+    public const string ActivateModification = "ActivateModification";
 }
