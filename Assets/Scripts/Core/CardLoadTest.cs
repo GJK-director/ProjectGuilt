@@ -26062,6 +26062,7 @@ public static class BattleAngerAndModificationAbilityTests
         CharacterData target = Unit("mode111_resolver_target");
         BattleBulletRules.AddBulletCapped(owner, 6);
         BattleModificationRules.Activate(owner);
+        bool clampedBullet = BattleBulletRules.GetBullet(owner) == 4;
         CardTestData card = new CardTestData
         {
             cardID = "mode111_bullet_resolver",
@@ -26087,8 +26088,9 @@ public static class BattleAngerAndModificationAbilityTests
         BattleResolveResult result = BattleResolver.ResolveFreeAction(
             FreeSlot(owner, 1, state, target)
         );
-        return result.isSuccess && result.playerPoint == 7 &&
-            BattleBulletRules.GetBullet(owner) == 5;
+        bool consumedBullet = BattleBulletRules.GetBullet(owner) == 3;
+        return clampedBullet && result.isSuccess && result.playerPoint == 7 &&
+            consumedBullet;
     }
 
     static BattleExecutionPlan Plan(params BattleActionSlot[] slots)
