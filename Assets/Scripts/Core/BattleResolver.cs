@@ -3875,8 +3875,13 @@ public static class BattleResolver
             return;
         }
 
-        // LongRangeShoot终局即代表实际开火；败方只支付资源，不触发胜者事件或伤害。
-        PayCapturedResourceCost(side.actor, side.resourceSnapshot);
+        // 仅 resolved participation 语义的远程射击会在败方终局支付资源。
+        // OnSuccessfulUse 仍只由胜方的成功使用路径支付。
+        if (GetConsumeTiming(side.resourceSnapshot) ==
+            CardResourceConsumeTiming.OnResolvedParticipation)
+        {
+            PayCapturedResourceCost(side.actor, side.resourceSnapshot);
+        }
     }
 
     static string GetConsumeTiming(BattleClashResourceSnapshot snapshot)

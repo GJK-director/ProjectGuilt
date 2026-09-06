@@ -1,7 +1,7 @@
 ﻿[
   {
     "cardID": "atk_001",
-    "cardName": "基础攻击",
+    "cardName": "顺斩",
     "description": "",
     "keywords": [],
     "rarity": "White",
@@ -58,14 +58,14 @@
   },
   {
     "cardID": "dodge_001",
-    "cardName": "调整呼吸",
+    "cardName": "换气",
     "description": "",
     "keywords": [],
     "rarity": "White",
     "cardType": "Dodge",
     "isClashable": true,
     "minPoint": 1,
-    "maxPoint": 12,
+    "maxPoint": 13,
     "cooldown": 2,
     "guiltCost": 0,
     "traits": [
@@ -74,14 +74,14 @@
   },
   {
     "cardID": "knife_stab_001",
-    "cardName": "刺",
+    "cardName": "突刺",
     "description": "与防御卡拼点时，胜负比较点数翻倍，但伤害仍使用原始点数。",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
     "attackDeliveryMode": "Melee",
     "isClashable": true,
-    "minPoint": 3,
+    "minPoint": 4,
     "maxPoint": 6,
     "cooldown": 1,
     "guiltCost": 0,
@@ -94,33 +94,33 @@
   },
   {
     "cardID": "knife_double_slash_001",
-    "cardName": "双斩",
-    "description": "造成点数两倍的单次逻辑伤害，HP分两段显示。",
+    "cardName": "连斩",
+    "description": "造成点数1.6倍的单次逻辑伤害，HP分两段显示。",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
     "attackDeliveryMode": "Melee",
     "isClashable": true,
     "minPoint": 3,
-    "maxPoint": 5,
-    "cooldown": 2,
+    "maxPoint": 6,
+    "cooldown": 1,
     "guiltCost": 0,
     "isSinCard": false,
-    "damageFormula": "DoublePointDamage",
+    "damageFormula": "PointAsDamage160Percent",
     "hpDisplayStageCount": 2,
     "effects": []
   },
   {
     "cardID": "knife_heavy_001",
-    "cardName": "重击",
+    "cardName": "重劈",
     "description": "有愤怒时强化点数并在结算后消耗1层愤怒。",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
     "attackDeliveryMode": "Melee",
     "isClashable": true,
-    "minPoint": 6,
-    "maxPoint": 10,
+    "minPoint": 8,
+    "maxPoint": 11,
     "cooldown": 3,
     "guiltCost": 0,
     "isSinCard": false,
@@ -132,8 +132,8 @@
   },
   {
     "cardID": "sin_iai_001",
-    "cardName": "拔刀斩",
-    "description": "根据行动开始时的愤怒提高点数；结算完成后清空愤怒。",
+    "cardName": "一闪",
+    "description": "基础伤害为点数1.5倍；根据行动开始时的愤怒提高点数，结算完成后清空愤怒。",
     "keywords": [],
     "rarity": "Sin",
     "cardType": "Attack",
@@ -149,7 +149,7 @@
     "maxUseCount": 0,
     "sinCardUseRule": "Permanent",
     "sinCardCategory": "Clash",
-    "damageFormula": "PointAsDamage",
+    "damageFormula": "PointAsDamage150Percent",
     "traits": [
       "IaiAnger"
     ],
@@ -172,14 +172,14 @@
   },
   {
     "cardID": "def_001",
-    "cardName": "基础防御",
+    "cardName": "架刀",
     "description": "",
     "keywords": [],
     "rarity": "White",
     "cardType": "Defense",
     "isClashable": false,
-    "minPoint": 2,
-    "maxPoint": 8,
+    "minPoint": 6,
+    "maxPoint": 9,
     "cooldown": 1,
     "guiltCost": 0,
     "defenseFormula": "PointAsDefense"
@@ -219,6 +219,9 @@
       "insufficientBehavior": "ActionUnavailable",
       "consumeTiming": "OnResolvedParticipation"
     },
+    "traits": [
+      "FirstStrike"
+    ],
     "effects": []
   },
   {
@@ -305,6 +308,9 @@
       "insufficientBehavior": "ActionUnavailable",
       "consumeTiming": "OnResolvedParticipation"
     },
+    "traits": [
+      "FirstStrike"
+    ],
     "effects": []
   },
   {

@@ -261,6 +261,18 @@ public static class BattleCardUIPreviewBuilder
             return;
         }
 
+        if (cardData.damageFormula == "PointAsDamage150Percent")
+        {
+            AppendLine(builder, "伤害=点数x1.5。");
+            return;
+        }
+
+        if (cardData.damageFormula == "PointAsDamage160Percent")
+        {
+            AppendLine(builder, "伤害=点数x1.6。");
+            return;
+        }
+
         if (!string.IsNullOrEmpty(cardData.damageFormula))
         {
             AppendLine(builder, "伤害公式：" + cardData.damageFormula + "。");

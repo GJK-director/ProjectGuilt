@@ -94,7 +94,8 @@ public enum BattleTestMode
     BattleCardCommonRulesPhaseOneBasic = 105,
     BattleResourceFoundationAndBasicKnife = 106,
     BattleAngerAndKnifeCardsBasic = 107,
-    BattleBasicShootingLoop = 108
+    BattleBasicShootingLoop = 108,
+    BattleDeckManifestBasic = 109
 }
 
 public static class BattleAngerAndKnifeCardsBasicTests
@@ -120,11 +121,11 @@ public static class BattleAngerAndKnifeCardsBasicTests
             "Anger叠层",
             "Anger拼点阶段",
             "Anger伤害规则",
-            "刺",
-            "双斩",
-            "重击",
-            "调整呼吸",
-            "拔刀斩",
+            "突刺",
+            "连斩",
+            "重劈",
+            "换气",
+            "一闪",
             "HP分段显示",
             "回归"
         };
@@ -147,26 +148,30 @@ public static class BattleAngerAndKnifeCardsBasicTests
         CardTestData defense = Find(cards, "def_001");
         CardTestData dodge = Find(cards, "dodge_001");
         CardTestData iai = Find(cards, "sin_iai_001");
-        return IsCard(attack, CardType.Attack, 4, 7, 0, "PointAsDamage") &&
-            IsCard(stab, CardType.Attack, 3, 6, 1, "PointAsDamage") &&
+        return attack != null && attack.cardName == "顺斩" &&
+            IsCard(attack, CardType.Attack, 4, 7, 0, "PointAsDamage") &&
+            stab != null && stab.cardName == "突刺" &&
+            IsCard(stab, CardType.Attack, 4, 6, 1, "PointAsDamage") &&
             stab.HasTrait(BattleCardTrait.DoubleClashAgainstDefense) &&
-            IsCard(doubleSlash, CardType.Attack, 3, 5, 2, "DoublePointDamage") &&
+            doubleSlash != null && doubleSlash.cardName == "连斩" &&
+            IsCard(doubleSlash, CardType.Attack, 3, 6, 1, "PointAsDamage160Percent") &&
             doubleSlash.hpDisplayStageCount == 2 &&
-            IsCard(heavy, CardType.Attack, 6, 10, 3, "PointAsDamage") &&
+            heavy != null && heavy.cardName == "重劈" &&
+            IsCard(heavy, CardType.Attack, 8, 11, 3, "PointAsDamage") &&
             heavy.HasTrait(BattleCardTrait.HeavyAnger) &&
-            defense != null && defense.cardType == CardType.Defense &&
-            defense.minPoint == 2 && defense.maxPoint == 8 &&
+            defense != null && defense.cardName == "架刀" && defense.cardType == CardType.Defense &&
+            defense.minPoint == 6 && defense.maxPoint == 9 &&
             defense.cooldown == 1 && defense.defenseFormula == "PointAsDefense" &&
-            dodge != null && dodge.cardName == "调整呼吸" &&
+            dodge != null && dodge.cardName == "换气" &&
             dodge.cardType == CardType.Dodge && dodge.minPoint == 1 &&
-            dodge.maxPoint == 12 && dodge.cooldown == 2 &&
+            dodge.maxPoint == 13 && dodge.cooldown == 2 &&
             dodge.HasTrait(BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge) &&
-            iai != null && iai.cardType == CardType.Attack && iai.isSinCard &&
+            iai != null && iai.cardName == "一闪" && iai.cardType == CardType.Attack && iai.isSinCard &&
             iai.sinCardCategory == SinCardCategory.Clash &&
             iai.sinCardUseRule == SinCardUseRule.Permanent &&
             !iai.consumeOnUse && iai.maxUseCount == 0 && iai.minPoint == 5 &&
             iai.maxPoint == 5 && iai.cooldown == 10 && iai.guiltGain == 0 &&
-            iai.HasTrait(BattleCardTrait.IaiAnger) &&
+            iai.damageFormula == "PointAsDamage150Percent" && iai.HasTrait(BattleCardTrait.IaiAnger) &&
             !iai.HasTrait(BattleCardTrait.FirstStrike);
     }
 
@@ -306,9 +311,9 @@ public static class BattleAngerAndKnifeCardsBasicTests
         plan.impacts.Add(impact);
         int before = target.currentHP;
         bool committed = BattleResolver.CommitImpact(plan, impact);
-        return Damage(attacker, Unit("mode107_double_math", false), doubleSlash, 4) == 8 &&
+        return Damage(attacker, Unit("mode107_double_math", false), doubleSlash, 4) == 7 &&
             plan.impacts.Count == 1 && committed &&
-            before - target.currentHP == 8 && impact.committedDamage == 8 &&
+            before - target.currentHP == 7 && impact.committedDamage == 7 &&
             BattleAngerRules.GetAnger(attacker) == 1 &&
             impact.hpDisplayStageCount == 2;
     }
@@ -316,9 +321,9 @@ public static class BattleAngerAndKnifeCardsBasicTests
     static bool VerifyHeavy(List<CardTestData> cards)
     {
         CardTestData heavy = Find(cards, "knife_heavy_001");
-        bool baseRange = CheckRange(heavy, 0, true, 6, 10);
-        bool oneRange = CheckRange(heavy, 1, true, 8, 12);
-        bool fourRange = CheckRange(heavy, 4, true, 9, 13);
+        bool baseRange = CheckRange(heavy, 0, true, 8, 11);
+        bool oneRange = CheckRange(heavy, 1, true, 10, 13);
+        bool fourRange = CheckRange(heavy, 4, true, 11, 14);
 
         CharacterData owner = Unit("mode107_heavy", true);
         BattleAngerRules.AddAnger(owner, 1);
@@ -408,7 +413,7 @@ public static class BattleAngerAndKnifeCardsBasicTests
             CheckRange(iai, 5, true, 6, 16);
         CharacterData owner = Unit("mode107_iai", true);
         BattleAngerRules.AddAnger(owner, 5);
-        bool damage = Damage(owner, Unit("mode107_iai_target", false), iai, 5) == 6;
+        bool damage = Damage(owner, Unit("mode107_iai_target", false), iai, 5) == 9;
         BattleCardState state = BattleCardManager.CreateBattleCard(
             owner,
             iai,
@@ -820,7 +825,12 @@ public static class BattleBasicShootingLoopTests
         bool reload = VerifyReload(cards);
         bool aim = VerifyAimShoot(cards);
         bool unavailable = VerifyActionUnavailable(cards);
-        bool fallback = VerifyRespondedFallbackSeam(cards);
+        bool fallback = VerifyRespondedFallbackSeam(
+            cards,
+            out bool enemyAttackFallback,
+            out bool enemyDefenseFallback,
+            out bool enemyDodgeFallback
+        );
         bool resourceCooldown = VerifyResourceAndCooldown(cards);
         bool regression = BattleExecutionPlanFirstStrikePolicyTests.Run() &&
             BattleExecutionInteractionContextTests.Run();
@@ -837,6 +847,9 @@ public static class BattleBasicShootingLoopTests
         Debug.Log("装填：" + reload);
         Debug.Log("瞄准射击：" + aim);
         Debug.Log("0弹ActionUnavailable：" + unavailable);
+        Debug.Log("Enemy Attack fallback：" + enemyAttackFallback);
+        Debug.Log("Enemy Defense fallback恢复Reactive：" + enemyDefenseFallback);
+        Debug.Log("Enemy Dodge fallback恢复Reactive：" + enemyDodgeFallback);
         Debug.Log("Responded空枪回落：" + fallback);
         Debug.Log("Resource/CD回归：" + resourceCooldown);
         Debug.Log("回归：" + regression);
@@ -958,7 +971,12 @@ public static class BattleBasicShootingLoopTests
             BattleBulletRules.GetBullet(player) == 0;
     }
 
-    static bool VerifyRespondedFallbackSeam(List<CardTestData> cards)
+    static bool VerifyRespondedFallbackSeam(
+        List<CardTestData> cards,
+        out bool attackFallback,
+        out bool defenseFallback,
+        out bool dodgeFallback
+    )
     {
         CardTestData blind = Find(cards, "atk_bullet_001");
         CharacterData player = Unit("mode108_fallback_player");
@@ -975,51 +993,85 @@ public static class BattleBasicShootingLoopTests
         );
         plan.AddItem(item);
         BattleExecutionPlanExecutor.ExecuteExecutionPlan(plan);
-        bool attackFallback = item.isCompleted &&
+        attackFallback = item.isCompleted &&
             item.outcomeReason ==
                 BattleExecutionItemOutcomeReason.ResponseUnavailableFallbackToUnresponded &&
             originalTarget.currentHP == 94 && playerCard.currentCooldown == 0 &&
             BattleBulletRules.GetBullet(player) == 0;
 
-        BattleCardState defenseCard = State(enemy, new CardTestData
-        {
-            cardID = "mode108_reactive_defense", cardName = "defense",
-            cardType = CardType.Defense, minPoint = 1, maxPoint = 1,
-            defenseFormula = "PointAsDefense"
-        }, "defense");
-        BattleEnemyIntent defenseIntent = new BattleEnemyIntent(
-            "defense_intent", enemy, defenseCard, originalTarget, 2
-        );
-        BattleActionSlot defenseResponseSlot = new BattleActionSlot(player, 2);
-        BattleCardState secondEmptyShoot = State(
-            player, Clone(blind, 1, 12), "second_empty"
-        );
-        defenseResponseSlot.AssignResponse(
-            player, secondEmptyShoot, defenseIntent, false
-        );
-        BattleExecutionPlan defensePlan = new BattleExecutionPlan();
-        BattleExecutionItem defenseItem = new BattleExecutionItem(
-            2, BattleExecutionItemType.RespondedEnemyIntent,
-            defenseIntent, defenseResponseSlot
-        );
-        defensePlan.AddItem(defenseItem);
-        BattleExecutionPlanExecutor.ExecuteExecutionPlan(defensePlan);
-        bool reactiveGuardPreserved = defenseItem.isCompleted &&
-            defenseItem.outcomeReason ==
-                BattleExecutionItemOutcomeReason.ResponseUnavailableFallbackToUnresponded &&
-            defenseCard.currentCooldown == 0 &&
-            object.ReferenceEquals(
-                defenseIntent.actualTargetCharacter,
-                defenseIntent.originalTargetCharacter
-            );
-        return attackFallback && reactiveGuardPreserved &&
+        defenseFallback = VerifyReactiveGuardFallback(cards, CardType.Defense);
+        dodgeFallback = VerifyReactiveGuardFallback(cards, CardType.Dodge);
+        return attackFallback && defenseFallback && dodgeFallback &&
             object.ReferenceEquals(intent.originalTargetCharacter, originalTarget) &&
             intent.originalTargetSlotIndex == 2;
+    }
+
+    static bool VerifyReactiveGuardFallback(List<CardTestData> cards, string guardCardType)
+    {
+        CardTestData blind = Find(cards, "atk_bullet_001");
+        CharacterData player = Unit("mode108_fallback_" + guardCardType + "_player");
+        CharacterData originalTarget = Unit("mode108_fallback_" + guardCardType + "_target");
+        CharacterData enemy = Unit("mode108_fallback_" + guardCardType + "_enemy");
+        BattleCardState guardCard = State(enemy, new CardTestData
+        {
+            cardID = "mode108_reactive_" + guardCardType,
+            cardName = guardCardType,
+            cardType = guardCardType,
+            minPoint = 1,
+            maxPoint = 1,
+            defenseFormula = guardCardType == CardType.Defense ? "PointAsDefense" : null
+        }, guardCardType);
+        BattleEnemyIntent guardIntent = new BattleEnemyIntent(
+            guardCardType + "_intent", enemy, guardCard, originalTarget, 2
+        );
+        BattleActionSlot responseSlot = new BattleActionSlot(player, 1);
+        BattleCardState emptyShoot = State(
+            player, Clone(blind, 1, 12), guardCardType + "_empty_shoot"
+        );
+        responseSlot.AssignResponse(
+            player, emptyShoot, guardIntent, false
+        );
+        BattleExecutionPlan responsePlan = new BattleExecutionPlan();
+        BattleExecutionItem responseItem = new BattleExecutionItem(
+            1, BattleExecutionItemType.RespondedEnemyIntent,
+            guardIntent, responseSlot
+        );
+        responsePlan.AddItem(responseItem);
+        BattleExecutionPlanExecutor.ExecuteExecutionPlan(responsePlan);
+
+        BattleActionSlot freeAttackSlot = new BattleActionSlot(player, 2);
+        BattleCardState freeAttack = State(player, Attack("free_" + guardCardType, 4),
+            guardCardType + "_free_attack");
+        freeAttackSlot.AssignFreeAction(player, freeAttack, enemy);
+        BattleEnemyIntent selected = BattleGuardSelectionManager
+            .SelectEnemyDefensiveIntentForFreeAttack(
+                new List<BattleEnemyIntent> { guardIntent },
+                freeAttackSlot
+            );
+
+        return responseItem.isCompleted && responseSlot.isUsed &&
+            responseItem.outcomeReason ==
+                BattleExecutionItemOutcomeReason.ResponseUnavailableFallbackToUnresponded &&
+            emptyShoot.currentCooldown == 0 &&
+            BattleBulletRules.GetBullet(player) == 0 &&
+            !guardIntent.isResponded && !guardIntent.isConsumedAsReactiveGuard &&
+            object.ReferenceEquals(
+                guardIntent.actualTargetCharacter,
+                guardIntent.originalTargetCharacter
+            ) && object.ReferenceEquals(selected, guardIntent);
     }
 
     static bool VerifyResourceAndCooldown(List<CardTestData> cards)
     {
         CardTestData close = Find(cards, "shoot_close_001");
+        CardTestData successfulUseShoot = Clone(Find(cards, "atk_bullet_001"), 1, 1);
+        successfulUseShoot.resourceRule = CopyResourceRule(successfulUseShoot.resourceRule);
+        successfulUseShoot.resourceRule.consumeTiming =
+            CardResourceConsumeTiming.OnSuccessfulUse;
+        bool loserDoesNotPaySuccessfulUseTiming = ResolveRespondedShoot(
+            successfulUseShoot, 1, 12, 1, out int bulletAfterLoss,
+            out BattleResolveResult lossResult
+        ) && bulletAfterLoss == 1 && lossResult.resultType == "EnemyWin";
         CharacterData owner = Unit("mode108_cd");
         BattleCardState state = BattleCardManager.CreateBattleCard(owner, close, "close");
         BattleCardManager.ApplyCooldownOnResolved(state);
@@ -1029,7 +1081,8 @@ public static class BattleBasicShootingLoopTests
         bool sameTurnHeld = state.currentCooldown == 1 &&
             !state.skipNextTurnEndCooldownTick;
         BattleCardManager.ReduceCooldownsAtTurnEnd(owner);
-        return truthfulCooldown && sameTurnHeld && state.currentCooldown == 0;
+        return loserDoesNotPaySuccessfulUseTiming && truthfulCooldown && sameTurnHeld &&
+            state.currentCooldown == 0;
     }
 
     static bool ResolveRespondedShoot(
@@ -1135,6 +1188,29 @@ public static class BattleBasicShootingLoopTests
     static CardTestData Clone(CardTestData source, int min, int max)
     {
         return new CardTestData { cardID = source.cardID, cardName = source.cardName, cardType = source.cardType, attackDeliveryMode = source.attackDeliveryMode, presentationVariant = source.presentationVariant, isClashable = true, minPoint = min, maxPoint = max, cooldown = source.cooldown, damageFormula = source.damageFormula, resourceRule = source.resourceRule, traits = source.traits };
+    }
+
+    static CardResourceRuleData CopyResourceRule(CardResourceRuleData source)
+    {
+        if (source == null)
+        {
+            return null;
+        }
+
+        return new CardResourceRuleData
+        {
+            resourceType = source.resourceType,
+            resourceID = source.resourceID,
+            requiredStackForNormalVersion = source.requiredStackForNormalVersion,
+            fallbackMinPoint = source.fallbackMinPoint,
+            fallbackMaxPoint = source.fallbackMaxPoint,
+            pointPerStack = source.pointPerStack,
+            exactStackForBonus = source.exactStackForBonus,
+            exactStackPointBonus = source.exactStackPointBonus,
+            consumeAmountOnSuccess = source.consumeAmountOnSuccess,
+            insufficientBehavior = source.insufficientBehavior,
+            consumeTiming = source.consumeTiming
+        };
     }
 
     static CardTestData Attack(string id, int point)
@@ -1530,6 +1606,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleBasicShootingLoop)
         {
             BattleBasicShootingLoopTests.Run(cards);
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleDeckManifestBasic)
+        {
+            BattleDeckManifestTests.Run(cards);
             return;
         }
 
@@ -9864,7 +9946,7 @@ public class CardLoadTest : MonoBehaviour
         );
         results[9] = cards != null &&
             basicAttack != null &&
-            basicAttack.cardName == "基础攻击" &&
+            basicAttack.cardName == "顺斩" &&
             basicAttack.cardType == CardType.Attack &&
             basicAttack.cooldown == 0;
         results[10] = basicAttack != null &&
@@ -9878,8 +9960,8 @@ public class CardLoadTest : MonoBehaviour
         );
         results[11] = basicDefense != null &&
             basicDefense.cardType == CardType.Defense &&
-            basicDefense.minPoint == 2 &&
-            basicDefense.maxPoint == 8 &&
+            basicDefense.minPoint == 6 &&
+            basicDefense.maxPoint == 9 &&
             basicDefense.cooldown == 1 &&
             basicDefense.defenseFormula == "PointAsDefense";
 
@@ -15242,7 +15324,7 @@ public class CardLoadTest : MonoBehaviour
             );
         bool test12 =
             basicPreview != null &&
-            basicPreview.cardName == "基础攻击" &&
+            basicPreview.cardName == "顺斩" &&
             (basicPreview.typeText == null ||
              !basicPreview.typeText.Contains("罪卡")) &&
             basicPreview.pointText == "10-10" &&

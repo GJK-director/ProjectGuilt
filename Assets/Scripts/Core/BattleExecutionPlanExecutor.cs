@@ -1570,21 +1570,22 @@ public static class BattleExecutionPlanExecutor
 
         Debug.Log(logMessage);
 
-        enemyIntent.SetActualTarget(
-            enemyIntent.originalTargetCharacter,
-            enemyIntent.originalTargetSlotIndex
-        );
-
         // Enemy Defense / Dodge 是后续Attack的reactive guard候选，不存在独立的
         // Unresponded攻击结算。空枪只取消响应方，不能把该守备意图误消费。
         if (enemyIntent.enemyCardState != null &&
             enemyIntent.enemyCardState.cardData != null &&
             enemyIntent.enemyCardState.cardData.cardType != CardType.Attack)
         {
+            enemyIntent.ResetResponseState();
             item.actionSlot.MarkUsed();
             item.MarkExecuted(executedReason);
             return true;
         }
+
+        enemyIntent.SetActualTarget(
+            enemyIntent.originalTargetCharacter,
+            enemyIntent.originalTargetSlotIndex
+        );
 
         if (TryCompleteEnemyItemBecauseActualTargetDead(item))
         {
