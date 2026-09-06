@@ -2,7 +2,7 @@
   {
     "cardID": "atk_001",
     "cardName": "顺斩",
-    "description": "",
+    "description": "CD 0",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
@@ -59,7 +59,7 @@
   {
     "cardID": "dodge_001",
     "cardName": "换气",
-    "description": "",
+    "description": "CD 2 成功：下一攻击牌点数+2。失败：本次受到伤害×1.25",
     "keywords": [],
     "rarity": "White",
     "cardType": "Dodge",
@@ -75,7 +75,7 @@
   {
     "cardID": "knife_stab_001",
     "cardName": "突刺",
-    "description": "与防御卡拼点时，胜负比较点数翻倍，但伤害仍使用原始点数。",
+    "description": "CD 1 与防御卡拼点时，拼点点数X2",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
@@ -95,7 +95,7 @@
   {
     "cardID": "knife_double_slash_001",
     "cardName": "连斩",
-    "description": "造成点数1.6倍的单次逻辑伤害，HP分两段显示。",
+    "description": "CD 1 造成80%伤害X2",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
@@ -113,7 +113,7 @@
   {
     "cardID": "knife_heavy_001",
     "cardName": "重劈",
-    "description": "有愤怒时强化点数并在结算后消耗1层愤怒。",
+    "description": "CD 3 若怒大于0，则消耗一层怒本卡点数 +2，并且cd-1",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
@@ -133,7 +133,7 @@
   {
     "cardID": "sin_iai_001",
     "cardName": "一闪",
-    "description": "基础伤害为点数1.5倍；根据行动开始时的愤怒提高点数，结算完成后清空愤怒。",
+    "description": "CD 10 造成伤害X1.5。拼点前根据本次消耗的全部怒，没一层怒+2点数",
     "keywords": [],
     "rarity": "Sin",
     "cardType": "Attack",
@@ -173,7 +173,7 @@
   {
     "cardID": "def_001",
     "cardName": "架刀",
-    "description": "",
+    "description": "CD 1",
     "keywords": [],
     "rarity": "White",
     "cardType": "Defense",
@@ -187,7 +187,7 @@
   {
     "cardID": "atk_bullet_001",
     "cardName": "盲射",
-    "description": "消耗1枚子弹进行远程射击。",
+    "description": "CD 0 拼点前消耗一颗弹药",
     "keywords": [
       {
         "keywordID": "Bullet",
@@ -227,7 +227,7 @@
   {
     "cardID": "shoot_close_001",
     "cardName": "抵近射击",
-    "description": "消耗1枚子弹进行抵近射击。",
+    "description": "CD 1 使用时消耗一颗弹药",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
@@ -255,7 +255,7 @@
   {
     "cardID": "shoot_all_in_001",
     "cardName": "ALL IN",
-    "description": "消耗当前全部子弹。点数随当前子弹增加；成功时造成对应总倍率伤害。",
+    "description": "CD 3 使用时，消耗所有弹药X。点数增加X点；造成X次伤害，每次伤害造成独特倍率伤害。",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
@@ -290,7 +290,7 @@
   {
     "cardID": "shoot_disengage_001",
     "cardName": "抽身",
-    "description": "闪避成功后获得1枚子弹。",
+    "description": "CD 1 拼点胜利时，子弹+1",
     "keywords": [],
     "rarity": "White",
     "cardType": "Dodge",
@@ -305,7 +305,7 @@
   {
     "cardID": "shoot_reload_001",
     "cardName": "装填",
-    "description": "闪避结算完成后装填至满弹；失败时承受伤害提高。",
+    "description": "CD 4 战斗开始时回复所有弹药",
     "keywords": [],
     "rarity": "White",
     "cardType": "Dodge",
@@ -320,7 +320,7 @@
   {
     "cardID": "shoot_aim_001",
     "cardName": "瞄准射击",
-    "description": "消耗1枚子弹进行远程射击。",
+    "description": "CD 3 拼点前消耗一颗弹药",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
@@ -372,7 +372,7 @@
   {
     "cardID": "sin_anger_001",
     "cardName": "愤怒",
-    "description": "开启本场战斗的愤怒机制。",
+    "description": "战斗开始时，获得愤怒buff",
     "keywords": [],
     "rarity": "Sin",
     "cardType": "Ability",
@@ -398,7 +398,7 @@
   {
     "cardID": "ability_modification_001",
     "cardName": "改装",
-    "description": "将弹仓容量改为4，并强化消耗子弹的卡牌。",
+    "description": "将子弹最大值改为4，消耗子弹卡牌点数+2",
     "keywords": [],
     "rarity": "White",
     "cardType": "Ability",
@@ -421,7 +421,7 @@
   {
     "cardID": "sin_conservation_001",
     "cardName": "节约",
-    "description": "根据当前子弹强化下一张射击，并在回合结束时结算剩余子弹。",
+    "description": "获得节约1层",
     "keywords": [],
     "rarity": "Sin",
     "cardType": "Ability",
