@@ -3712,25 +3712,19 @@ public class BattleSimpleUIController : MonoBehaviour
         bool showSinCards
     )
     {
+        List<BattleCardState> groupedCards = BattleDeckHandGroupingRules.GetCardsForGroup(
+            handOwner,
+            showSinCards
+        );
         List<BattleCardState> cards = new List<BattleCardState>();
-
-        if (handOwner == null || handOwner.battleCards == null)
+        for (int index = 0; index < groupedCards.Count; index++)
         {
-            return cards;
-        }
-
-        for (int index = 0; index < handOwner.battleCards.Count; index++)
-        {
-            BattleCardState cardState = handOwner.battleCards[index];
-            if (!ShouldDisplayCardInHand(runtimeState, cardState) ||
-                cardState.cardData.isSinCard != showSinCards)
+            BattleCardState cardState = groupedCards[index];
+            if (ShouldDisplayCardInHand(runtimeState, cardState))
             {
-                continue;
+                cards.Add(cardState);
             }
-
-            cards.Add(cardState);
         }
-
         return cards;
     }
 
