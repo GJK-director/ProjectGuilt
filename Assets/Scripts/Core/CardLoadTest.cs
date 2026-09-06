@@ -257,8 +257,27 @@ public static class BattleAngerAndKnifeCardsBasicTests
             attack,
             5
         );
+        CharacterData defender = Unit("mode107_stab_defender", false);
+        BattleCardState defenseState = new BattleCardState(
+            defender,
+            FixedCopy(defense, 6, 6),
+            "mode107_stab_defense"
+        );
+        BattleClashSession defenseSession = BattleClashSession.CreateDefenseVsAttack(
+            Side(defender, defenseState),
+            Side(owner, new BattleCardState(
+                owner,
+                FixedCopy(stab, 5, 5),
+                "mode107_stab_fixed"
+            )),
+            defender
+        );
+        defenseSession.RollNextAttempt();
         int damage = Damage(owner, Unit("mode107_stab_target", false), stab, 5);
-        return comparisonDefense == 10 && comparisonAttack == 5 && damage == 5;
+        return comparisonDefense == 10 && comparisonAttack == 5 && damage == 5 &&
+            defenseSession.SideBDamagePoint == 5 &&
+            defenseSession.SideBPoint == 10 &&
+            defenseSession.RemainingAttackPoint == 5;
     }
 
     static bool VerifyDoubleSlash(List<CardTestData> cards)
@@ -312,6 +331,13 @@ public static class BattleAngerAndKnifeCardsBasicTests
         BattleAngerRules.AddAnger(owner, 1);
         BattleKnifeCardRules.FinalizeCompletedInteraction(state);
         bool gainThenSpend = BattleAngerRules.GetAnger(owner) == 1;
+        BattleAngerRules.ClearAnger(owner);
+        state.currentCooldown = 0;
+        BattleKnifeCardRules.CaptureActionStart(state);
+        BattleCardManager.ApplyCooldownOnResolved(state);
+        bool overrideCleared = state.currentCooldown == 3 &&
+            state.resolvedCooldownOverride < 0 &&
+            !state.pendingHeavyAngerSpend;
 
         CharacterData cancelledOwner = Unit("mode107_heavy_cancel", true);
         BattleAngerRules.AddAnger(cancelledOwner, 2);
@@ -323,7 +349,7 @@ public static class BattleAngerAndKnifeCardsBasicTests
         BattleKnifeCardRules.CaptureActionStart(cancelled);
         bool cancelledKeeps = BattleAngerRules.GetAnger(cancelledOwner) == 2;
         return baseRange && oneRange && fourRange && snapshotKept &&
-            cooldownOverride && gainThenSpend && cancelledKeeps;
+            cooldownOverride && gainThenSpend && overrideCleared && cancelledKeeps;
     }
 
     static bool VerifyAdjustBreathing(List<CardTestData> cards)
@@ -392,9 +418,27 @@ public static class BattleAngerAndKnifeCardsBasicTests
 
         CharacterData tieOwner = Unit("mode107_iai_tie", true);
         BattleAngerRules.AddAnger(tieOwner, 3);
-        BattleCardState tie = new BattleCardState(tieOwner, iai, "mode107_tie");
+        BattleCardState tie = new BattleCardState(
+            tieOwner,
+            FixedCopy(iai, 12, 12),
+            "mode107_tie"
+        );
         BattleKnifeCardRules.CaptureActionStart(tie);
-        bool tieKeeps = BattleAngerRules.GetAnger(tieOwner) == 3;
+        CharacterData tieEnemy = Unit("mode107_iai_tie_enemy", false);
+        BattleCardState tieEnemyCard = new BattleCardState(
+            tieEnemy,
+            FixedAttack("mode107_iai_tie_attack", 12),
+            "mode107_iai_tie_attack"
+        );
+        BattleClashSession tieSession = BattleClashSession.CreateAttackVsAttack(
+            Side(tieOwner, tie),
+            Side(tieEnemy, tieEnemyCard),
+            tieOwner
+        );
+        tieSession.RollNextAttempt();
+        bool tieKeeps = tieSession.RequiresAnotherRoll &&
+            !tieSession.IsFinalized &&
+            BattleAngerRules.GetAnger(tieOwner) == 3;
 
         CharacterData loser = Unit("mode107_iai_loser", true);
         CharacterData winner = Unit("mode107_iai_winner", false);
@@ -441,7 +485,7 @@ public static class BattleAngerAndKnifeCardsBasicTests
     )
     {
         List<int> values = BattleHpUIView.BuildStagedHpValues(100, 91, 2);
-        bool split = values.Count == 2 && values[0] == 96 && values[1] == 91;
+        bool split = values.Count == 2 && values[0] == 95 && values[1] == 91;
         GameObject root = new GameObject("Mode107StagedHp");
         BattleHpUIView view = root.AddComponent<BattleHpUIView>();
         view.SetHp(100, 100);
@@ -449,7 +493,7 @@ public static class BattleAngerAndKnifeCardsBasicTests
         view.SetHp(91, 100);
         bool held = view.IsStaging && view.DisplayedHp == 100;
         view.CompleteStagedHpTransition(91, 100, 0f);
-        bool intermediate = view.IsStaging && view.DisplayedHp == 96;
+        bool intermediate = view.IsStaging && view.DisplayedHp == 95;
         yield return null;
         bool finished = !view.IsStaging && view.DisplayedHp == 91;
 

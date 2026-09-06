@@ -170,7 +170,9 @@ public class BattleHpUIView : MonoBehaviour
         List<int> values = new List<int>(safeStageCount);
         for (int stage = 1; stage <= safeStageCount; stage++)
         {
-            int appliedDamage = totalDamage * stage / safeStageCount;
+            int appliedDamage = Mathf.CeilToInt(
+                (float)totalDamage * stage / safeStageCount
+            );
             values.Add(stage == safeStageCount
                 ? finalHp
                 : startHp - appliedDamage);
