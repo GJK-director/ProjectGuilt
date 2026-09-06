@@ -566,6 +566,7 @@ public static class BattleConservationAbilityTests
         bool cleanup = VerifyTurnEndCleanup();
         bool reloadOrder = VerifyReloadThenTurnEnd(closeShoot, allIn);
         bool cooldown = VerifyCooldown(conservation);
+        bool turnEndDeath = VerifyTurnEndDeath();
         bool manifest = BattleDeckManifestTests.Run(cards);
         bool abilityRegression = BattleAbilityPhaseBasicTests.Run();
         bool angerRegression = BattleAngerAndModificationAbilityTests.Run(cards);
@@ -575,7 +576,7 @@ public static class BattleConservationAbilityTests
         bool passed = data && unavailable && armed && table && transfer && ownership &&
             formal && modification && allInLink && tie && failed && nonShooting &&
             killReload && noReload && turnEnd && cleanup && reloadOrder && cooldown &&
-            manifest && abilityRegression && angerRegression && allInRegression;
+            turnEndDeath && manifest && abilityRegression && angerRegression && allInRegression;
 
         Debug.Log("===== Mode113 BattleConservationAbility =====");
         Debug.Log("节约数据：" + data);
@@ -596,6 +597,7 @@ public static class BattleConservationAbilityTests
         Debug.Log("TurnEnd清理：" + cleanup);
         Debug.Log("Kill Reload→TurnEnd顺序：" + reloadOrder);
         Debug.Log("CD3：" + cooldown);
+        Debug.Log("TurnEnd致死结束战斗：" + turnEndDeath);
         Debug.Log("DeckManifest完整：" + manifest);
         Debug.Log("Mode108射击回归：已执行（Run返回void，无法聚合返回值）");
         Debug.Log("Mode110回归：" + abilityRegression);
@@ -658,7 +660,10 @@ public static class BattleConservationAbilityTests
         CharacterData owner = Unit("mode113_transfer");
         BattleBulletRules.AddBulletCapped(owner, 4);
         BattleConservationRules.Activate(owner);
-        BattleBulletRules.AddBulletCapped(owner, -1);
+        if (!ConsumeBulletForTest(owner, 1) || BattleBulletRules.GetBullet(owner) != 3)
+        {
+            return false;
+        }
         BattleCardState state = State(owner, Clone(source, 5, 5), "mode113_transfer_shot");
         bool assigned = BattleConservationRules.TryAssignPendingBonus(owner, state);
         return assigned && state.hasConservationPointBonus &&
@@ -738,9 +743,13 @@ public static class BattleConservationAbilityTests
         {
             return false;
         }
-        BattleBulletRules.AddBulletCapped(player, -1);
-        return shot.conservationPointBonus == 4 && session.RollNextAttempt() &&
-            session.SideAPoint == 9;
+        if (!ConsumeBulletForTest(player, 1) || BattleBulletRules.GetBullet(player) != 1)
+        {
+            return false;
+        }
+        return shot.conservationPointBonus == 4 &&
+            !BattleConservationRules.HasPendingPointGrant(player) &&
+            session.RollNextAttempt() && session.SideAPoint == 9;
     }
 
     static bool VerifyFailedShotConsumesGrant(CardTestData source)
@@ -773,28 +782,39 @@ public static class BattleConservationAbilityTests
     static bool VerifyKillReload(CardTestData source)
     {
         CharacterData owner = Unit("mode113_reload");
+        CharacterData target = Unit("mode113_reload_target");
+        target.currentHP = 1;
         BattleBulletRules.AddBulletCapped(owner, 2);
         BattleConservationRules.Activate(owner);
-        BattleCardState shot = State(owner, Clone(source, 5, 5), "mode113_reload_shot");
-        BattleConservationRules.TryAssignPendingBonus(owner, shot);
-        BattleBulletRules.AddBulletCapped(owner, -1);
-        BattleEventProcessor.ProcessEvent(new BattleEventContext(BattleTiming.AfterKill)
-            .SetUserAndTarget(owner, Unit("mode113_reload_target"))
-            .SetCardState(shot)
-            .SetKill(true));
-        return BattleBulletRules.GetBullet(owner) == 6 && !shot.conservationKillReloadArmed;
+        BattleCardState shot = BattleCardManager.CreateBattleCard(
+            owner,
+            source,
+            "mode113_reload_shot"
+        );
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, shot, target);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+        return result != null && result.isSuccess && target.IsDead() &&
+            BattleBulletRules.GetBullet(owner) == 6 &&
+            !shot.conservationKillReloadArmed;
     }
 
     static bool VerifyUnarmedKillDoesNotReload(CardTestData source)
     {
         CharacterData owner = Unit("mode113_no_reload");
+        CharacterData target = Unit("mode113_no_reload_target");
+        target.currentHP = 1;
         BattleBulletRules.AddBulletCapped(owner, 2);
-        BattleCardState shot = State(owner, Clone(source, 5, 5), "mode113_no_reload_shot");
-        BattleEventProcessor.ProcessEvent(new BattleEventContext(BattleTiming.AfterKill)
-            .SetUserAndTarget(owner, Unit("mode113_no_reload_target"))
-            .SetCardState(shot)
-            .SetKill(true));
-        return BattleBulletRules.GetBullet(owner) == 2;
+        BattleCardState shot = BattleCardManager.CreateBattleCard(
+            owner,
+            source,
+            "mode113_no_reload_shot"
+        );
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, shot, target);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+        return result != null && result.isSuccess && target.IsDead() &&
+            BattleBulletRules.GetBullet(owner) == 1;
     }
 
     static bool VerifyTurnEndPenaltyTable()
@@ -831,22 +851,34 @@ public static class BattleConservationAbilityTests
         BattleModificationRules.Activate(owner);
         BattleBulletRules.AddBulletCapped(owner, 4);
         BattleConservationRules.Activate(owner);
-        BattleCardState card = State(owner, Clone(allInSource, 2, 2), "mode113_reload_order_card");
-        BattleConservationRules.TryAssignPendingBonus(owner, card);
-        BattleBulletRules.AddBulletCapped(owner, -4);
-        BattleEventProcessor.ProcessEvent(new BattleEventContext(BattleTiming.AfterKill)
-            .SetUserAndTarget(owner, Unit("mode113_reload_order_target"))
-            .SetCardState(card)
-            .SetKill(true));
+        CharacterData target = Unit("mode113_reload_order_target");
+        target.currentHP = 1;
+        BattleCardState card = BattleCardManager.CreateBattleCard(
+            owner,
+            allInSource,
+            "mode113_reload_order_card"
+        );
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, card, target);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+        if (result == null || !result.isSuccess || !target.IsDead() ||
+            BattleBulletRules.GetBullet(owner) != 4)
+        {
+            return false;
+        }
         int damage = BattleConservationRules.ResolveTurnEnd(owner);
-        return BattleBulletRules.GetBullet(owner) == 4 && damage == 5;
+        return damage == 5 && owner.currentHP == 95;
     }
 
     static bool VerifyCooldown(CardTestData source)
     {
         CharacterData owner = Unit("mode113_cooldown");
         BattleBulletRules.AddBulletCapped(owner, 1);
-        BattleCardState state = State(owner, source, "mode113_cooldown_card");
+        BattleCardState state = BattleCardManager.CreateBattleCard(
+            owner,
+            source,
+            "mode113_cooldown_card"
+        );
         BattleActionSlot slot = new BattleActionSlot(owner, 1);
         slot.AssignFreeAction(owner, state, owner);
         BattleConservationRules.Activate(owner);
@@ -859,6 +891,50 @@ public static class BattleConservationAbilityTests
         BattleCardManager.ReduceCooldownsAtTurnEnd(owner);
         BattleCardManager.ReduceCooldownsAtTurnEnd(owner);
         return applied && skipped && state.currentCooldown == 0;
+    }
+
+    static bool VerifyTurnEndDeath()
+    {
+        CharacterData ally = Unit("mode113_turn_end_death_ally");
+        CharacterData enemy = Unit("mode113_turn_end_death_enemy");
+        ally.currentHP = 30;
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(ally, null, enemy);
+        runtimeState.SetExecutionPlan(new BattleExecutionPlan
+        {
+            isCompleted = true
+        });
+        BattleConservationRules.Activate(ally);
+
+        BattleLifecycleController lifecycle = new BattleLifecycleController(runtimeState);
+        string failureMessage;
+        if (!lifecycle.TryInitializeToPrepare(out failureMessage) ||
+            !runtimeState.TryTransitionTo(BattleLifecyclePhase.PlanReady, out failureMessage) ||
+            !runtimeState.TryTransitionTo(BattleLifecyclePhase.Executing, out failureMessage) ||
+            !runtimeState.TryTransitionTo(BattleLifecyclePhase.TurnResolved, out failureMessage))
+        {
+            return false;
+        }
+
+        bool ended = lifecycle.TryEndCurrentTurn(out failureMessage);
+        return ended && runtimeState.IsBattleEnded &&
+            runtimeState.LifecyclePhase == BattleLifecyclePhase.BattleEnded &&
+            runtimeState.battleResult == BattleResult.Defeat;
+    }
+
+    static bool ConsumeBulletForTest(CharacterData owner, int amount)
+    {
+        if (owner == null || amount <= 0)
+        {
+            return false;
+        }
+
+        bool success = owner.TryConsumeBuffStackAsResource(
+            BattleResourceID.Bullet,
+            amount,
+            out int consumed
+        );
+        return success && consumed == amount;
     }
 
     static CharacterData Unit(string id)

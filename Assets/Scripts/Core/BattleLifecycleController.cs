@@ -409,7 +409,14 @@ public sealed class BattleLifecycleController
             "TurnEnd"
         );
         BattleTurnProcessor.EndTurn(GetLivingTurnParticipants());
+        EvaluateBattleEnd();
         runtimeState.ClearCurrentTurnRuntimeObjects();
+
+        if (runtimeState.IsBattleEnded)
+        {
+            failureMessage = string.Empty;
+            return true;
+        }
 
         return runtimeState.TryTransitionTo(
             BattleLifecyclePhase.TurnEnded,

@@ -3841,7 +3841,7 @@ public static class BattleResolver
             snapshot.selectedMaxPoint = temp;
         }
 
-        snapshot.pointModifierFromResource = snapshot.capturedStack * rule.pointPerStack;
+        snapshot.pointModifierFromResource += snapshot.capturedStack * rule.pointPerStack;
 
         snapshot.pointModifierFromResource += BattleModificationRules.GetCardPointBonus(
             unit,
