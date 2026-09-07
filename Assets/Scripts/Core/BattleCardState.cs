@@ -21,6 +21,9 @@ public class BattleCardState
     // 主动减 CD 接口不读取这个标记。
     public bool skipNextTurnEndCooldownTick;
 
+    // 当前行动内的CardUsed提交保护；不代表本场战斗是否曾经使用过。
+    public bool cardUsedCommittedForCurrentAction;
+
     // 单次行动快照。由ActionStart捕获，由Resolution完成或下一次ActionStart清理。
     public int preResolutionAnger;
     public bool hasPreResolutionAngerSnapshot;
@@ -50,6 +53,7 @@ public class BattleCardState
 
         currentCooldown = 0;
         skipNextTurnEndCooldownTick = false;
+        cardUsedCommittedForCurrentAction = false;
         ClearResolutionRuleState();
         isConsumed = false;
 
@@ -151,6 +155,22 @@ public class BattleCardState
     public bool IsImmediateCommit()
     {
         return cardData != null && cardData.IsImmediateCommit();
+    }
+
+    public void ResetCardUsedCommitForNewAction()
+    {
+        cardUsedCommittedForCurrentAction = false;
+    }
+
+    public bool TryMarkCardUsedCommitted()
+    {
+        if (cardUsedCommittedForCurrentAction)
+        {
+            return false;
+        }
+
+        cardUsedCommittedForCurrentAction = true;
+        return true;
     }
 
     // HasTrait = 查询这张战斗卡实例对应的卡牌固有词条。

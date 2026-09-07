@@ -104,7 +104,8 @@ public enum BattleTestMode
     BattleDeckHandGroupingBasic = 115,
     BattleLifecycleTimingBasic = 116,
     BattleUsePolicyDataBasic = 117,
-    BattleAttackUsePolicyResolutionBasic = 118
+    BattleAttackUsePolicyResolutionBasic = 118,
+    BattleCardUsedCommitBasic = 119
 }
 
 public static class BattleLifecycleTimingTests
@@ -808,6 +809,413 @@ public static class BattleAttackUsePolicyResolutionTests
     static CharacterData Unit(string id)
     {
         return new CharacterData(id, 100, 5, 5, id);
+    }
+
+    static void LogCheck(string label, bool passed)
+    {
+        Debug.Log(passed ? label : "FAIL: " + label.Substring(6));
+    }
+}
+
+public static class BattleCardUsedCommitTests
+{
+    sealed class AttackFixture
+    {
+        public CharacterData player;
+        public CharacterData enemy;
+        public BattleCardState playerCard;
+        public BattleCardState enemyCard;
+        public BattleActionSlot playerSlot;
+        public BattleEnemyIntent enemyIntent;
+    }
+
+    public static bool Run()
+    {
+        bool helperOnce = WithObserver(VerifyHelperIdempotency);
+        bool normalWinner = WithObserver(VerifyNormalWinner);
+        bool immediateLoser = WithObserver(VerifyImmediateLoser);
+        bool immediateWinner = WithObserver(VerifyImmediateWinner);
+        bool tieLimit = WithObserver(VerifyImmediateTieLimit);
+        bool unilateral = WithObserver(VerifyUnilateralAttack);
+        bool ability = WithObserver(VerifyAbility);
+        bool noLegacyConsequence = WithObserver(VerifyNoLegacyConsequence);
+
+        Debug.Log("===== Mode119 BattleCardUsedCommitBasic =====");
+        LogCheck("PASS: CardUsed helper commits once", helperOnce);
+        LogCheck("PASS: Normal winner CardUsed once", normalWinner);
+        LogCheck("PASS: Normal loser no CardUsed", normalWinner);
+        LogCheck(
+            "PASS: ImmediateCommit commits before clash result",
+            immediateLoser
+        );
+        LogCheck(
+            "PASS: ImmediateCommit loser CardUsed only once",
+            immediateLoser
+        );
+        LogCheck(
+            "PASS: ImmediateCommit winner not recommitted",
+            immediateWinner
+        );
+        LogCheck(
+            "PASS: TieLimit preserves ImmediateCommit CardUsed",
+            tieLimit
+        );
+        LogCheck("PASS: unilateral Attack CardUsed once", unilateral);
+        LogCheck("PASS: unilateral CardUsed before Hit", unilateral);
+        LogCheck("PASS: Ability CardUsed once", ability);
+        LogCheck("PASS: Ability CardUsed before OnPlay", ability);
+        LogCheck(
+            "PASS: CardUsed has no legacy cooldown consequence",
+            noLegacyConsequence
+        );
+
+        bool passed = helperOnce && normalWinner && immediateLoser &&
+            immediateWinner && tieLimit && unilateral && ability &&
+            noLegacyConsequence;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyHelperIdempotency(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode119_helper_owner");
+        BattleCardState card = AttackCard(
+            owner,
+            "mode119_helper_card",
+            5,
+            CardUsePolicy.Normal
+        );
+        card.ResetCardUsedCommitForNewAction();
+        bool first = BattleResolver.CommitCardUsedOnce(owner, owner, card);
+        bool second = BattleResolver.CommitCardUsedOnce(owner, owner, card);
+        return first && !second && Count(events, BattleTiming.CardUsed, card) == 1;
+    }
+
+    static bool VerifyNormalWinner(List<BattleEventContext> events)
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode119_normal_winner",
+            10,
+            CardUsePolicy.Normal,
+            1,
+            CardUsePolicy.Normal
+        );
+        BattleClashSession session = BattleResolver.CreateRespondedAttackClashSession(
+            fixture.playerSlot,
+            fixture.enemyIntent
+        );
+        while (!session.IsFinalized)
+        {
+            session.RollNextAttempt();
+        }
+        BattleResolveResult result = BattleResolver.FinalizeRespondedClash(
+            fixture.playerSlot,
+            fixture.enemyIntent,
+            session
+        );
+        return result != null &&
+            Count(events, BattleTiming.CardUsed, fixture.playerCard) == 1 &&
+            Count(events, BattleTiming.CardUsed, fixture.enemyCard) == 0;
+    }
+
+    static bool VerifyImmediateLoser(List<BattleEventContext> events)
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode119_immediate_loser",
+            1,
+            CardUsePolicy.ImmediateCommit,
+            10,
+            CardUsePolicy.Normal
+        );
+        BattleClashSession session = BattleResolver.CreateRespondedAttackClashSession(
+            fixture.playerSlot,
+            fixture.enemyIntent
+        );
+        int playerCardUsedBeforeRoll = Count(
+            events,
+            BattleTiming.CardUsed,
+            fixture.playerCard
+        );
+        int enemyCardUsedBeforeRoll = Count(
+            events,
+            BattleTiming.CardUsed,
+            fixture.enemyCard
+        );
+        bool noClashResultBeforeRoll = Count(
+                events,
+                BattleTiming.ClashWin,
+                null
+            ) == 0 &&
+            Count(events, BattleTiming.ClashLose, null) == 0;
+        while (!session.IsFinalized)
+        {
+            session.RollNextAttempt();
+        }
+        BattleResolver.FinalizeRespondedClash(
+            fixture.playerSlot,
+            fixture.enemyIntent,
+            session
+        );
+        return playerCardUsedBeforeRoll == 1 &&
+            enemyCardUsedBeforeRoll == 0 &&
+            noClashResultBeforeRoll &&
+            Count(events, BattleTiming.CardUsed, fixture.playerCard) == 1 &&
+            Count(events, BattleTiming.CardUsed, fixture.enemyCard) == 1;
+    }
+
+    static bool VerifyImmediateWinner(List<BattleEventContext> events)
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode119_immediate_winner",
+            10,
+            CardUsePolicy.ImmediateCommit,
+            1,
+            CardUsePolicy.Normal
+        );
+        BattleClashSession session = BattleResolver.CreateRespondedAttackClashSession(
+            fixture.playerSlot,
+            fixture.enemyIntent
+        );
+        bool committedBeforeRoll = Count(
+            events,
+            BattleTiming.CardUsed,
+            fixture.playerCard
+        ) == 1;
+        while (!session.IsFinalized)
+        {
+            session.RollNextAttempt();
+        }
+        BattleResolver.FinalizeRespondedClash(
+            fixture.playerSlot,
+            fixture.enemyIntent,
+            session
+        );
+        return committedBeforeRoll &&
+            Count(events, BattleTiming.CardUsed, fixture.playerCard) == 1;
+    }
+
+    static bool VerifyImmediateTieLimit(List<BattleEventContext> events)
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode119_immediate_tie",
+            5,
+            CardUsePolicy.ImmediateCommit,
+            5,
+            CardUsePolicy.Normal
+        );
+        BattleClashSession session = BattleResolver.CreateRespondedAttackClashSession(
+            fixture.playerSlot,
+            fixture.enemyIntent
+        );
+        while (!session.IsFinalized)
+        {
+            session.RollNextAttempt();
+        }
+        BattleResolveResult result = BattleResolver.FinalizeRespondedClash(
+            fixture.playerSlot,
+            fixture.enemyIntent,
+            session
+        );
+        return result != null &&
+            session.FinalResult == BattleClashFinalResult.TieLimit &&
+            Count(events, BattleTiming.CardUsed, fixture.playerCard) == 1 &&
+            Count(events, BattleTiming.CardUsed, fixture.enemyCard) == 0;
+    }
+
+    static bool VerifyUnilateralAttack(List<BattleEventContext> events)
+    {
+        CharacterData user = Unit("mode119_unilateral_user");
+        CharacterData target = Unit("mode119_unilateral_target");
+        BattleCardState card = AttackCard(
+            user,
+            "mode119_unilateral_card",
+            5,
+            CardUsePolicy.Normal
+        );
+        BattleActionSlot slot = new BattleActionSlot(user, 1);
+        slot.AssignFreeAction(user, card, target);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+        int cardUsedIndex = IndexOf(events, BattleTiming.CardUsed, card);
+        int hitIndex = IndexOf(events, BattleTiming.Hit, card);
+        return result != null &&
+            result.isSuccess &&
+            Count(events, BattleTiming.CardUsed, card) == 1 &&
+            cardUsedIndex >= 0 &&
+            hitIndex >= 0 &&
+            cardUsedIndex < hitIndex;
+    }
+
+    static bool VerifyAbility(List<BattleEventContext> events)
+    {
+        CharacterData user = Unit("mode119_ability_user");
+        BattleCardState card = new BattleCardState(
+            user,
+            new CardTestData
+            {
+                cardID = "mode119_ability_card",
+                cardName = "mode119_ability_card",
+                cardType = CardType.Ability,
+                isClashable = false
+            },
+            "mode119_ability_card"
+        );
+        BattleActionSlot slot = new BattleActionSlot(user, 1);
+        slot.AssignFreeAction(user, card, user);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+        int cardUsedIndex = IndexOf(events, BattleTiming.CardUsed, card);
+        int onPlayIndex = IndexOf(events, BattleTiming.OnPlay, card);
+        int resolvedIndex = IndexOf(events, BattleTiming.Resolved, card);
+        return result != null &&
+            result.isSuccess &&
+            Count(events, BattleTiming.CardUsed, card) == 1 &&
+            cardUsedIndex >= 0 &&
+            onPlayIndex > cardUsedIndex &&
+            resolvedIndex > onPlayIndex;
+    }
+
+    static bool VerifyNoLegacyConsequence(List<BattleEventContext> events)
+    {
+        CharacterData user = Unit("mode119_no_legacy_user");
+        BattleCardState card = AttackCard(
+            user,
+            "mode119_no_legacy_card",
+            5,
+            CardUsePolicy.Normal
+        );
+        card.cardData.cooldown = 3;
+        card.cardData.consumeOnUse = true;
+        card.maxUseCount = 2;
+        card.ResetCardUsedCommitForNewAction();
+        bool committed = BattleResolver.CommitCardUsedOnce(user, user, card);
+        return committed &&
+            Count(events, BattleTiming.CardUsed, card) == 1 &&
+            card.currentCooldown == 0 &&
+            card.currentUseCount == 0 &&
+            !card.isConsumed;
+    }
+
+    static AttackFixture CreateAttackFixture(
+        string id,
+        int playerPoint,
+        string playerPolicy,
+        int enemyPoint,
+        string enemyPolicy
+    )
+    {
+        AttackFixture fixture = new AttackFixture
+        {
+            player = Unit(id + "_player"),
+            enemy = Unit(id + "_enemy")
+        };
+        fixture.playerCard = AttackCard(
+            fixture.player,
+            id + "_player_card",
+            playerPoint,
+            playerPolicy
+        );
+        fixture.enemyCard = AttackCard(
+            fixture.enemy,
+            id + "_enemy_card",
+            enemyPoint,
+            enemyPolicy
+        );
+        fixture.enemyIntent = new BattleEnemyIntent(
+            id + "_intent",
+            fixture.enemy,
+            fixture.enemyCard,
+            fixture.player,
+            1
+        );
+        fixture.playerSlot = new BattleActionSlot(fixture.player, 1);
+        fixture.playerSlot.AssignResponse(
+            fixture.player,
+            fixture.playerCard,
+            fixture.enemyIntent,
+            false
+        );
+        return fixture;
+    }
+
+    static BattleCardState AttackCard(
+        CharacterData owner,
+        string id,
+        int point,
+        string usePolicy
+    )
+    {
+        return BattleCardManager.CreateBattleCard(
+            owner,
+            new CardTestData
+            {
+                cardID = id,
+                cardName = id,
+                cardType = CardType.Attack,
+                attackDeliveryMode = AttackDeliveryMode.Melee,
+                isClashable = true,
+                minPoint = point,
+                maxPoint = point,
+                damageFormula = "PointAsDamage",
+                usePolicy = usePolicy
+            },
+            id
+        );
+    }
+
+    static CharacterData Unit(string id)
+    {
+        return new CharacterData(id, 100, 5, 5, id);
+    }
+
+    static bool WithObserver(System.Func<List<BattleEventContext>, bool> test)
+    {
+        List<BattleEventContext> events = new List<BattleEventContext>();
+        System.Action<BattleEventContext> previousObserver =
+            BattleEventProcessor.TestEventObserver;
+        BattleEventProcessor.TestEventObserver = context => events.Add(context);
+        try
+        {
+            return test(events);
+        }
+        finally
+        {
+            BattleEventProcessor.TestEventObserver = previousObserver;
+        }
+    }
+
+    static int Count(
+        List<BattleEventContext> events,
+        string timing,
+        BattleCardState card
+    )
+    {
+        int count = 0;
+        foreach (BattleEventContext context in events)
+        {
+            if (context != null && context.timing == timing &&
+                (card == null || object.ReferenceEquals(context.cardState, card)))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    static int IndexOf(
+        List<BattleEventContext> events,
+        string timing,
+        BattleCardState card
+    )
+    {
+        for (int index = 0; index < events.Count; index++)
+        {
+            BattleEventContext context = events[index];
+            if (context != null && context.timing == timing &&
+                object.ReferenceEquals(context.cardState, card))
+            {
+                return index;
+            }
+        }
+        return -1;
     }
 
     static void LogCheck(string label, bool passed)
@@ -2384,6 +2792,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleAttackUsePolicyResolutionBasic)
         {
             BattleAttackUsePolicyResolutionTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardUsedCommitBasic)
+        {
+            BattleCardUsedCommitTests.Run();
             return;
         }
 

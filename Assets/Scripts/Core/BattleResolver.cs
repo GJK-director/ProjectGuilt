@@ -118,6 +118,8 @@ public static class BattleResolver
             "，不进入拼点"
         );
 
+        actionSlot.cardState.ResetCardUsedCommitForNewAction();
+        CommitCardUsedOnce(user, target, actionSlot.cardState);
         TriggerBattleEvent(BattleTiming.OnPlay, user, target, actionSlot.cardState, 0, 0, false, false);
         TriggerBattleEvent(BattleTiming.Resolved, user, target, actionSlot.cardState, 0, 0, false, false);
 
@@ -463,6 +465,8 @@ public static class BattleResolver
 
         Debug.Log(user.characterName + " 使用能力型罪卡：" + abilityCardState.GetCardName() + "，不进入拼点");
 
+        abilityCardState.ResetCardUsedCommitForNewAction();
+        CommitCardUsedOnce(user, target, abilityCardState);
         // Ability 罪卡直接执行 OnPlay effects
         TriggerBattleEvent(BattleTiming.OnPlay, user, target, abilityCardState, 0, 0, false, false);
 
@@ -1818,6 +1822,13 @@ public static class BattleResolver
         BattleResolutionPlan plan
     )
     {
+        CommitCardUsedOnce(
+            plan.attacker,
+            plan.target,
+            plan.sourceCardState,
+            plan.freeActionPoint,
+            ClashResult.None
+        );
         ConsumeSuccessfulPointCardBuffs(
             plan.attacker,
             plan.freeActionPointSnapshot
@@ -1860,6 +1871,13 @@ public static class BattleResolver
         int winnerPoint = playerWon ? session.SideAPoint : session.SideBPoint;
         int loserPoint = playerWon ? session.SideBPoint : session.SideAPoint;
 
+        CommitCardUsedOnce(
+            winner.actor,
+            defender,
+            winner.cardState,
+            winnerPoint,
+            ClashResult.Win
+        );
         ConsumeSuccessfulPointCardBuffs(winner.actor, winner.pointSnapshot);
         PayDefaultResourceCostOnSuccessfulUse(winner.actor, winner.resourceSnapshot);
         PayResolvedParticipationResourceCost(winner.actor, winner.resourceSnapshot);
@@ -2520,6 +2538,23 @@ public static class BattleResolver
             enemyCardState, 0, 0, false, false);
         TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit,
             playerCardState, 0, 0, false, false);
+
+        if (playerCardState.IsImmediateCommit())
+        {
+            CommitCardUsedOnce(
+                playerUnit,
+                enemyUnit,
+                playerCardState
+            );
+        }
+        if (enemyCardState.IsImmediateCommit())
+        {
+            CommitCardUsedOnce(
+                enemyUnit,
+                actualTarget,
+                enemyCardState
+            );
+        }
 
         enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
         playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
@@ -3715,6 +3750,38 @@ public static class BattleResolver
     // 事件入口
     // ================================
 
+    internal static bool CommitCardUsedOnce(
+        CharacterData user,
+        CharacterData target,
+        BattleCardState cardState,
+        int clashPoint = 0,
+        string clashResult = ClashResult.None
+    )
+    {
+        if (user == null || cardState == null || cardState.cardData == null)
+        {
+            return false;
+        }
+
+        if (!cardState.TryMarkCardUsedCommitted())
+        {
+            return false;
+        }
+
+        TriggerBattleEvent(
+            BattleTiming.CardUsed,
+            user,
+            target,
+            cardState,
+            clashPoint,
+            0,
+            false,
+            false,
+            clashResult
+        );
+        return true;
+    }
+
     // TriggerBattleEvent = 触发战斗事件
     static void TriggerBattleEvent(
         string timing,
@@ -3961,6 +4028,10 @@ public static class BattleResolver
 
     static void TriggerActionStart(CharacterData user, CharacterData target, BattleCardState cardState)
     {
+        if (cardState != null)
+        {
+            cardState.ResetCardUsedCommitForNewAction();
+        }
         BattleKnifeCardRules.CaptureActionStart(cardState);
         TriggerBattleEvent(BattleTiming.ActionStart, user, target, cardState, 0, 0, false, false);
     }
