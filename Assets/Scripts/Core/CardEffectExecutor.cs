@@ -9,6 +9,22 @@ using UnityEngine;
 // Effect = 效果，Executor = 执行器。
 // 专门负责执行卡牌 JSON 里 effects 列表中的效果。
 // 注意：这个脚本只负责“效果怎么执行”，不负责判断卡牌能不能使用，也不负责拼点胜负。
+public sealed class BattleRuleEvaluationContext
+{
+    public BattleEventContext battleEvent;
+    public CharacterData user;
+    public CharacterData target;
+    public BattleCardState sourceCardState;
+    public BattleCardState candidateCardState;
+    public BattleCardState opponentCardState;
+    public BattleRuntimeInteraction runtimeInteraction;
+    public BattleImpact impact;
+    public BattleClashResourceSnapshot resourceSnapshot;
+    public string timing;
+    public string clashResult;
+    public CardTestData candidateCardData;
+}
+
 public static class CardEffectExecutor
 {
     // ExecuteCardEffects = 执行卡牌效果
@@ -26,89 +42,156 @@ public static class CardEffectExecutor
       string currentClashResult = "None"
     )
     {
-        // effects 为空，说明这张卡没有需要执行的效果。
-        if (card.effects == null || card.effects.Count == 0)
+        BattleEventContext context = new BattleEventContext(trigger)
+            .SetUserAndTarget(user, target)
+            .SetCardData(card)
+            .SetClashResult(currentClashResult);
+        HandleEvent(context);
+    }
+
+    public static void HandleEvent(BattleEventContext context)
+    {
+        BattleRuleEvaluationContext evaluation = CreateEvaluationContext(context);
+        CardTestData card = evaluation != null
+            ? evaluation.candidateCardData
+            : null;
+        if (card == null || card.effects == null || card.effects.Count == 0)
         {
             return;
         }
 
-        // 遍历这张卡的所有效果。
-        // 一张卡可以有多个效果，例如：先加 Buff，再减少 CD。
         foreach (CardEffectData effect in card.effects)
         {
-            // 如果效果触发时机不等于当前时机，就跳过。
-            // 例如当前是 OnPlay，就不执行 AfterDamage 的效果。
-            if (!IsTriggerMatched(effect, trigger))
+            if (!IsTriggerMatched(effect, evaluation.timing) ||
+                !IsClashResultMatched(effect, evaluation.clashResult) ||
+                !AreConditionsMet(effect.conditions, evaluation) ||
+                !AreFiltersMatched(effect.filters, evaluation))
             {
                 continue;
             }
 
-            // 如果效果要求特定拼点结果，但当前结果不满足，也跳过。
-            // 例如只在 ClashWin 时触发的效果，拼点失败时不会执行。
-            if (!IsClashResultMatched(effect, currentClashResult))
+            int resolvedValue = 0;
+            bool hasResolvedValue = effect.formula != null;
+            if (hasResolvedValue && !TryEvaluateFormula(
+                effect.formula,
+                evaluation,
+                out resolvedValue
+            ))
             {
+                Debug.LogWarning("卡牌效果公式无法计算，跳过效果：" +
+                    (card.cardName ?? card.cardID));
                 continue;
             }
 
-            // ApplyBuff = 添加 Buff / 状态。
-            if (effect.effectType == CardEffectType.ApplyBuff)
+            CharacterData effectTarget = GetEffectTarget(
+                evaluation.user,
+                evaluation.target,
+                effect.target
+            );
+            if (effectTarget == null)
             {
-                // 先根据 effect.target 找到效果目标。
-                // 例如 Self 表示自己，Target 表示卡牌目标。
-                CharacterData effectTarget = GetEffectTarget(user, target, effect.target);
+                Debug.LogWarning("找不到效果目标：" + effect.target);
+                continue;
+            }
 
-                if (effectTarget == null)
-                {
-                    Debug.LogWarning("找不到效果目标：" + effect.target);
-                    continue;
-                }
+            ExecuteEffect(effectTarget, effect, hasResolvedValue, resolvedValue);
+        }
+    }
 
-                ApplyBuffEffect(effectTarget, effect);
-            }
-            // ReduceCooldown = 减少 CD。
-            else if (effect.effectType == CardEffectType.ReduceCooldown)
-            {
-                // 减少 CD 也需要先找到作用目标。
-                // 例如减少自己的全部卡 CD，或者减少目标角色的某类卡 CD。
-                CharacterData effectTarget = GetEffectTarget(user, target, effect.target);
+    internal static BattleRuleEvaluationContext CreateEvaluationContext(
+        BattleEventContext context
+    )
+    {
+        if (context == null)
+        {
+            return null;
+        }
 
-                if (effectTarget == null)
-                {
-                    Debug.LogWarning("找不到减少冷却的目标：" + effect.target);
-                    continue;
-                }
+        BattleRuleEvaluationContext evaluation = new BattleRuleEvaluationContext
+        {
+            battleEvent = context,
+            user = context.user,
+            target = context.target,
+            sourceCardState = context.cardState,
+            candidateCardState = context.cardState,
+            runtimeInteraction = context.runtimeInteraction,
+            impact = context.impact,
+            resourceSnapshot = context.resourceSnapshot,
+            timing = context.timing,
+            clashResult = string.IsNullOrEmpty(context.clashResult)
+                ? ClashResult.None
+                : context.clashResult,
+            candidateCardData = context.cardState != null
+                ? context.cardState.cardData
+                : context.cardData
+        };
+        evaluation.opponentCardState = FindOpponentCardState(evaluation);
+        return evaluation;
+    }
 
-                ApplyReduceCooldownEffect(effectTarget, effect);
-            }
-            else if (effect.effectType == CardEffectType.EnableAngerMechanic)
-            {
-                CharacterData effectTarget = GetEffectTarget(user, target, effect.target);
-                if (effectTarget != null)
-                {
-                    effectTarget.SetAngerMechanicEnabledForBattle(true);
-                }
-            }
-            else if (effect.effectType == CardEffectType.ActivateModification)
-            {
-                CharacterData effectTarget = GetEffectTarget(user, target, effect.target);
-                if (effectTarget != null)
-                {
-                    BattleModificationRules.Activate(effectTarget);
-                }
-            }
-            else if (effect.effectType == CardEffectType.ActivateConservation)
-            {
-                CharacterData effectTarget = GetEffectTarget(user, target, effect.target);
-                if (effectTarget != null)
-                {
-                    BattleConservationRules.Activate(effectTarget);
-                }
-            }
-            else
-            {
-                // 未知效果类型暂时只打印警告，避免静默失败。
-                Debug.LogWarning("暂未处理的效果类型：" + effect.effectType);
-            }
+    static BattleCardState FindOpponentCardState(
+        BattleRuleEvaluationContext context
+    )
+    {
+        if (context == null || context.runtimeInteraction == null ||
+            context.sourceCardState == null)
+        {
+            return null;
+        }
+
+        BattleExecutionAction sideA = context.runtimeInteraction.sideA;
+        BattleExecutionAction sideB = context.runtimeInteraction.sideB;
+        if (sideA != null && object.ReferenceEquals(
+            sideA.cardState,
+            context.sourceCardState
+        ))
+        {
+            return sideB != null ? sideB.cardState : null;
+        }
+        if (sideB != null && object.ReferenceEquals(
+            sideB.cardState,
+            context.sourceCardState
+        ))
+        {
+            return sideA != null ? sideA.cardState : null;
+        }
+        return null;
+    }
+
+    static void ExecuteEffect(
+        CharacterData effectTarget,
+        CardEffectData effect,
+        bool hasResolvedValue,
+        int resolvedValue
+    )
+    {
+        if (effect.effectType == CardEffectType.ApplyBuff)
+        {
+            ApplyBuffEffect(effectTarget, effect, hasResolvedValue
+                ? resolvedValue
+                : (int?)null);
+        }
+        else if (effect.effectType == CardEffectType.ReduceCooldown)
+        {
+            ApplyReduceCooldownEffect(effectTarget, effect, hasResolvedValue
+                ? resolvedValue
+                : (int?)null);
+        }
+        else if (effect.effectType == CardEffectType.EnableAngerMechanic)
+        {
+            effectTarget.SetAngerMechanicEnabledForBattle(true);
+        }
+        else if (effect.effectType == CardEffectType.ActivateModification)
+        {
+            BattleModificationRules.Activate(effectTarget);
+        }
+        else if (effect.effectType == CardEffectType.ActivateConservation)
+        {
+            BattleConservationRules.Activate(effectTarget);
+        }
+        else
+        {
+            Debug.LogWarning("暂未处理的效果类型：" + effect.effectType);
         }
     }
 
@@ -216,11 +299,223 @@ public static class CardEffectExecutor
         return effect.requireClashResult == currentClashResult;
     }
 
+    internal static bool AreConditionsMet(
+        CardEffectConditionData[] conditions,
+        BattleRuleEvaluationContext context
+    )
+    {
+        if (conditions == null || conditions.Length == 0)
+        {
+            return true;
+        }
+
+        foreach (CardEffectConditionData condition in conditions)
+        {
+            if (!EvaluateCondition(condition, context))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool EvaluateCondition(
+        CardEffectConditionData condition,
+        BattleRuleEvaluationContext context
+    )
+    {
+        if (condition == null || context == null)
+        {
+            return false;
+        }
+
+        if (condition.conditionType ==
+            CardEffectConditionType.OpponentCardTypeIs)
+        {
+            return context.opponentCardState != null &&
+                context.opponentCardState.cardData != null &&
+                context.opponentCardState.cardData.cardType == condition.cardType;
+        }
+
+        if (condition.conditionType ==
+            CardEffectConditionType.ResourceStackAtLeast)
+        {
+            CharacterData resourceOwner = GetEffectTarget(
+                context.user,
+                context.target,
+                condition.target
+            );
+            return resourceOwner != null &&
+                !string.IsNullOrEmpty(condition.resourceID) &&
+                resourceOwner.GetBuffStack(condition.resourceID) >=
+                    condition.value;
+        }
+
+        if (condition.conditionType ==
+            CardEffectConditionType.ClashResultIs)
+        {
+            return !string.IsNullOrEmpty(condition.clashResult) &&
+                context.clashResult == condition.clashResult;
+        }
+
+        Debug.LogWarning("未知的卡牌效果条件：" + condition.conditionType);
+        return false;
+    }
+
+    internal static bool AreFiltersMatched(
+        CardEffectFilterData[] filters,
+        BattleRuleEvaluationContext context
+    )
+    {
+        if (filters == null || filters.Length == 0)
+        {
+            return true;
+        }
+
+        foreach (CardEffectFilterData filter in filters)
+        {
+            if (!EvaluateFilter(filter, context))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool EvaluateFilter(
+        CardEffectFilterData filter,
+        BattleRuleEvaluationContext context
+    )
+    {
+        CardTestData candidate = context != null
+            ? context.candidateCardData
+            : null;
+        if (filter == null || candidate == null)
+        {
+            return false;
+        }
+
+        if (filter.filterType == CardEffectFilterType.CardTypeIs)
+        {
+            return candidate.cardType == filter.cardType;
+        }
+
+        if (filter.filterType == CardEffectFilterType.CardConsumesResource)
+        {
+            return CardConsumesResource(candidate, filter.resourceID);
+        }
+
+        if (filter.filterType == CardEffectFilterType.EligibleShootingAttack)
+        {
+            return candidate.cardType == CardType.Attack &&
+                (candidate.IsLongRangeShoot() ||
+                    candidate.IsCloseRangeShoot()) &&
+                CardConsumesResource(candidate, BattleResourceID.Bullet);
+        }
+
+        Debug.LogWarning("未知的卡牌效果过滤器：" + filter.filterType);
+        return false;
+    }
+
+    internal static bool CardConsumesResource(
+        CardTestData card,
+        string resourceID
+    )
+    {
+        if (card == null || string.IsNullOrEmpty(resourceID))
+        {
+            return false;
+        }
+
+        if (ConsumesResource(card.resourceRule, resourceID))
+        {
+            return true;
+        }
+
+        if (card.resourceRules != null)
+        {
+            foreach (CardResourceRuleData rule in card.resourceRules)
+            {
+                if (ConsumesResource(rule, resourceID))
+                {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    static bool ConsumesResource(CardResourceRuleData rule, string resourceID)
+    {
+        return rule != null && rule.resourceType == "BuffStack" &&
+            rule.resourceID == resourceID &&
+            (rule.consumeAmountOnSuccess > 0 ||
+                rule.consumeAllCapturedOnSuccess);
+    }
+
+    internal static bool TryEvaluateFormula(
+        CardEffectFormulaData formula,
+        BattleRuleEvaluationContext context,
+        out int value
+    )
+    {
+        value = 0;
+        if (formula == null || context == null)
+        {
+            return false;
+        }
+
+        int input;
+        if (formula.inputType == CardEffectFormulaInputType.CurrentAnger)
+        {
+            if (context.user == null)
+            {
+                return false;
+            }
+            input = BattleAngerRules.GetAnger(context.user);
+        }
+        else if (formula.inputType == CardEffectFormulaInputType.ResourceSnapshot)
+        {
+            if (context.resourceSnapshot == null ||
+                string.IsNullOrEmpty(formula.resourceID) ||
+                context.resourceSnapshot.resourceID != formula.resourceID)
+            {
+                return false;
+            }
+            input = context.resourceSnapshot.capturedStack;
+        }
+        else
+        {
+            Debug.LogWarning("未知的卡牌效果公式输入：" + formula.inputType);
+            return false;
+        }
+
+        if (formula.lookup != null && formula.lookup.Length > 0)
+        {
+            foreach (CardEffectFormulaLookupEntryData entry in formula.lookup)
+            {
+                if (entry != null && entry.input == input)
+                {
+                    value = entry.value;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        value = input * formula.multiplier + formula.additive;
+        return true;
+    }
+
     // ApplyBuffEffect = 执行添加 Buff 的效果
     // Apply = 应用，BuffEffect = Buff 效果。
     // effectTarget = 被添加 Buff 的角色。
     // effect = 单个效果数据，里面包含 buffType、stack、duration 等字段。
-    static void ApplyBuffEffect(CharacterData effectTarget, CardEffectData effect)
+    static void ApplyBuffEffect(
+        CharacterData effectTarget,
+        CardEffectData effect,
+        int? resolvedStack = null
+    )
     {
         string applyTiming = effect.applyTiming;
 
@@ -238,7 +533,7 @@ public static class CardEffectExecutor
             return;
         }
 
-        int stack = effect.stack;
+        int stack = resolvedStack ?? effect.stack;
         int duration = effect.duration;
 
         if (stack <= 0)
@@ -344,10 +639,14 @@ public static class CardEffectExecutor
     // Reduce = 减少，Cooldown = 冷却。
     // effectTarget = 被减少 CD 的角色。
     // effect = 单个效果数据，里面包含减少数量和减少范围。
-    static void ApplyReduceCooldownEffect(CharacterData effectTarget, CardEffectData effect)
+    static void ApplyReduceCooldownEffect(
+        CharacterData effectTarget,
+        CardEffectData effect,
+        int? resolvedCooldownAmount = null
+    )
     {
         // cooldownAmount = 明确填写的 CD 减少数量。
-        int amount = effect.cooldownAmount;
+        int amount = resolvedCooldownAmount ?? effect.cooldownAmount;
 
         // 如果 cooldownAmount 没填，就临时兼容 stack
         if (amount <= 0)

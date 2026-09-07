@@ -115,7 +115,8 @@ public enum BattleTestMode
     BattleScopedDamageModifierBasic = 126,
     BattleHiddenPendingStateBasic = 127,
     BattleResourceSpecialStateNormalizationBasic = 128,
-    BattleRuntimeInteractionLifecycleBasic = 129
+    BattleRuntimeInteractionLifecycleBasic = 129,
+    BattleRuleEvaluationAndEffectHookupBasic = 130
 }
 
 public static class BattleLifecycleTimingTests
@@ -5118,6 +5119,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleRuntimeInteractionLifecycleBasic)
         {
             BattleRuntimeInteractionLifecycleTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleRuleEvaluationAndEffectHookupBasic)
+        {
+            BattleRuleEvaluationAndEffectHookupTests.Run(cards);
             return;
         }
 
@@ -31372,6 +31379,569 @@ public static class BattleRuntimeInteractionLifecycleTests
             }
         }
         return null;
+    }
+
+    static void Check(string label, bool passed)
+    {
+        Debug.Log((passed ? "PASS: " : "FAIL: ") + label);
+    }
+}
+
+public static class BattleRuleEvaluationAndEffectHookupTests
+{
+    public static bool Run(List<CardTestData> cards)
+    {
+        bool eligibility = VerifyEligibilityIsolation();
+        bool opponent = VerifyOpponentCardType();
+        bool resourceCondition = VerifyResourceStackCondition();
+        bool clashResult = VerifyClashResultCondition();
+        bool cardType = VerifyCardTypeFilter();
+        bool consumesResource = VerifyConsumesResourceFilter();
+        bool shooting = VerifyEligibleShootingFilter(cards);
+        bool angerFormula = VerifyCurrentAngerFormula();
+        bool snapshotFormula = VerifySnapshotFormulaThroughCardUsed();
+        bool lookup = VerifyLookupFormula();
+        bool sourceBinding = VerifySourceBinding();
+        bool impactBinding = VerifyExactImpactBinding();
+        bool legacy = VerifyLegacyEffectCompatibility();
+        bool singleDispatch = VerifyCentralDispatchOnce();
+        bool existingAbility = VerifyExistingOnPlayAbility(cards);
+        bool description = VerifyDescriptionIgnored();
+
+        Debug.Log("===== Mode130 BattleRuleEvaluationAndEffectHookupBasic =====");
+        Check("Eligibility remains separate from effect conditions", eligibility);
+        Check("OpponentCardTypeIs uses runtime opponent", opponent);
+        Check("ResourceStackAtLeast reads current resource", resourceCondition);
+        Check("ClashResultIs evaluates battle result", clashResult);
+        Check("CardType filter works", cardType);
+        Check("CardConsumesResource filter uses resource rules", consumesResource);
+        Check("EligibleShootingAttack filter matches current shooting cards", shooting);
+        Check("CurrentAnger formula evaluates correctly", angerFormula);
+        Check("ResourceSnapshot formula does not reread current Bullet", snapshotFormula);
+        Check("Lookup formula uses exact table entry", lookup);
+        Check("Runtime source binding does not leak interaction", sourceBinding);
+        Check("Exact Impact remains exact binding", impactBinding);
+        Check("Legacy effect metadata remains compatible", legacy);
+        Check("Central event hookup executes effect once", singleDispatch);
+        Check("Existing OnPlay ability remains compatible", existingAbility);
+        Check("Description does not affect gameplay", description);
+        bool passed = eligibility && opponent && resourceCondition && clashResult &&
+            cardType && consumesResource && shooting && angerFormula &&
+            snapshotFormula && lookup && sourceBinding && impactBinding && legacy &&
+            singleDispatch && existingAbility && description;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyEligibilityIsolation()
+    {
+        CharacterData owner = Unit("mode130_eligibility");
+        BattleBulletRules.AddBulletCapped(owner, 2);
+        BattleCardState gated = Card(owner, "eligibility", CardType.Attack, 1);
+        gated.cardData.useConditions = new[] { new CardUseConditionData
+        {
+            conditionType = CardUseConditionType.BuffStackAtLeast,
+            target = CardTargetType.Self,
+            buffType = BattleResourceID.Bullet,
+            value = 3
+        } };
+        BattleCardState effectOnly = Card(owner, "effect_only", CardType.Ability, 0);
+        effectOnly.cardData.effects = new List<CardEffectData> { Effect(
+            BattleTiming.OnPlay,
+            CardEffectType.ReduceCooldown,
+            new[] { ResourceCondition(CardTargetType.Self, BattleResourceID.Bullet, 3) }
+        ) };
+        BattleCardState cooldownCard = Card(owner, "effect_target", CardType.Attack, 1);
+        cooldownCard.currentCooldown = 5;
+        bool eligibilityUnchanged = !BattleCardManager.EvaluateCardEligibility(
+            owner, owner, gated
+        ).isEligible && BattleCardManager.EvaluateCardEligibility(
+            owner, owner, effectOnly
+        ).isEligible;
+        BattleEventProcessor.ProcessEvent(new BattleEventContext(BattleTiming.OnPlay)
+            .SetUserAndTarget(owner, owner)
+            .SetCardState(effectOnly));
+        return eligibilityUnchanged && cooldownCard.currentCooldown == 5;
+    }
+
+    static bool VerifyOpponentCardType()
+    {
+        CharacterData defenderOwner = Unit("mode130_defender");
+        CharacterData attackerOwner = Unit("mode130_attacker");
+        BattleCardState defense = Card(defenderOwner, "defense", CardType.Defense, 1);
+        BattleCardState attack = Card(attackerOwner, "attack", CardType.Attack, 10);
+        BattleResolutionPlan defensePlan = BattleTimingMigrationFixture.Respond(
+            defense, attack
+        );
+        BattleRuleEvaluationContext defenseContext = CardEffectExecutor
+            .CreateEvaluationContext(new BattleEventContext(BattleTiming.ClashWin)
+                .SetUserAndTarget(attackerOwner, defenderOwner)
+                .SetCardState(attack)
+                .SetRuntimeInteraction(defensePlan != null
+                    ? defensePlan.runtimeInteraction
+                    : null));
+        BattleCardState responseAttack = Card(defenderOwner, "response_attack", CardType.Attack, 1);
+        BattleCardState enemyAttack = Card(attackerOwner, "enemy_attack", CardType.Attack, 10);
+        BattleResolutionPlan attackPlan = BattleTimingMigrationFixture.Respond(
+            responseAttack, enemyAttack
+        );
+        BattleRuleEvaluationContext attackContext = CardEffectExecutor
+            .CreateEvaluationContext(new BattleEventContext(BattleTiming.ClashWin)
+                .SetUserAndTarget(attackerOwner, defenderOwner)
+                .SetCardState(enemyAttack)
+                .SetRuntimeInteraction(attackPlan != null
+                    ? attackPlan.runtimeInteraction
+                    : null));
+        CardEffectConditionData condition = new CardEffectConditionData
+        {
+            conditionType = CardEffectConditionType.OpponentCardTypeIs,
+            cardType = CardType.Defense
+        };
+        return defensePlan != null && attackPlan != null &&
+            CardEffectExecutor.AreConditionsMet(
+                new[] { condition }, defenseContext
+            ) && !CardEffectExecutor.AreConditionsMet(
+                new[] { condition }, attackContext
+            );
+    }
+
+    static bool VerifyResourceStackCondition()
+    {
+        CharacterData owner = Unit("mode130_resource_condition");
+        BattleBulletRules.AddBulletCapped(owner, 3);
+        BattleRuleEvaluationContext context = Context(owner, owner, null);
+        CardEffectConditionData condition = ResourceCondition(
+            CardTargetType.Self,
+            BattleResourceID.Bullet,
+            3
+        );
+        bool atThree = CardEffectExecutor.AreConditionsMet(
+            new[] { condition }, context
+        );
+        owner.TryConsumeBuffStackAsResource(BattleResourceID.Bullet, 1, out _);
+        return atThree && !CardEffectExecutor.AreConditionsMet(
+            new[] { condition }, context
+        );
+    }
+
+    static bool VerifyClashResultCondition()
+    {
+        CharacterData owner = Unit("mode130_clash_result_owner");
+        CharacterData enemy = Unit("mode130_clash_result_enemy");
+        BattleCardState winningAttack = Card(owner, "clash_win", CardType.Attack, 10);
+        BattleCardState losingAttack = Card(owner, "clash_lose", CardType.Attack, 1);
+        BattleResolutionPlan winningPlan = BattleTimingMigrationFixture.Respond(
+            winningAttack,
+            Card(enemy, "clash_win_enemy", CardType.Attack, 1)
+        );
+        BattleResolutionPlan losingPlan = BattleTimingMigrationFixture.Respond(
+            losingAttack,
+            Card(enemy, "clash_lose_enemy", CardType.Attack, 10)
+        );
+        BattleRuleEvaluationContext win = Context(owner, enemy, winningAttack,
+            ClashResult.Win, null, winningPlan != null
+                ? winningPlan.runtimeInteraction
+                : null);
+        BattleRuleEvaluationContext lose = Context(owner, enemy, losingAttack,
+            ClashResult.Lose, null, losingPlan != null
+                ? losingPlan.runtimeInteraction
+                : null);
+        CardEffectConditionData condition = new CardEffectConditionData
+        {
+            conditionType = CardEffectConditionType.ClashResultIs,
+            clashResult = ClashResult.Win
+        };
+        CardEffectData legacy = new CardEffectData { requireClashResult = ClashResult.Win };
+        return winningPlan != null && losingPlan != null &&
+            CardEffectExecutor.AreConditionsMet(new[] { condition }, win) &&
+            !CardEffectExecutor.AreConditionsMet(new[] { condition }, lose) &&
+            InvokeLegacyClashGate(legacy, ClashResult.Win) &&
+            !InvokeLegacyClashGate(legacy, ClashResult.Lose);
+    }
+
+    static bool VerifyCardTypeFilter()
+    {
+        CharacterData owner = Unit("mode130_card_type");
+        CardEffectFilterData filter = new CardEffectFilterData
+        {
+            filterType = CardEffectFilterType.CardTypeIs,
+            cardType = CardType.Attack
+        };
+        return CardEffectExecutor.AreFiltersMatched(
+            new[] { filter }, Context(owner, owner, Card(owner, "attack", CardType.Attack, 1))
+        ) && !CardEffectExecutor.AreFiltersMatched(
+            new[] { filter }, Context(owner, owner, Card(owner, "dodge", CardType.Dodge, 1))
+        );
+    }
+
+    static bool VerifyConsumesResourceFilter()
+    {
+        CharacterData owner = Unit("mode130_consumes_resource");
+        BattleCardState bullet = BulletShot(owner, "bullet", 1);
+        BattleCardState knife = Card(owner, "knife", CardType.Attack, 1);
+        CardEffectFilterData filter = new CardEffectFilterData
+        {
+            filterType = CardEffectFilterType.CardConsumesResource,
+            resourceID = BattleResourceID.Bullet
+        };
+        return CardEffectExecutor.AreFiltersMatched(
+            new[] { filter }, Context(owner, owner, bullet)
+        ) && !CardEffectExecutor.AreFiltersMatched(
+            new[] { filter }, Context(owner, owner, knife)
+        );
+    }
+
+    static bool VerifyEligibleShootingFilter(List<CardTestData> cards)
+    {
+        if (cards == null)
+        {
+            return false;
+        }
+        string[] eligible = { "atk_bullet_001", "shoot_close_001", "shoot_all_in_001", "shoot_aim_001" };
+        string[] ineligible = { "atk_001", "def_001", "dodge_001", "sin_anger_001" };
+        CardEffectFilterData filter = new CardEffectFilterData
+        {
+            filterType = CardEffectFilterType.EligibleShootingAttack
+        };
+        CharacterData owner = Unit("mode130_shooting_filter");
+        foreach (string id in eligible)
+        {
+            CardTestData data = CardDataLoader.FindCardByID(cards, id);
+            if (data == null || !CardEffectExecutor.AreFiltersMatched(
+                new[] { filter }, Context(owner, owner, null, ClashResult.None, data)
+            )) return false;
+        }
+        foreach (string id in ineligible)
+        {
+            CardTestData data = CardDataLoader.FindCardByID(cards, id);
+            if (data == null || CardEffectExecutor.AreFiltersMatched(
+                new[] { filter }, Context(owner, owner, null, ClashResult.None, data)
+            )) return false;
+        }
+        CardTestData fakeShoot = new CardTestData
+        {
+            cardType = CardType.Attack,
+            attackDeliveryMode = AttackDeliveryMode.LongRangeShoot
+        };
+        return !CardEffectExecutor.AreFiltersMatched(
+            new[] { filter }, Context(owner, owner, null, ClashResult.None, fakeShoot)
+        );
+    }
+
+    static bool VerifyCurrentAngerFormula()
+    {
+        CharacterData owner = Unit("mode130_anger_formula");
+        owner.SetAngerMechanicEnabledForBattle(true);
+        BattleAngerRules.AddAnger(owner, 3);
+        return CardEffectExecutor.TryEvaluateFormula(new CardEffectFormulaData
+        {
+            inputType = CardEffectFormulaInputType.CurrentAnger,
+            multiplier = 2,
+            additive = 1
+        }, Context(owner, owner, null), out int value) && value == 7;
+    }
+
+    static bool VerifySnapshotFormulaThroughCardUsed()
+    {
+        return BattleTimingMigrationFixture.Observe(events =>
+        {
+            CharacterData owner = Unit("mode130_snapshot_owner");
+            CharacterData target = Unit("mode130_snapshot_target");
+            BattleBulletRules.AddBulletCapped(owner, 3);
+            BattleCardState shot = BulletShot(owner, "snapshot_shot", 5);
+            shot.cardData.cooldown = 10;
+            shot.cardData.effects = new List<CardEffectData> { new CardEffectData
+            {
+                trigger = BattleTiming.CardUsed,
+                effectType = CardEffectType.ReduceCooldown,
+                target = CardTargetType.Self,
+                cooldownTarget = CooldownTargetType.All,
+                formula = new CardEffectFormulaData
+                {
+                    inputType = CardEffectFormulaInputType.ResourceSnapshot,
+                    resourceID = BattleResourceID.Bullet,
+                    multiplier = 1
+                }
+            } };
+            BattleResolutionPlan plan = BattleTimingMigrationFixture.Free(shot, target);
+            BattleResolveResult result = BattleTimingMigrationFixture.Complete(plan);
+            BattleEventContext used = Find(events, BattleTiming.CardUsed, shot);
+            return result != null && used != null && used.resourceSnapshot != null &&
+                used.resourceSnapshot.capturedStack == 3 &&
+                BattleBulletRules.GetBullet(owner) == 2 && shot.currentCooldown == 7;
+        });
+    }
+
+    static bool VerifyLookupFormula()
+    {
+        CharacterData owner = Unit("mode130_lookup");
+        BattleClashResourceSnapshot snapshot = new BattleClashResourceSnapshot
+        {
+            resourceID = BattleResourceID.Bullet,
+            capturedStack = 2
+        };
+        CardEffectFormulaData formula = new CardEffectFormulaData
+        {
+            inputType = CardEffectFormulaInputType.ResourceSnapshot,
+            resourceID = BattleResourceID.Bullet,
+            lookup = new[]
+            {
+                new CardEffectFormulaLookupEntryData { input = 1, value = 6 },
+                new CardEffectFormulaLookupEntryData { input = 2, value = 4 }
+            }
+        };
+        BattleRuleEvaluationContext context = Context(owner, owner, null);
+        context.resourceSnapshot = snapshot;
+        bool exact = CardEffectExecutor.TryEvaluateFormula(formula, context, out int value) &&
+            value == 4;
+        snapshot.capturedStack = 3;
+        return exact && !CardEffectExecutor.TryEvaluateFormula(formula, context, out _);
+    }
+
+    static bool VerifySourceBinding()
+    {
+        CharacterData owner = Unit("mode130_binding_owner");
+        CharacterData firstEnemy = Unit("mode130_binding_first");
+        CharacterData secondEnemy = Unit("mode130_binding_second");
+        BattleCardState source = Card(owner, "source", CardType.Attack, 1);
+        BattleCardState firstOpponent = Card(firstEnemy, "first", CardType.Defense, 1);
+        BattleCardState secondOpponent = Card(secondEnemy, "second", CardType.Dodge, 1);
+        BattleRuntimeInteraction first = Interaction(owner, source, firstEnemy, firstOpponent);
+        BattleRuntimeInteraction second = Interaction(owner, source, secondEnemy, secondOpponent);
+        BattleRuleEvaluationContext firstContext = Context(owner, firstEnemy, source, ClashResult.None, null, first);
+        BattleRuleEvaluationContext secondContext = Context(owner, secondEnemy, source, ClashResult.None, null, second);
+        return object.ReferenceEquals(firstContext.opponentCardState, firstOpponent) &&
+            object.ReferenceEquals(secondContext.opponentCardState, secondOpponent);
+    }
+
+    static bool VerifyExactImpactBinding()
+    {
+        CharacterData owner = Unit("mode130_impact_owner");
+        CharacterData target = Unit("mode130_impact_target");
+        BattleCardState source = Card(owner, "source", CardType.Attack, 1);
+        BattleCardState opponent = Card(target, "opponent", CardType.Attack, 1);
+        BattleRuntimeInteraction interaction = Interaction(owner, source, target, opponent);
+        BattleImpact first = new BattleImpact(1, owner, target, source, 1, 1,
+            ClashResult.Win, true, true, interaction);
+        BattleImpact second = new BattleImpact(2, owner, target, source, 1, 1,
+            ClashResult.Win, true, true, interaction);
+        BattleRuleEvaluationContext firstContext = Context(owner, target, source,
+            ClashResult.Win, null, interaction, first);
+        BattleRuleEvaluationContext secondContext = Context(owner, target, source,
+            ClashResult.Win, null, interaction, second);
+        return object.ReferenceEquals(firstContext.impact, first) &&
+            object.ReferenceEquals(secondContext.impact, second) &&
+            object.ReferenceEquals(firstContext.runtimeInteraction, secondContext.runtimeInteraction);
+    }
+
+    static bool VerifyLegacyEffectCompatibility()
+    {
+        CharacterData owner = Unit("mode130_legacy");
+        BattleCardState source = Card(owner, "legacy_source", CardType.Ability, 0);
+        BattleCardState cooldown = Card(owner, "legacy_cooldown", CardType.Attack, 1);
+        cooldown.currentCooldown = 10;
+        source.cardData.effects = new List<CardEffectData> { Effect(
+            BattleTiming.OnPlay,
+            CardEffectType.ReduceCooldown
+        ) };
+        CardEffectExecutor.ExecuteCardEffects(
+            owner, owner, source.cardData, BattleTiming.OnPlay
+        );
+        return cooldown.currentCooldown == 9;
+    }
+
+    static bool VerifyCentralDispatchOnce()
+    {
+        CharacterData owner = Unit("mode130_once_owner");
+        BattleCardState ability = Card(owner, "once_ability", CardType.Ability, 0);
+        BattleCardState cooldown = Card(owner, "once_cooldown", CardType.Attack, 1);
+        cooldown.currentCooldown = 10;
+        ability.cardData.effects = new List<CardEffectData> { Effect(
+            BattleTiming.OnPlay,
+            CardEffectType.ReduceCooldown
+        ) };
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, ability, owner);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot, null);
+        return result != null && result.isSuccess && cooldown.currentCooldown == 9;
+    }
+
+    static bool VerifyExistingOnPlayAbility(List<CardTestData> cards)
+    {
+        CardTestData data = CardDataLoader.FindCardByID(cards, "sin_anger_001");
+        if (data == null)
+        {
+            return false;
+        }
+        CharacterData owner = Unit("mode130_existing_ability");
+        BattleCardState ability = BattleCardManager.CreateBattleCard(
+            owner, data, "mode130_existing_ability_card"
+        );
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, ability, owner);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot, null);
+        return result != null && result.isSuccess && owner.IsAngerMechanicEnabled;
+    }
+
+    static bool VerifyDescriptionIgnored()
+    {
+        CharacterData owner = Unit("mode130_description");
+        CardTestData described = new CardTestData
+        {
+            cardType = CardType.Attack,
+            description = "Bullet Win Attack +999",
+            resourceRule = new CardResourceRuleData
+            {
+                resourceType = "BuffStack", resourceID = BattleResourceID.Bullet,
+                consumeAmountOnSuccess = 1
+            }
+        };
+        CardTestData plain = new CardTestData
+        {
+            cardType = CardType.Attack,
+            resourceRule = described.resourceRule
+        };
+        CardEffectFilterData filter = new CardEffectFilterData
+        {
+            filterType = CardEffectFilterType.CardConsumesResource,
+            resourceID = BattleResourceID.Bullet
+        };
+        CardEffectFormulaData formula = new CardEffectFormulaData
+        {
+            inputType = CardEffectFormulaInputType.CurrentAnger,
+            multiplier = 2,
+            additive = 1
+        };
+        owner.SetAngerMechanicEnabledForBattle(true);
+        BattleAngerRules.AddAnger(owner, 2);
+        int describedValue = 0;
+        int plainValue = 0;
+        bool describedResult = CardEffectExecutor.AreFiltersMatched(
+            new[] { filter }, Context(owner, owner, null, ClashResult.None, described)
+        ) && CardEffectExecutor.TryEvaluateFormula(formula, Context(owner, owner, null), out describedValue);
+        bool plainResult = CardEffectExecutor.AreFiltersMatched(
+            new[] { filter }, Context(owner, owner, null, ClashResult.None, plain)
+        ) && CardEffectExecutor.TryEvaluateFormula(formula, Context(owner, owner, null), out plainValue);
+        return describedResult && plainResult && describedValue == plainValue;
+    }
+
+    static CardEffectConditionData ResourceCondition(string target, string resourceID, int value)
+    {
+        return new CardEffectConditionData
+        {
+            conditionType = CardEffectConditionType.ResourceStackAtLeast,
+            target = target,
+            resourceID = resourceID,
+            value = value
+        };
+    }
+
+    static CardEffectData Effect(string trigger, string effectType,
+        CardEffectConditionData[] conditions = null)
+    {
+        return new CardEffectData
+        {
+            trigger = trigger,
+            effectType = effectType,
+            target = CardTargetType.Self,
+            conditions = conditions,
+            cooldownTarget = CooldownTargetType.All,
+            cooldownAmount = 1
+        };
+    }
+
+    static BattleCardState Card(CharacterData owner, string id, string type, int point)
+    {
+        return BattleCardManager.CreateBattleCard(owner, new CardTestData
+        {
+            cardID = "mode130_" + id,
+            cardName = id,
+            cardType = type,
+            attackDeliveryMode = AttackDeliveryMode.Melee,
+            isClashable = type != CardType.Ability,
+            minPoint = point,
+            maxPoint = point,
+            damageFormula = type == CardType.Attack ? "PointAsDamage" : "",
+            defenseFormula = type == CardType.Defense ? "PointAsDefense" : ""
+        }, "mode130_" + id + "_instance");
+    }
+
+    static BattleCardState BulletShot(CharacterData owner, string id, int point)
+    {
+        BattleCardState card = Card(owner, id, CardType.Attack, point);
+        card.cardData.attackDeliveryMode = AttackDeliveryMode.LongRangeShoot;
+        card.cardData.resourceRule = new CardResourceRuleData
+        {
+            resourceType = "BuffStack",
+            resourceID = BattleResourceID.Bullet,
+            requiredStackForNormalVersion = 1,
+            consumeAmountOnSuccess = 1,
+            insufficientBehavior = CardResourceInsufficientBehavior.ActionUnavailable
+        };
+        return card;
+    }
+
+    static CharacterData Unit(string id)
+    {
+        return new CharacterData(id, 100, 5, 5, id);
+    }
+
+    static BattleRuleEvaluationContext Context(CharacterData user, CharacterData target,
+        BattleCardState card, string clashResult = ClashResult.None,
+        CardTestData cardData = null, BattleRuntimeInteraction interaction = null,
+        BattleImpact impact = null)
+    {
+        return CardEffectExecutor.CreateEvaluationContext(
+            new BattleEventContext(BattleTiming.OnPlay)
+                .SetUserAndTarget(user, target)
+                .SetCardState(card)
+                .SetCardData(cardData)
+                .SetClashResult(clashResult)
+                .SetRuntimeInteraction(interaction)
+                .SetImpact(impact)
+        );
+    }
+
+    static BattleRuntimeInteraction Interaction(CharacterData sourceOwner,
+        BattleCardState source, CharacterData opponentOwner,
+        BattleCardState opponent)
+    {
+        return new BattleRuntimeInteraction(
+            BattleInteractionType.AttackVsAttack,
+            new BattleExecutionAction(sourceOwner, source, null, null, opponentOwner),
+            new BattleExecutionAction(opponentOwner, opponent, null, null, sourceOwner),
+            null
+        );
+    }
+
+    static BattleEventContext Find(List<BattleEventContext> events, string timing,
+        BattleCardState card)
+    {
+        foreach (BattleEventContext context in events)
+        {
+            if (context != null && context.timing == timing &&
+                object.ReferenceEquals(context.cardState, card)) return context;
+        }
+        return null;
+    }
+
+    static bool InvokeLegacyClashGate(CardEffectData effect, string result)
+    {
+        CharacterData owner = Unit("mode130_legacy_gate_" + result);
+        BattleCardState source = Card(owner, "legacy_gate_" + result, CardType.Ability, 0);
+        BattleCardState cooldown = Card(owner, "legacy_gate_target_" + result, CardType.Attack, 1);
+        cooldown.currentCooldown = 2;
+        effect.trigger = BattleTiming.OnPlay;
+        effect.effectType = CardEffectType.ReduceCooldown;
+        effect.target = CardTargetType.Self;
+        effect.cooldownTarget = CooldownTargetType.All;
+        effect.cooldownAmount = 1;
+        source.cardData.effects = new List<CardEffectData> { effect };
+        BattleEventProcessor.ProcessEvent(new BattleEventContext(BattleTiming.OnPlay)
+            .SetUserAndTarget(owner, owner)
+            .SetCardState(source)
+            .SetClashResult(result));
+        return cooldown.currentCooldown == (result == ClashResult.Win ? 1 : 2);
     }
 
     static void Check(string label, bool passed)

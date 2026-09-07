@@ -33,6 +33,10 @@ public class BattleEventContext
     // runtimeInteraction = 本次事件所属的直接交互 identity。
     public BattleRuntimeInteraction runtimeInteraction;
 
+    // resourceSnapshot = 正式流程在行动开始时捕获的资源快照。
+    // CardUsed 可以在资源支付后继续读取支付前的 capturedStack。
+    public BattleClashResourceSnapshot resourceSnapshot;
+
     // clashPoint = 本次拼点点数
     public int clashPoint;
     // clashResult = 拼点结果
@@ -101,6 +105,14 @@ public class BattleEventContext
     )
     {
         this.runtimeInteraction = runtimeInteraction;
+        return this;
+    }
+
+    public BattleEventContext SetResourceSnapshot(
+        BattleClashResourceSnapshot resourceSnapshot
+    )
+    {
+        this.resourceSnapshot = resourceSnapshot;
         return this;
     }
 

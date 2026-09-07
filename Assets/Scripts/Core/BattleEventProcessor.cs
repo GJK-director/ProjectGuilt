@@ -24,9 +24,9 @@ public static class BattleEventProcessor
         BattleCardManager.HandleEvent(context);      // 卡牌 CD / 消耗
         BattlePendingRules.HandleEvent(context);
         BattleConservationRules.HandleEvent(context);
+        CardEffectExecutor.HandleEvent(context);
         TestEventObserver?.Invoke(context);
         // 后面会在这里逐步接入：
-        // CardEffectExecutor.HandleEvent(context);     // 卡牌效果
         // BuffSystem.HandleEvent(context);             // 特殊 Buff 响应
         // GuiltSystem.HandleEvent(context);            // 负罪感系统
         // AchievementManager.HandleEvent(context);     // 成就系统

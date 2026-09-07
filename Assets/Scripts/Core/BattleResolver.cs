@@ -4307,6 +4307,7 @@ public static class BattleResolver
             false,
             false,
             clashResult,
+            resourceSnapshot: resourceSnapshot,
             runtimeInteraction: runtimeInteraction
         );
         return true;
@@ -4420,7 +4421,8 @@ public static class BattleResolver
         bool isKill,
         string clashResult = ClashResult.None,
         BattleImpact impact = null,
-        BattleRuntimeInteraction runtimeInteraction = null
+        BattleRuntimeInteraction runtimeInteraction = null,
+        BattleClashResourceSnapshot resourceSnapshot = null
     )
     {
         BattleEventContext context = new BattleEventContext(timing)
@@ -4434,33 +4436,14 @@ public static class BattleResolver
             .SetImpact(impact)
             .SetRuntimeInteraction(
                 runtimeInteraction ?? impact?.runtimeInteraction
-            );
+            )
+            .SetResourceSnapshot(resourceSnapshot);
 
         // 先让事件系统处理
         // 例如 CD、消耗、以后成就/UI/负罪感等
         BattleEventProcessor.ProcessEvent(context);
 
-        // 再让卡牌效果处理对应阶段
-        ExecuteCardEffectsByTiming(user, target, cardState, timing, clashResult);
-
         return context;
-    }
-
-    // ExecuteCardEffectsByTiming = 按战斗阶段执行卡牌效果
-    static void ExecuteCardEffectsByTiming(
-        CharacterData user,
-        CharacterData target,
-        BattleCardState cardState,
-        string timing,
-        string clashResult
-    )
-    {
-        if (cardState == null || cardState.cardData == null)
-        {
-            return;
-        }
-
-        CardEffectExecutor.ExecuteCardEffects(user, target, cardState.cardData, timing, clashResult);
     }
 
 
