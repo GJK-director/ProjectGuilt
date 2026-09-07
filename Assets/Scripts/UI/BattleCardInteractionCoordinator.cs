@@ -97,7 +97,7 @@ public sealed class BattleCardInteractionCoordinator
             clickedSlotView == null ||
             !object.ReferenceEquals(clickedSlotView, selectedActionSlotView) ||
             clickedSlotView.IsEnemySlot ||
-            !IsDefenseOrDodge(selectedCardView.BoundCardState))
+            !IsSelfPlaceableCard(selectedCardView.BoundCardState))
         {
             return outcome;
         }
@@ -235,11 +235,12 @@ public sealed class BattleCardInteractionCoordinator
         cardSelectionController?.ClearSelection();
     }
 
-    private static bool IsDefenseOrDodge(BattleCardState cardState)
+    private static bool IsSelfPlaceableCard(BattleCardState cardState)
     {
         return cardState != null &&
             cardState.cardData != null &&
             (cardState.cardData.cardType == CardType.Defense ||
-             cardState.cardData.cardType == CardType.Dodge);
+             cardState.cardData.cardType == CardType.Dodge ||
+             cardState.cardData.cardType == CardType.Ability);
     }
 }

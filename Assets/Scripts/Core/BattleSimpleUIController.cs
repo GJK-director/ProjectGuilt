@@ -3303,7 +3303,7 @@ public class BattleSimpleUIController : MonoBehaviour
         if (object.ReferenceEquals(
                 cardInteractionCoordinator.SelectedActionSlotView,
                 clickedSlotView) &&
-            IsSelectedDefenseOrDodgeCard())
+            IsSelectedSelfPlaceableCard())
         {
             BattleCardInteractionOutcome outcome =
                 cardInteractionCoordinator.ClickSelectedSourceSlotAsSelf(
@@ -3456,7 +3456,7 @@ public class BattleSimpleUIController : MonoBehaviour
         }
     }
 
-    private bool IsSelectedDefenseOrDodgeCard()
+    private bool IsSelectedSelfPlaceableCard()
     {
         BattleCardUIView cardView = cardSelectionController.SelectedCardView;
         BattleCardState cardState = cardView != null
@@ -3465,7 +3465,8 @@ public class BattleSimpleUIController : MonoBehaviour
         return cardState != null &&
             cardState.cardData != null &&
             (cardState.cardData.cardType == CardType.Defense ||
-             cardState.cardData.cardType == CardType.Dodge);
+             cardState.cardData.cardType == CardType.Dodge ||
+             cardState.cardData.cardType == CardType.Ability);
     }
 
     private void RefreshCardTargetingPreview()
