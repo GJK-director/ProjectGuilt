@@ -697,11 +697,12 @@ public static class BattleKnifeCardRules
             return;
         }
 
-        if (cardState.pendingHeavyAngerSpend)
+        bool cardWasUsed = cardState.cardUsedCommittedForCurrentAction;
+        if (cardWasUsed && cardState.pendingHeavyAngerSpend)
         {
             BattleAngerRules.RemoveAnger(cardState.owner, 1);
         }
-        if (cardState.pendingIaiAngerClear)
+        if (cardWasUsed && cardState.pendingIaiAngerClear)
         {
             BattleAngerRules.ClearAnger(cardState.owner);
         }

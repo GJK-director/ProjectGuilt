@@ -113,7 +113,8 @@ public enum BattleTestMode
     BattleActionFinishedBasic = 124,
     BattleImpactFactsBasic = 125,
     BattleScopedDamageModifierBasic = 126,
-    BattleHiddenPendingStateBasic = 127
+    BattleHiddenPendingStateBasic = 127,
+    BattleResourceSpecialStateNormalizationBasic = 128
 }
 
 public static class BattleLifecycleTimingTests
@@ -3577,7 +3578,7 @@ public static class BattleAngerAndKnifeCardsBasicTests
         BattleKnifeCardRules.CaptureActionStart(state);
         bool snapshotKept = state.preResolutionAnger == 1 &&
             BattleAngerRules.GetAnger(owner) == 1;
-        BattleCardManager.ApplyCooldownOnResolved(state);
+        BattleResolver.CommitCardUsedOnce(owner, owner, state);
         bool cooldownOverride = state.currentCooldown == 2 &&
             state.skipNextTurnEndCooldownTick;
         BattleAngerRules.AddAnger(owner, 1);
@@ -3585,8 +3586,9 @@ public static class BattleAngerAndKnifeCardsBasicTests
         bool gainThenSpend = BattleAngerRules.GetAnger(owner) == 1;
         BattleAngerRules.ClearAnger(owner);
         state.currentCooldown = 0;
+        state.ResetCardUsedCommitForNewAction();
         BattleKnifeCardRules.CaptureActionStart(state);
-        BattleCardManager.ApplyCooldownOnResolved(state);
+        BattleResolver.CommitCardUsedOnce(owner, owner, state);
         bool overrideCleared = state.currentCooldown == 3 &&
             state.resolvedCooldownOverride < 0 &&
             !state.pendingHeavyAngerSpend;
@@ -3667,7 +3669,7 @@ public static class BattleAngerAndKnifeCardsBasicTests
         );
         BattleKnifeCardRules.CaptureActionStart(state);
         bool retainedBeforeFinish = BattleAngerRules.GetAnger(owner) == 5;
-        BattleCardManager.ApplyCooldownOnResolved(state);
+        BattleResolver.CommitCardUsedOnce(owner, owner, state);
         BattleKnifeCardRules.FinalizeCompletedInteraction(state);
         bool clearedAndCooldown = BattleAngerRules.GetAnger(owner) == 0 &&
             state.currentCooldown == 10 && !state.isConsumed;
@@ -3776,8 +3778,9 @@ public static class BattleAngerAndKnifeCardsBasicTests
         bool contextual = lossPlan.impacts.Count == 1 &&
             lossPlan.impacts[0].damageMultiplierPercent == 150;
         CompletePlan(lossPlan);
-        bool lossAppliedThenCleared = lossPlan.CompletedResult.damage == 14 &&
-            BattleAngerRules.GetAnger(loser) == 0;
+        bool lossAppliedAndRetained = lossPlan.CompletedResult.damage == 14 &&
+            !loserCard.cardUsedCommittedForCurrentAction &&
+            BattleAngerRules.GetAnger(loser) == 4;
 
         CharacterData cancelledOwner = Unit("mode107_iai_cancel", true);
         BattleAngerRules.AddAnger(cancelledOwner, 2);
@@ -3795,11 +3798,11 @@ public static class BattleAngerAndKnifeCardsBasicTests
         Debug.Log("Iai CD路径回归：" + cooldownRegressions);
         Debug.Log("Iai Tie保怒：" + tieKeeps);
         Debug.Log("Iai Loss contextual x1.5：" + contextual);
-        Debug.Log("Iai Loss伤害后清怒：" + lossAppliedThenCleared);
+        Debug.Log("Iai Loss NotUsed保留剩余怒：" + lossAppliedAndRetained);
         Debug.Log("Iai Cancel不清怒：" + cancelledKeeps);
         return ranges && damage && retainedBeforeFinish && clearedAndCooldown &&
             cooldownRegressions &&
-            tieKeeps && contextual && lossAppliedThenCleared && cancelledKeeps;
+            tieKeeps && contextual && lossAppliedAndRetained && cancelledKeeps;
     }
 
     static IEnumerator VerifyStagedHp(
@@ -4966,6 +4969,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleHiddenPendingStateBasic)
         {
             BattleHiddenPendingStateTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleResourceSpecialStateNormalizationBasic)
+        {
+            BattleResourceSpecialStateNormalizationTests.Run();
             return;
         }
 
@@ -30196,6 +30205,326 @@ public static class BattleHiddenPendingStateTests
         return BattleTimingMigrationFixture.Complete(plan) != null &&
             !shot.cardUsedCommittedForCurrentAction && !owner.battlePending.conservationPointGrant &&
             BattleBulletRules.GetBullet(owner) == 6;
+    }
+}
+
+public static class BattleResourceSpecialStateNormalizationTests
+{
+    public static bool Run()
+    {
+        bool normalShooting = VerifyNormalShootingPayment();
+        bool immediateShooting = VerifyImmediateShootingPayment();
+        bool allIn = VerifyAllInSnapshot();
+        bool modification = VerifyModificationOwnership();
+        bool heavy = VerifyHeavySettlement();
+        bool iai = VerifyIaiSettlement();
+        bool conservationKill = VerifyConservationKillOwnership();
+        bool conservationTurnEnd = VerifyConservationTurnEndPenalty();
+        bool noDoubleConsume = VerifyPendingAndResourceSingleConsumption();
+
+        Debug.Log("===== Mode128 BattleResourceSpecialStateNormalizationBasic =====");
+        BattleTimingMigrationFixture.Check("Normal shooting pays only when Used", normalShooting);
+        BattleTimingMigrationFixture.Check("Immediate shooting keeps committed payment", immediateShooting);
+        BattleTimingMigrationFixture.Check("ALL IN uses captured bullets", allIn);
+        BattleTimingMigrationFixture.Check("Modification clamps magazine and filters shooting bonus", modification);
+        BattleTimingMigrationFixture.Check("Heavy resource settlement follows Used", heavy);
+        BattleTimingMigrationFixture.Check("Iai clear follows Used", iai);
+        BattleTimingMigrationFixture.Check("Conservation reload follows exact AfterKill source", conservationKill);
+        BattleTimingMigrationFixture.Check("Conservation TurnEnd penalty remains stable", conservationTurnEnd);
+        BattleTimingMigrationFixture.Check("pending and resource ownership do not double-consume", noDoubleConsume);
+
+        bool passed = normalShooting && immediateShooting && allIn &&
+            modification && heavy && iai && conservationKill &&
+            conservationTurnEnd && noDoubleConsume;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyNormalShootingPayment()
+    {
+        CharacterData loser = BattleTimingMigrationFixture.Unit("mode128_normal_loser");
+        BattleBulletRules.ReloadToCapacity(loser);
+        BattleCardState losingShot = BattleTimingMigrationFixture.Shot(loser, 1);
+        CharacterData firstEnemy = BattleTimingMigrationFixture.Unit("mode128_normal_loser_enemy");
+        BattleResolutionPlan losingPlan = BattleTimingMigrationFixture.Respond(
+            losingShot,
+            BattleTimingMigrationFixture.Card(firstEnemy, CardType.Attack, 10)
+        );
+        BattleResolveResult losingResult = BattleTimingMigrationFixture.Complete(losingPlan);
+        bool loserKeptResource = losingResult != null &&
+            losingResult.resultType == "EnemyWin" &&
+            !losingShot.cardUsedCommittedForCurrentAction &&
+            BattleBulletRules.GetBullet(loser) == 6;
+
+        CharacterData winner = BattleTimingMigrationFixture.Unit("mode128_normal_winner");
+        BattleBulletRules.ReloadToCapacity(winner);
+        BattleCardState winningShot = BattleTimingMigrationFixture.Shot(winner, 10);
+        CharacterData secondEnemy = BattleTimingMigrationFixture.Unit("mode128_normal_winner_enemy");
+        BattleResolutionPlan winningPlan = BattleTimingMigrationFixture.Respond(
+            winningShot,
+            BattleTimingMigrationFixture.Card(secondEnemy, CardType.Attack, 1)
+        );
+        BattleResolveResult winningResult = BattleTimingMigrationFixture.Complete(winningPlan);
+        bool duplicateRejected = !BattleResolver.CommitCardUsedOnce(
+            winner,
+            secondEnemy,
+            winningShot
+        );
+        return loserKeptResource && winningResult != null &&
+            winningResult.resultType == "PlayerWin" &&
+            winningShot.cardUsedCommittedForCurrentAction && duplicateRejected &&
+            BattleBulletRules.GetBullet(winner) == 5;
+    }
+
+    static bool VerifyImmediateShootingPayment()
+    {
+        CharacterData owner = BattleTimingMigrationFixture.Unit("mode128_immediate");
+        BattleBulletRules.ReloadToCapacity(owner);
+        BattleCardState shot = BattleTimingMigrationFixture.Shot(owner, 1, true);
+        CharacterData enemy = BattleTimingMigrationFixture.Unit("mode128_immediate_enemy");
+        BattleResolutionPlan plan = BattleTimingMigrationFixture.Respond(
+            shot,
+            BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 10)
+        );
+        bool paidBeforeResult = plan != null && shot.cardUsedCommittedForCurrentAction &&
+            BattleBulletRules.GetBullet(owner) == 5;
+        BattleResolveResult result = BattleTimingMigrationFixture.Complete(plan);
+        bool duplicateRejected = !BattleResolver.CommitCardUsedOnce(owner, enemy, shot);
+        return paidBeforeResult && result != null &&
+            result.resultType == "EnemyWin" && duplicateRejected &&
+            BattleBulletRules.GetBullet(owner) == 5;
+    }
+
+    static bool VerifyAllInSnapshot()
+    {
+        CharacterData winner = BattleTimingMigrationFixture.Unit("mode128_all_in_winner");
+        BattleBulletRules.ReloadToCapacity(winner);
+        BattleCardState winningCard = BattleTimingMigrationFixture.Shot(winner, 10, false, true);
+        CharacterData losingEnemy = BattleTimingMigrationFixture.Unit("mode128_all_in_enemy");
+        BattleResolutionPlan winningPlan = BattleTimingMigrationFixture.Respond(
+            winningCard,
+            BattleTimingMigrationFixture.Card(losingEnemy, CardType.Attack, 1)
+        );
+        BattleClashResourceSnapshot snapshot = winningPlan != null
+            ? winningPlan.clashSession.SideA.resourceSnapshot
+            : null;
+        bool capturedBeforePayment = snapshot != null && snapshot.capturedStack == 6 &&
+            BattleBulletRules.GetBullet(winner) == 6;
+        BattleResolveResult winningResult = BattleTimingMigrationFixture.Complete(winningPlan);
+        bool usedSnapshot = capturedBeforePayment && winningResult != null &&
+            winningResult.damage == 32 && BattleBulletRules.GetBullet(winner) == 0 &&
+            winningPlan.impacts.Count == 1 && winningPlan.impacts[0].hpDisplayStageCount == 6;
+
+        CharacterData loser = BattleTimingMigrationFixture.Unit("mode128_all_in_loser");
+        BattleBulletRules.ReloadToCapacity(loser);
+        BattleCardState losingCard = BattleTimingMigrationFixture.Shot(loser, 1, false, true);
+        CharacterData winningEnemy = BattleTimingMigrationFixture.Unit("mode128_all_in_winner_enemy");
+        BattleResolutionPlan losingPlan = BattleTimingMigrationFixture.Respond(
+            losingCard,
+            BattleTimingMigrationFixture.Card(winningEnemy, CardType.Attack, 10)
+        );
+        BattleResolveResult losingResult = BattleTimingMigrationFixture.Complete(losingPlan);
+        return usedSnapshot && losingResult != null &&
+            losingResult.resultType == "EnemyWin" &&
+            !losingCard.cardUsedCommittedForCurrentAction &&
+            BattleBulletRules.GetBullet(loser) == 6;
+    }
+
+    static bool VerifyModificationOwnership()
+    {
+        CharacterData owner = BattleTimingMigrationFixture.Unit("mode128_modification");
+        BattleBulletRules.ReloadToCapacity(owner);
+        BattleModificationRules.Activate(owner);
+        bool clamped = BattleBulletRules.GetMagazineCapacity(owner) == 4 &&
+            BattleBulletRules.GetBullet(owner) == 4;
+
+        BattleCardState shot = BattleTimingMigrationFixture.Shot(owner, 5);
+        BattleResolutionPlan shotPlan = BattleTimingMigrationFixture.Free(
+            shot,
+            BattleTimingMigrationFixture.Unit("mode128_modification_shot_target")
+        );
+        bool shootingBonus = shotPlan != null && shotPlan.freeActionPoint == 7 &&
+            BattleTimingMigrationFixture.Complete(shotPlan) != null &&
+            BattleBulletRules.GetBullet(owner) == 3;
+
+        BattleCardState melee = BattleTimingMigrationFixture.Card(owner, CardType.Attack, 5);
+        BattleResolutionPlan meleePlan = BattleTimingMigrationFixture.Free(
+            melee,
+            BattleTimingMigrationFixture.Unit("mode128_modification_melee_target")
+        );
+        bool meleeFiltered = meleePlan != null && meleePlan.freeActionPoint == 5 &&
+            BattleTimingMigrationFixture.Complete(meleePlan) != null &&
+            BattleBulletRules.GetBullet(owner) == 3;
+        return clamped && shootingBonus && meleeFiltered;
+    }
+
+    static bool VerifyHeavySettlement()
+    {
+        CharacterData usedOwner = BattleTimingMigrationFixture.Unit("mode128_heavy_used");
+        usedOwner.SetAngerMechanicEnabledForBattle(true);
+        BattleAngerRules.AddAnger(usedOwner, 2);
+        BattleCardState usedHeavy = BattleTimingMigrationFixture.Card(
+            usedOwner,
+            CardType.Attack,
+            5,
+            BattleCardTrait.HeavyAnger
+        );
+        CharacterData firstEnemy = BattleTimingMigrationFixture.Unit("mode128_heavy_used_enemy");
+        BattleResolutionPlan usedPlan = BattleTimingMigrationFixture.Respond(
+            usedHeavy,
+            BattleTimingMigrationFixture.Card(firstEnemy, CardType.Attack, 1)
+        );
+        bool usedRange = usedPlan != null && usedPlan.clashSession.SideAPoint == 7;
+        BattleResolveResult usedResult = BattleTimingMigrationFixture.Complete(usedPlan);
+        bool usedSettled = usedResult != null && usedHeavy.cardUsedCommittedForCurrentAction &&
+            BattleAngerRules.GetAnger(usedOwner) == 2 &&
+            !usedHeavy.pendingHeavyAngerSpend;
+
+        CharacterData loser = BattleTimingMigrationFixture.Unit("mode128_heavy_not_used");
+        loser.SetAngerMechanicEnabledForBattle(true);
+        BattleAngerRules.AddAnger(loser, 2);
+        BattleCardState losingHeavy = BattleTimingMigrationFixture.Card(
+            loser,
+            CardType.Attack,
+            1,
+            BattleCardTrait.HeavyAnger
+        );
+        CharacterData secondEnemy = BattleTimingMigrationFixture.Unit("mode128_heavy_not_used_enemy");
+        BattleResolutionPlan losingPlan = BattleTimingMigrationFixture.Respond(
+            losingHeavy,
+            BattleTimingMigrationFixture.Card(secondEnemy, CardType.Attack, 4)
+        );
+        BattleResolveResult losingResult = BattleTimingMigrationFixture.Complete(losingPlan);
+        bool notUsedKept = losingResult != null &&
+            losingResult.resultType == "EnemyWin" &&
+            !losingHeavy.cardUsedCommittedForCurrentAction &&
+            BattleAngerRules.GetAnger(loser) == 2 &&
+            !losingHeavy.pendingHeavyAngerSpend;
+        return usedRange && usedSettled && notUsedKept;
+    }
+
+    static bool VerifyIaiSettlement()
+    {
+        CharacterData usedOwner = BattleTimingMigrationFixture.Unit("mode128_iai_used");
+        usedOwner.SetAngerMechanicEnabledForBattle(true);
+        BattleAngerRules.AddAnger(usedOwner, 3);
+        BattleCardState usedIai = BattleTimingMigrationFixture.Card(
+            usedOwner,
+            CardType.Attack,
+            10,
+            BattleCardTrait.IaiAnger
+        );
+        CharacterData firstEnemy = BattleTimingMigrationFixture.Unit("mode128_iai_used_enemy");
+        BattleResolutionPlan usedPlan = BattleTimingMigrationFixture.Respond(
+            usedIai,
+            BattleTimingMigrationFixture.Card(firstEnemy, CardType.Attack, 1)
+        );
+        BattleResolveResult usedResult = BattleTimingMigrationFixture.Complete(usedPlan);
+        bool usedCleared = usedResult != null && usedIai.cardUsedCommittedForCurrentAction &&
+            BattleAngerRules.GetAnger(usedOwner) == 0 && !usedIai.pendingIaiAngerClear;
+
+        CharacterData loser = BattleTimingMigrationFixture.Unit("mode128_iai_not_used");
+        loser.SetAngerMechanicEnabledForBattle(true);
+        BattleAngerRules.AddAnger(loser, 1);
+        BattleCardState losingIai = BattleTimingMigrationFixture.Card(
+            loser,
+            CardType.Attack,
+            1,
+            BattleCardTrait.IaiAnger
+        );
+        CharacterData secondEnemy = BattleTimingMigrationFixture.Unit("mode128_iai_not_used_enemy");
+        BattleResolutionPlan losingPlan = BattleTimingMigrationFixture.Respond(
+            losingIai,
+            BattleTimingMigrationFixture.Card(secondEnemy, CardType.Attack, 4)
+        );
+        BattleResolveResult losingResult = BattleTimingMigrationFixture.Complete(losingPlan);
+        bool notUsedKept = losingResult != null &&
+            losingResult.resultType == "EnemyWin" &&
+            !losingIai.cardUsedCommittedForCurrentAction &&
+            BattleAngerRules.GetAnger(loser) == 1 && !losingIai.pendingIaiAngerClear;
+        return usedCleared && notUsedKept;
+    }
+
+    static bool VerifyConservationKillOwnership()
+    {
+        CharacterData owner = BattleTimingMigrationFixture.Unit("mode128_conservation_exact");
+        BattleBulletRules.AddBulletCapped(owner, 2);
+        BattleConservationRules.Activate(owner);
+        BattleCardState shot = BattleTimingMigrationFixture.Shot(owner, 10);
+        CharacterData enemy = BattleTimingMigrationFixture.Unit("mode128_conservation_exact_enemy", 3);
+        BattleResolutionPlan plan = BattleTimingMigrationFixture.Respond(
+            shot,
+            BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 1)
+        );
+        bool armed = plan != null && shot.conservationKillReloadArmed &&
+            !owner.battlePending.conservationPointGrant;
+        BattleResolveResult result = BattleTimingMigrationFixture.Complete(plan);
+        bool exactReloaded = armed && result != null && result.damage == 3 &&
+            BattleBulletRules.GetBullet(owner) == 6 &&
+            !shot.conservationKillReloadArmed;
+
+        CharacterData otherOwner = BattleTimingMigrationFixture.Unit("mode128_conservation_other");
+        BattleBulletRules.AddBulletCapped(otherOwner, 2);
+        BattleConservationRules.Activate(otherOwner);
+        BattleCardState armedShot = BattleTimingMigrationFixture.Shot(otherOwner, 5);
+        if (!BattleConservationRules.TryAssignPendingBonus(otherOwner, armedShot)) return false;
+        BattleCardState otherSource = BattleTimingMigrationFixture.Card(
+            otherOwner,
+            CardType.Attack,
+            3
+        );
+        BattleResolutionPlan otherPlan = BattleTimingMigrationFixture.Free(
+            otherSource,
+            BattleTimingMigrationFixture.Unit("mode128_conservation_other_target", 2)
+        );
+        BattleResolveResult otherResult = BattleTimingMigrationFixture.Complete(otherPlan);
+        bool unrelatedDidNotReload = otherResult != null && otherResult.damage == 2 &&
+            BattleBulletRules.GetBullet(otherOwner) == 2 &&
+            armedShot.conservationKillReloadArmed;
+        return exactReloaded && unrelatedDidNotReload;
+    }
+
+    static bool VerifyConservationTurnEndPenalty()
+    {
+        CharacterData owner = BattleTimingMigrationFixture.Unit("mode128_conservation_turn_end");
+        BattleBulletRules.AddBulletCapped(owner, 3);
+        BattleConservationRules.Activate(owner);
+        BattleTurnProcessor.EndTurn(new List<CharacterData> { owner });
+        return owner.currentHP == 92 && !BattleConservationRules.IsActive(owner) &&
+            !owner.battlePending.conservationPointGrant;
+    }
+
+    static bool VerifyPendingAndResourceSingleConsumption()
+    {
+        CharacterData owner = BattleTimingMigrationFixture.Unit("mode128_single_consume");
+        CharacterData dodgeEnemy = BattleTimingMigrationFixture.Unit("mode128_single_consume_dodge_enemy");
+        BattleCardState breath = BattleTimingMigrationFixture.Card(
+            owner,
+            CardType.Dodge,
+            10,
+            BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge
+        );
+        BattleResolutionPlan breathPlan = BattleTimingMigrationFixture.Respond(
+            breath,
+            BattleTimingMigrationFixture.Card(dodgeEnemy, CardType.Attack, 1)
+        );
+        if (BattleTimingMigrationFixture.Complete(breathPlan) == null ||
+            owner.battlePending.nextUsedAttackPointBonus != 2) return false;
+
+        BattleBulletRules.ReloadToCapacity(owner);
+        BattleCardState shot = BattleTimingMigrationFixture.Shot(owner, 5);
+        CharacterData attackEnemy = BattleTimingMigrationFixture.Unit("mode128_single_consume_attack_enemy");
+        BattleResolutionPlan shotPlan = BattleTimingMigrationFixture.Respond(
+            shot,
+            BattleTimingMigrationFixture.Card(attackEnemy, CardType.Attack, 1)
+        );
+        bool borrowed = shotPlan != null && shotPlan.clashSession.SideAPoint == 7;
+        BattleResolveResult firstCompletion = BattleTimingMigrationFixture.Complete(shotPlan);
+        BattleResolveResult secondCompletion = BattleTimingMigrationFixture.Complete(shotPlan);
+        bool duplicateRejected = !BattleResolver.CommitCardUsedOnce(owner, attackEnemy, shot);
+        return borrowed && firstCompletion != null && secondCompletion != null &&
+            duplicateRejected && owner.battlePending.nextUsedAttackPointBonus == 0 &&
+            BattleBulletRules.GetBullet(owner) == 5;
     }
 }
 
