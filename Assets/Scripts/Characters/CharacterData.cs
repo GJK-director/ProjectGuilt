@@ -68,7 +68,12 @@ public class CharacterData
     public bool IsAngerMechanicEnabled => angerMechanicEnabled;
 
     // 节约的激活状态与下一张射击的待转移资格分开保存。
-    public bool conservationPointGrantPending;
+    public readonly BattlePendingState battlePending = new BattlePendingState();
+    public bool conservationPointGrantPending
+    {
+        get => battlePending.conservationPointGrant;
+        set => battlePending.conservationPointGrant = value;
+    }
 
     public void SetAngerMechanicEnabledForBattle(bool enabled)
     {

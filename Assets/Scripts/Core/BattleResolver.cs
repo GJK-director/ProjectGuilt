@@ -1609,9 +1609,17 @@ public static class BattleResolver
         );
         if (session.SideA.cardState != null &&
             session.SideA.cardState.HasTrait(
+                BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge))
+        {
+            impact.scopedDamageModifier = new BattleScopedDamageModifier(
+                impact, session.SideA.cardState, session, 125);
+        }
+        if (session.SideA.cardState != null &&
+            session.SideA.cardState.HasTrait(
                 BattleCardTrait.ReloadBulletOnDodgeResolution))
         {
-            impact.damageMultiplierPercent = 150;
+            impact.scopedDamageModifier = new BattleScopedDamageModifier(
+                impact, session.SideA.cardState, session, 150);
         }
         plan.impacts.Add(impact);
     }
@@ -2154,11 +2162,7 @@ public static class BattleResolver
                 plan.clashSession.SideA.cardState.HasTrait(
                     BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge))
             {
-                plan.clashSession.SideA.actor.AddBuff(
-                    BuffNextClashPointUp,
-                    2,
-                    1
-                );
+                BattlePendingRules.RegisterSuccessfulBreath(plan.clashSession.SideA.cardState);
             }
             if (plan.clashSession.ClashType == BattleClashType.DodgeVsAttack)
             {
@@ -2172,12 +2176,6 @@ public static class BattleResolver
                     BattleBulletRules.AddBulletCapped(dodgeSide.actor, 1);
                 }
 
-                if (dodgeSide.cardState != null &&
-                    dodgeSide.cardState.HasTrait(
-                        BattleCardTrait.ReloadBulletOnDodgeResolution))
-                {
-                    BattleBulletRules.ReloadToCapacity(dodgeSide.actor);
-                }
             }
             return;
         }
@@ -4092,6 +4090,7 @@ public static class BattleResolver
 
         snapshot.pointModifierFromResource +=
             BattleConservationRules.GetAssignedPointBonus(cardState);
+        snapshot.pointModifierFromResource += cardState.borrowedBreathPointBonus;
 
         CardResourceRuleData rule = GetFirstResourceRule(cardState.cardData);
 
@@ -4231,6 +4230,7 @@ public static class BattleResolver
             cardState.ResetCardUsedCommitForNewAction();
         }
         BattleKnifeCardRules.CaptureActionStart(cardState);
+        BattlePendingRules.CaptureAttackBonus(cardState);
         TriggerBattleEvent(BattleTiming.ActionStart, user, target, cardState, 0, 0, false, false);
     }
 

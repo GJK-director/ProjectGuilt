@@ -39,6 +39,11 @@ public class BattleCardState
     public bool hasConservationPointBonus;
     public bool conservationKillReloadArmed;
 
+    // Borrowed for this Action's roll; character ownership ends only at CardUsed.
+    public int borrowedBreathPointBonus;
+    public long borrowedBreathGeneration;
+    public bool breathSuccessPendingRegistered;
+
     // isConsumed = 是否已经被消耗
     // 主要给“能力型罪卡”使用
     public bool isConsumed;
@@ -112,6 +117,8 @@ public class BattleCardState
         conservationPointBonus = 0;
         hasConservationPointBonus = false;
         conservationKillReloadArmed = false;
+        borrowedBreathPointBonus = 0;
+        borrowedBreathGeneration = 0;
     }
 
     public string GetAttackDeliveryMode()
@@ -166,6 +173,7 @@ public class BattleCardState
     {
         cardUsedCommittedForCurrentAction = false;
         cardResolvedCommittedForCurrentAction = false;
+        breathSuccessPendingRegistered = false;
     }
 
     public bool TryMarkCardUsedCommitted()

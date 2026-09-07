@@ -64,6 +64,64 @@ public static class BattleBulletRules
     }
 }
 
+public sealed class BattlePendingState
+{
+    public int nextUsedAttackPointBonus;
+    public long breathGeneration;
+    public bool reloadAtTurnEnd;
+    public bool conservationPointGrant;
+}
+
+public static class BattlePendingRules
+{
+    public static void RegisterSuccessfulBreath(BattleCardState card)
+    {
+        if (card == null || card.owner == null || !card.cardUsedCommittedForCurrentAction ||
+            card.breathSuccessPendingRegistered ||
+            !card.HasTrait(BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge)) return;
+
+        card.breathSuccessPendingRegistered = true;
+        BattlePendingState pending = card.owner.battlePending;
+        if (pending.nextUsedAttackPointBonus > 0) return;
+        pending.nextUsedAttackPointBonus = 2;
+        pending.breathGeneration++;
+    }
+
+    public static void CaptureAttackBonus(BattleCardState card)
+    {
+        if (card == null || card.owner == null || card.cardData == null ||
+            card.cardData.cardType != CardType.Attack) return;
+        card.borrowedBreathPointBonus = card.owner.battlePending.nextUsedAttackPointBonus;
+        card.borrowedBreathGeneration = card.owner.battlePending.breathGeneration;
+    }
+
+    public static void HandleEvent(BattleEventContext context)
+    {
+        if (context == null || context.user == null) return;
+        BattlePendingState pending = context.user.battlePending;
+        if (context.timing == BattleTiming.CardUsed)
+        {
+            BattleCardState card = context.cardState;
+            if (card == null || card.owner != context.user || !card.cardUsedCommittedForCurrentAction) return;
+            if (card.cardData.cardType == CardType.Attack && card.borrowedBreathPointBonus > 0 &&
+                card.borrowedBreathGeneration == pending.breathGeneration)
+            {
+                pending.nextUsedAttackPointBonus = 0;
+            }
+            if (card.cardData.cardType == CardType.Dodge &&
+                card.HasTrait(BattleCardTrait.ReloadBulletOnDodgeResolution))
+            {
+                pending.reloadAtTurnEnd = true;
+            }
+        }
+        else if (context.timing == BattleTiming.TurnEnd && pending.reloadAtTurnEnd)
+        {
+            pending.reloadAtTurnEnd = false;
+            BattleBulletRules.ReloadToCapacity(context.user);
+        }
+    }
+}
+
 public static class BattleModificationRules
 {
     public const int ModifiedMagazineCapacity = 4;
@@ -191,7 +249,8 @@ public static class BattleConservationRules
         BattleCardState cardState
     )
     {
-        if (!HasPendingPointGrant(character) || !IsShootingAttack(cardState))
+        if (!HasPendingPointGrant(character) || !IsShootingAttack(cardState) ||
+            cardState.owner != character || cardState.hasConservationPointBonus)
         {
             return false;
         }

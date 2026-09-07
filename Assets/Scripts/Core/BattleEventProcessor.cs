@@ -20,7 +20,9 @@ public static class BattleEventProcessor
 
         PrintEventLog(context);
 
+        context.impact?.scopedDamageModifier?.TryApply(context);
         BattleCardManager.HandleEvent(context);      // 卡牌 CD / 消耗
+        BattlePendingRules.HandleEvent(context);
         BattleConservationRules.HandleEvent(context);
         TestEventObserver?.Invoke(context);
         // 后面会在这里逐步接入：

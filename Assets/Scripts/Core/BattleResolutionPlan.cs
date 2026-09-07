@@ -22,6 +22,40 @@ public enum BattleResolutionPlanKind
     FreeActionAttack
 }
 
+// A modifier belongs to one incoming Impact, never to the target's persistent buffs.
+public sealed class BattleScopedDamageModifier
+{
+    public readonly BattleImpact impact;
+    public readonly BattleCardState sourceCard;
+    public readonly BattleClashSession sourceInteraction;
+    public readonly int multiplierPercent;
+    public bool Applied { get; private set; }
+
+    public BattleScopedDamageModifier(
+        BattleImpact impact, BattleCardState sourceCard,
+        BattleClashSession sourceInteraction, int multiplierPercent)
+    {
+        this.impact = impact;
+        this.sourceCard = sourceCard;
+        this.sourceInteraction = sourceInteraction;
+        this.multiplierPercent = System.Math.Max(0, multiplierPercent);
+    }
+
+    public bool TryApply(BattleEventContext context)
+    {
+        if (Applied || context == null || context.timing != BattleTiming.DamageModifier ||
+            !object.ReferenceEquals(context.impact, impact) || impact == null ||
+            impact.state != BattleImpactState.Pending || !impact.allowsDamage)
+        {
+            return false;
+        }
+        Applied = true;
+        context.damage = (int)System.Math.Min(int.MaxValue,
+            (long)System.Math.Max(0, context.damage) * multiplierPercent / 100);
+        return true;
+    }
+}
+
 public sealed class BattleImpact
 {
     public int impactIndex;
@@ -42,6 +76,7 @@ public sealed class BattleImpact
     public int precalculatedDamage;
     public int damageMultiplierPercent = 100;
     public int hpDisplayStageCount = 1;
+    public BattleScopedDamageModifier scopedDamageModifier;
 
     public BattleImpact(
         int impactIndex,

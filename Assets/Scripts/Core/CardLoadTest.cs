@@ -111,7 +111,9 @@ public enum BattleTestMode
     BattleCardUsedResourceConsequencesBasic = 122,
     BattleCardResolvedBasic = 123,
     BattleActionFinishedBasic = 124,
-    BattleImpactFactsBasic = 125
+    BattleImpactFactsBasic = 125,
+    BattleScopedDamageModifierBasic = 126,
+    BattleHiddenPendingStateBasic = 127
 }
 
 public static class BattleLifecycleTimingTests
@@ -4952,6 +4954,18 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleImpactFactsBasic)
         {
             BattleImpactFactsTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleScopedDamageModifierBasic)
+        {
+            BattleScopedDamageModifierTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleHiddenPendingStateBasic)
+        {
+            BattleHiddenPendingStateTests.Run();
             return;
         }
 
@@ -29855,6 +29869,333 @@ public static class BattleActionFinishedTests
     static void LogCheck(string label, bool passed)
     {
         Debug.Log(passed ? label : "FAIL: " + label.Substring(6));
+    }
+}
+
+// Shared fixed-point fixtures for the timing migration regressions.
+internal static class BattleTimingMigrationFixture
+{
+    internal static CharacterData Unit(string id, int hp = 100)
+    {
+        return new CharacterData(id, hp, 5, 5, id);
+    }
+
+    internal static BattleCardState Card(CharacterData owner, string type, int point,
+        params BattleCardTrait[] traits)
+    {
+        string id = owner.runtimeUnitID + "_card_" + owner.battleCards.Count;
+        return BattleCardManager.CreateBattleCard(owner, new CardTestData
+        {
+            cardID = id, cardName = id, cardType = type,
+            attackDeliveryMode = AttackDeliveryMode.Melee, isClashable = true,
+            minPoint = point, maxPoint = point, traits = traits,
+            damageFormula = "PointAsDamage", defenseFormula = "PointAsDefense"
+        }, id);
+    }
+
+    internal static BattleResolutionPlan Respond(BattleCardState response,
+        BattleCardState attack)
+    {
+        BattleEnemyIntent intent = new BattleEnemyIntent("timing_intent",
+            attack.owner, attack, response.owner, 1);
+        BattleActionSlot slot = new BattleActionSlot(response.owner, 1);
+        slot.AssignResponse(response.owner, response, intent, false);
+        if (BattleResolver.TryBeginRespondedClash(slot, intent, out BattleClashSession session) != null ||
+            session == null || !session.RollNextAttempt() || !session.IsFinalized)
+        {
+            return null;
+        }
+        return BattleResolver.BuildRespondedClashResolutionPlan(slot, intent, session);
+    }
+
+    internal static BattleCardState Shot(CharacterData owner, int point, bool immediate = false,
+        bool allIn = false)
+    {
+        var card = Card(owner, CardType.Attack, point,
+            allIn ? new[] { BattleCardTrait.AllInBulletDump } : new BattleCardTrait[0]);
+        card.cardData.attackDeliveryMode = AttackDeliveryMode.LongRangeShoot;
+        card.cardData.usePolicy = immediate ? CardUsePolicy.ImmediateCommit : CardUsePolicy.Normal;
+        card.cardData.resourceRule = new CardResourceRuleData
+        {
+            resourceType = "BuffStack", resourceID = BattleResourceID.Bullet,
+            requiredStackForNormalVersion = 1, consumeAmountOnSuccess = allIn ? 0 : 1,
+            consumeAllCapturedOnSuccess = allIn,
+            insufficientBehavior = CardResourceInsufficientBehavior.ActionUnavailable
+        };
+        return card;
+    }
+
+    internal static BattleResolutionPlan Free(BattleCardState card, CharacterData target)
+    {
+        BattleActionSlot slot = new BattleActionSlot(card.owner, 1);
+        slot.AssignFreeAction(card.owner, card, target);
+        BattleResolutionPlan plan = BattleResolver.BuildFreeAttackResolutionPlan(null, slot, out _);
+        return plan != null && BattleResolver.TryRollFreeAttackResolutionPlan(plan, out _)
+            ? plan : null;
+    }
+
+    internal static BattleResolveResult Complete(BattleResolutionPlan plan)
+    {
+        return BattleResolver.TryCommitNextResolutionStep(plan, out BattleResolveResult result)
+            ? result : null;
+    }
+
+    internal static bool Observe(System.Func<List<BattleEventContext>, bool> test)
+    {
+        var previous = BattleEventProcessor.TestEventObserver;
+        var events = new List<BattleEventContext>();
+        BattleEventProcessor.TestEventObserver = events.Add;
+        try { return test(events); }
+        finally { BattleEventProcessor.TestEventObserver = previous; }
+    }
+
+    internal static void Check(string label, bool passed)
+    {
+        Debug.Log((passed ? "PASS: " : "FAIL: ") + label);
+    }
+}
+
+public static class BattleScopedDamageModifierTests
+{
+    public static bool Run()
+    {
+        bool plain = Failure(false, 100, 8);
+        bool breath = Failure(true, 100, 10);
+        bool actual = Failure(true, 5, 5);
+        bool isolated = VerifyIsolation();
+        bool success = VerifyNoModifier(CardType.Dodge);
+        bool block = VerifyNoModifier(CardType.Defense);
+        Debug.Log("===== Mode126 BattleScopedDamageModifierBasic =====");
+        BattleTimingMigrationFixture.Check("ordinary Dodge keeps damage", plain);
+        BattleTimingMigrationFixture.Check("failed Breath modifies exact incoming Impact", breath);
+        BattleTimingMigrationFixture.Check("Breath modifier applies once", isolated);
+        BattleTimingMigrationFixture.Check("Breath modifier does not leak", isolated);
+        BattleTimingMigrationFixture.Check("successful Breath creates no failure modifier", success);
+        BattleTimingMigrationFixture.Check("FullBlock creates no failure modifier", block);
+        BattleTimingMigrationFixture.Check("scoped modifier preserves actualDamage semantics", actual);
+        bool passed = plain && breath && actual && isolated && success && block;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool Failure(bool breath, int hp, int expectedDamage)
+    {
+        return BattleTimingMigrationFixture.Observe(events =>
+        {
+            var target = BattleTimingMigrationFixture.Unit("mode126_target", hp);
+            var enemy = BattleTimingMigrationFixture.Unit("mode126_enemy");
+            var dodge = BattleTimingMigrationFixture.Card(target, CardType.Dodge, 1,
+                breath ? new[] { BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge } : new BattleCardTrait[0]);
+            var attack = BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 8);
+            var plan = BattleTimingMigrationFixture.Respond(dodge, attack);
+            var result = BattleTimingMigrationFixture.Complete(plan);
+            if (result == null || plan.impacts.Count != 1) return false;
+            var impact = plan.impacts[0];
+            int hits = 0, damageEvents = 0, kills = 0;
+            foreach (var context in events)
+            {
+                if (context.timing == BattleTiming.Hit)
+                {
+                    if (context.damage != (breath ? 10 : 8) || context.impact != impact) return false;
+                    hits++;
+                }
+                if (context.timing == BattleTiming.AfterDamage || context.timing == BattleTiming.AfterKill)
+                {
+                    if (context.damage != expectedDamage || context.impact != impact) return false;
+                    if (context.timing == BattleTiming.AfterDamage) damageEvents++; else kills++;
+                }
+            }
+            return result.damage == expectedDamage && impact.actualDamage == expectedDamage &&
+                impact.committedDamage == expectedDamage && impact.didHit &&
+                impact.didKill == (hp <= expectedDamage) && hits == 1 && damageEvents == 1 &&
+                kills == (hp <= expectedDamage ? 1 : 0) &&
+                (breath ? impact.scopedDamageModifier != null && impact.scopedDamageModifier.Applied
+                    : impact.scopedDamageModifier == null);
+        });
+    }
+
+    static bool VerifyIsolation()
+    {
+        var target = BattleTimingMigrationFixture.Unit("mode126_isolation");
+        var enemy = BattleTimingMigrationFixture.Unit("mode126_isolation_enemy");
+        var dodge = BattleTimingMigrationFixture.Card(target, CardType.Dodge, 1,
+            BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge);
+        var attack = BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 8);
+        var first = BattleTimingMigrationFixture.Respond(dodge, attack);
+        if (first == null || first.impacts.Count != 1) return false;
+        var bound = first.impacts[0];
+        var secondCard = BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 8);
+        var second = BattleTimingMigrationFixture.Free(secondCard, target);
+        if (second == null) return false;
+        var wrong = new BattleEventContext(BattleTiming.DamageModifier)
+            .SetImpact(second.impacts[0]).SetDamage(8);
+        bool rejected = !bound.scopedDamageModifier.TryApply(wrong) && wrong.damage == 8;
+        var result1 = BattleTimingMigrationFixture.Complete(first);
+        var duplicate = new BattleEventContext(BattleTiming.DamageModifier).SetImpact(bound).SetDamage(8);
+        bool once = !bound.scopedDamageModifier.TryApply(duplicate) && duplicate.damage == 8;
+        var result2 = BattleTimingMigrationFixture.Complete(second);
+        return rejected && once && result1 != null && result1.damage == 10 &&
+            result2 != null && result2.damage == 8 && target.currentHP == 82;
+    }
+
+    static bool VerifyNoModifier(string type)
+    {
+        var target = BattleTimingMigrationFixture.Unit("mode126_no_modifier_" + type);
+        var enemy = BattleTimingMigrationFixture.Unit("mode126_no_modifier_enemy_" + type);
+        var guard = BattleTimingMigrationFixture.Card(target, type, 10,
+            BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge);
+        var attack = BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 5);
+        var plan = BattleTimingMigrationFixture.Respond(guard, attack);
+        var result = BattleTimingMigrationFixture.Complete(plan);
+        if (result == null || result.damage != 0) return false;
+        foreach (var impact in plan.impacts)
+            if (impact.scopedDamageModifier != null) return false;
+        return true;
+    }
+}
+
+public static class BattleHiddenPendingStateTests
+{
+    public static bool Run()
+    {
+        bool breath = VerifyBreathBorrowAndConsume();
+        bool immediate = VerifyImmediateBreath();
+        bool continuation = VerifyContinuationDoesNotGrantTwice();
+        bool reloadSuccess = VerifyReload(true, false);
+        bool reloadFailure = VerifyReload(false, false);
+        bool capacity = VerifyReload(false, true);
+        bool conservation = VerifyConservationTransfer();
+        Debug.Log("===== Mode127 BattleHiddenPendingStateBasic =====");
+        BattleTimingMigrationFixture.Check("Breath success creates NextUsedAttack pending", breath);
+        BattleTimingMigrationFixture.Check("Normal NotUsed Attack preserves Breath pending", breath);
+        BattleTimingMigrationFixture.Check("Used Attack consumes Breath pending", breath);
+        BattleTimingMigrationFixture.Check("non-Attack preserves Breath pending", breath);
+        BattleTimingMigrationFixture.Check("Continuous Breath registers once", continuation);
+        BattleTimingMigrationFixture.Check("ImmediateCommit consumes Breath pending on CardUsed", immediate);
+        BattleTimingMigrationFixture.Check("Reload registers TurnEnd pending on CardUsed", reloadSuccess && reloadFailure);
+        BattleTimingMigrationFixture.Check("Reload does not happen immediately", reloadSuccess && reloadFailure);
+        BattleTimingMigrationFixture.Check("Reload resolves at current TurnEnd capacity", capacity);
+        BattleTimingMigrationFixture.Check("Reload failure modifier binds exact Impact", reloadFailure);
+        BattleTimingMigrationFixture.Check("Conservation transfers to eligible shooting card", conservation);
+        BattleTimingMigrationFixture.Check("Conservation transfer is not refunded", conservation);
+        bool passed = breath && immediate && continuation && reloadSuccess && reloadFailure && capacity && conservation;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static BattleResolutionPlan GrantBreath(CharacterData owner)
+    {
+        var enemy = BattleTimingMigrationFixture.Unit("mode127_breath_enemy");
+        var breath = BattleTimingMigrationFixture.Card(owner, CardType.Dodge, 20,
+            BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge);
+        var attack = BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 1);
+        var plan = BattleTimingMigrationFixture.Respond(breath, attack);
+        return BattleTimingMigrationFixture.Complete(plan) != null ? plan : null;
+    }
+
+    static bool VerifyBreathBorrowAndConsume()
+    {
+        var owner = BattleTimingMigrationFixture.Unit("mode127_borrow");
+        if (GrantBreath(owner) == null || owner.battlePending.nextUsedAttackPointBonus != 2 ||
+            owner.GetBuffStack("NextClashPointUp") != 0) return false;
+        var enemy = BattleTimingMigrationFixture.Unit("mode127_borrow_enemy");
+        var defense = BattleTimingMigrationFixture.Card(owner, CardType.Defense, 30);
+        if (BattleTimingMigrationFixture.Complete(BattleTimingMigrationFixture.Respond(defense,
+                BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 1))) == null ||
+            owner.battlePending.nextUsedAttackPointBonus != 2) return false;
+        var first = BattleTimingMigrationFixture.Card(owner, CardType.Attack, 5);
+        var losing = BattleTimingMigrationFixture.Respond(first,
+            BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 20));
+        if (losing == null || losing.clashSession.SideAPoint != 7) return false;
+        if (BattleTimingMigrationFixture.Complete(losing) == null || first.cardUsedCommittedForCurrentAction ||
+            owner.battlePending.nextUsedAttackPointBonus != 2) return false;
+        var next = BattleTimingMigrationFixture.Card(owner, CardType.Attack, 5);
+        var winning = BattleTimingMigrationFixture.Respond(next,
+            BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 1));
+        if (winning == null || winning.clashSession.SideAPoint != 7) return false;
+        return BattleTimingMigrationFixture.Complete(winning) != null &&
+            next.cardUsedCommittedForCurrentAction && owner.battlePending.nextUsedAttackPointBonus == 0 &&
+            first.cardData.minPoint == 5 && first.cardData.maxPoint == 5 && next.cardData.minPoint == 5;
+    }
+
+    static bool VerifyImmediateBreath()
+    {
+        var owner = BattleTimingMigrationFixture.Unit("mode127_immediate");
+        if (GrantBreath(owner) == null) return false;
+        BattleBulletRules.ReloadToCapacity(owner);
+        var shot = BattleTimingMigrationFixture.Shot(owner, 5, true);
+        var enemy = BattleTimingMigrationFixture.Unit("mode127_immediate_enemy");
+        var plan = BattleTimingMigrationFixture.Respond(shot,
+            BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 20));
+        bool beforeFinish = plan != null && plan.clashSession.SideAPoint == 7 &&
+            shot.cardUsedCommittedForCurrentAction && owner.battlePending.nextUsedAttackPointBonus == 0;
+        return beforeFinish && BattleTimingMigrationFixture.Complete(plan) != null &&
+            owner.battlePending.nextUsedAttackPointBonus == 0 && BattleBulletRules.GetBullet(owner) == 5;
+    }
+
+    static bool VerifyContinuationDoesNotGrantTwice()
+    {
+        var owner = BattleTimingMigrationFixture.Unit("mode127_continuation");
+        var first = GrantBreath(owner);
+        if (first == null) return false;
+        var enemy = BattleTimingMigrationFixture.Unit("mode127_continuation_enemy");
+        var use = BattleTimingMigrationFixture.Card(owner, CardType.Attack, 3);
+        if (BattleTimingMigrationFixture.Complete(BattleTimingMigrationFixture.Free(use, enemy)) == null ||
+            owner.battlePending.nextUsedAttackPointBonus != 0) return false;
+        var attack = BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 1);
+        var dodge = first.clashSession.SideA.cardState;
+        var intent = new BattleEnemyIntent("mode127_continuation_intent", enemy, attack, owner, 1);
+        var attackAction = new BattleExecutionAction(enemy, attack, null, intent, owner);
+        var dodgeAction = new BattleExecutionAction(owner, dodge, first.actionSlot, intent, enemy);
+        var session = BattleResolver.CreateAttackVsDodgeClashSession(attackAction, dodgeAction, true);
+        if (session == null || !session.RollNextAttempt()) return false;
+        var second = BattleResolver.BuildAttackVsDodgeResolutionPlan(attackAction, dodgeAction, session);
+        return BattleTimingMigrationFixture.Complete(second) != null &&
+            session.FinalResult == BattleClashFinalResult.DodgeSuccess &&
+            owner.battlePending.nextUsedAttackPointBonus == 0;
+    }
+
+    static bool VerifyReload(bool success, bool modified)
+    {
+        var owner = BattleTimingMigrationFixture.Unit("mode127_reload_" + success + modified);
+        BattleBulletRules.AddBulletCapped(owner, 1);
+        var enemy = BattleTimingMigrationFixture.Unit("mode127_reload_enemy");
+        var reload = BattleTimingMigrationFixture.Card(owner, CardType.Dodge, success ? 20 : 1,
+            BattleCardTrait.ReloadBulletOnDodgeResolution);
+        var plan = BattleTimingMigrationFixture.Respond(reload,
+            BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 8));
+        if (plan == null || !reload.cardUsedCommittedForCurrentAction ||
+            !owner.battlePending.reloadAtTurnEnd || BattleBulletRules.GetBullet(owner) != 1) return false;
+        var result = BattleTimingMigrationFixture.Complete(plan);
+        if (result == null || BattleBulletRules.GetBullet(owner) != 1 ||
+            result.damage != (success ? 0 : 12)) return false;
+        if (!success && (plan.impacts[0].scopedDamageModifier == null ||
+            plan.impacts[0].scopedDamageModifier.impact != plan.impacts[0] ||
+            !plan.impacts[0].scopedDamageModifier.Applied)) return false;
+        if (modified) BattleModificationRules.Activate(owner);
+        BattleTurnProcessor.EndTurn(new List<CharacterData> { owner });
+        return !owner.battlePending.reloadAtTurnEnd &&
+            BattleBulletRules.GetBullet(owner) == (modified ? 4 : 6);
+    }
+
+    static bool VerifyConservationTransfer()
+    {
+        var owner = BattleTimingMigrationFixture.Unit("mode127_conservation");
+        BattleBulletRules.ReloadToCapacity(owner);
+        BattleConservationRules.Activate(owner);
+        var melee = BattleTimingMigrationFixture.Card(owner, CardType.Attack, 1);
+        if (BattleConservationRules.TryAssignPendingBonus(owner, melee) ||
+            !owner.battlePending.conservationPointGrant) return false;
+        var shot = BattleTimingMigrationFixture.Shot(owner, 1);
+        var enemy = BattleTimingMigrationFixture.Unit("mode127_conservation_enemy");
+        var plan = BattleTimingMigrationFixture.Respond(shot,
+            BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 20));
+        if (plan == null || !shot.hasConservationPointBonus || shot.conservationPointBonus != 1 ||
+            owner.battlePending.conservationPointGrant ||
+            BattleConservationRules.TryAssignPendingBonus(owner, shot)) return false;
+        return BattleTimingMigrationFixture.Complete(plan) != null &&
+            !shot.cardUsedCommittedForCurrentAction && !owner.battlePending.conservationPointGrant &&
+            BattleBulletRules.GetBullet(owner) == 6;
     }
 }
 
