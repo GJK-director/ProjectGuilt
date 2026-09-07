@@ -47,14 +47,16 @@
     { "nodeId": "d027", "nodeType": "Dialogue", "nextNodeId": "bg_tv_wide", "dialogue": { "text": "......" } },
 
     { "nodeId": "bg_tv_wide", "nodeType": "ChangeBackground", "nextNodeId": "d028", "background": { "backgroundId": "tv_viewer_wide", "fadeSeconds": 1.0 } },
-    { "nodeId": "d028", "nodeType": "Dialogue", "nextNodeId": "d029", "dialogue": { "text": "客厅里开着电视。" } },
+    { "nodeId": "d028", "nodeType": "Dialogue", "nextNodeId": "bg_tv_snow_screen", "dialogue": { "text": "客厅里开着电视。" } },
+    { "nodeId": "bg_tv_snow_screen", "nodeType": "ChangeBackground", "nextNodeId": "d029", "background": { "backgroundId": "tv_snow_screen_latest", "fadeSeconds": 0.18 } },
     { "nodeId": "d029", "nodeType": "Dialogue", "nextNodeId": "d030", "dialogue": { "text": "雪花屏....？" } },
     { "nodeId": "d030", "nodeType": "Dialogue", "nextNodeId": "d031", "dialogue": { "text": "电视前坐着个人...||至少，看起来还是个人。" } },
-    { "nodeId": "d031", "nodeType": "Dialogue", "nextNodeId": "d032", "dialogue": { "text": "“先生？”" } },
+    { "nodeId": "d031", "nodeType": "Dialogue", "nextNodeId": "bg_tv_pre_turn", "dialogue": { "text": "“先生？”" } },
+    { "nodeId": "bg_tv_pre_turn", "nodeType": "ChangeBackground", "nextNodeId": "d032", "background": { "backgroundId": "tv_pre_turn_closeup", "fadeSeconds": 0.18 } },
     { "nodeId": "d032", "nodeType": "Dialogue", "nextNodeId": "bg_monster_turn", "dialogue": { "text": "......" } },
 
     { "nodeId": "bg_monster_turn", "nodeType": "ChangeBackground", "nextNodeId": "d033", "background": { "backgroundId": "monster_turn_reveal", "fadeSeconds": 0.16 } },
-    { "nodeId": "d033", "nodeType": "Dialogue", "nextNodeId": "end", "dialogue": { "text": "..........｜｜操" } },
+    { "nodeId": "d033", "nodeType": "Dialogue", "nextNodeId": "end", "dialogue": { "text": "...||...||操" } },
     { "nodeId": "end", "nodeType": "End" }
   ]
 }

@@ -105,8 +105,16 @@ public static class IntroStorySceneSetup
             "Assets/Art/Story/Prologue501/CG/TVViewerWide.png"
         ),
         new BackgroundEntry(
+            "tv_snow_screen_latest",
+            "Assets/Art/Story/Prologue501/CG/TVSnowScreenLatest.png"
+        ),
+        new BackgroundEntry(
             "tv_viewer_variant",
             "Assets/Art/Story/Prologue501/CG/TVViewerVariant.png"
+        ),
+        new BackgroundEntry(
+            "tv_pre_turn_closeup",
+            "Assets/Art/Story/Prologue501/CG/TVPreTurnCloseup.png"
         ),
         new BackgroundEntry(
             "monster_turn_reveal",
@@ -168,6 +176,37 @@ public static class IntroStorySceneSetup
             !presenter.ResumeInlinePause())
         {
             throw new InvalidOperationException("剧情 || 停顿标记行为校验失败。 ");
+        }
+
+        presenter.Begin(
+            "double_pause_test",
+            new StoryDialogueData { text = "...||...||操" }
+        );
+        presenter.Tick(0.1f);
+
+        if (presenter.FullText != "......操" ||
+            presenter.VisibleCharacterCount != 3 ||
+            !presenter.IsWaitingForInlinePause ||
+            !presenter.ResumeInlinePause())
+        {
+            throw new InvalidOperationException("剧情双 || 停顿第一次校验失败。 ");
+        }
+
+        presenter.Tick(0.1f);
+
+        if (presenter.VisibleCharacterCount != 6 ||
+            !presenter.IsWaitingForInlinePause ||
+            !presenter.ResumeInlinePause())
+        {
+            throw new InvalidOperationException("剧情双 || 停顿第二次校验失败。 ");
+        }
+
+        presenter.Tick(0.1f);
+
+        if (presenter.VisibleCharacterCount != presenter.FullText.Length ||
+            presenter.IsTyping)
+        {
+            throw new InvalidOperationException("剧情双 || 停顿收尾校验失败。 ");
         }
 
         Scene scene = EditorSceneManager.OpenScene(IntroScenePath, OpenSceneMode.Single);
