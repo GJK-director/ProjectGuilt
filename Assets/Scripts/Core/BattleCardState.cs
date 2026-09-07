@@ -24,6 +24,9 @@ public class BattleCardState
     // 当前行动内的CardUsed提交保护；不代表本场战斗是否曾经使用过。
     public bool cardUsedCommittedForCurrentAction;
 
+    // 当前行动内的CardResolved提交保护；不代表本场战斗是否曾经结算过。
+    public bool cardResolvedCommittedForCurrentAction;
+
     // 单次行动快照。由ActionStart捕获，由Resolution完成或下一次ActionStart清理。
     public int preResolutionAnger;
     public bool hasPreResolutionAngerSnapshot;
@@ -54,6 +57,7 @@ public class BattleCardState
         currentCooldown = 0;
         skipNextTurnEndCooldownTick = false;
         cardUsedCommittedForCurrentAction = false;
+        cardResolvedCommittedForCurrentAction = false;
         ClearResolutionRuleState();
         isConsumed = false;
 
@@ -157,9 +161,11 @@ public class BattleCardState
         return cardData != null && cardData.IsImmediateCommit();
     }
 
+    // 历史方法名保留兼容；现在同时重置新Action的Used / Resolved transaction guards。
     public void ResetCardUsedCommitForNewAction()
     {
         cardUsedCommittedForCurrentAction = false;
+        cardResolvedCommittedForCurrentAction = false;
     }
 
     public bool TryMarkCardUsedCommitted()
@@ -170,6 +176,17 @@ public class BattleCardState
         }
 
         cardUsedCommittedForCurrentAction = true;
+        return true;
+    }
+
+    public bool TryMarkCardResolvedCommitted()
+    {
+        if (cardResolvedCommittedForCurrentAction)
+        {
+            return false;
+        }
+
+        cardResolvedCommittedForCurrentAction = true;
         return true;
     }
 

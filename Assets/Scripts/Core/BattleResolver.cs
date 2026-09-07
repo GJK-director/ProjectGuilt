@@ -122,6 +122,7 @@ public static class BattleResolver
         CommitCardUsedOnce(user, target, actionSlot.cardState);
         TriggerBattleEvent(BattleTiming.OnPlay, user, target, actionSlot.cardState, 0, 0, false, false);
         TriggerBattleEvent(BattleTiming.Resolved, user, target, actionSlot.cardState, 0, 0, false, false);
+        CommitCardResolvedOnce(user, target, actionSlot.cardState);
 
         BattleResolveResult result = new BattleResolveResult();
         result.isSuccess = true;
@@ -472,6 +473,7 @@ public static class BattleResolver
 
         // 成功使用后统一走 Resolved，让 BattleCardManager 处理 guiltGain / UseCount / Permanent
         TriggerBattleEvent(BattleTiming.Resolved, user, target, abilityCardState, 0, 0, false, false);
+        CommitCardResolvedOnce(user, target, abilityCardState);
     }
     // TestClash = 测试一次战斗结算
     public static void TestClash(
@@ -2008,6 +2010,7 @@ public static class BattleResolver
 
         BattleClashSession session = plan.clashSession;
         FinalizeCardInteractionRules(plan);
+        CommitCardResolvedForCompletedPlan(plan);
         BattleResolveResult result = new BattleResolveResult
         {
             isSuccess = true,
@@ -3256,6 +3259,13 @@ public static class BattleResolver
             false,
             ClashResult.Win
         );
+        CommitCardResolvedOnce(
+            slot.actor,
+            target,
+            slot.cardState,
+            slot.lastContinuousDodgePoint,
+            ClashResult.Win
+        );
     }
 
     static BattleResolveResult ResolveRespondedDodgeVsAttack(
@@ -3768,6 +3778,39 @@ public static class BattleResolver
     // 事件入口
     // ================================
 
+    internal static bool CommitCardResolvedOnce(
+        CharacterData user,
+        CharacterData target,
+        BattleCardState cardState,
+        int clashPoint = 0,
+        string clashResult = ClashResult.None
+    )
+    {
+        if (user == null || cardState == null || cardState.cardData == null ||
+            !cardState.cardUsedCommittedForCurrentAction)
+        {
+            return false;
+        }
+
+        if (!cardState.TryMarkCardResolvedCommitted())
+        {
+            return false;
+        }
+
+        TriggerBattleEvent(
+            BattleTiming.CardResolved,
+            user,
+            target,
+            cardState,
+            clashPoint,
+            0,
+            false,
+            false,
+            clashResult
+        );
+        return true;
+    }
+
     internal static bool CommitCardUsedOnce(
         CharacterData user,
         CharacterData target,
@@ -3801,6 +3844,98 @@ public static class BattleResolver
             clashResult
         );
         return true;
+    }
+
+    static void CommitCardResolvedForCompletedPlan(BattleResolutionPlan plan)
+    {
+        if (plan == null)
+        {
+            return;
+        }
+
+        if (plan.clashSession == null)
+        {
+            CommitCardResolvedOnce(
+                plan.attacker,
+                plan.target,
+                plan.sourceCardState,
+                plan.freeActionPoint,
+                ClashResult.None
+            );
+            return;
+        }
+
+        BattleClashSession session = plan.clashSession;
+        BattleClashSideState sideA = session.SideA;
+        BattleClashSideState sideB = session.SideB;
+        if (sideA == null || sideB == null)
+        {
+            return;
+        }
+
+        string sideAResult = ClashResult.None;
+        string sideBResult = ClashResult.None;
+        if (session.FinalResult == BattleClashFinalResult.SideAWin)
+        {
+            sideAResult = ClashResult.Win;
+            sideBResult = ClashResult.Lose;
+        }
+        else if (session.FinalResult == BattleClashFinalResult.SideBWin)
+        {
+            sideAResult = ClashResult.Lose;
+            sideBResult = ClashResult.Win;
+        }
+        else if (session.ClashType == BattleClashType.DodgeVsAttack &&
+            session.FinalResult == BattleClashFinalResult.DodgeSuccess)
+        {
+            sideAResult = ClashResult.Win;
+            sideBResult = ClashResult.Lose;
+        }
+        else if (session.ClashType == BattleClashType.DodgeVsAttack &&
+            session.FinalResult == BattleClashFinalResult.DodgeFailed)
+        {
+            sideAResult = ClashResult.Lose;
+            sideBResult = ClashResult.Win;
+        }
+
+        CharacterData sideATarget = sideB.actor;
+        CharacterData sideBTarget = session.ActualTarget != null
+            ? session.ActualTarget
+            : sideA.actor;
+
+        if (session.UsesKnownSideBPoint)
+        {
+            CommitCardResolvedOnce(
+                sideA.actor,
+                sideATarget,
+                sideA.cardState,
+                session.SideAPoint,
+                sideAResult
+            );
+            return;
+        }
+
+        bool deferDodgeResolution = session.ClashType ==
+                BattleClashType.DodgeVsAttack &&
+            plan.playerCardUseDisposition ==
+                BattleCardUseDisposition.DeferForContinuousDodge;
+        if (!deferDodgeResolution)
+        {
+            CommitCardResolvedOnce(
+                sideA.actor,
+                sideATarget,
+                sideA.cardState,
+                session.SideAPoint,
+                sideAResult
+            );
+        }
+        CommitCardResolvedOnce(
+            sideB.actor,
+            sideBTarget,
+            sideB.cardState,
+            session.SideBPoint,
+            sideBResult
+        );
     }
 
     // TriggerBattleEvent = 触发战斗事件

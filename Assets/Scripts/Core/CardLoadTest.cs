@@ -108,7 +108,8 @@ public enum BattleTestMode
     BattleCardUsedCommitBasic = 119,
     BattleGuardCardUsedCommitBasic = 120,
     BattleCardUsedConsequencesBasic = 121,
-    BattleCardUsedResourceConsequencesBasic = 122
+    BattleCardUsedResourceConsequencesBasic = 122,
+    BattleCardResolvedBasic = 123
 }
 
 public static class BattleLifecycleTimingTests
@@ -1792,6 +1793,488 @@ public static class BattleGuardCardUsedCommitTests
             }
         }
         return count;
+    }
+
+    static void LogCheck(string label, bool passed)
+    {
+        Debug.Log(passed ? label : "FAIL: " + label.Substring(6));
+    }
+}
+
+public static class BattleCardResolvedTests
+{
+    public static bool Run()
+    {
+        bool helperRequiresUsed = WithObserver(VerifyHelperRequiresCardUsed);
+        bool helperOnce = WithObserver(VerifyHelperCommitsOnce);
+        bool abilityOrder = WithObserver(VerifyAbilityOrder);
+        bool unilateralOrder = WithObserver(VerifyUnilateralOrder);
+        bool normalWinner = WithObserver(VerifyNormalWinner);
+        bool normalLoser = WithObserver(VerifyNormalLoser);
+        bool immediateLoser = WithObserver(VerifyImmediateLoser);
+        bool tieLimit = WithObserver(VerifyTieLimit);
+        bool fullBlock = WithObserver(VerifyFullBlock);
+        bool dodgeSuccess = WithObserver(VerifyDeferredDodge);
+        bool deferredOnce = WithObserver(VerifyDeferredDodgeFinalizer);
+        bool dodgeFailure = WithObserver(VerifyDodgeFailure);
+        bool knownPoint = WithObserver(VerifyKnownPointGuard);
+
+        Debug.Log("===== Mode123 BattleCardResolvedBasic =====");
+        LogCheck("PASS: CardResolved requires CardUsed", helperRequiresUsed);
+        LogCheck("PASS: CardResolved helper commits once", helperOnce);
+        LogCheck("PASS: Ability CardResolved after direct logic", abilityOrder);
+        LogCheck("PASS: Ability CardResolved only once", abilityOrder);
+        LogCheck("PASS: unilateral CardResolved after Impact events", unilateralOrder);
+        LogCheck("PASS: Normal winner CardResolved once", normalWinner);
+        LogCheck("PASS: Normal loser has no CardResolved", normalLoser);
+        LogCheck("PASS: ImmediateCommit loser still CardResolved", immediateLoser);
+        LogCheck("PASS: TieLimit resolves only Used cards", tieLimit);
+        LogCheck("PASS: FullBlock resolves both Used cards", fullBlock);
+        LogCheck("PASS: successful continuous Dodge defers CardResolved", dodgeSuccess);
+        LogCheck("PASS: deferred Dodge CardResolved once at chain end", deferredOnce);
+        LogCheck("PASS: deferred Dodge finalizer cannot duplicate CardResolved", deferredOnce);
+        LogCheck("PASS: failed Dodge resolves both Used cards", dodgeFailure);
+        LogCheck("PASS: known-point guard does not re-resolve reused Attack", knownPoint);
+
+        bool passed = helperRequiresUsed && helperOnce && abilityOrder &&
+            unilateralOrder && normalWinner && normalLoser && immediateLoser &&
+            tieLimit && fullBlock && dodgeSuccess && deferredOnce &&
+            dodgeFailure && knownPoint;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyHelperRequiresCardUsed(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode123_helper_requires_used");
+        BattleCardState card = Card(owner, "mode123_helper_card", CardType.Attack, 5);
+        bool notResolved = !BattleResolver.CommitCardResolvedOnce(owner, owner, card) &&
+            Count(events, BattleTiming.CardResolved, card) == 0;
+        card.ResetCardUsedCommitForNewAction();
+        bool used = BattleResolver.CommitCardUsedOnce(owner, owner, card);
+        bool resolved = BattleResolver.CommitCardResolvedOnce(owner, owner, card);
+        bool duplicate = !BattleResolver.CommitCardResolvedOnce(owner, owner, card);
+        return notResolved && used && resolved && duplicate &&
+            Count(events, BattleTiming.CardUsed, card) == 1 &&
+            Count(events, BattleTiming.CardResolved, card) == 1;
+    }
+
+    static bool VerifyHelperCommitsOnce(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode123_helper_once");
+        BattleCardState card = Card(owner, "mode123_helper_once_card", CardType.Attack, 0);
+        BattleResolver.CommitCardUsedOnce(owner, owner, card);
+        bool first = BattleResolver.CommitCardResolvedOnce(owner, owner, card);
+        bool second = BattleResolver.CommitCardResolvedOnce(owner, owner, card);
+        return first && !second && Count(events, BattleTiming.CardResolved, card) == 1;
+    }
+
+    static bool VerifyAbilityOrder(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode123_ability");
+        BattleCardState card = Card(owner, "mode123_ability_card", CardType.Ability, 0);
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, card, owner);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+        return result != null && result.isSuccess &&
+            Ordered(events, card, BattleTiming.CardUsed, BattleTiming.OnPlay,
+                BattleTiming.Resolved, BattleTiming.CardResolved) &&
+            Count(events, BattleTiming.CardResolved, card) == 1;
+    }
+
+    static bool VerifyUnilateralOrder(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode123_unilateral");
+        CharacterData target = Unit("mode123_unilateral_target");
+        BattleCardState card = Card(owner, "mode123_unilateral_card", CardType.Attack, 0, 5);
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, card, target);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+        int hit = IndexOf(events, BattleTiming.Hit, card);
+        int afterDamage = IndexOf(events, BattleTiming.AfterDamage, card);
+        int cardResolved = IndexOf(events, BattleTiming.CardResolved, card);
+        return result != null && result.isSuccess && result.damage > 0 &&
+            hit >= 0 && afterDamage >= 0 && cardResolved > hit &&
+            cardResolved > afterDamage && Count(events, BattleTiming.CardResolved, card) == 1;
+    }
+
+    static bool VerifyNormalWinner(List<BattleEventContext> events)
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode123_normal_winner", 10, CardUsePolicy.Normal, 1, CardUsePolicy.Normal
+        );
+        BattleResolveResult result = ResolveAttack(fixture);
+        return result != null && result.resultType == "PlayerWin" &&
+            Count(events, BattleTiming.CardResolved, fixture.playerCard) == 1 &&
+            Count(events, BattleTiming.CardResolved, fixture.enemyCard) == 0;
+    }
+
+    static bool VerifyNormalLoser(List<BattleEventContext> events)
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode123_normal_loser", 1, CardUsePolicy.Normal, 10, CardUsePolicy.Normal
+        );
+        BattleResolveResult result = ResolveAttack(fixture);
+        return result != null && result.resultType == "EnemyWin" &&
+            Count(events, BattleTiming.CardResolved, fixture.playerCard) == 0 &&
+            Count(events, BattleTiming.CardResolved, fixture.enemyCard) == 1;
+    }
+
+    static bool VerifyImmediateLoser(List<BattleEventContext> events)
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode123_immediate_loser", 1, CardUsePolicy.ImmediateCommit, 10, CardUsePolicy.Normal
+        );
+        BattleResolveResult result = ResolveAttack(fixture);
+        return result != null && result.resultType == "EnemyWin" &&
+            Count(events, BattleTiming.CardResolved, fixture.playerCard) == 1 &&
+            Count(events, BattleTiming.CardResolved, fixture.enemyCard) == 1;
+    }
+
+    static bool VerifyTieLimit(List<BattleEventContext> events)
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode123_tie", 5, CardUsePolicy.ImmediateCommit, 5, CardUsePolicy.Normal
+        );
+        BattleResolveResult result = ResolveAttack(fixture);
+        return result != null && result.resultType == "TieLimit" &&
+            Count(events, BattleTiming.CardResolved, fixture.playerCard) == 1 &&
+            Count(events, BattleTiming.CardResolved, fixture.enemyCard) == 0;
+    }
+
+    static bool VerifyFullBlock(List<BattleEventContext> events)
+    {
+        GuardFixture fixture = CreateGuardFixture(
+            "mode123_full_block", CardType.Defense, 5, 10
+        );
+        BattleClashSession session = BattleResolver.CreateAttackVsDefenseClashSession(
+            fixture.attackAction, fixture.responseAction
+        );
+        session.RollNextAttempt();
+        BattleResolveResult result = Complete(
+            BattleResolver.BuildRespondedClashResolutionPlan(
+                fixture.playerSlot, fixture.enemyIntent, session
+            )
+        );
+        return result != null && result.resultType == "DefenseFullBlock" &&
+            Count(events, BattleTiming.CardResolved, fixture.playerCard) == 1 &&
+            Count(events, BattleTiming.CardResolved, fixture.enemyCard) == 1;
+    }
+
+    static bool VerifyDeferredDodge(List<BattleEventContext> events)
+    {
+        GuardFixture fixture = CreateGuardFixture(
+            "mode123_deferred_dodge", CardType.Dodge, 1, 10
+        );
+        BattleClashSession session = BattleResolver.CreateAttackVsDodgeClashSession(
+            fixture.attackAction, fixture.responseAction, false
+        );
+        session.RollNextAttempt();
+        BattleResolveResult result = Complete(
+            BattleResolver.BuildRespondedClashResolutionPlan(
+                fixture.playerSlot, fixture.enemyIntent, session
+            )
+        );
+        return result != null && result.resultType == "DodgeSuccess" &&
+            result.playerCardUseDisposition == BattleCardUseDisposition.DeferForContinuousDodge &&
+            Count(events, BattleTiming.CardResolved, fixture.playerCard) == 0 &&
+            Count(events, BattleTiming.CardResolved, fixture.enemyCard) == 1;
+    }
+
+    static bool VerifyDeferredDodgeFinalizer(List<BattleEventContext> events)
+    {
+        GuardFixture fixture = CreateGuardFixture(
+            "mode123_deferred_finalizer", CardType.Dodge, 1, 10
+        );
+        BattleClashSession session = BattleResolver.CreateAttackVsDodgeClashSession(
+            fixture.attackAction, fixture.responseAction, false
+        );
+        session.RollNextAttempt();
+        Complete(BattleResolver.BuildRespondedClashResolutionPlan(
+            fixture.playerSlot, fixture.enemyIntent, session
+        ));
+        BattleResolver.FinalizeDeferredDodgeCardUse(fixture.playerSlot);
+        BattleResolver.FinalizeDeferredDodgeCardUse(fixture.playerSlot);
+        return Count(events, BattleTiming.CardResolved, fixture.playerCard) == 1;
+    }
+
+    static bool VerifyDodgeFailure(List<BattleEventContext> events)
+    {
+        GuardFixture fixture = CreateGuardFixture(
+            "mode123_dodge_failure", CardType.Dodge, 10, 1
+        );
+        BattleClashSession session = BattleResolver.CreateAttackVsDodgeClashSession(
+            fixture.attackAction, fixture.responseAction, false
+        );
+        session.RollNextAttempt();
+        BattleResolveResult result = Complete(
+            BattleResolver.BuildRespondedClashResolutionPlan(
+                fixture.playerSlot, fixture.enemyIntent, session
+            )
+        );
+        return result != null && result.resultType == "DodgeFailed" &&
+            Count(events, BattleTiming.CardResolved, fixture.playerCard) == 1 &&
+            Count(events, BattleTiming.CardResolved, fixture.enemyCard) == 1;
+    }
+
+    static bool VerifyKnownPointGuard(List<BattleEventContext> events)
+    {
+        bool defense = VerifyKnownPointCase(events, CardType.Defense);
+        bool dodge = VerifyKnownPointCase(events, CardType.Dodge);
+        return defense && dodge;
+    }
+
+    static bool VerifyKnownPointCase(List<BattleEventContext> events, string guardType)
+    {
+        GuardFixture fixture = CreateGuardFixture(
+            "mode123_known_" + guardType, guardType, 5, 10
+        );
+        BattleResolver.CommitCardUsedOnce(
+            fixture.enemy, fixture.player, fixture.enemyCard
+        );
+        BattleClashSession session = guardType == CardType.Defense
+            ? BattleResolver.CreateKnownPointDefenseClashSession(
+                fixture.playerSlot, fixture.enemyIntent, 5
+            )
+            : BattleResolver.CreateKnownPointDodgeClashSession(
+                fixture.playerSlot, fixture.enemyIntent, 5
+            );
+        session.RollNextAttempt();
+        BattleResolveResult result = Complete(
+            BattleResolver.BuildRespondedClashResolutionPlan(
+                fixture.playerSlot, fixture.enemyIntent, session
+            )
+        );
+        return result != null &&
+            Count(events, BattleTiming.CardResolved, fixture.playerCard) == 1 &&
+            Count(events, BattleTiming.CardResolved, fixture.enemyCard) == 0;
+    }
+
+    static BattleResolveResult ResolveAttack(AttackFixture fixture)
+    {
+        BattleClashSession session = BattleResolver.CreateRespondedAttackClashSession(
+            fixture.playerSlot, fixture.enemyIntent
+        );
+        if (session == null)
+        {
+            return null;
+        }
+        while (!session.IsFinalized)
+        {
+            session.RollNextAttempt();
+        }
+        return BattleResolver.FinalizeRespondedClash(
+            fixture.playerSlot, fixture.enemyIntent, session
+        );
+    }
+
+    static BattleResolveResult Complete(BattleResolutionPlan plan)
+    {
+        int guard = 0;
+        BattleResolveResult result = null;
+        while (plan != null && plan.State != BattleResolutionPlanState.Completed && guard++ < 8)
+        {
+            if (!BattleResolver.TryCommitNextResolutionStep(plan, out result))
+            {
+                return null;
+            }
+        }
+        return result ?? (plan != null ? plan.CompletedResult : null);
+    }
+
+    sealed class AttackFixture
+    {
+        public CharacterData player;
+        public CharacterData enemy;
+        public BattleCardState playerCard;
+        public BattleCardState enemyCard;
+        public BattleActionSlot playerSlot;
+        public BattleEnemyIntent enemyIntent;
+    }
+
+    sealed class GuardFixture
+    {
+        public CharacterData player;
+        public CharacterData enemy;
+        public BattleCardState playerCard;
+        public BattleCardState enemyCard;
+        public BattleActionSlot playerSlot;
+        public BattleEnemyIntent enemyIntent;
+        public BattleExecutionAction attackAction;
+        public BattleExecutionAction responseAction;
+    }
+
+    static AttackFixture CreateAttackFixture(
+        string id,
+        int playerPoint,
+        string playerPolicy,
+        int enemyPoint,
+        string enemyPolicy
+    )
+    {
+        AttackFixture fixture = new AttackFixture
+        {
+            player = Unit(id + "_player"),
+            enemy = Unit(id + "_enemy")
+        };
+        fixture.playerCard = Card(
+            fixture.player, id + "_player_card", CardType.Attack, 0,
+            playerPoint, playerPolicy
+        );
+        fixture.enemyCard = Card(
+            fixture.enemy, id + "_enemy_card", CardType.Attack, 0,
+            enemyPoint, enemyPolicy
+        );
+        fixture.enemyIntent = new BattleEnemyIntent(
+            id + "_intent", fixture.enemy, fixture.enemyCard,
+            fixture.player, 1
+        );
+        fixture.playerSlot = new BattleActionSlot(fixture.player, 1);
+        fixture.playerSlot.AssignResponse(
+            fixture.player, fixture.playerCard, fixture.enemyIntent, false
+        );
+        return fixture;
+    }
+
+    static GuardFixture CreateGuardFixture(
+        string id,
+        string guardType,
+        int attackPoint,
+        int guardPoint
+    )
+    {
+        GuardFixture fixture = new GuardFixture
+        {
+            player = Unit(id + "_player"),
+            enemy = Unit(id + "_enemy")
+        };
+        fixture.playerCard = Card(
+            fixture.player, id + "_guard", guardType, 0, guardPoint
+        );
+        fixture.enemyCard = Card(
+            fixture.enemy, id + "_attack", CardType.Attack, 0, attackPoint
+        );
+        fixture.enemyIntent = new BattleEnemyIntent(
+            id + "_intent", fixture.enemy, fixture.enemyCard,
+            fixture.player, 1
+        );
+        fixture.playerSlot = new BattleActionSlot(fixture.player, 1);
+        fixture.playerSlot.AssignResponse(
+            fixture.player, fixture.playerCard, fixture.enemyIntent, false
+        );
+        fixture.attackAction = new BattleExecutionAction(
+            fixture.enemy, fixture.enemyCard, null, fixture.enemyIntent, fixture.player
+        );
+        fixture.responseAction = new BattleExecutionAction(
+            fixture.player, fixture.playerCard, fixture.playerSlot,
+            fixture.enemyIntent, fixture.player
+        );
+        return fixture;
+    }
+
+    static BattleCardState Card(
+        CharacterData owner,
+        string id,
+        string type,
+        int cooldown,
+        int point = 1,
+        string usePolicy = CardUsePolicy.Normal
+    )
+    {
+        return BattleCardManager.CreateBattleCard(
+            owner,
+            new CardTestData
+            {
+                cardID = id,
+                cardName = id,
+                cardType = type,
+                attackDeliveryMode = AttackDeliveryMode.Melee,
+                isClashable = type != CardType.Ability,
+                minPoint = point,
+                maxPoint = point,
+                cooldown = cooldown,
+                damageFormula = type == CardType.Attack ? "PointAsDamage" : "",
+                defenseFormula = type == CardType.Defense ? "PointAsDefense" : "",
+                usePolicy = usePolicy
+            },
+            id
+        );
+    }
+
+    static CharacterData Unit(string id)
+    {
+        return new CharacterData(id, 100, 5, 5, id);
+    }
+
+    static bool Ordered(
+        List<BattleEventContext> events,
+        BattleCardState card,
+        params string[] timings
+    )
+    {
+        int previous = -1;
+        foreach (string timing in timings)
+        {
+            int current = IndexOf(events, timing, card);
+            if (current < 0 || current <= previous)
+            {
+                return false;
+            }
+            previous = current;
+        }
+        return true;
+    }
+
+    static int IndexOf(
+        List<BattleEventContext> events,
+        string timing,
+        BattleCardState card
+    )
+    {
+        for (int index = 0; index < events.Count; index++)
+        {
+            BattleEventContext context = events[index];
+            if (context != null && context.timing == timing &&
+                object.ReferenceEquals(context.cardState, card))
+            {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    static int Count(
+        List<BattleEventContext> events,
+        string timing,
+        BattleCardState card
+    )
+    {
+        int count = 0;
+        foreach (BattleEventContext context in events)
+        {
+            if (context != null && context.timing == timing &&
+                (card == null || object.ReferenceEquals(context.cardState, card)))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    static bool WithObserver(System.Func<List<BattleEventContext>, bool> test)
+    {
+        List<BattleEventContext> events = new List<BattleEventContext>();
+        System.Action<BattleEventContext> previousObserver =
+            BattleEventProcessor.TestEventObserver;
+        BattleEventProcessor.TestEventObserver = context => events.Add(context);
+        try
+        {
+            return test(events);
+        }
+        finally
+        {
+            BattleEventProcessor.TestEventObserver = previousObserver;
+        }
     }
 
     static void LogCheck(string label, bool passed)
@@ -4449,6 +4932,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleCardUsedResourceConsequencesBasic)
         {
             BattleCardUsedResourceConsequencesTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardResolvedBasic)
+        {
+            BattleCardResolvedTests.Run();
             return;
         }
 
