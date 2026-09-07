@@ -407,10 +407,7 @@ public static class CardEffectExecutor
 
         if (filter.filterType == CardEffectFilterType.EligibleShootingAttack)
         {
-            return candidate.cardType == CardType.Attack &&
-                (candidate.IsLongRangeShoot() ||
-                    candidate.IsCloseRangeShoot()) &&
-                CardConsumesResource(candidate, BattleResourceID.Bullet);
+            return IsEligibleShootingAttack(candidate);
         }
 
         Debug.LogWarning("未知的卡牌效果过滤器：" + filter.filterType);
@@ -443,6 +440,14 @@ public static class CardEffectExecutor
             }
         }
         return false;
+    }
+
+    // 正式射击候选：攻击、射击投递方式，并且真实消耗 Bullet。
+    internal static bool IsEligibleShootingAttack(CardTestData card)
+    {
+        return card != null && card.cardType == CardType.Attack &&
+            (card.IsLongRangeShoot() || card.IsCloseRangeShoot()) &&
+            CardConsumesResource(card, BattleResourceID.Bullet);
     }
 
     static bool ConsumesResource(CardResourceRuleData rule, string resourceID)

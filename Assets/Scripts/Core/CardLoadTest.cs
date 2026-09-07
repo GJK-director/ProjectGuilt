@@ -116,7 +116,8 @@ public enum BattleTestMode
     BattleHiddenPendingStateBasic = 127,
     BattleResourceSpecialStateNormalizationBasic = 128,
     BattleRuntimeInteractionLifecycleBasic = 129,
-    BattleRuleEvaluationAndEffectHookupBasic = 130
+    BattleRuleEvaluationAndEffectHookupBasic = 130,
+    BattleDeckFrozenSemanticsMigration = 131
 }
 
 public static class BattleLifecycleTimingTests
@@ -5125,6 +5126,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleRuleEvaluationAndEffectHookupBasic)
         {
             BattleRuleEvaluationAndEffectHookupTests.Run(cards);
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleDeckFrozenSemanticsMigration)
+        {
+            BattleDeckFrozenSemanticsMigrationTests.Run(cards);
             return;
         }
 
@@ -30111,6 +30118,489 @@ internal static class BattleTimingMigrationFixture
     internal static void Check(string label, bool passed)
     {
         Debug.Log((passed ? "PASS: " : "FAIL: ") + label);
+    }
+}
+
+// Mode131 verifies that the real Knife and Shooting templates consume the
+// frozen Step1-12 transaction rules without duplicating those rules in data.
+public static class BattleDeckFrozenSemanticsMigrationTests
+{
+    public static bool Run(List<CardTestData> cards)
+    {
+        bool realData = VerifyRealData(cards);
+        bool usePolicy = VerifyUsePolicy(cards);
+        bool shootingSelector = VerifyShootingSelector(cards);
+        bool close = VerifyCloseShoot(cards);
+        bool immediate = VerifyImmediateShooting(cards);
+        bool allIn = VerifyAllIn(cards);
+        bool breath = VerifyBreath(cards);
+        bool reload = VerifyReload(cards);
+        bool heavy = VerifyHeavy(cards);
+        bool iai = VerifyIai(cards);
+        bool conservation = VerifyConservation(cards);
+        bool legacy = VerifyLegacyContradictions(cards);
+
+        Debug.Log("===== Mode131 BattleDeckFrozenSemanticsMigration =====");
+        BattleTimingMigrationFixture.Check("A Real Card Data", realData);
+        BattleTimingMigrationFixture.Check("B UsePolicy Matrix", usePolicy);
+        BattleTimingMigrationFixture.Check("C Shooting Selector", shootingSelector);
+        BattleTimingMigrationFixture.Check("D Close Shoot Normal Transaction", close);
+        BattleTimingMigrationFixture.Check("E Immediate Shooting", immediate);
+        BattleTimingMigrationFixture.Check("F ALL IN", allIn);
+        BattleTimingMigrationFixture.Check("G Breath", breath);
+        BattleTimingMigrationFixture.Check("H Reload", reload);
+        BattleTimingMigrationFixture.Check("I Heavy", heavy);
+        BattleTimingMigrationFixture.Check("J Iai", iai);
+        BattleTimingMigrationFixture.Check("K Conservation", conservation);
+        BattleTimingMigrationFixture.Check("L Legacy Contradiction Audit", legacy);
+        bool passed = realData && usePolicy && shootingSelector && close && immediate &&
+            allIn && breath && reload && heavy && iai && conservation && legacy;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyRealData(List<CardTestData> cards)
+    {
+        string[] required =
+        {
+            "atk_001", "atk_bullet_001", "shoot_close_001", "shoot_all_in_001",
+            "shoot_aim_001", "dodge_001", "shoot_reload_001", "knife_heavy_001",
+            "sin_iai_001", "sin_conservation_001", "ability_modification_001"
+        };
+        foreach (string id in required)
+        {
+            if (Find(cards, id) == null) return false;
+        }
+        return true;
+    }
+
+    static bool VerifyUsePolicy(List<CardTestData> cards)
+    {
+        return IsPolicy(cards, "atk_bullet_001", CardUsePolicy.ImmediateCommit) &&
+            IsPolicy(cards, "shoot_aim_001", CardUsePolicy.ImmediateCommit) &&
+            IsPolicy(cards, "shoot_close_001", CardUsePolicy.Normal) &&
+            IsPolicy(cards, "shoot_all_in_001", CardUsePolicy.Normal) &&
+            IsPolicy(cards, "knife_heavy_001", CardUsePolicy.Normal) &&
+            IsPolicy(cards, "sin_iai_001", CardUsePolicy.Normal) &&
+            IsPolicy(cards, "atk_001", CardUsePolicy.Normal) &&
+            OnlyExpectedImmediatePlayerAttacks(cards);
+    }
+
+    static bool VerifyShootingSelector(List<CardTestData> cards)
+    {
+        string[] shooting =
+        {
+            "atk_bullet_001", "shoot_close_001", "shoot_all_in_001", "shoot_aim_001"
+        };
+        string[] nonShooting =
+        {
+            "atk_001", "dodge_001", "shoot_reload_001", "sin_conservation_001"
+        };
+        foreach (string id in shooting)
+        {
+            CardTestData data = Find(cards, id);
+            if (data == null || !CardEffectExecutor.CardConsumesResource(
+                    data, BattleResourceID.Bullet
+                ) || !CardEffectExecutor.IsEligibleShootingAttack(data) ||
+                !BattleConservationRules.IsShootingAttack(data)) return false;
+        }
+        foreach (string id in nonShooting)
+        {
+            CardTestData data = Find(cards, id);
+            if (data == null || CardEffectExecutor.CardConsumesResource(
+                    data, BattleResourceID.Bullet
+                ) || CardEffectExecutor.IsEligibleShootingAttack(data) ||
+                BattleConservationRules.IsShootingAttack(data)) return false;
+        }
+
+        CharacterData modifiedOwner = Unit("mode131_selector_modification");
+        BattleModificationRules.Activate(modifiedOwner);
+        foreach (string id in shooting)
+        {
+            if (BattleModificationRules.GetCardPointBonus(
+                    modifiedOwner, Find(cards, id)
+                ) != 2) return false;
+        }
+        foreach (string id in nonShooting)
+        {
+            if (BattleModificationRules.GetCardPointBonus(
+                    modifiedOwner, Find(cards, id)
+                ) != 0) return false;
+        }
+        return true;
+    }
+
+    static bool VerifyCloseShoot(List<CardTestData> cards)
+    {
+        CharacterData loserOwner = Unit("mode131_close_loser");
+        BattleBulletRules.ReloadToCapacity(loserOwner);
+        BattleCardState loser = State(loserOwner, cards, "shoot_close_001");
+        BattleResolutionPlan lossPlan = Respond(loser, Attack(
+            Unit("mode131_close_loser_enemy"), 100
+        ));
+        BattleResolveResult loss = Complete(lossPlan);
+        bool normalLoss = loss != null && loss.resultType == "EnemyWin" &&
+            !loser.cardUsedCommittedForCurrentAction &&
+            BattleBulletRules.GetBullet(loserOwner) == 6 && loser.currentCooldown == 0 &&
+            loser.currentUseCount == 0;
+
+        CharacterData defenseOwner = Unit("mode131_close_defense");
+        BattleBulletRules.ReloadToCapacity(defenseOwner);
+        BattleCardState defenseAttack = State(defenseOwner, cards, "shoot_close_001");
+        BattleResolutionPlan defensePlan = AgainstDefense(defenseAttack, Unit(
+            "mode131_close_defender"), 100);
+        BattleResolveResult defense = Complete(defensePlan);
+        bool usedOnBlock = defense != null && defense.resultType == "DefenseFullBlock" &&
+            defenseAttack.cardUsedCommittedForCurrentAction &&
+            BattleBulletRules.GetBullet(defenseOwner) == 5;
+
+        CharacterData dodgeOwner = Unit("mode131_close_dodge");
+        BattleBulletRules.ReloadToCapacity(dodgeOwner);
+        BattleCardState dodgeAttack = State(dodgeOwner, cards, "shoot_close_001");
+        BattleResolutionPlan dodgePlan = AgainstDodge(dodgeAttack, Unit(
+            "mode131_close_dodger"), 100);
+        BattleResolveResult dodge = Complete(dodgePlan);
+        return normalLoss && usedOnBlock && dodge != null &&
+            dodge.resultType == "DodgeSuccess" && dodgeAttack.cardUsedCommittedForCurrentAction &&
+            BattleBulletRules.GetBullet(dodgeOwner) == 5;
+    }
+
+    static bool VerifyImmediateShooting(List<CardTestData> cards)
+    {
+        return VerifyImmediateLoss(cards, "atk_bullet_001") &&
+            VerifyImmediateLoss(cards, "shoot_aim_001");
+    }
+
+    static bool VerifyImmediateLoss(List<CardTestData> cards, string id)
+    {
+        CharacterData owner = Unit("mode131_immediate_" + id);
+        BattleBulletRules.ReloadToCapacity(owner);
+        BattleCardState shot = State(owner, cards, id);
+        BattleResolutionPlan plan = Respond(shot, Attack(Unit(
+            "mode131_immediate_enemy_" + id), 100
+        ));
+        BattleResolveResult result = Complete(plan);
+        return result != null && result.resultType == "EnemyWin" &&
+            shot.cardUsedCommittedForCurrentAction && BattleBulletRules.GetBullet(owner) == 5;
+    }
+
+    static bool VerifyAllIn(List<CardTestData> cards)
+    {
+        CharacterData loserOwner = Unit("mode131_allin_loser");
+        BattleBulletRules.ReloadToCapacity(loserOwner);
+        BattleCardState loser = State(loserOwner, cards, "shoot_all_in_001");
+        BattleResolveResult loss = Complete(Respond(loser, Attack(Unit(
+            "mode131_allin_loser_enemy"), 100
+        )));
+        bool noDumpOnLoss = loss != null && loss.resultType == "EnemyWin" &&
+            !loser.cardUsedCommittedForCurrentAction &&
+            BattleBulletRules.GetBullet(loserOwner) == 6 && loser.currentCooldown == 0;
+
+        CharacterData owner = Unit("mode131_allin_block");
+        BattleBulletRules.ReloadToCapacity(owner);
+        BattleCardState allIn = State(owner, cards, "shoot_all_in_001");
+        BattleResolutionPlan blockPlan = AgainstDefense(allIn, Unit(
+            "mode131_allin_defender"), 100);
+        BattleClashResourceSnapshot snapshot = FindSnapshot(blockPlan, allIn);
+        BattleResolveResult block = Complete(blockPlan);
+        return noDumpOnLoss && block != null && block.resultType == "DefenseFullBlock" &&
+            allIn.cardUsedCommittedForCurrentAction && BattleBulletRules.GetBullet(owner) == 0 &&
+            snapshot != null && snapshot.capturedStack == 6 &&
+            BattleAllInRules.GetDamageMultiplierPercent(snapshot.capturedStack) == 320;
+    }
+
+    static bool VerifyBreath(List<CardTestData> cards)
+    {
+        CharacterData owner = Unit("mode131_breath");
+        BattleCardState breath = State(owner, cards, "dodge_001");
+        BattleResolveResult success = Complete(Respond(breath, Attack(Unit(
+            "mode131_breath_enemy"), 0
+        )));
+        if (success == null || !breath.cardUsedCommittedForCurrentAction ||
+            owner.battlePending.nextUsedAttackPointBonus != 2 ||
+            owner.GetBuffStack("NextClashPointUp") != 0) return false;
+
+        BattleCardState normalLoss = State(owner, cards, "atk_001");
+        BattleResolutionPlan normalPlan = Respond(normalLoss, Attack(Unit(
+            "mode131_breath_loss_enemy"), 100
+        ));
+        bool borrowed = normalPlan != null && normalLoss.borrowedBreathPointBonus == 2 &&
+            normalPlan.clashSession.SideAPoint >= 6 && normalPlan.clashSession.SideAPoint <= 9;
+        BattleResolveResult loss = Complete(normalPlan);
+        if (!borrowed || loss == null || normalLoss.cardUsedCommittedForCurrentAction ||
+            owner.battlePending.nextUsedAttackPointBonus != 2) return false;
+
+        BattleCardState used = State(owner, cards, "atk_001");
+        if (Complete(BattleTimingMigrationFixture.Free(used, Unit("mode131_breath_used_target"))) == null ||
+            !used.cardUsedCommittedForCurrentAction ||
+            owner.battlePending.nextUsedAttackPointBonus != 0) return false;
+
+        CharacterData immediateOwner = Unit("mode131_breath_immediate");
+        BattleCardState immediateBreath = State(immediateOwner, cards, "dodge_001");
+        if (Complete(Respond(immediateBreath, Attack(Unit(
+                    "mode131_breath_immediate_enemy"), 0
+                ))) == null || immediateOwner.battlePending.nextUsedAttackPointBonus != 2)
+        {
+            return false;
+        }
+        BattleBulletRules.ReloadToCapacity(immediateOwner);
+        BattleCardState immediateShot = State(immediateOwner, cards, "atk_bullet_001");
+        BattleResolutionPlan immediatePlan = Respond(immediateShot, Attack(Unit(
+            "mode131_breath_immediate_loss_enemy"), 100
+        ));
+        return immediatePlan != null && immediateShot.borrowedBreathPointBonus == 2 &&
+            immediateShot.cardUsedCommittedForCurrentAction &&
+            immediateOwner.battlePending.nextUsedAttackPointBonus == 0 &&
+            Complete(immediatePlan) != null && VerifyFailureScope(
+                cards, "dodge_001", 125, "mode131_breath_scope"
+            );
+    }
+
+    static bool VerifyReload(List<CardTestData> cards)
+    {
+        CharacterData owner = Unit("mode131_reload");
+        BattleBulletRules.AddBulletCapped(owner, 1);
+        BattleCardState reload = State(owner, cards, "shoot_reload_001");
+        BattleResolveResult result = Complete(Respond(reload, Attack(Unit(
+            "mode131_reload_enemy"), 100
+        )));
+        bool deferred = result != null && reload.cardUsedCommittedForCurrentAction &&
+            owner.battlePending.reloadAtTurnEnd && BattleBulletRules.GetBullet(owner) == 1;
+        BattleEventProcessor.ProcessEvent(new BattleEventContext(BattleTiming.TurnEnd)
+            .SetUserAndTarget(owner, owner));
+        bool failedReload = deferred && BattleBulletRules.GetBullet(owner) == 6 &&
+            !owner.battlePending.reloadAtTurnEnd && VerifyFailureScope(
+                cards, "shoot_reload_001", 150, "mode131_reload_scope"
+            );
+
+        CharacterData successOwner = Unit("mode131_reload_success");
+        BattleBulletRules.AddBulletCapped(successOwner, 1);
+        BattleCardState successReload = State(successOwner, cards, "shoot_reload_001");
+        BattleResolveResult success = Complete(Respond(successReload, Attack(Unit(
+            "mode131_reload_success_enemy"), 0
+        )));
+        bool successDeferred = success != null && successReload.cardUsedCommittedForCurrentAction &&
+            successOwner.battlePending.reloadAtTurnEnd &&
+            BattleBulletRules.GetBullet(successOwner) == 1;
+        BattleEventProcessor.ProcessEvent(new BattleEventContext(BattleTiming.TurnEnd)
+            .SetUserAndTarget(successOwner, successOwner));
+        return failedReload && successDeferred &&
+            BattleBulletRules.GetBullet(successOwner) == 6 &&
+            !successOwner.battlePending.reloadAtTurnEnd;
+    }
+
+    static bool VerifyHeavy(List<CardTestData> cards)
+    {
+        CharacterData owner = Unit("mode131_heavy");
+        owner.SetAngerMechanicEnabledForBattle(true);
+        BattleAngerRules.AddAnger(owner, 3);
+        BattleCardState heavy = State(owner, cards, "knife_heavy_001");
+        BattleResolveResult result = Complete(Respond(heavy, Attack(Unit(
+            "mode131_heavy_enemy"), 100
+        )));
+        return result != null && result.resultType == "EnemyWin" &&
+            !heavy.cardUsedCommittedForCurrentAction && heavy.currentCooldown == 0 &&
+            !heavy.pendingHeavyAngerSpend && BattleAngerRules.GetAnger(owner) == 2;
+    }
+
+    static bool VerifyIai(List<CardTestData> cards)
+    {
+        CharacterData owner = Unit("mode131_iai");
+        owner.SetAngerMechanicEnabledForBattle(true);
+        BattleAngerRules.AddAnger(owner, 3);
+        BattleCardState iai = State(owner, cards, "sin_iai_001");
+        BattleResolutionPlan plan = Respond(iai, Attack(Unit("mode131_iai_enemy"), 100));
+        BattleImpact impact = plan != null && plan.impacts.Count == 1 ? plan.impacts[0] : null;
+        BattleResolveResult result = Complete(plan);
+        return result != null && result.resultType == "EnemyWin" &&
+            !iai.cardUsedCommittedForCurrentAction && !iai.pendingIaiAngerClear &&
+            BattleAngerRules.GetAnger(owner) == 2 && impact != null &&
+            impact.damageMultiplierPercent == 150;
+    }
+
+    static bool VerifyConservation(List<CardTestData> cards)
+    {
+        CharacterData owner = Unit("mode131_conservation");
+        BattleBulletRules.AddBulletCapped(owner, 3);
+        BattleCardState conservation = State(owner, cards, "sin_conservation_001");
+        BattleActionSlot abilitySlot = new BattleActionSlot(owner, 1);
+        abilitySlot.AssignFreeAction(owner, conservation, owner);
+        BattleResolveResult activation = BattleResolver.ResolveFreeAction(abilitySlot, null);
+        if (activation == null || !activation.isSuccess ||
+            !BattleConservationRules.IsActive(owner) || !owner.conservationPointGrantPending)
+        {
+            return false;
+        }
+        BattleCardState melee = State(owner, cards, "atk_001");
+        bool meleeRejected = !BattleConservationRules.TryAssignPendingBonus(owner, melee) &&
+            owner.conservationPointGrantPending;
+        BattleCardState shot = State(owner, cards, "shoot_close_001");
+        bool assigned = BattleConservationRules.TryAssignPendingBonus(owner, shot) &&
+            shot.conservationPointBonus == 3 && !owner.conservationPointGrantPending;
+        BattleResolveResult failure = Complete(Respond(shot, Attack(Unit(
+            "mode131_conservation_enemy"), 100
+        )));
+        return meleeRejected && assigned && failure != null &&
+            !shot.cardUsedCommittedForCurrentAction && !owner.conservationPointGrantPending;
+    }
+
+    static bool VerifyLegacyContradictions(List<CardTestData> cards)
+    {
+        CardTestData breath = Find(cards, "dodge_001");
+        CardTestData reload = Find(cards, "shoot_reload_001");
+        CardTestData close = Find(cards, "shoot_close_001");
+        return breath != null && reload != null && close != null &&
+            breath.HasTrait(BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge) &&
+            reload.HasTrait(BattleCardTrait.ReloadBulletOnDodgeResolution) &&
+            !close.IsImmediateCommit() && VerifyUsePolicy(cards) &&
+            !HasImmediateReloadEffect(reload);
+    }
+
+    static bool VerifyFailureScope(List<CardTestData> cards, string dodgeID,
+        int multiplier, string id)
+    {
+        CharacterData target = Unit(id + "_target");
+        BattleCardState dodge = State(target, cards, dodgeID);
+        BattleResolutionPlan first = Respond(dodge, Attack(Unit(id + "_enemy"), 20));
+        BattleResolveResult firstResult = Complete(first);
+        BattleResolutionPlan second = BattleTimingMigrationFixture.Free(Attack(
+            Unit(id + "_second_enemy"), 8
+        ), target);
+        BattleResolveResult secondResult = Complete(second);
+        return firstResult != null && firstResult.damage == 20 * multiplier / 100 &&
+            secondResult != null && secondResult.damage == 8;
+    }
+
+    static BattleResolutionPlan Respond(BattleCardState response, BattleCardState attack)
+    {
+        BattleEnemyIntent intent = new BattleEnemyIntent("mode131_intent", attack.owner,
+            attack, response.owner, 1);
+        BattleActionSlot slot = new BattleActionSlot(response.owner, 1);
+        slot.AssignResponse(response.owner, response, intent, false);
+        if (BattleResolver.TryBeginRespondedClash(slot, intent, out BattleClashSession session) != null ||
+            session == null) return null;
+        while (!session.IsFinalized && session.RollNextAttempt()) { }
+        return session.IsFinalized
+            ? BattleResolver.BuildRespondedClashResolutionPlan(slot, intent, session)
+            : null;
+    }
+
+    static BattleResolutionPlan AgainstDefense(BattleCardState attack, CharacterData defender,
+        int defensePoint)
+    {
+        BattleCardState defense = BattleTimingMigrationFixture.Card(
+            defender, CardType.Defense, defensePoint
+        );
+        BattleExecutionAction attackAction = new BattleExecutionAction(
+            attack.owner, attack, null, null, defender
+        );
+        BattleExecutionAction defenseAction = new BattleExecutionAction(
+            defender, defense, null, null, attack.owner
+        );
+        if (BattleResolver.TryBeginAttackVsDefense(attackAction, defenseAction,
+                out BattleClashSession session) != null || session == null) return null;
+        while (!session.IsFinalized && session.RollNextAttempt()) { }
+        return session.IsFinalized ? BattleResolver.BuildAttackVsDefenseResolutionPlan(
+            attackAction, defenseAction, session
+        ) : null;
+    }
+
+    static BattleResolutionPlan AgainstDodge(BattleCardState attack, CharacterData dodger,
+        int dodgePoint)
+    {
+        BattleCardState dodge = BattleTimingMigrationFixture.Card(
+            dodger, CardType.Dodge, dodgePoint
+        );
+        BattleExecutionAction attackAction = new BattleExecutionAction(
+            attack.owner, attack, null, null, dodger
+        );
+        BattleExecutionAction dodgeAction = new BattleExecutionAction(
+            dodger, dodge, null, null, attack.owner
+        );
+        if (BattleResolver.TryBeginAttackVsDodge(attackAction, dodgeAction,
+                out BattleClashSession session) != null || session == null) return null;
+        while (!session.IsFinalized && session.RollNextAttempt()) { }
+        return session.IsFinalized ? BattleResolver.BuildAttackVsDodgeResolutionPlan(
+            attackAction, dodgeAction, session
+        ) : null;
+    }
+
+    static BattleResolveResult Complete(BattleResolutionPlan plan)
+    {
+        BattleResolveResult result = null;
+        int guard = 0;
+        while (plan != null && plan.State != BattleResolutionPlanState.Completed && guard++ < 8)
+        {
+            if (!BattleResolver.TryCommitNextResolutionStep(plan, out result)) return null;
+        }
+        return result ?? (plan != null ? plan.CompletedResult : null);
+    }
+
+    static BattleCardState State(CharacterData owner, List<CardTestData> cards, string id)
+    {
+        CardTestData data = Find(cards, id);
+        return data != null ? BattleCardManager.CreateBattleCard(
+            owner, data, owner.runtimeUnitID + "_" + id
+        ) : null;
+    }
+
+    static BattleCardState Attack(CharacterData owner, int point)
+    {
+        return BattleTimingMigrationFixture.Card(owner, CardType.Attack, point);
+    }
+
+    static BattleClashResourceSnapshot FindSnapshot(BattleResolutionPlan plan,
+        BattleCardState card)
+    {
+        BattleClashSession session = plan != null ? plan.clashSession : null;
+        if (session == null) return null;
+        if (session.SideA != null && object.ReferenceEquals(session.SideA.cardState, card))
+            return session.SideA.resourceSnapshot;
+        if (session.SideB != null && object.ReferenceEquals(session.SideB.cardState, card))
+            return session.SideB.resourceSnapshot;
+        return null;
+    }
+
+    static bool IsPolicy(List<CardTestData> cards, string id, string policy)
+    {
+        CardTestData data = Find(cards, id);
+        return data != null && data.GetUsePolicy() == policy;
+    }
+
+    static bool OnlyExpectedImmediatePlayerAttacks(List<CardTestData> cards)
+    {
+        BattleDeckManifest shooting = BattleDeckManifests.Get(BattleDeckPreset.Shooting);
+        BattleDeckManifest knife = BattleDeckManifests.Get(BattleDeckPreset.Knife);
+        List<string> ids = new List<string>();
+        foreach (string id in shooting.normalCardIDs) ids.Add(id);
+        foreach (string id in knife.normalCardIDs) ids.Add(id);
+        foreach (string id in knife.specialCardIDs) ids.Add(id);
+        foreach (string id in ids)
+        {
+            CardTestData data = Find(cards, id);
+            if (data != null && data.cardType == CardType.Attack &&
+                data.IsImmediateCommit() && id != "atk_bullet_001" && id != "shoot_aim_001")
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool HasImmediateReloadEffect(CardTestData reload)
+    {
+        // 现有装填没有 OnPlay effect；其兼容 trait 仅在 CardUsed 注册 TurnEnd pending。
+        return reload != null && reload.effects != null && reload.effects.Count > 0;
+    }
+
+    static CardTestData Find(List<CardTestData> cards, string id)
+    {
+        return CardDataLoader.FindCardByID(cards, id);
+    }
+
+    static CharacterData Unit(string id)
+    {
+        return BattleTimingMigrationFixture.Unit(id);
     }
 }
 

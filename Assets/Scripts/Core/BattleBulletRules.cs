@@ -146,7 +146,8 @@ public static class BattleModificationRules
 
     public static int GetCardPointBonus(CharacterData character, CardTestData card)
     {
-        return IsActive(character) && UsesBullet(card)
+        return IsActive(character) &&
+            CardEffectExecutor.IsEligibleShootingAttack(card)
             ? BulletConsumingCardPointBonus
             : 0;
     }
@@ -170,25 +171,6 @@ public static class BattleModificationRules
         }
     }
 
-    static bool UsesBullet(CardTestData card)
-    {
-        if (card == null)
-        {
-            return false;
-        }
-
-        CardResourceRuleData rule = card.resourceRule;
-        if (rule == null && card.resourceRules != null && card.resourceRules.Length > 0)
-        {
-            rule = card.resourceRules[0];
-        }
-
-        return rule != null &&
-            rule.resourceType == "BuffStack" &&
-            rule.resourceID == BattleResourceID.Bullet &&
-            (rule.consumeAmountOnSuccess > 0 ||
-                rule.consumeAllCapturedOnSuccess);
-    }
 }
 
 // 节约规则只保存本回合的激活、单次卡实例转移和回合末结算。
@@ -226,8 +208,7 @@ public static class BattleConservationRules
 
     public static bool IsShootingAttack(CardTestData cardData)
     {
-        return cardData != null && cardData.cardType == CardType.Attack &&
-            (cardData.IsLongRangeShoot() || cardData.IsCloseRangeShoot());
+        return CardEffectExecutor.IsEligibleShootingAttack(cardData);
     }
 
     public static int GetPointBonusForBullet(int bullet)
