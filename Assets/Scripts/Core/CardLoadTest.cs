@@ -102,7 +102,8 @@ public enum BattleTestMode
     BattleConservationAbility = 113,
     BattleDeckBootstrapPreset = 114,
     BattleDeckHandGroupingBasic = 115,
-    BattleLifecycleTimingBasic = 116
+    BattleLifecycleTimingBasic = 116,
+    BattleUsePolicyDataBasic = 117
 }
 
 public static class BattleLifecycleTimingTests
@@ -407,6 +408,98 @@ public static class BattleLifecycleTimingTests
     {
         Debug.Log((passed ? label : "FAIL: " + label.Substring(6)) +
             (passed ? string.Empty : "（" + detail + "）"));
+    }
+}
+
+public static class BattleUsePolicyDataTests
+{
+    public static bool Run(List<CardTestData> cards)
+    {
+        CardTestData blindFire = Find(cards, "atk_bullet_001");
+        CardTestData aimedShot = Find(cards, "shoot_aim_001");
+        CardTestData closeShot = Find(cards, "shoot_close_001");
+        CardTestData allIn = Find(cards, "shoot_all_in_001");
+        CardTestData heavy = Find(cards, "knife_heavy_001");
+        CardTestData iai = Find(cards, "sin_iai_001");
+        CardTestData slash = Find(cards, "atk_001");
+        CardTestData defaultCard = new CardTestData
+        {
+            cardID = "mode117_default_normal",
+            cardType = CardType.Attack
+        };
+
+        bool blindFirePassed = blindFire != null &&
+            blindFire.GetUsePolicy() == CardUsePolicy.ImmediateCommit &&
+            blindFire.IsImmediateCommit();
+        bool aimedShotPassed = aimedShot != null &&
+            aimedShot.GetUsePolicy() == CardUsePolicy.ImmediateCommit &&
+            aimedShot.IsImmediateCommit();
+        bool closeShotPassed = closeShot != null &&
+            closeShot.GetUsePolicy() == CardUsePolicy.Normal &&
+            !closeShot.IsImmediateCommit();
+        bool allInPassed = allIn != null &&
+            allIn.GetUsePolicy() == CardUsePolicy.Normal &&
+            !allIn.IsImmediateCommit();
+        bool heavyPassed = heavy != null &&
+            heavy.GetUsePolicy() == CardUsePolicy.Normal &&
+            !heavy.IsImmediateCommit();
+        bool iaiPassed = iai != null &&
+            iai.GetUsePolicy() == CardUsePolicy.Normal &&
+            !iai.IsImmediateCommit();
+        bool defaultPolicyPassed = slash != null &&
+            string.IsNullOrEmpty(slash.usePolicy) &&
+            slash.GetUsePolicy() == CardUsePolicy.Normal &&
+            !slash.IsImmediateCommit() &&
+            defaultCard.GetUsePolicy() == CardUsePolicy.Normal &&
+            !defaultCard.IsImmediateCommit();
+        bool allPoliciesValid = cards != null;
+        if (allPoliciesValid)
+        {
+            foreach (CardTestData card in cards)
+            {
+                if (card != null && !CardUsePolicy.IsKnownSerializedValue(card.usePolicy))
+                {
+                    allPoliciesValid = false;
+                    break;
+                }
+            }
+        }
+
+        bool passed = blindFirePassed && aimedShotPassed && closeShotPassed &&
+            allInPassed && heavyPassed && iaiPassed && defaultPolicyPassed &&
+            allPoliciesValid;
+        Debug.Log("===== Mode117 BattleUsePolicyDataBasic =====");
+        LogCheck("PASS: blind fire ImmediateCommit", blindFirePassed);
+        LogCheck("PASS: aimed shot ImmediateCommit", aimedShotPassed);
+        LogCheck("PASS: close shot Normal", closeShotPassed);
+        LogCheck("PASS: all in Normal", allInPassed);
+        LogCheck("PASS: heavy Normal", heavyPassed);
+        LogCheck("PASS: iai Normal", iaiPassed);
+        LogCheck("PASS: default policy Normal", defaultPolicyPassed);
+        LogCheck("PASS: all serialized policies valid", allPoliciesValid);
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static void LogCheck(string label, bool passed)
+    {
+        Debug.Log((passed ? label : "FAIL: " + label.Substring(6)));
+    }
+
+    static CardTestData Find(List<CardTestData> cards, string cardID)
+    {
+        if (cards == null)
+        {
+            return null;
+        }
+        foreach (CardTestData card in cards)
+        {
+            if (card != null && card.cardID == cardID)
+            {
+                return card;
+            }
+        }
+        return null;
     }
 }
 
@@ -1966,6 +2059,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleLifecycleTimingBasic)
         {
             BattleLifecycleTimingTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleUsePolicyDataBasic)
+        {
+            BattleUsePolicyDataTests.Run(cards);
             return;
         }
 

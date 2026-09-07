@@ -43,6 +43,11 @@ public static class CardDataLoader
             return null;
         }
 
+        if (!ValidateUsePolicies(cards))
+        {
+            return null;
+        }
+
         // showJsonLog = 是否显示完整 JSON 原文
         if (BattleDebugSettings.ShowJsonLog)
         {
@@ -90,6 +95,48 @@ public static class CardDataLoader
                     "，当前值：" +
                     serializedMode
                 );
+            }
+        }
+
+        return isValid;
+    }
+
+    public static bool ValidateUsePolicies(List<CardTestData> cards)
+    {
+        bool isValid = true;
+        if (cards == null)
+        {
+            return false;
+        }
+
+        foreach (CardTestData card in cards)
+        {
+            if (card == null)
+            {
+                continue;
+            }
+
+            if (!CardUsePolicy.IsKnownSerializedValue(card.usePolicy))
+            {
+                Debug.LogError(
+                    "读取卡牌失败：usePolicy 未知。卡牌ID：" +
+                    card.cardID +
+                    "，当前值：" +
+                    card.usePolicy
+                );
+                isValid = false;
+                continue;
+            }
+
+            if (card.IsImmediateCommit() && card.cardType != CardType.Attack)
+            {
+                Debug.LogError(
+                    "读取卡牌失败：ImmediateCommit 只允许配置在 Attack 卡。卡牌ID：" +
+                    card.cardID +
+                    "，卡牌类型：" +
+                    card.cardType
+                );
+                isValid = false;
             }
         }
 

@@ -141,6 +141,18 @@ public class BattleCardState
             cardData.IsSpecialLongRangeDuelPresentation();
     }
 
+    public string GetUsePolicy()
+    {
+        return cardData != null
+            ? cardData.GetUsePolicy()
+            : CardUsePolicy.Normal;
+    }
+
+    public bool IsImmediateCommit()
+    {
+        return cardData != null && cardData.IsImmediateCommit();
+    }
+
     // HasTrait = 查询这张战斗卡实例对应的卡牌固有词条。
     public bool HasTrait(BattleCardTrait trait)
     {

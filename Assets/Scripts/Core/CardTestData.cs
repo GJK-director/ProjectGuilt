@@ -30,6 +30,24 @@ public static class CardResourceConsumeTiming
     public const string OnResolvedParticipation = "OnResolvedParticipation";
 }
 
+public static class CardUsePolicy
+{
+    public const string Normal = "Normal";
+    public const string ImmediateCommit = "ImmediateCommit";
+
+    public static string ResolveOrDefault(string value)
+    {
+        return string.IsNullOrEmpty(value) ? Normal : value;
+    }
+
+    public static bool IsKnownSerializedValue(string value)
+    {
+        return string.IsNullOrEmpty(value) ||
+            value == Normal ||
+            value == ImmediateCommit;
+    }
+}
+
 // CardResourceRuleData = 卡牌资源规则。
 // 缺省值保持旧的软资源fallback与成功使用支付语义。
 public class CardResourceRuleData
@@ -100,6 +118,8 @@ public class CardTestData
     public string attackDeliveryMode;
     // 缺省时使用通用表现；特殊值只改变Presentation，不改变Combat语义。
     public string presentationVariant;
+    // usePolicy = 卡牌独立的使用策略；缺省时为 Normal。
+    public string usePolicy;
     public bool isSinCard;      // 是否罪卡
     public bool consumeOnUse;   // 是否使用后消耗
     public CardUseConditionData[] useConditions;
@@ -195,5 +215,15 @@ public class CardTestData
     {
         return GetPresentationVariant() ==
             BattleCardPresentationVariant.SpecialLongRangeDuel;
+    }
+
+    public string GetUsePolicy()
+    {
+        return CardUsePolicy.ResolveOrDefault(usePolicy);
+    }
+
+    public bool IsImmediateCommit()
+    {
+        return GetUsePolicy() == CardUsePolicy.ImmediateCommit;
     }
 }
