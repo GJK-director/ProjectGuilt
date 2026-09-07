@@ -101,7 +101,204 @@ public enum BattleTestMode
     BattleAllInBasic = 112,
     BattleConservationAbility = 113,
     BattleDeckBootstrapPreset = 114,
-    BattleDeckHandGroupingBasic = 115
+    BattleDeckHandGroupingBasic = 115,
+    BattleLifecycleTimingBasic = 116
+}
+
+public static class BattleLifecycleTimingTests
+{
+    static List<string> observedTimings;
+
+    public static bool Run()
+    {
+        observedTimings = new List<string>();
+        System.Action<BattleEventContext> previousObserver =
+            BattleEventProcessor.TestEventObserver;
+        BattleEventProcessor.TestEventObserver = ObserveEvent;
+        try
+        {
+            bool stateUnchanged;
+            bool lifecycleCompleted = RunTwoTurnLifecycle(out stateUnchanged);
+            int turnStartCount = Count(BattleTiming.TurnStart);
+            int executionStartCount = Count(BattleTiming.ExecutionStart);
+            int turnEndCount = Count(BattleTiming.TurnEnd);
+            string expectedOrder =
+                BattleTiming.TurnStart + "," +
+                BattleTiming.ExecutionStart + "," +
+                BattleTiming.TurnEnd + "," +
+                BattleTiming.TurnStart + "," +
+                BattleTiming.ExecutionStart + "," +
+                BattleTiming.TurnEnd;
+            string actualOrder = string.Join(",", observedTimings.ToArray());
+            bool counts = turnStartCount == 2 && executionStartCount == 2 &&
+                turnEndCount == 2;
+            bool order = actualOrder == expectedOrder;
+            Debug.Log("===== Mode116 BattleLifecycleTimingBasic =====");
+            LogCheck(
+                "PASS: TurnStart count",
+                counts,
+                "期望2，实际" + turnStartCount
+            );
+            LogCheck(
+                "PASS: ExecutionStart count",
+                counts,
+                "期望2，实际" + executionStartCount
+            );
+            LogCheck(
+                "PASS: TurnEnd count",
+                counts,
+                "期望2，实际" + turnEndCount
+            );
+            LogCheck(
+                "PASS: lifecycle order",
+                order,
+                "期望" + expectedOrder + "，实际" + actualOrder
+            );
+            LogCheck(
+                "PASS: event state unchanged",
+                stateUnchanged,
+                "事件接线不应改变 HP / CD / 资源 / 卡牌状态"
+            );
+            bool passed = lifecycleCompleted && counts && order && stateUnchanged;
+            Debug.Log("Passed: " + passed);
+            return passed;
+        }
+        finally
+        {
+            BattleEventProcessor.TestEventObserver = previousObserver;
+            observedTimings = null;
+        }
+    }
+
+    static void ObserveEvent(BattleEventContext context)
+    {
+        if (context == null || observedTimings == null)
+        {
+            return;
+        }
+        if (context.timing == BattleTiming.TurnStart ||
+            context.timing == BattleTiming.ExecutionStart ||
+            context.timing == BattleTiming.TurnEnd)
+        {
+            observedTimings.Add(context.timing);
+        }
+    }
+
+    static bool RunTwoTurnLifecycle(out bool stateUnchanged)
+    {
+        CharacterData player = new CharacterData(
+            "mode116_player",
+            30,
+            5,
+            5,
+            "mode116_player"
+        );
+        CardTestData cardData = new CardTestData
+        {
+            cardID = "mode116_noop_ability",
+            cardName = "Mode116 No-op Ability",
+            cardType = CardType.Ability,
+            isClashable = false,
+            minPoint = 0,
+            maxPoint = 0,
+            cooldown = 0,
+            isSinCard = false
+        };
+        BattleCardState cardState = BattleCardManager.CreateBattleCard(
+            player,
+            cardData,
+            "mode116_noop_ability_instance"
+        );
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(player, null, null, null);
+        BattleLifecycleController controller = new BattleLifecycleController(runtimeState);
+
+        int hpBefore = player.currentHP;
+        int cooldownBefore = cardState.currentCooldown;
+        int useCountBefore = cardState.currentUseCount;
+        bool consumedBefore = cardState.isConsumed;
+        int bulletBefore = BattleBulletRules.GetBullet(player);
+        int angerBefore = player.GetBuffStack(BattleResourceID.Anger);
+
+        if (!controller.TryInitializeToPrepare(out string failureMessage) ||
+            !RunOneTurn(controller, runtimeState, player, cardState, out failureMessage))
+        {
+            stateUnchanged = false;
+            return false;
+        }
+
+        BattleActionSlot nextSlot = CreateAbilitySlot(player, cardState, 1);
+        if (!controller.TryPrepareNextTurn(
+                new List<BattleActionSlot> { nextSlot },
+                new List<BattleEnemyIntent>(),
+                out failureMessage
+            ) ||
+            !RunOneTurn(controller, runtimeState, player, cardState, out failureMessage))
+        {
+            stateUnchanged = false;
+            return false;
+        }
+
+        stateUnchanged = player.currentHP == hpBefore &&
+            cardState.currentCooldown == cooldownBefore &&
+            cardState.currentUseCount == useCountBefore &&
+            cardState.isConsumed == consumedBefore &&
+            BattleBulletRules.GetBullet(player) == bulletBefore &&
+            player.GetBuffStack(BattleResourceID.Anger) == angerBefore;
+        return true;
+    }
+
+    static bool RunOneTurn(
+        BattleLifecycleController controller,
+        BattleRuntimeState runtimeState,
+        CharacterData player,
+        BattleCardState cardState,
+        out string failureMessage
+    )
+    {
+        BattleActionSlot slot = CreateAbilitySlot(player, cardState, 1);
+        runtimeState.SetActionSlots(new List<BattleActionSlot> { slot });
+        runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+        if (!controller.TryCreateExecutionPlan(
+                false,
+                out BattleExecutionPlan executionPlan,
+                out failureMessage
+            ) || executionPlan == null ||
+            !controller.TryExecuteCurrentPlan(out failureMessage) ||
+            !controller.TryEndCurrentTurn(out failureMessage))
+        {
+            return false;
+        }
+        return true;
+    }
+
+    static BattleActionSlot CreateAbilitySlot(
+        CharacterData player,
+        BattleCardState cardState,
+        int slotIndex
+    )
+    {
+        BattleActionSlot slot = new BattleActionSlot(player, slotIndex);
+        slot.AssignFreeAction(player, cardState, player);
+        return slot;
+    }
+
+    static int Count(string timing)
+    {
+        int count = 0;
+        if (observedTimings == null) return count;
+        foreach (string observedTiming in observedTimings)
+        {
+            if (observedTiming == timing) count++;
+        }
+        return count;
+    }
+
+    static void LogCheck(string label, bool passed, string detail)
+    {
+        Debug.Log((passed ? label : "FAIL: " + label.Substring(6)) +
+            (passed ? string.Empty : "（" + detail + "）"));
+    }
 }
 
 public static class BattleAngerAndKnifeCardsBasicTests
@@ -1654,6 +1851,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleDeckHandGroupingBasic)
         {
             BattleDeckHandGroupingTests.Run(cards);
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleLifecycleTimingBasic)
+        {
+            BattleLifecycleTimingTests.Run();
             return;
         }
 

@@ -13,6 +13,10 @@ public static class BattleTurnProcessor
     {
         Debug.Log("===== 回合开始 =====");
 
+        BattleEventProcessor.ProcessEvent(
+            new BattleEventContext(BattleTiming.TurnStart)
+        );
+
         foreach (CharacterData unit in units)
         {
             if (unit == null)

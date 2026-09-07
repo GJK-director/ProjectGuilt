@@ -7,6 +7,7 @@ public sealed class BattleLifecycleController
     private readonly BattleRuntimeState runtimeState;
     private readonly IBattleExecutionPresenter executionPresenter;
     private BattleExecutionRunner executionRunner;
+    private int executionStartBroadcastTurn = -1;
 
     public BattleRuntimeState RuntimeState
     {
@@ -66,6 +67,11 @@ public sealed class BattleLifecycleController
                 BattleLifecyclePhase.Executing,
                 out failureMessage
             ))
+        {
+            return false;
+        }
+
+        if (!TryBroadcastExecutionStart(out failureMessage))
         {
             return false;
         }
@@ -185,10 +191,31 @@ public sealed class BattleLifecycleController
             return false;
         }
 
-        return runtimeState.TryTransitionTo(
-            BattleLifecyclePhase.Prepare,
-            out failureMessage
+        if (!runtimeState.TryTransitionTo(
+                BattleLifecyclePhase.Prepare,
+                out failureMessage
+            ))
+        {
+            return false;
+        }
+
+        BattleTurnProcessor.StartTurn(GetLivingTurnParticipants());
+        return true;
+    }
+
+    private bool TryBroadcastExecutionStart(out string failureMessage)
+    {
+        failureMessage = string.Empty;
+        if (executionStartBroadcastTurn == runtimeState.currentTurn)
+        {
+            return true;
+        }
+
+        BattleEventProcessor.ProcessEvent(
+            new BattleEventContext(BattleTiming.ExecutionStart)
         );
+        executionStartBroadcastTurn = runtimeState.currentTurn;
+        return true;
     }
 
     public bool TryCreateExecutionPlan(
@@ -283,6 +310,11 @@ public sealed class BattleLifecycleController
             return false;
         }
 
+        if (!TryBroadcastExecutionStart(out failureMessage))
+        {
+            return false;
+        }
+
         BattleExecutionPlanExecutor.ExecuteCurrentPlanFromLifecycle(this);
         if (runtimeState.IsBattleEnded)
         {
@@ -356,6 +388,11 @@ public sealed class BattleLifecycleController
         {
             failureMessage =
                 "单项执行失败：当前阶段必须为Prepare、PlanReady或Executing";
+                return false;
+        }
+
+        if (!TryBroadcastExecutionStart(out failureMessage))
+        {
             return false;
         }
 

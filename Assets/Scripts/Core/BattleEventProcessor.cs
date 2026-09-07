@@ -6,6 +6,9 @@ using UnityEngine;
 // 第一版先只打印事件，后面再接 CD / Buff / 罪卡 / 负罪感 / 成就 / UI
 public static class BattleEventProcessor
 {
+    // 仅供同程序集回归测试观察统一事件广播，不参与正式战斗逻辑。
+    internal static System.Action<BattleEventContext> TestEventObserver;
+
     // ProcessEvent = 处理战斗事件
     public static void ProcessEvent(BattleEventContext context)
     {
@@ -19,6 +22,7 @@ public static class BattleEventProcessor
 
         BattleCardManager.HandleEvent(context);      // 卡牌 CD / 消耗
         BattleConservationRules.HandleEvent(context);
+        TestEventObserver?.Invoke(context);
         // 后面会在这里逐步接入：
         // CardEffectExecutor.HandleEvent(context);     // 卡牌效果
         // BuffSystem.HandleEvent(context);             // 特殊 Buff 响应
