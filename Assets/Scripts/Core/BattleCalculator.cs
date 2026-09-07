@@ -356,7 +356,8 @@ public static class BattleCalculator
 
         if (attackCard.damageFormula == "PointAsDamage250Percent")
         {
-            return ToScaledValue(clashPoint) * 250 / 100;
+            int damage = clashPoint * 5 / 2;
+            return ToScaledValue(damage);
         }
 
         Debug.LogWarning("未识别的伤害公式：" + attackCard.damageFormula + "，默认使用 PointAsDamage");

@@ -25,7 +25,7 @@ public static class FullBattleIntegrationRegressionTests
             VerifyNoInteraction(CardType.Defense, CardType.Dodge),
             VerifyNoInteraction(CardType.Dodge, CardType.Dodge),
             VerifyFirstStrikeTierOrdering(),
-            VerifyProductionLongRangeIsNormalTier(production),
+            VerifyLongRangeWithoutFirstStrikeIsNormalTier(),
             VerifyProductionLongRangeWithBullet(production),
             VerifyProductionLongRangeNoBullet(production),
             VerifyAttackVsDefenseFullBlockLifecycle(),
@@ -57,7 +57,7 @@ public static class FullBattleIntegrationRegressionTests
             "Defense/Dodge归类NoInteraction",
             "Dodge/Dodge归类NoInteraction",
             "FirstStrike完整Item优先且不拆Pairing",
-            "Production LongRange无FirstStrike时保持Normal",
+            "LongRange无FirstStrike Trait时保持Normal",
             "Production LongRange有Bullet时完成单方攻击生命周期",
             "Production LongRange无Bullet时ActionUnavailable",
             "AttackVsDefense FullBlock仍提交Attack生命周期",
@@ -583,27 +583,25 @@ public static class FullBattleIntegrationRegressionTests
                 BattleExecutionPriorityTier.Normal;
     }
 
-    private static bool VerifyProductionLongRangeIsNormalTier(
-        ProductionFixture fixture
-    )
+    private static bool VerifyLongRangeWithoutFirstStrikeIsNormalTier()
     {
-        BattleCardState longRange = FindCard(
-            fixture.runtime?.allyA,
-            "atk_bullet_001"
+        CharacterData actor = CreateCharacter("mode103_long_range_normal");
+        CharacterData target = CreateCharacter("mode103_long_range_target");
+        BattleCardState longRange = CreateCard(
+            actor,
+            CardType.Attack,
+            5,
+            AttackDeliveryMode.LongRangeShoot
         );
-        if (longRange == null || longRange.HasTrait(BattleCardTrait.FirstStrike))
-        {
-            return false;
-        }
-
-        BattleActionSlot slot = new BattleActionSlot(fixture.runtime.allyA, 1);
-        slot.AssignFreeAction(fixture.runtime.allyA, longRange, fixture.runtime.enemy);
+        BattleActionSlot slot = new BattleActionSlot(actor, 1);
+        slot.AssignFreeAction(actor, longRange, target);
         BattleExecutionPlan plan =
             BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
                 new List<BattleActionSlot> { slot },
                 new List<BattleEnemyIntent>()
             );
-        return plan.executionItems.Count == 1 &&
+        return !longRange.HasTrait(BattleCardTrait.FirstStrike) &&
+            plan.executionItems.Count == 1 &&
             plan.executionItems[0].priorityTier ==
                 BattleExecutionPriorityTier.Normal;
     }
