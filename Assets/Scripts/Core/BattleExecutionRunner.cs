@@ -985,6 +985,8 @@ public sealed class BattleExecutionRunner
             return Fail("Pausable执行失败：当前Item尚未完成", out failureMessage);
         }
 
+        BattleExecutionPlanExecutor.CommitActionFinishedOnce(CurrentItem);
+
         if (!lifecycleController.HandlePausableItemCompleted(out failureMessage))
         {
             return Fail(failureMessage, out failureMessage);

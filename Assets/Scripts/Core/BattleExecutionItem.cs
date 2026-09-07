@@ -113,6 +113,9 @@ public class BattleExecutionItem
     // 兼容旧逻辑的完成字段；正式状态以 status / outcomeReason 为准。
     public bool isCompleted;
 
+    // ActionFinished = ExecutionItem级完成事件的幂等提交保护。
+    public bool actionFinishedCommitted;
+
     // status = 第一版正式执行项状态
     public BattleExecutionItemStatus status;
 
@@ -159,8 +162,20 @@ public class BattleExecutionItem
         status = BattleExecutionItemStatus.Pending;
         outcomeReason = BattleExecutionItemOutcomeReason.None;
         isCompleted = false;
+        actionFinishedCommitted = false;
         responseAttemptState = BattleResponseAttemptState.None;
         responseAttemptResourceSnapshot = null;
+    }
+
+    public bool TryMarkActionFinishedCommitted()
+    {
+        if (actionFinishedCommitted)
+        {
+            return false;
+        }
+
+        actionFinishedCommitted = true;
+        return true;
     }
 
     public void SetResponseAttempt(

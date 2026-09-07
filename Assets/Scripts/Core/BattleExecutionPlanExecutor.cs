@@ -145,6 +145,7 @@ public static class BattleExecutionPlanExecutor
         if (runtimeState != null && runtimeState.IsBattleEnded)
         {
             item.MarkSkipped(BattleExecutionItemOutcomeReason.BattleEnded);
+            CommitActionFinishedOnce(item);
             Debug.Log(item.order + ". 因 BattleEnded 跳过");
             RefreshPlanCompletion(plan);
             return true;
@@ -199,12 +200,34 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
+        CommitActionFinishedOnce(item);
+
         if (lifecycleController != null && runtimeState != null)
         {
             lifecycleController.EvaluateBattleEnd();
         }
 
         RefreshPlanCompletion(plan);
+        return true;
+    }
+
+    internal static bool CommitActionFinishedOnce(BattleExecutionItem item)
+    {
+        if (item == null || !item.isCompleted ||
+            (item.status != BattleExecutionItemStatus.Executed &&
+             item.status != BattleExecutionItemStatus.Skipped))
+        {
+            return false;
+        }
+
+        if (!item.TryMarkActionFinishedCommitted())
+        {
+            return false;
+        }
+
+        BattleEventProcessor.ProcessEvent(
+            new BattleEventContext(BattleTiming.ActionFinished)
+        );
         return true;
     }
 

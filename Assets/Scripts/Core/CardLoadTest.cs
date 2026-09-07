@@ -109,7 +109,8 @@ public enum BattleTestMode
     BattleGuardCardUsedCommitBasic = 120,
     BattleCardUsedConsequencesBasic = 121,
     BattleCardUsedResourceConsequencesBasic = 122,
-    BattleCardResolvedBasic = 123
+    BattleCardResolvedBasic = 123,
+    BattleActionFinishedBasic = 124
 }
 
 public static class BattleLifecycleTimingTests
@@ -4938,6 +4939,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleCardResolvedBasic)
         {
             BattleCardResolvedTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleActionFinishedBasic)
+        {
+            BattleActionFinishedTests.Run();
             return;
         }
 
@@ -29458,5 +29465,373 @@ public static class BattleAngerAndModificationAbilityTests
             }
         }
         return null;
+    }
+}
+
+public static class BattleActionFinishedTests
+{
+    public static bool Run()
+    {
+        bool helper = WithObserver(VerifyHelperGuard);
+        bool skipped = WithObserver(VerifySkipped);
+        bool failed = WithObserver(VerifyFailed);
+        bool syncAbility = WithObserver(VerifySyncAbility);
+        bool unavailable = WithObserver(VerifyActionUnavailable);
+        bool actorDead = WithObserver(VerifyActorDead);
+        bool noInteraction = WithObserver(VerifyNoInteraction);
+        bool noDuplicatePlan = WithObserver(VerifyCompletedPlanNoDuplicate);
+        bool pausable = WithObserver(VerifyPausableCompletion);
+        bool pausableFallback = WithObserver(VerifyPausableSyncFallback);
+        bool itemLevel = WithObserver(VerifyItemLevelContext);
+
+        Debug.Log("===== Mode124 BattleActionFinishedBasic =====");
+        LogCheck("PASS: ActionFinished requires completed item", helper);
+        LogCheck("PASS: ActionFinished helper commits once", helper);
+        LogCheck("PASS: skipped item ActionFinished once", skipped);
+        LogCheck("PASS: failed item has no ActionFinished", failed);
+        LogCheck("PASS: sync Ability finishes after CardResolved", syncAbility);
+        LogCheck("PASS: ActionUnavailable still ActionFinished", unavailable);
+        LogCheck("PASS: ActorDead skipped item ActionFinished", actorDead);
+        LogCheck("PASS: NoInteraction item ActionFinished", noInteraction);
+        LogCheck("PASS: completed plan does not duplicate ActionFinished", noDuplicatePlan);
+        LogCheck("PASS: pausable completed item ActionFinished once", pausable);
+        LogCheck("PASS: pausable sync fallback does not duplicate ActionFinished", pausableFallback);
+        LogCheck("PASS: ActionFinished remains item-level event", itemLevel);
+
+        bool passed = helper && skipped && failed && syncAbility && unavailable &&
+            actorDead && noInteraction && noDuplicatePlan && pausable &&
+            pausableFallback && itemLevel;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyHelperGuard(List<BattleEventContext> events)
+    {
+        BattleExecutionItem item = Item("mode124_helper");
+        bool pendingRejected = !BattleExecutionPlanExecutor
+            .CommitActionFinishedOnce(item) && Count(events) == 0;
+        item.MarkExecuted();
+        bool first = BattleExecutionPlanExecutor.CommitActionFinishedOnce(item);
+        bool second = !BattleExecutionPlanExecutor.CommitActionFinishedOnce(item);
+        return pendingRejected && first && second && Count(events) == 1;
+    }
+
+    static bool VerifySkipped(List<BattleEventContext> events)
+    {
+        BattleExecutionItem item = Item("mode124_skipped");
+        item.MarkSkipped(BattleExecutionItemOutcomeReason.ActionUnavailable);
+        bool first = BattleExecutionPlanExecutor.CommitActionFinishedOnce(item);
+        bool second = !BattleExecutionPlanExecutor.CommitActionFinishedOnce(item);
+        return first && second && Count(events) == 1;
+    }
+
+    static bool VerifyFailed(List<BattleEventContext> events)
+    {
+        BattleExecutionItem item = Item("mode124_failed");
+        item.MarkFailed(BattleExecutionItemOutcomeReason.ResolverFailure);
+        return !BattleExecutionPlanExecutor.CommitActionFinishedOnce(item) &&
+            Count(events) == 0;
+    }
+
+    static bool VerifySyncAbility(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode124_sync_ability_owner");
+        BattleCardState card = CreateCard(
+            owner,
+            "mode124_sync_ability",
+            CardType.Ability,
+            false
+        );
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, card, owner);
+        BattleExecutionItem item = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            slot
+        );
+        BattleExecutionPlan plan = Plan(item);
+        bool executed = BattleExecutionPlanExecutor.ExecuteNextItem(plan);
+        int cardResolved = IndexOf(events, BattleTiming.CardResolved);
+        int actionFinished = IndexOf(events, BattleTiming.ActionFinished);
+        return executed && plan.isCompleted && item.status ==
+            BattleExecutionItemStatus.Executed && item.isCompleted &&
+            item.actionFinishedCommitted && Count(events, BattleTiming.CardUsed) == 1 &&
+            Count(events, BattleTiming.CardResolved) == 1 &&
+            cardResolved >= 0 && actionFinished > cardResolved;
+    }
+
+    static bool VerifyActionUnavailable(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode124_unavailable_owner");
+        BattleCardState card = CreateCard(
+            owner,
+            "mode124_unavailable",
+            CardType.Attack,
+            true
+        );
+        card.currentCooldown = 1;
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, card, owner);
+        BattleExecutionItem item = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            slot
+        );
+        bool executed = BattleExecutionPlanExecutor.ExecuteNextItem(Plan(item));
+        return executed && item.status == BattleExecutionItemStatus.Skipped &&
+            item.outcomeReason == BattleExecutionItemOutcomeReason.ActionUnavailable &&
+            Count(events, BattleTiming.CardUsed) == 0 &&
+            Count(events, BattleTiming.CardResolved) == 0 && Count(events) == 1;
+    }
+
+    static bool VerifyActorDead(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode124_dead_owner");
+        owner.currentHP = 0;
+        BattleCardState card = CreateCard(
+            owner,
+            "mode124_dead",
+            CardType.Attack,
+            true
+        );
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, card, owner);
+        BattleExecutionItem item = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            slot
+        );
+        bool executed = BattleExecutionPlanExecutor.ExecuteNextItem(Plan(item));
+        return executed && item.status == BattleExecutionItemStatus.Skipped &&
+            item.outcomeReason == BattleExecutionItemOutcomeReason.ActorDead &&
+            Count(events, BattleTiming.CardUsed) == 0 &&
+            Count(events, BattleTiming.CardResolved) == 0 && Count(events) == 1;
+    }
+
+    static bool VerifyNoInteraction(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode124_no_interaction_owner");
+        BattleCardState defense = CreateCard(
+            owner,
+            "mode124_no_interaction_defense",
+            CardType.Defense,
+            false
+        );
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, defense, owner);
+        BattleExecutionItem item = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            slot
+        );
+        bool executed = BattleExecutionPlanExecutor.ExecuteNextItem(Plan(item));
+        return executed && item.status == BattleExecutionItemStatus.Skipped &&
+            item.outcomeReason == BattleExecutionItemOutcomeReason.NoInteraction &&
+            Count(events, BattleTiming.ActionFinished) == 1;
+    }
+
+    static bool VerifyCompletedPlanNoDuplicate(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode124_completed_plan_owner");
+        BattleCardState card = CreateCard(
+            owner,
+            "mode124_completed_plan_ability",
+            CardType.Ability,
+            false
+        );
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, card, owner);
+        BattleExecutionPlan plan = Plan(new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            slot
+        ));
+        bool first = BattleExecutionPlanExecutor.ExecuteNextItem(plan);
+        bool second = BattleExecutionPlanExecutor.ExecuteNextItem(plan);
+        return first && second && plan.isCompleted &&
+            Count(events, BattleTiming.ActionFinished) == 1;
+    }
+
+    static bool VerifyPausableCompletion(List<BattleEventContext> events)
+    {
+        return RunPausableAbility(
+            "mode124_pausable_owner",
+            "mode124_pausable_ability",
+            out BattleExecutionItem item,
+            out BattleExecutionRunner runner
+        ) && item.actionFinishedCommitted && item.isCompleted &&
+            runner.IsCompleted && Count(events, BattleTiming.ActionFinished) == 1;
+    }
+
+    static bool VerifyPausableSyncFallback(List<BattleEventContext> events)
+    {
+        bool completed = RunPausableAbility(
+            "mode124_pausable_fallback_owner",
+            "mode124_pausable_fallback_ability",
+            out BattleExecutionItem item,
+            out BattleExecutionRunner runner
+        );
+        return completed && item.actionFinishedCommitted && runner.IsCompleted &&
+            Count(events, BattleTiming.ActionFinished) == 1;
+    }
+
+    static bool VerifyItemLevelContext(List<BattleEventContext> events)
+    {
+        foreach (BattleEventContext context in events)
+        {
+            if (context != null && context.timing == BattleTiming.ActionFinished &&
+                (context.cardState != null || context.cardData != null))
+            {
+                return false;
+            }
+        }
+        return Count(events, BattleTiming.ActionFinished) > 0;
+    }
+
+    static bool RunPausableAbility(
+        string ownerID,
+        string cardID,
+        out BattleExecutionItem item,
+        out BattleExecutionRunner runner
+    )
+    {
+        CharacterData owner = Unit(ownerID);
+        CharacterData target = Unit(ownerID + "_target");
+        BattleCardState card = CreateCard(owner, cardID, CardType.Ability, false);
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, card, owner);
+        item = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            slot
+        );
+        BattleExecutionPlan plan = Plan(item);
+        BattleRuntimeState runtimeState = new BattleRuntimeState();
+        runtimeState.SetCharacters(owner, null, target, null);
+        runtimeState.SetActionSlots(new List<BattleActionSlot> { slot });
+        runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
+        runtimeState.SetExecutionPlan(plan);
+        BattleLifecycleController controller = new BattleLifecycleController(runtimeState);
+        if (!controller.TryInitializeToPrepare(out string failureMessage) ||
+            !controller.TryBeginPausableExecution(
+                new BattleRollGateSettings(BattleRollMode.Manual, 0f, 0f),
+                out failureMessage
+            ))
+        {
+            runner = controller.ExecutionRunner;
+            return false;
+        }
+
+        runner = controller.ExecutionRunner;
+        int guard = 0;
+        while (!runner.IsCompleted && !runner.HasFailed && guard++ < 4)
+        {
+            if (!controller.AdvancePausableExecution(0f, out failureMessage))
+            {
+                return false;
+            }
+        }
+
+        return !runner.HasFailed && runner.IsCompleted;
+    }
+
+    static BattleExecutionItem Item(string id)
+    {
+        return new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            null
+        );
+    }
+
+    static BattleExecutionPlan Plan(BattleExecutionItem item)
+    {
+        BattleExecutionPlan plan = new BattleExecutionPlan();
+        plan.AddItem(item);
+        return plan;
+    }
+
+    static BattleCardState CreateCard(
+        CharacterData owner,
+        string id,
+        string cardType,
+        bool clashable
+    )
+    {
+        return BattleCardManager.CreateBattleCard(
+            owner,
+            new CardTestData
+            {
+                cardID = id,
+                cardName = id,
+                cardType = cardType,
+                isClashable = clashable,
+                minPoint = 1,
+                maxPoint = 1,
+                damageFormula = cardType == CardType.Attack ? "PointAsDamage" : "",
+                defenseFormula = cardType == CardType.Defense ? "PointAsDefense" : ""
+            },
+            id
+        );
+    }
+
+    static CharacterData Unit(string id)
+    {
+        return new CharacterData(id, 100, 5, 5, id);
+    }
+
+    static int Count(List<BattleEventContext> events, string timing = null)
+    {
+        int count = 0;
+        foreach (BattleEventContext context in events)
+        {
+            if (context != null && (timing == null || context.timing == timing))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    static int IndexOf(List<BattleEventContext> events, string timing)
+    {
+        for (int index = 0; index < events.Count; index++)
+        {
+            if (events[index] != null && events[index].timing == timing)
+            {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    static System.Action<BattleEventContext> previousObserver;
+
+    static bool WithObserver(System.Func<List<BattleEventContext>, bool> test)
+    {
+        List<BattleEventContext> events = new List<BattleEventContext>();
+        previousObserver = BattleEventProcessor.TestEventObserver;
+        BattleEventProcessor.TestEventObserver = context => events.Add(context);
+        try
+        {
+            return test(events);
+        }
+        finally
+        {
+            BattleEventProcessor.TestEventObserver = previousObserver;
+            previousObserver = null;
+        }
+    }
+
+    static void LogCheck(string label, bool passed)
+    {
+        Debug.Log(passed ? label : "FAIL: " + label.Substring(6));
     }
 }
