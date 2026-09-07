@@ -4228,11 +4228,35 @@ public static class BattleBasicShootingLoopTests
     static bool VerifyReload(List<CardTestData> cards)
     {
         CardTestData reload = Find(cards, "shoot_reload_001");
-        bool successResolved = ResolveDodge(reload, 3, 1, 0, out int afterSuccess,
-            out BattleResolutionPlan successPlan, out CharacterData successPlayer) &&
-            successPlan != null && successPlan.CompletedResult != null &&
-            successPlan.CompletedResult.resultType == "DodgeSuccess" &&
-            afterSuccess == 0 && successPlayer.battlePending.reloadAtTurnEnd;
+        if (reload == null)
+        {
+            return false;
+        }
+
+        CharacterData successPlayer = BattleTimingMigrationFixture.Unit(
+            "mode108_reload_success_player"
+        );
+        CharacterData successEnemy = BattleTimingMigrationFixture.Unit(
+            "mode108_reload_success_enemy"
+        );
+        BattleCardState successReload = State(
+            successPlayer, Clone(reload, 3, 3), "reload_success"
+        );
+        BattleResolutionPlan successPlan = BattleTimingMigrationFixture.Respond(
+            successReload,
+            State(successEnemy, Attack("reload_success_enemy_attack", 1),
+                "reload_success_enemy_attack")
+        );
+        bool successResolved = successPlan != null &&
+            successReload.cardUsedCommittedForCurrentAction &&
+            successPlayer.battlePending.reloadAtTurnEnd &&
+            BattleBulletRules.GetBullet(successPlayer) == 0;
+        BattleResolveResult successResult = successResolved
+            ? BattleTimingMigrationFixture.Complete(successPlan)
+            : null;
+        successResolved = successResolved && successResult != null &&
+            successResult.resultType == "DodgeSuccess" &&
+            BattleBulletRules.GetBullet(successPlayer) == 0;
         bool success = false;
         if (successResolved)
         {
@@ -4242,12 +4266,32 @@ public static class BattleBasicShootingLoopTests
                 !successPlayer.battlePending.reloadAtTurnEnd;
         }
 
-        bool failureResolved = ResolveDodge(reload, 1, 10, 2, out int afterFailure,
-            out BattleResolutionPlan failurePlan, out CharacterData failurePlayer) &&
-            failurePlan != null && failurePlan.CompletedResult != null &&
-            failurePlan.CompletedResult.resultType == "DodgeFailed" &&
-            failurePlan.CompletedResult.damage == 15 && afterFailure == 2 &&
-            failurePlayer.battlePending.reloadAtTurnEnd;
+        CharacterData failurePlayer = BattleTimingMigrationFixture.Unit(
+            "mode108_reload_failure_player"
+        );
+        BattleBulletRules.AddBulletCapped(failurePlayer, 2);
+        CharacterData failureEnemy = BattleTimingMigrationFixture.Unit(
+            "mode108_reload_failure_enemy"
+        );
+        BattleCardState failureReload = State(
+            failurePlayer, Clone(reload, 1, 1), "reload_failure"
+        );
+        BattleResolutionPlan failurePlan = BattleTimingMigrationFixture.Respond(
+            failureReload,
+            State(failureEnemy, Attack("reload_failure_enemy_attack", 10),
+                "reload_failure_enemy_attack")
+        );
+        bool failureResolved = failurePlan != null &&
+            failureReload.cardUsedCommittedForCurrentAction &&
+            failurePlayer.battlePending.reloadAtTurnEnd &&
+            BattleBulletRules.GetBullet(failurePlayer) == 2;
+        BattleResolveResult failureResult = failureResolved
+            ? BattleTimingMigrationFixture.Complete(failurePlan)
+            : null;
+        failureResolved = failureResolved && failureResult != null &&
+            failureResult.resultType == "DodgeFailed" &&
+            failureResult.damage == 15 &&
+            BattleBulletRules.GetBullet(failurePlayer) == 2;
         bool failure = false;
         if (failureResolved)
         {
