@@ -2015,6 +2015,17 @@ public static class BattleCardUsedResourceConsequencesTests
         );
         fixture.playerCard.cardData.traits = new[] { BattleCardTrait.AllInBulletDump };
         fixture.playerCard.cardData.resourceRule.pointPerStack = 0;
+        fixture.playerCard.cardData.resourceRule.consumeAllCapturedOnSuccess = true;
+        fixture.playerCard.cardData.resourceRule.consumeAmountOnSuccess = 0;
+        CardResourceRuleData resourceRule = fixture.playerCard.cardData.resourceRule;
+        bool fixtureReady = resourceRule != null &&
+            resourceRule.consumeAllCapturedOnSuccess &&
+            BattleBulletRules.GetBullet(fixture.player) == 6;
+        if (!fixtureReady)
+        {
+            return false;
+        }
+
         BattleClashSession session;
         if (BattleResolver.TryBeginRespondedClash(
                 fixture.playerSlot, fixture.enemyIntent, out session
@@ -2037,6 +2048,18 @@ public static class BattleCardUsedResourceConsequencesTests
             1, CardUsePolicy.Normal, 6
         );
         fixture.playerCard.cardData.traits = new[] { BattleCardTrait.AllInBulletDump };
+        fixture.playerCard.cardData.resourceRule.pointPerStack = 0;
+        fixture.playerCard.cardData.resourceRule.consumeAllCapturedOnSuccess = true;
+        fixture.playerCard.cardData.resourceRule.consumeAmountOnSuccess = 0;
+        CardResourceRuleData resourceRule = fixture.playerCard.cardData.resourceRule;
+        bool fixtureReady = resourceRule != null &&
+            resourceRule.consumeAllCapturedOnSuccess &&
+            BattleBulletRules.GetBullet(fixture.player) == 6;
+        if (!fixtureReady)
+        {
+            return false;
+        }
+
         BattleClashSession session;
         if (BattleResolver.TryBeginRespondedClash(
                 fixture.playerSlot, fixture.enemyIntent, out session
@@ -2044,6 +2067,7 @@ public static class BattleCardUsedResourceConsequencesTests
         {
             return false;
         }
+        bool notPaidBeforeRoll = BattleBulletRules.GetBullet(fixture.player) == 6;
         session.RollNextAttempt();
         BattleResolveResult result = BattleResolver.FinalizeRespondedClash(
             fixture.playerSlot, fixture.enemyIntent, session
@@ -2052,7 +2076,8 @@ public static class BattleCardUsedResourceConsequencesTests
             fixture.player, fixture.enemy, fixture.playerCard
         );
         return result != null && result.resultType == "PlayerWin" &&
-            BattleBulletRules.GetBullet(fixture.player) == 0 && noSecondPayment;
+            notPaidBeforeRoll && BattleBulletRules.GetBullet(fixture.player) == 0 &&
+            noSecondPayment;
     }
 
     static bool VerifyAllInResponseSnapshots()
@@ -2147,11 +2172,16 @@ public static class BattleCardUsedResourceConsequencesTests
         CharacterData user = Unit("mode122_unavailable_user");
         CharacterData target = Unit("mode122_unavailable_target");
         BattleCardState card = ResourceAttack(
-            user, "mode122_unavailable_attack", 5, 1, false,
+            user, "mode122_unavailable_attack", 5, 0, false,
             CardUsePolicy.Normal
         );
         card.cardData.resourceRule.insufficientBehavior =
             CardResourceInsufficientBehavior.ActionUnavailable;
+        if (BattleBulletRules.GetBullet(user) != 0)
+        {
+            return false;
+        }
+
         BattleActionSlot slot = new BattleActionSlot(user, 1);
         slot.AssignFreeAction(user, card, target);
         BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
