@@ -29682,15 +29682,30 @@ public static class BattleActionFinishedTests
 
     static bool VerifyItemLevelContext(List<BattleEventContext> events)
     {
+        BattleExecutionItem item = Item("mode124_item_level_context");
+        item.MarkExecuted();
+
+        if (!BattleExecutionPlanExecutor.CommitActionFinishedOnce(item))
+        {
+            return false;
+        }
+
+        BattleEventContext actionFinished = null;
+        int count = 0;
         foreach (BattleEventContext context in events)
         {
-            if (context != null && context.timing == BattleTiming.ActionFinished &&
-                (context.cardState != null || context.cardData != null))
+            if (context != null && context.timing == BattleTiming.ActionFinished)
             {
-                return false;
+                count++;
+                actionFinished = context;
             }
         }
-        return Count(events, BattleTiming.ActionFinished) > 0;
+
+        return count == 1 && actionFinished != null &&
+            actionFinished.cardState == null &&
+            actionFinished.cardData == null &&
+            actionFinished.user == null &&
+            actionFinished.target == null;
     }
 
     static bool RunPausableAbility(
