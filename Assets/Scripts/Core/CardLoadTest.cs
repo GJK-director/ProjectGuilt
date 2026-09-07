@@ -107,11 +107,20 @@ public enum BattleTestMode
 
 public static class BattleLifecycleTimingTests
 {
-    static List<string> observedTimings;
+    sealed class ObservedLifecycleEvent
+    {
+        public string timing;
+        public CharacterData user;
+        public int observedTurn;
+    }
+
+    static List<ObservedLifecycleEvent> observedEvents;
+    static int currentObservedTurn;
 
     public static bool Run()
     {
-        observedTimings = new List<string>();
+        observedEvents = new List<ObservedLifecycleEvent>();
+        currentObservedTurn = 1;
         System.Action<BattleEventContext> previousObserver =
             BattleEventProcessor.TestEventObserver;
         BattleEventProcessor.TestEventObserver = ObserveEvent;
@@ -121,58 +130,69 @@ public static class BattleLifecycleTimingTests
             bool lifecycleCompleted = RunTwoTurnLifecycle(out stateUnchanged);
             int turnStartCount = Count(BattleTiming.TurnStart);
             int executionStartCount = Count(BattleTiming.ExecutionStart);
-            int turnEndCount = Count(BattleTiming.TurnEnd);
-            string expectedOrder =
-                BattleTiming.TurnStart + "," +
-                BattleTiming.ExecutionStart + "," +
-                BattleTiming.TurnEnd + "," +
-                BattleTiming.TurnStart + "," +
-                BattleTiming.ExecutionStart + "," +
-                BattleTiming.TurnEnd;
-            string actualOrder = string.Join(",", observedTimings.ToArray());
-            bool counts = turnStartCount == 2 && executionStartCount == 2 &&
-                turnEndCount == 2;
-            bool order = actualOrder == expectedOrder;
+            int playerTurnEndCount = CountUserTurnEnds("mode116_player");
+            int enemyTurnEndCount = CountUserTurnEnds("mode116_enemy");
+            bool turnStartCountPassed = turnStartCount == 2;
+            bool executionStartCountPassed = executionStartCount == 2;
+            bool playerTurnEndCountPassed = CountUserTurnEnds("mode116_player") == 2;
+            bool enemyTurnEndCountPassed = CountUserTurnEnds("mode116_enemy") == 2;
+            bool turnEndPerUnitPerTurnPassed = VerifyTurnEndPerUnitPerTurn();
+            bool order = VerifyLifecycleOrder();
             Debug.Log("===== Mode116 BattleLifecycleTimingBasic =====");
             LogCheck(
                 "PASS: TurnStart count",
-                counts,
+                turnStartCountPassed,
                 "期望2，实际" + turnStartCount
             );
             LogCheck(
                 "PASS: ExecutionStart count",
-                counts,
+                executionStartCountPassed,
                 "期望2，实际" + executionStartCount
             );
             LogCheck(
-                "PASS: TurnEnd count",
-                counts,
-                "期望2，实际" + turnEndCount
+                "PASS: player TurnEnd count",
+                playerTurnEndCountPassed,
+                "期望2，实际" + CountUserTurnEnds("mode116_player")
+            );
+            LogCheck(
+                "PASS: enemy TurnEnd count",
+                enemyTurnEndCountPassed,
+                "期望2，实际" + CountUserTurnEnds("mode116_enemy")
+            );
+            LogCheck(
+                "PASS: TurnEnd per-unit per-turn uniqueness",
+                turnEndPerUnitPerTurnPassed,
+                "playerTurnEndEntries=" + playerTurnEndCount +
+                ", enemyTurnEndEntries=" + enemyTurnEndCount
             );
             LogCheck(
                 "PASS: lifecycle order",
                 order,
-                "期望" + expectedOrder + "，实际" + actualOrder
+                "期望每回合 TurnStart → ExecutionStart → player TurnEnd → enemy TurnEnd"
             );
             LogCheck(
                 "PASS: event state unchanged",
                 stateUnchanged,
                 "事件接线不应改变 HP / CD / 资源 / 卡牌状态"
             );
-            bool passed = lifecycleCompleted && counts && order && stateUnchanged;
+            bool passed = lifecycleCompleted && turnStartCountPassed &&
+                executionStartCountPassed && playerTurnEndCountPassed &&
+                enemyTurnEndCountPassed && turnEndPerUnitPerTurnPassed &&
+                order && stateUnchanged;
             Debug.Log("Passed: " + passed);
             return passed;
         }
         finally
         {
             BattleEventProcessor.TestEventObserver = previousObserver;
-            observedTimings = null;
+            observedEvents = null;
+            currentObservedTurn = 0;
         }
     }
 
     static void ObserveEvent(BattleEventContext context)
     {
-        if (context == null || observedTimings == null)
+        if (context == null || observedEvents == null)
         {
             return;
         }
@@ -180,7 +200,12 @@ public static class BattleLifecycleTimingTests
             context.timing == BattleTiming.ExecutionStart ||
             context.timing == BattleTiming.TurnEnd)
         {
-            observedTimings.Add(context.timing);
+            observedEvents.Add(new ObservedLifecycleEvent
+            {
+                timing = context.timing,
+                user = context.user,
+                observedTurn = currentObservedTurn
+            });
         }
     }
 
@@ -192,6 +217,13 @@ public static class BattleLifecycleTimingTests
             5,
             5,
             "mode116_player"
+        );
+        CharacterData enemy = new CharacterData(
+            "mode116_enemy",
+            30,
+            5,
+            5,
+            "mode116_enemy"
         );
         CardTestData cardData = new CardTestData
         {
@@ -210,7 +242,7 @@ public static class BattleLifecycleTimingTests
             "mode116_noop_ability_instance"
         );
         BattleRuntimeState runtimeState = new BattleRuntimeState();
-        runtimeState.SetCharacters(player, null, null, null);
+        runtimeState.SetCharacters(player, null, enemy, null);
         BattleLifecycleController controller = new BattleLifecycleController(runtimeState);
 
         int hpBefore = player.currentHP;
@@ -220,6 +252,7 @@ public static class BattleLifecycleTimingTests
         int bulletBefore = BattleBulletRules.GetBullet(player);
         int angerBefore = player.GetBuffStack(BattleResourceID.Anger);
 
+        currentObservedTurn = 1;
         if (!controller.TryInitializeToPrepare(out string failureMessage) ||
             !RunOneTurn(controller, runtimeState, player, cardState, out failureMessage))
         {
@@ -227,6 +260,7 @@ public static class BattleLifecycleTimingTests
             return false;
         }
 
+        currentObservedTurn = 2;
         BattleActionSlot nextSlot = CreateAbilitySlot(player, cardState, 1);
         if (!controller.TryPrepareNextTurn(
                 new List<BattleActionSlot> { nextSlot },
@@ -240,6 +274,7 @@ public static class BattleLifecycleTimingTests
         }
 
         stateUnchanged = player.currentHP == hpBefore &&
+            enemy.currentHP == enemy.maxHP &&
             cardState.currentCooldown == cooldownBefore &&
             cardState.currentUseCount == useCountBefore &&
             cardState.isConsumed == consumedBefore &&
@@ -286,12 +321,86 @@ public static class BattleLifecycleTimingTests
     static int Count(string timing)
     {
         int count = 0;
-        if (observedTimings == null) return count;
-        foreach (string observedTiming in observedTimings)
+        if (observedEvents == null) return count;
+        foreach (ObservedLifecycleEvent observedEvent in observedEvents)
         {
-            if (observedTiming == timing) count++;
+            if (observedEvent.timing == timing) count++;
         }
         return count;
+    }
+
+    static int CountUserTurnEnds(string characterID)
+    {
+        int count = 0;
+        if (observedEvents == null) return count;
+        foreach (ObservedLifecycleEvent observedEvent in observedEvents)
+        {
+            if (observedEvent.timing == BattleTiming.TurnEnd &&
+                observedEvent.user != null &&
+                observedEvent.user.runtimeUnitID == characterID)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    static int CountTurnEndFor(string characterID, int observedTurn)
+    {
+        int count = 0;
+        if (observedEvents == null) return count;
+        foreach (ObservedLifecycleEvent observedEvent in observedEvents)
+        {
+            if (observedEvent.timing == BattleTiming.TurnEnd &&
+                observedEvent.observedTurn == observedTurn &&
+                observedEvent.user != null &&
+                observedEvent.user.runtimeUnitID == characterID)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    static bool VerifyTurnEndPerUnitPerTurn()
+    {
+        return CountTurnEndFor("mode116_player", 1) == 1 &&
+            CountTurnEndFor("mode116_enemy", 1) == 1 &&
+            CountTurnEndFor("mode116_player", 2) == 1 &&
+            CountTurnEndFor("mode116_enemy", 2) == 1;
+    }
+
+    static bool VerifyLifecycleOrder()
+    {
+        if (observedEvents == null || observedEvents.Count != 8)
+        {
+            return false;
+        }
+
+        return observedEvents[0].timing == BattleTiming.TurnStart &&
+            observedEvents[0].observedTurn == 1 &&
+            observedEvents[1].timing == BattleTiming.ExecutionStart &&
+            observedEvents[1].observedTurn == 1 &&
+            observedEvents[2].timing == BattleTiming.TurnEnd &&
+            observedEvents[2].observedTurn == 1 &&
+            observedEvents[2].user != null &&
+            observedEvents[2].user.runtimeUnitID == "mode116_player" &&
+            observedEvents[3].timing == BattleTiming.TurnEnd &&
+            observedEvents[3].observedTurn == 1 &&
+            observedEvents[3].user != null &&
+            observedEvents[3].user.runtimeUnitID == "mode116_enemy" &&
+            observedEvents[4].timing == BattleTiming.TurnStart &&
+            observedEvents[4].observedTurn == 2 &&
+            observedEvents[5].timing == BattleTiming.ExecutionStart &&
+            observedEvents[5].observedTurn == 2 &&
+            observedEvents[6].timing == BattleTiming.TurnEnd &&
+            observedEvents[6].observedTurn == 2 &&
+            observedEvents[6].user != null &&
+            observedEvents[6].user.runtimeUnitID == "mode116_player" &&
+            observedEvents[7].timing == BattleTiming.TurnEnd &&
+            observedEvents[7].observedTurn == 2 &&
+            observedEvents[7].user != null &&
+            observedEvents[7].user.runtimeUnitID == "mode116_enemy";
     }
 
     static void LogCheck(string label, bool passed, string detail)
