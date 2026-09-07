@@ -30051,14 +30051,37 @@ public static class BattleImpactFactsTests
 
     static bool VerifyDamageEventsKeepExactImpact(List<BattleEventContext> events)
     {
+        ImpactFixture fixture = CreateImpactFixture(
+            "mode125_event_impact",
+            3,
+            3
+        );
+        bool committed = BattleResolver.CommitImpact(
+            fixture.plan,
+            fixture.impact
+        );
         BattleEventContext modifier = Find(events, BattleTiming.DamageModifier);
         BattleEventContext hit = Find(events, BattleTiming.Hit);
         BattleEventContext afterDamage = Find(events, BattleTiming.AfterDamage);
-        return modifier != null && hit != null && afterDamage != null &&
-            modifier.impact != null && object.ReferenceEquals(modifier.impact, hit.impact) &&
-            object.ReferenceEquals(modifier.impact, afterDamage.impact) &&
-            modifier.cardState != null && object.ReferenceEquals(modifier.cardState, hit.cardState) &&
-            object.ReferenceEquals(modifier.cardState, afterDamage.cardState);
+        BattleEventContext afterKill = Find(events, BattleTiming.AfterKill);
+        return committed && fixture.target.IsDead() && modifier != null &&
+            hit != null && afterDamage != null && afterKill != null &&
+            object.ReferenceEquals(modifier.impact, fixture.impact) &&
+            object.ReferenceEquals(hit.impact, fixture.impact) &&
+            object.ReferenceEquals(afterDamage.impact, fixture.impact) &&
+            object.ReferenceEquals(afterKill.impact, fixture.impact) &&
+            object.ReferenceEquals(modifier.cardState, fixture.card) &&
+            object.ReferenceEquals(hit.cardState, fixture.card) &&
+            object.ReferenceEquals(afterDamage.cardState, fixture.card) &&
+            object.ReferenceEquals(afterKill.cardState, fixture.card) &&
+            Count(events, BattleTiming.DamageModifier) == 1 &&
+            Count(events, BattleTiming.Hit) == 1 &&
+            Count(events, BattleTiming.AfterDamage) == 1 &&
+            Count(events, BattleTiming.AfterKill) == 1 &&
+            fixture.impact.didHit && fixture.impact.actualDamage == 3 &&
+            fixture.impact.committedDamage == 3 && fixture.impact.didKill &&
+            afterDamage.damage == 3 && afterKill.damage == 3 &&
+            afterDamage.isKill && afterKill.isKill;
     }
 
     static BattleResolutionPlan CreateDefensePlan(string id, int attackPoint, int defensePoint)
