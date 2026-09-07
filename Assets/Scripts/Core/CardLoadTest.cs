@@ -107,7 +107,8 @@ public enum BattleTestMode
     BattleAttackUsePolicyResolutionBasic = 118,
     BattleCardUsedCommitBasic = 119,
     BattleGuardCardUsedCommitBasic = 120,
-    BattleCardUsedConsequencesBasic = 121
+    BattleCardUsedConsequencesBasic = 121,
+    BattleCardUsedResourceConsequencesBasic = 122
 }
 
 public static class BattleLifecycleTimingTests
@@ -1799,6 +1800,533 @@ public static class BattleGuardCardUsedCommitTests
     }
 }
 
+public static class BattleCardUsedResourceConsequencesTests
+{
+    sealed class AttackFixture
+    {
+        public CharacterData player;
+        public CharacterData enemy;
+        public BattleCardState playerCard;
+        public BattleCardState enemyCard;
+        public BattleActionSlot playerSlot;
+        public BattleEnemyIntent enemyIntent;
+    }
+
+    public static bool Run()
+    {
+        bool immediateLoser = VerifyImmediateLoserPaysOnce();
+        bool immediateTie = VerifyImmediateTiePaysOnce();
+        bool normalLoser = VerifyNormalLoserDoesNotPay();
+        bool normalWinner = VerifyNormalWinnerPays();
+        bool defense = VerifyAttackVsDefenseResource();
+        bool dodge = VerifyAttackVsDodgeResource();
+        bool allInLoser = VerifyAllInLoserDoesNotDump();
+        bool allInWinner = VerifyAllInWinnerDumpsOnce();
+        bool allInResponses = VerifyAllInResponseSnapshots();
+        bool unilateral = VerifyUnilateralResourcePaysOnce();
+        bool unavailable = VerifyResourceUnavailable();
+        bool legacyTiming = VerifyImmediateResourceIgnoresLegacyTiming();
+
+        Debug.Log("===== Mode122 BattleCardUsedResourceConsequencesBasic =====");
+        LogCheck("PASS: ImmediateCommit resource pays before result", immediateLoser);
+        LogCheck("PASS: ImmediateCommit loser resource pays only once", immediateLoser);
+        LogCheck("PASS: ImmediateCommit TieLimit keeps paid resource", immediateTie);
+        LogCheck("PASS: Normal loser does not pay resource", normalLoser);
+        LogCheck("PASS: Normal winner pays resource on CardUsed", normalWinner);
+        LogCheck("PASS: Attack pays resource before Defense result", defense);
+        LogCheck("PASS: FullBlock does not refund Used resource", defense);
+        LogCheck("PASS: Attack pays resource before Dodge result", dodge);
+        LogCheck("PASS: successful Dodge does not refund Used resource", dodge);
+        LogCheck("PASS: ALL IN Not Used does not dump bullets", allInLoser);
+        LogCheck("PASS: ALL IN Used dumps captured bullets once", allInWinner);
+        LogCheck("PASS: ALL IN pays on Used before guard result", allInResponses);
+        LogCheck("PASS: ALL IN snapshot survives bullet dump", allInResponses);
+        LogCheck("PASS: unilateral Used pays resource once", unilateral);
+        LogCheck("PASS: resource unavailable action does not commit or pay", unavailable);
+        LogCheck("PASS: legacy consumeTiming does not override CardUsed policy", legacyTiming);
+
+        bool passed = immediateLoser && immediateTie && normalLoser &&
+            normalWinner && defense && dodge && allInLoser && allInWinner &&
+            allInResponses && unilateral && unavailable && legacyTiming;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyImmediateLoserPaysOnce()
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode122_immediate_loser", 1, CardUsePolicy.ImmediateCommit,
+            10, CardUsePolicy.Normal, 1
+        );
+        BattleClashSession session;
+        BattleResolveResult begin = BattleResolver.TryBeginRespondedClash(
+            fixture.playerSlot, fixture.enemyIntent, out session
+        );
+        bool paidBeforeResult = begin == null && session != null &&
+            !session.IsFinalized && BattleBulletRules.GetBullet(fixture.player) == 0;
+        bool secondCommitRejected = !BattleResolver.CommitCardUsedOnce(
+            fixture.player, fixture.enemy, fixture.playerCard
+        ) && BattleBulletRules.GetBullet(fixture.player) == 0;
+        return paidBeforeResult && secondCommitRejected;
+    }
+
+    static bool VerifyImmediateTiePaysOnce()
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode122_immediate_tie", 5, CardUsePolicy.ImmediateCommit,
+            5, CardUsePolicy.Normal, 1
+        );
+        BattleClashSession session;
+        BattleResolveResult begin = BattleResolver.TryBeginRespondedClash(
+            fixture.playerSlot, fixture.enemyIntent, out session
+        );
+        if (begin != null || session == null ||
+            BattleBulletRules.GetBullet(fixture.player) != 0)
+        {
+            return false;
+        }
+
+        while (!session.IsFinalized)
+        {
+            session.RollNextAttempt();
+        }
+        return session.FinalResult == BattleClashFinalResult.TieLimit &&
+            BattleBulletRules.GetBullet(fixture.player) == 0;
+    }
+
+    static bool VerifyNormalLoserDoesNotPay()
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode122_normal_loser", 1, CardUsePolicy.Normal,
+            10, CardUsePolicy.Normal, 1
+        );
+        BattleClashSession session;
+        if (BattleResolver.TryBeginRespondedClash(
+                fixture.playerSlot, fixture.enemyIntent, out session
+            ) != null || session == null)
+        {
+            return false;
+        }
+        session.RollNextAttempt();
+        BattleResolveResult result = BattleResolver.FinalizeRespondedClash(
+            fixture.playerSlot, fixture.enemyIntent, session
+        );
+        return result != null && result.resultType == "EnemyWin" &&
+            BattleBulletRules.GetBullet(fixture.player) == 1 &&
+            fixture.playerCard.currentCooldown == 0;
+    }
+
+    static bool VerifyNormalWinnerPays()
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode122_normal_winner", 10, CardUsePolicy.Normal,
+            1, CardUsePolicy.Normal, 1
+        );
+        BattleClashSession session;
+        if (BattleResolver.TryBeginRespondedClash(
+                fixture.playerSlot, fixture.enemyIntent, out session
+            ) != null || session == null)
+        {
+            return false;
+        }
+        bool notPaidBeforeResult = BattleBulletRules.GetBullet(fixture.player) == 1;
+        session.RollNextAttempt();
+        BattleResolveResult result = BattleResolver.FinalizeRespondedClash(
+            fixture.playerSlot, fixture.enemyIntent, session
+        );
+        return notPaidBeforeResult && result != null && result.isSuccess &&
+            result.resultType == "PlayerWin" &&
+            BattleBulletRules.GetBullet(fixture.player) == 0;
+    }
+
+    static bool VerifyAttackVsDefenseResource()
+    {
+        CharacterData attacker = Unit("mode122_defense_attacker");
+        CharacterData defender = Unit("mode122_defender");
+        BattleCardState attackCard = ResourceAttack(
+            attacker, "mode122_defense_attack", 5, 1, false,
+            CardUsePolicy.Normal
+        );
+        BattleCardState defenseCard = Card(
+            defender, "mode122_defense_card", CardType.Defense, 10, 10
+        );
+        BattleExecutionAction attack = new BattleExecutionAction(
+            attacker, attackCard, null, null, defender
+        );
+        BattleExecutionAction defense = new BattleExecutionAction(
+            defender, defenseCard, null, null, attacker
+        );
+        BattleClashSession session;
+        if (BattleResolver.TryBeginAttackVsDefense(
+                attack, defense, out session
+            ) != null || session == null)
+        {
+            return false;
+        }
+        bool paidBeforeResult = BattleBulletRules.GetBullet(attacker) == 0;
+        session.RollNextAttempt();
+        BattleResolutionPlan plan = BattleResolver.BuildAttackVsDefenseResolutionPlan(
+            attack, defense, session
+        );
+        BattleResolveResult result = Complete(plan);
+        return paidBeforeResult && result != null &&
+            result.resultType == "DefenseFullBlock" && result.damage == 0;
+    }
+
+    static bool VerifyAttackVsDodgeResource()
+    {
+        CharacterData attacker = Unit("mode122_dodge_attacker");
+        CharacterData dodger = Unit("mode122_dodger");
+        BattleCardState attackCard = ResourceAttack(
+            attacker, "mode122_dodge_attack", 5, 1, false,
+            CardUsePolicy.Normal
+        );
+        BattleCardState dodgeCard = Card(
+            dodger, "mode122_dodge_card", CardType.Dodge, 10, 10
+        );
+        BattleExecutionAction attack = new BattleExecutionAction(
+            attacker, attackCard, null, null, dodger
+        );
+        BattleExecutionAction dodge = new BattleExecutionAction(
+            dodger, dodgeCard, null, null, attacker
+        );
+        BattleClashSession session;
+        if (BattleResolver.TryBeginAttackVsDodge(
+                attack, dodge, out session
+            ) != null || session == null)
+        {
+            return false;
+        }
+        bool paidBeforeResult = BattleBulletRules.GetBullet(attacker) == 0;
+        session.RollNextAttempt();
+        BattleResolutionPlan plan = BattleResolver.BuildAttackVsDodgeResolutionPlan(
+            attack, dodge, session
+        );
+        BattleResolveResult result = Complete(plan);
+        return paidBeforeResult && result != null &&
+            result.resultType == "DodgeSuccess" && result.damage == 0;
+    }
+
+    static bool VerifyAllInLoserDoesNotDump()
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode122_all_in_loser", 1, CardUsePolicy.Normal,
+            10, CardUsePolicy.Normal, 6
+        );
+        fixture.playerCard.cardData.traits = new[] { BattleCardTrait.AllInBulletDump };
+        fixture.playerCard.cardData.resourceRule.pointPerStack = 0;
+        BattleClashSession session;
+        if (BattleResolver.TryBeginRespondedClash(
+                fixture.playerSlot, fixture.enemyIntent, out session
+            ) != null || session == null)
+        {
+            return false;
+        }
+        session.RollNextAttempt();
+        BattleResolveResult result = BattleResolver.FinalizeRespondedClash(
+            fixture.playerSlot, fixture.enemyIntent, session
+        );
+        return result != null && result.resultType == "EnemyWin" &&
+            BattleBulletRules.GetBullet(fixture.player) == 6;
+    }
+
+    static bool VerifyAllInWinnerDumpsOnce()
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode122_all_in_winner", 10, CardUsePolicy.Normal,
+            1, CardUsePolicy.Normal, 6
+        );
+        fixture.playerCard.cardData.traits = new[] { BattleCardTrait.AllInBulletDump };
+        BattleClashSession session;
+        if (BattleResolver.TryBeginRespondedClash(
+                fixture.playerSlot, fixture.enemyIntent, out session
+            ) != null || session == null)
+        {
+            return false;
+        }
+        session.RollNextAttempt();
+        BattleResolveResult result = BattleResolver.FinalizeRespondedClash(
+            fixture.playerSlot, fixture.enemyIntent, session
+        );
+        bool noSecondPayment = !BattleResolver.CommitCardUsedOnce(
+            fixture.player, fixture.enemy, fixture.playerCard
+        );
+        return result != null && result.resultType == "PlayerWin" &&
+            BattleBulletRules.GetBullet(fixture.player) == 0 && noSecondPayment;
+    }
+
+    static bool VerifyAllInResponseSnapshots()
+    {
+        bool defense = VerifyAllInDefenseSnapshot();
+        bool dodge = VerifyAllInDodgeSnapshot();
+        return defense && dodge;
+    }
+
+    static bool VerifyAllInDefenseSnapshot()
+    {
+        CharacterData attacker = Unit("mode122_all_in_defense_attacker");
+        CharacterData defender = Unit("mode122_all_in_defender");
+        BattleCardState attackCard = ResourceAttack(
+            attacker, "mode122_all_in_defense_attack", 5, 6, true,
+            CardUsePolicy.Normal
+        );
+        attackCard.cardData.traits = new[] { BattleCardTrait.AllInBulletDump };
+        BattleCardState defenseCard = Card(
+            defender, "mode122_all_in_defense_card", CardType.Defense, 10, 10
+        );
+        BattleExecutionAction attack = new BattleExecutionAction(
+            attacker, attackCard, null, null, defender
+        );
+        BattleExecutionAction defense = new BattleExecutionAction(
+            defender, defenseCard, null, null, attacker
+        );
+        BattleClashSession session;
+        if (BattleResolver.TryBeginAttackVsDefense(
+                attack, defense, out session
+            ) != null || session == null)
+        {
+            return false;
+        }
+        BattleClashResourceSnapshot snapshot = FindSnapshot(session, attackCard);
+        return BattleBulletRules.GetBullet(attacker) == 0 &&
+            snapshot != null && snapshot.capturedStack == 6 &&
+            snapshot.pointModifierFromResource == 6;
+    }
+
+    static bool VerifyAllInDodgeSnapshot()
+    {
+        CharacterData attacker = Unit("mode122_all_in_dodge_attacker");
+        CharacterData dodger = Unit("mode122_all_in_dodger");
+        BattleCardState attackCard = ResourceAttack(
+            attacker, "mode122_all_in_dodge_attack", 5, 6, true,
+            CardUsePolicy.Normal
+        );
+        attackCard.cardData.traits = new[] { BattleCardTrait.AllInBulletDump };
+        BattleCardState dodgeCard = Card(
+            dodger, "mode122_all_in_dodge_card", CardType.Dodge, 10, 10
+        );
+        BattleExecutionAction attack = new BattleExecutionAction(
+            attacker, attackCard, null, null, dodger
+        );
+        BattleExecutionAction dodge = new BattleExecutionAction(
+            dodger, dodgeCard, null, null, attacker
+        );
+        BattleClashSession session;
+        if (BattleResolver.TryBeginAttackVsDodge(
+                attack, dodge, out session
+            ) != null || session == null)
+        {
+            return false;
+        }
+        BattleClashResourceSnapshot snapshot = FindSnapshot(session, attackCard);
+        return BattleBulletRules.GetBullet(attacker) == 0 &&
+            snapshot != null && snapshot.capturedStack == 6 &&
+            snapshot.pointModifierFromResource == 6;
+    }
+
+    static bool VerifyUnilateralResourcePaysOnce()
+    {
+        CharacterData user = Unit("mode122_unilateral_user");
+        CharacterData target = Unit("mode122_unilateral_target");
+        BattleCardState card = ResourceAttack(
+            user, "mode122_unilateral_attack", 5, 1, false,
+            CardUsePolicy.Normal
+        );
+        BattleActionSlot slot = new BattleActionSlot(user, 1);
+        slot.AssignFreeAction(user, card, target);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+        bool secondCommitRejected = !BattleResolver.CommitCardUsedOnce(
+            user, target, card
+        );
+        return result != null && result.isSuccess &&
+            BattleBulletRules.GetBullet(user) == 0 && secondCommitRejected;
+    }
+
+    static bool VerifyResourceUnavailable()
+    {
+        CharacterData user = Unit("mode122_unavailable_user");
+        CharacterData target = Unit("mode122_unavailable_target");
+        BattleCardState card = ResourceAttack(
+            user, "mode122_unavailable_attack", 5, 1, false,
+            CardUsePolicy.Normal
+        );
+        card.cardData.resourceRule.insufficientBehavior =
+            CardResourceInsufficientBehavior.ActionUnavailable;
+        BattleActionSlot slot = new BattleActionSlot(user, 1);
+        slot.AssignFreeAction(user, card, target);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+        return result != null && !result.isSuccess &&
+            result.resultType == "ActionUnavailable" &&
+            !card.cardUsedCommittedForCurrentAction &&
+            card.currentCooldown == 0 && BattleBulletRules.GetBullet(user) == 0;
+    }
+
+    static bool VerifyImmediateResourceIgnoresLegacyTiming()
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode122_legacy_timing", 1, CardUsePolicy.ImmediateCommit,
+            10, CardUsePolicy.Normal, 1
+        );
+        fixture.playerCard.cardData.resourceRule.consumeTiming =
+            CardResourceConsumeTiming.OnSuccessfulUse;
+        BattleClashSession session;
+        BattleResolveResult begin = BattleResolver.TryBeginRespondedClash(
+            fixture.playerSlot, fixture.enemyIntent, out session
+        );
+        return begin == null && session != null &&
+            BattleBulletRules.GetBullet(fixture.player) == 0;
+    }
+
+    static BattleClashResourceSnapshot FindSnapshot(
+        BattleClashSession session,
+        BattleCardState card
+    )
+    {
+        if (session == null)
+        {
+            return null;
+        }
+        if (session.SideA != null &&
+            object.ReferenceEquals(session.SideA.cardState, card))
+        {
+            return session.SideA.resourceSnapshot;
+        }
+        if (session.SideB != null &&
+            object.ReferenceEquals(session.SideB.cardState, card))
+        {
+            return session.SideB.resourceSnapshot;
+        }
+        return null;
+    }
+
+    static BattleResolveResult Complete(BattleResolutionPlan plan)
+    {
+        int guard = 0;
+        BattleResolveResult result = null;
+        while (plan != null &&
+            plan.State != BattleResolutionPlanState.Completed && guard++ < 8)
+        {
+            if (!BattleResolver.TryCommitNextResolutionStep(plan, out result))
+            {
+                return null;
+            }
+        }
+        return result ?? (plan != null ? plan.CompletedResult : null);
+    }
+
+    static AttackFixture CreateAttackFixture(
+        string id,
+        int playerPoint,
+        string playerPolicy,
+        int enemyPoint,
+        string enemyPolicy,
+        int startingBullet
+    )
+    {
+        AttackFixture fixture = new AttackFixture
+        {
+            player = Unit(id + "_player"),
+            enemy = Unit(id + "_enemy")
+        };
+        fixture.playerCard = ResourceAttack(
+            fixture.player,
+            id + "_player_card",
+            playerPoint,
+            startingBullet,
+            false,
+            playerPolicy
+        );
+        fixture.enemyCard = Card(
+            fixture.enemy,
+            id + "_enemy_card",
+            CardType.Attack,
+            0,
+            enemyPoint,
+            enemyPolicy
+        );
+        fixture.enemyIntent = new BattleEnemyIntent(
+            id + "_intent", fixture.enemy, fixture.enemyCard,
+            fixture.player, 1
+        );
+        fixture.playerSlot = new BattleActionSlot(fixture.player, 1);
+        fixture.playerSlot.AssignResponse(
+            fixture.player, fixture.playerCard, fixture.enemyIntent, false
+        );
+        return fixture;
+    }
+
+    static BattleCardState ResourceAttack(
+        CharacterData owner,
+        string id,
+        int point,
+        int startingBullet,
+        bool consumeAll,
+        string usePolicy
+    )
+    {
+        if (startingBullet > 0)
+        {
+            BattleBulletRules.AddBulletCapped(owner, startingBullet);
+        }
+        BattleCardState state = Card(
+            owner, id, CardType.Attack, 3, point, usePolicy
+        );
+        state.cardData.resourceRule = new CardResourceRuleData
+        {
+            resourceType = "BuffStack",
+            resourceID = BattleResourceID.Bullet,
+            requiredStackForNormalVersion = 1,
+            fallbackMinPoint = point,
+            fallbackMaxPoint = point,
+            pointPerStack = consumeAll ? 1 : 0,
+            consumeAmountOnSuccess = 1,
+            consumeAllCapturedOnSuccess = consumeAll,
+            insufficientBehavior = CardResourceInsufficientBehavior.SoftFallback,
+            consumeTiming = CardResourceConsumeTiming.OnResolvedParticipation
+        };
+        return state;
+    }
+
+    static BattleCardState Card(
+        CharacterData owner,
+        string id,
+        string type,
+        int cooldown,
+        int point,
+        string usePolicy = CardUsePolicy.Normal
+    )
+    {
+        return BattleCardManager.CreateBattleCard(
+            owner,
+            new CardTestData
+            {
+                cardID = id,
+                cardName = id,
+                cardType = type,
+                attackDeliveryMode = AttackDeliveryMode.Melee,
+                isClashable = type != CardType.Ability,
+                minPoint = point,
+                maxPoint = point,
+                cooldown = cooldown,
+                damageFormula = type == CardType.Attack ? "PointAsDamage" : "",
+                defenseFormula = type == CardType.Defense ? "PointAsDefense" : "",
+                usePolicy = usePolicy
+            },
+            id
+        );
+    }
+
+    static CharacterData Unit(string id)
+    {
+        return new CharacterData(id, 100, 5, 5, id);
+    }
+
+    static void LogCheck(string label, bool passed)
+    {
+        Debug.Log(passed ? label : "FAIL: " + label.Substring(6));
+    }
+}
+
 public static class BattleCardUsedConsequencesTests
 {
     sealed class AttackFixture
@@ -1854,7 +2382,7 @@ public static class BattleCardUsedConsequencesTests
         LogCheck("PASS: Dodge cooldown starts on CardUsed", dodgeCooldown);
         LogCheck("PASS: Continuous Dodge use consequences only once", continuousDodge);
         LogCheck("PASS: Heavy prepared cooldown override works at CardUsed", heavyOverride);
-        LogCheck("PASS: CardUsed manager does not pay resources yet", resourceUnchanged);
+        LogCheck("PASS: BattleCardManager does not directly pay resources", resourceUnchanged);
 
         bool passed = normalCooldown && noLegacyCooldown && useCount &&
             noLegacyUseCount && maxUseCount && sinUseCount && guilt &&
@@ -3885,6 +4413,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleCardUsedConsequencesBasic)
         {
             BattleCardUsedConsequencesTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardUsedResourceConsequencesBasic)
+        {
+            BattleCardUsedResourceConsequencesTests.Run();
             return;
         }
 
