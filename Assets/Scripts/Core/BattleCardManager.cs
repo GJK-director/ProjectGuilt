@@ -76,12 +76,18 @@ public static class BattleCardManager
             return;
         }
 
-        // 生效阶段：
+        // 使用提交阶段：
         // 普通卡进入 CD
         // 罪卡按 UseCount / Permanent 规则处理使用次数或负罪感
+        if (context.timing == BattleTiming.CardUsed)
+        {
+            ApplyUseConsequencesOnCardUsed(context.cardState);
+            return;
+        }
+
         if (context.timing == BattleTiming.Resolved)
         {
-            ApplyCooldownOnResolved(context.cardState);
+            // Legacy compatibility event. Card use consequences already commit at CardUsed.
             return;
         }
 
@@ -275,10 +281,9 @@ public static class BattleCardManager
         return CardEligibilityResult.Success();
     }
 
-    // ApplyCooldownOnResolved = 卡牌生效后处理 CD / 消耗
-    // Apply = 应用，Cooldown = 冷却，Resolved = 卡牌已经生效。
-    // cardState = 已经成功生效的卡牌状态。
-    public static void ApplyCooldownOnResolved(BattleCardState cardState)
+    // ApplyUseConsequencesOnCardUsed = 卡牌正式使用后处理 CD / 消耗 / 负罪感。
+    // cardState = 已经在 CardUsed 时间点提交的卡牌状态。
+    public static void ApplyUseConsequencesOnCardUsed(BattleCardState cardState)
     {
         if (cardState == null)
         {
@@ -343,6 +348,12 @@ public static class BattleCardManager
                 cardState.currentCooldown
             );
         }
+    }
+
+    // Legacy direct-call compatibility only. Formal runtime must use CardUsed.
+    public static void ApplyCooldownOnResolved(BattleCardState cardState)
+    {
+        ApplyUseConsequencesOnCardUsed(cardState);
     }
 
     static int GetResolvedCooldown(BattleCardState cardState)

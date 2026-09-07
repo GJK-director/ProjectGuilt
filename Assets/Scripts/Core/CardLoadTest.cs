@@ -106,7 +106,8 @@ public enum BattleTestMode
     BattleUsePolicyDataBasic = 117,
     BattleAttackUsePolicyResolutionBasic = 118,
     BattleCardUsedCommitBasic = 119,
-    BattleGuardCardUsedCommitBasic = 120
+    BattleGuardCardUsedCommitBasic = 120,
+    BattleCardUsedConsequencesBasic = 121
 }
 
 public static class BattleLifecycleTimingTests
@@ -866,7 +867,7 @@ public static class BattleCardUsedCommitTests
         LogCheck("PASS: Ability CardUsed once", ability);
         LogCheck("PASS: Ability CardUsed before OnPlay", ability);
         LogCheck(
-            "PASS: CardUsed has no legacy cooldown consequence",
+            "PASS: CardUsed consequences are not duplicated by legacy Resolved",
             noLegacyConsequence
         );
 
@@ -1088,10 +1089,15 @@ public static class BattleCardUsedCommitTests
         card.maxUseCount = 2;
         card.ResetCardUsedCommitForNewAction();
         bool committed = BattleResolver.CommitCardUsedOnce(user, user, card);
+        BattleEventProcessor.ProcessEvent(
+            new BattleEventContext(BattleTiming.Resolved)
+                .SetUserAndTarget(user, user)
+                .SetCardState(card)
+        );
         return committed &&
             Count(events, BattleTiming.CardUsed, card) == 1 &&
-            card.currentCooldown == 0 &&
-            card.currentUseCount == 0 &&
+            card.currentCooldown == 3 &&
+            card.currentUseCount == 1 &&
             !card.isConsumed;
     }
 
@@ -1780,6 +1786,506 @@ public static class BattleGuardCardUsedCommitTests
         {
             if (context != null && context.timing == timing &&
                 (card == null || object.ReferenceEquals(context.cardState, card)))
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    static void LogCheck(string label, bool passed)
+    {
+        Debug.Log(passed ? label : "FAIL: " + label.Substring(6));
+    }
+}
+
+public static class BattleCardUsedConsequencesTests
+{
+    sealed class AttackFixture
+    {
+        public CharacterData player;
+        public CharacterData enemy;
+        public BattleCardState playerCard;
+        public BattleCardState enemyCard;
+        public BattleActionSlot playerSlot;
+        public BattleEnemyIntent enemyIntent;
+    }
+
+    public static bool Run()
+    {
+        bool normalCooldown = VerifyNormalCooldown();
+        bool noLegacyCooldown = VerifyLegacyCooldownNoOp();
+        bool useCount = VerifyUseCount();
+        bool noLegacyUseCount = VerifyLegacyUseCountNoOp();
+        bool maxUseCount = VerifyMaxUseCount();
+        bool sinUseCount = VerifySinUseCount();
+        bool guilt = VerifyGuilt();
+        bool noLegacyGuilt = VerifyLegacyGuiltNoOp();
+        bool permanentUseCount = VerifyPermanentSinUseCount();
+        bool permanentCooldown = VerifyPermanentSinCooldown();
+        bool sameTurnCooldown = VerifySameTurnCooldown();
+        bool nextTurnCooldown = VerifyNextTurnCooldown();
+        bool normalLoser = VerifyNormalAttackLoser();
+        bool immediateBeforeResult = VerifyImmediateLoserCooldownBeforeResult();
+        bool immediateNotDuplicated = VerifyImmediateLoserCooldownNotDuplicated();
+        bool defenseCooldown = VerifyDefenseCooldown();
+        bool dodgeCooldown = VerifyDodgeCooldown();
+        bool continuousDodge = WithObserver(VerifyContinuousDodgeConsequences);
+        bool heavyOverride = VerifyHeavyCooldownOverride();
+        bool resourceUnchanged = VerifyCardUsedDoesNotPayResource();
+
+        Debug.Log("===== Mode121 BattleCardUsedConsequencesBasic =====");
+        LogCheck("PASS: CardUsed applies normal cooldown", normalCooldown);
+        LogCheck("PASS: legacy Resolved does not reapply cooldown", noLegacyCooldown);
+        LogCheck("PASS: UseCount commits on CardUsed", useCount);
+        LogCheck("PASS: legacy Resolved does not duplicate UseCount", noLegacyUseCount);
+        LogCheck("PASS: ConsumeOnUse reaches max count on second use", maxUseCount);
+        LogCheck("PASS: Sin UseCount commits on CardUsed", sinUseCount);
+        LogCheck("PASS: guilt commits on CardUsed", guilt);
+        LogCheck("PASS: legacy Resolved does not duplicate guilt", noLegacyGuilt);
+        LogCheck("PASS: Permanent Sin keeps use count", permanentUseCount);
+        LogCheck("PASS: Permanent Sin real cooldown starts on CardUsed", permanentCooldown);
+        LogCheck("PASS: CardUsed cooldown skips same-turn TurnEnd", sameTurnCooldown);
+        LogCheck("PASS: next TurnEnd reduces cooldown", nextTurnCooldown);
+        LogCheck("PASS: Normal Attack loser gets no cooldown", normalLoser);
+        LogCheck("PASS: ImmediateCommit loser cooldown starts before result", immediateBeforeResult);
+        LogCheck("PASS: ImmediateCommit loser cooldown not duplicated", immediateNotDuplicated);
+        LogCheck("PASS: Defense cooldown starts on CardUsed", defenseCooldown);
+        LogCheck("PASS: Dodge cooldown starts on CardUsed", dodgeCooldown);
+        LogCheck("PASS: Continuous Dodge use consequences only once", continuousDodge);
+        LogCheck("PASS: Heavy prepared cooldown override works at CardUsed", heavyOverride);
+        LogCheck("PASS: CardUsed manager does not pay resources yet", resourceUnchanged);
+
+        bool passed = normalCooldown && noLegacyCooldown && useCount &&
+            noLegacyUseCount && maxUseCount && sinUseCount && guilt &&
+            noLegacyGuilt && permanentUseCount && permanentCooldown &&
+            sameTurnCooldown && nextTurnCooldown && normalLoser &&
+            immediateBeforeResult && immediateNotDuplicated &&
+            defenseCooldown && dodgeCooldown && continuousDodge &&
+            heavyOverride && resourceUnchanged;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyNormalCooldown()
+    {
+        CharacterData owner = Unit("mode121_normal_cooldown");
+        BattleCardState card = Card(owner, "normal_cooldown", CardType.Attack, 3, false);
+        Emit(BattleTiming.CardUsed, owner, owner, card);
+        return card.currentCooldown == 3 && card.skipNextTurnEndCooldownTick;
+    }
+
+    static bool VerifyLegacyCooldownNoOp()
+    {
+        CharacterData owner = Unit("mode121_legacy_cooldown");
+        BattleCardState card = Card(owner, "legacy_cooldown", CardType.Attack, 3, false);
+        Emit(BattleTiming.CardUsed, owner, owner, card);
+        Emit(BattleTiming.Resolved, owner, owner, card);
+        return card.currentCooldown == 3 && card.skipNextTurnEndCooldownTick;
+    }
+
+    static bool VerifyUseCount()
+    {
+        CharacterData owner = Unit("mode121_use_count");
+        BattleCardState card = Card(owner, "use_count", CardType.Attack, 0, true);
+        card.maxUseCount = 2;
+        Emit(BattleTiming.CardUsed, owner, owner, card);
+        return card.currentUseCount == 1 && !card.isConsumed;
+    }
+
+    static bool VerifyLegacyUseCountNoOp()
+    {
+        CharacterData owner = Unit("mode121_legacy_use_count");
+        BattleCardState card = Card(owner, "legacy_use_count", CardType.Attack, 0, true);
+        card.maxUseCount = 2;
+        Emit(BattleTiming.CardUsed, owner, owner, card);
+        Emit(BattleTiming.Resolved, owner, owner, card);
+        return card.currentUseCount == 1 && !card.isConsumed;
+    }
+
+    static bool VerifyMaxUseCount()
+    {
+        CharacterData owner = Unit("mode121_max_use_count");
+        BattleCardState card = Card(owner, "max_use_count", CardType.Attack, 0, true);
+        card.maxUseCount = 2;
+        Emit(BattleTiming.CardUsed, owner, owner, card);
+        card.ResetCardUsedCommitForNewAction();
+        bool committed = BattleResolver.CommitCardUsedOnce(owner, owner, card);
+        return committed && card.currentUseCount == 2 && card.isConsumed;
+    }
+
+    static bool VerifySinUseCount()
+    {
+        CharacterData owner = Unit("mode121_sin_use_count");
+        BattleCardState card = Card(owner, "sin_use_count", CardType.Ability, 0, true);
+        card.cardData.isSinCard = true;
+        card.cardData.sinCardUseRule = SinCardUseRule.UseCount;
+        card.cardData.maxUseCount = 2;
+        card.cardData.guiltGain = 2;
+        card.maxUseCount = 2;
+        Emit(BattleTiming.CardUsed, owner, owner, card);
+        return card.currentUseCount == 1 &&
+            !card.isConsumed && GuiltManager.GetCurrentGuilt(owner) == 2;
+    }
+
+    static bool VerifyGuilt()
+    {
+        CharacterData owner = Unit("mode121_guilt");
+        BattleCardState card = Card(owner, "guilt_card", CardType.Ability, 0, false);
+        card.cardData.isSinCard = true;
+        card.cardData.sinCardUseRule = SinCardUseRule.Permanent;
+        card.cardData.guiltGain = 2;
+        Emit(BattleTiming.CardUsed, owner, owner, card);
+        return GuiltManager.GetCurrentGuilt(owner) == 2;
+    }
+
+    static bool VerifyLegacyGuiltNoOp()
+    {
+        CharacterData owner = Unit("mode121_legacy_guilt");
+        BattleCardState card = Card(owner, "legacy_guilt", CardType.Ability, 0, false);
+        card.cardData.isSinCard = true;
+        card.cardData.sinCardUseRule = SinCardUseRule.Permanent;
+        card.cardData.guiltGain = 2;
+        Emit(BattleTiming.CardUsed, owner, owner, card);
+        Emit(BattleTiming.Resolved, owner, owner, card);
+        return GuiltManager.GetCurrentGuilt(owner) == 2;
+    }
+
+    static bool VerifyPermanentSinUseCount()
+    {
+        CharacterData owner = Unit("mode121_permanent_use_count");
+        BattleCardState card = Card(owner, "permanent_use_count", CardType.Ability, 0, false);
+        card.cardData.isSinCard = true;
+        card.cardData.sinCardUseRule = SinCardUseRule.Permanent;
+        Emit(BattleTiming.CardUsed, owner, owner, card);
+        return card.currentUseCount == 0 && !card.isConsumed;
+    }
+
+    static bool VerifyPermanentSinCooldown()
+    {
+        CharacterData owner = Unit("mode121_permanent_cooldown");
+        BattleCardState card = Card(owner, "permanent_cooldown", CardType.Ability, 3, false);
+        card.cardData.isSinCard = true;
+        card.cardData.sinCardUseRule = SinCardUseRule.Permanent;
+        Emit(BattleTiming.CardUsed, owner, owner, card);
+        return card.currentUseCount == 0 && !card.isConsumed &&
+            card.currentCooldown == 3 && card.skipNextTurnEndCooldownTick;
+    }
+
+    static bool VerifySameTurnCooldown()
+    {
+        CharacterData owner = Unit("mode121_same_turn");
+        BattleCardState card = Card(owner, "same_turn", CardType.Attack, 3, false);
+        Emit(BattleTiming.CardUsed, owner, owner, card);
+        BattleCardManager.ReduceCooldownsAtTurnEnd(owner);
+        return card.currentCooldown == 3 && !card.skipNextTurnEndCooldownTick;
+    }
+
+    static bool VerifyNextTurnCooldown()
+    {
+        CharacterData owner = Unit("mode121_next_turn");
+        BattleCardState card = Card(owner, "next_turn", CardType.Attack, 3, false);
+        Emit(BattleTiming.CardUsed, owner, owner, card);
+        BattleCardManager.ReduceCooldownsAtTurnEnd(owner);
+        BattleCardManager.ReduceCooldownsAtTurnEnd(owner);
+        return card.currentCooldown == 2;
+    }
+
+    static bool VerifyNormalAttackLoser()
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode121_normal_loser", 1, CardUsePolicy.Normal, 10, CardUsePolicy.Normal
+        );
+        BattleClashSession session = BattleResolver.CreateRespondedAttackClashSession(
+            fixture.playerSlot, fixture.enemyIntent
+        );
+        session.RollNextAttempt();
+        BattleResolveResult result = BattleResolver.FinalizeRespondedClash(
+            fixture.playerSlot, fixture.enemyIntent, session
+        );
+        return result != null && result.isSuccess &&
+            fixture.playerCard.currentCooldown == 0;
+    }
+
+    static bool VerifyImmediateLoserCooldownBeforeResult()
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode121_immediate_loser_before", 1, CardUsePolicy.ImmediateCommit,
+            10, CardUsePolicy.Normal
+        );
+        BattleClashSession session = BattleResolver.CreateRespondedAttackClashSession(
+            fixture.playerSlot, fixture.enemyIntent
+        );
+        return session != null && fixture.playerCard.currentCooldown == 3;
+    }
+
+    static bool VerifyImmediateLoserCooldownNotDuplicated()
+    {
+        AttackFixture fixture = CreateAttackFixture(
+            "mode121_immediate_loser_after", 1, CardUsePolicy.ImmediateCommit,
+            10, CardUsePolicy.Normal
+        );
+        BattleClashSession session = BattleResolver.CreateRespondedAttackClashSession(
+            fixture.playerSlot, fixture.enemyIntent
+        );
+        session.RollNextAttempt();
+        BattleResolveResult result = BattleResolver.FinalizeRespondedClash(
+            fixture.playerSlot, fixture.enemyIntent, session
+        );
+        return result != null && result.isSuccess && fixture.playerCard.currentCooldown == 3;
+    }
+
+    static bool VerifyDefenseCooldown()
+    {
+        CharacterData attacker = Unit("mode121_defense_attacker");
+        CharacterData defender = Unit("mode121_defender");
+        BattleExecutionAction attack = new BattleExecutionAction(
+            attacker, Card(attacker, "defense_attack", CardType.Attack, 0, false), null, null, defender
+        );
+        BattleExecutionAction defense = new BattleExecutionAction(
+            defender, Card(defender, "defense_card", CardType.Defense, 2, false), null, null, attacker
+        );
+        BattleResolveResult failure = BattleResolver.TryBeginAttackVsDefense(
+            attack, defense, out BattleClashSession session
+        );
+        return failure == null && session != null &&
+            defense.cardState.currentCooldown == 2;
+    }
+
+    static bool VerifyDodgeCooldown()
+    {
+        CharacterData attacker = Unit("mode121_dodge_attacker");
+        CharacterData dodger = Unit("mode121_dodger");
+        BattleExecutionAction attack = new BattleExecutionAction(
+            attacker, Card(attacker, "dodge_attack", CardType.Attack, 0, false), null, null, dodger
+        );
+        BattleExecutionAction dodge = new BattleExecutionAction(
+            dodger, Card(dodger, "dodge_card", CardType.Dodge, 2, false), null, null, attacker
+        );
+        BattleResolveResult failure = BattleResolver.TryBeginAttackVsDodge(
+            attack, dodge, out BattleClashSession session
+        );
+        return failure == null && session != null && dodge.cardState.currentCooldown == 2;
+    }
+
+    static bool VerifyContinuousDodgeConsequences(List<BattleEventContext> events)
+    {
+        CharacterData attacker = Unit("mode121_continuous_attacker");
+        CharacterData dodger = Unit("mode121_continuous_dodger");
+        BattleCardState dodgeCard = Card(dodger, "continuous_dodge", CardType.Dodge, 2, true);
+        dodgeCard.maxUseCount = 3;
+        BattleExecutionAction firstAttack = new BattleExecutionAction(
+            attacker, Card(attacker, "continuous_attack_1", CardType.Attack, 0, false),
+            null, null, dodger
+        );
+        BattleExecutionAction firstDodge = new BattleExecutionAction(
+            dodger, dodgeCard, null, null, attacker
+        );
+        BattleResolveResult firstFailure = BattleResolver.TryBeginAttackVsDodge(
+            firstAttack, firstDodge, false, out BattleClashSession firstSession
+        );
+        if (firstFailure != null || firstSession == null || !firstSession.RollNextAttempt())
+        {
+            return false;
+        }
+
+        BattleExecutionAction secondAttack = new BattleExecutionAction(
+            attacker, Card(attacker, "continuous_attack_2", CardType.Attack, 0, false),
+            null, null, dodger
+        );
+        BattleExecutionAction secondDodge = new BattleExecutionAction(
+            dodger, dodgeCard, null, null, attacker
+        );
+        BattleResolveResult secondFailure = BattleResolver.TryBeginAttackVsDodge(
+            secondAttack, secondDodge, true, out BattleClashSession secondSession
+        );
+        return secondFailure == null && secondSession != null &&
+            Count(events, BattleTiming.CardUsed, dodgeCard) == 1 &&
+            dodgeCard.currentCooldown == 2 && dodgeCard.currentUseCount == 1;
+    }
+
+    static bool VerifyHeavyCooldownOverride()
+    {
+        CharacterData owner = Unit("mode121_heavy");
+        owner.SetAngerMechanicEnabledForBattle(true);
+        BattleAngerRules.AddAnger(owner, 1);
+        bool angerPrecondition = owner.IsAngerMechanicEnabled &&
+            BattleAngerRules.GetAnger(owner) > 0;
+        Debug.Log(
+            angerPrecondition
+                ? "PASS: Heavy test Anger precondition"
+                : "FAIL: Heavy test Anger precondition (enabled=" +
+                    owner.IsAngerMechanicEnabled +
+                    ", anger=" +
+                    BattleAngerRules.GetAnger(owner) + ")"
+        );
+        if (!angerPrecondition)
+        {
+            return false;
+        }
+
+        BattleCardState card = Card(owner, "heavy", CardType.Attack, 3, false);
+        card.cardData.traits = new[] { BattleCardTrait.HeavyAnger };
+        BattleKnifeCardRules.CaptureActionStart(card);
+        bool overridePrepared = card.resolvedCooldownOverride == 2;
+        Debug.Log(
+            overridePrepared
+                ? "PASS: Heavy cooldown override prepared before CardUsed"
+                : "FAIL: Heavy cooldown override prepared before CardUsed (actual=" +
+                    card.resolvedCooldownOverride + ")"
+        );
+        if (!overridePrepared)
+        {
+            return false;
+        }
+
+        bool committed = BattleResolver.CommitCardUsedOnce(owner, owner, card);
+        bool cooldownApplied = committed && card.currentCooldown == 2 &&
+            card.skipNextTurnEndCooldownTick;
+        bool overrideConsumed = card.resolvedCooldownOverride == -1;
+        Debug.Log(
+            cooldownApplied
+                ? "PASS: Heavy prepared cooldown override works at CardUsed"
+                : "FAIL: Heavy prepared cooldown override works at CardUsed (committed=" +
+                    committed +
+                    ", cooldown=" +
+                    card.currentCooldown + ")"
+        );
+        Debug.Log(
+            overrideConsumed
+                ? "PASS: Heavy cooldown override consumed on CardUsed"
+                : "FAIL: Heavy cooldown override consumed on CardUsed (actual=" +
+                    card.resolvedCooldownOverride + ")"
+        );
+        return cooldownApplied && overrideConsumed;
+    }
+
+    static bool VerifyCardUsedDoesNotPayResource()
+    {
+        CharacterData owner = Unit("mode121_resource");
+        BattleBulletRules.AddBulletCapped(owner, 6);
+        BattleCardState card = Card(owner, "resource", CardType.Attack, 0, false);
+        card.cardData.resourceRule = new CardResourceRuleData
+        {
+            resourceType = "BuffStack",
+            resourceID = "Bullet",
+            consumeAmountOnSuccess = 1,
+            consumeTiming = CardResourceConsumeTiming.OnResolvedParticipation
+        };
+        Emit(BattleTiming.CardUsed, owner, owner, card);
+        return BattleBulletRules.GetBullet(owner) == 6;
+    }
+
+    static AttackFixture CreateAttackFixture(
+        string id,
+        int playerPoint,
+        string playerPolicy,
+        int enemyPoint,
+        string enemyPolicy
+    )
+    {
+        AttackFixture fixture = new AttackFixture
+        {
+            player = Unit(id + "_player"),
+            enemy = Unit(id + "_enemy")
+        };
+        fixture.playerCard = Card(
+            fixture.player, id + "_player_card", CardType.Attack, 3, false,
+            playerPoint, playerPolicy
+        );
+        fixture.enemyCard = Card(
+            fixture.enemy, id + "_enemy_card", CardType.Attack, 0, false,
+            enemyPoint, enemyPolicy
+        );
+        fixture.enemyIntent = new BattleEnemyIntent(
+            id + "_intent", fixture.enemy, fixture.enemyCard, fixture.player, 1
+        );
+        fixture.playerSlot = new BattleActionSlot(fixture.player, 1);
+        fixture.playerSlot.AssignResponse(
+            fixture.player, fixture.playerCard, fixture.enemyIntent, false
+        );
+        return fixture;
+    }
+
+    static BattleCardState Card(
+        CharacterData owner,
+        string id,
+        string type,
+        int cooldown,
+        bool consumeOnUse,
+        int point = 1,
+        string usePolicy = CardUsePolicy.Normal
+    )
+    {
+        string damageFormula = type == CardType.Attack ? "PointAsDamage" : "";
+        string defenseFormula = type == CardType.Defense ? "PointAsDefense" : "";
+        return BattleCardManager.CreateBattleCard(
+            owner,
+            new CardTestData
+            {
+                cardID = id,
+                cardName = id,
+                cardType = type,
+                attackDeliveryMode = AttackDeliveryMode.Melee,
+                isClashable = type != CardType.Ability,
+                minPoint = point,
+                maxPoint = point,
+                cooldown = cooldown,
+                consumeOnUse = consumeOnUse,
+                damageFormula = damageFormula,
+                defenseFormula = defenseFormula,
+                usePolicy = usePolicy
+            },
+            id
+        );
+    }
+
+    static void Emit(
+        string timing,
+        CharacterData user,
+        CharacterData target,
+        BattleCardState card
+    )
+    {
+        BattleEventProcessor.ProcessEvent(
+            new BattleEventContext(timing)
+                .SetUserAndTarget(user, target)
+                .SetCardState(card)
+        );
+    }
+
+    static CharacterData Unit(string id)
+    {
+        return new CharacterData(id, 100, 5, 5, id);
+    }
+
+    static bool WithObserver(System.Func<List<BattleEventContext>, bool> test)
+    {
+        List<BattleEventContext> events = new List<BattleEventContext>();
+        System.Action<BattleEventContext> previousObserver =
+            BattleEventProcessor.TestEventObserver;
+        BattleEventProcessor.TestEventObserver = context => events.Add(context);
+        try
+        {
+            return test(events);
+        }
+        finally
+        {
+            BattleEventProcessor.TestEventObserver = previousObserver;
+        }
+    }
+
+    static int Count(
+        List<BattleEventContext> events,
+        string timing,
+        BattleCardState card
+    )
+    {
+        int count = 0;
+        foreach (BattleEventContext context in events)
+        {
+            if (context != null && context.timing == timing &&
+                object.ReferenceEquals(context.cardState, card))
             {
                 count++;
             }
@@ -3373,6 +3879,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleGuardCardUsedCommitBasic)
         {
             BattleGuardCardUsedCommitTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardUsedConsequencesBasic)
+        {
+            BattleCardUsedConsequencesTests.Run();
             return;
         }
 
