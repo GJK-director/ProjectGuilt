@@ -1578,7 +1578,7 @@ public static class BattleResolver
         }
         else
         {
-            plan.playerCardUsed = !success;
+            plan.playerCardUsed = true;
             plan.enemyCardUsed = true;
             plan.playerCardParticipated = true;
             plan.playerCardUseDisposition = success
@@ -2997,6 +2997,16 @@ public static class BattleResolver
             false,
             false
         );
+        CommitCardUsedOnce(
+            attackAction.actor,
+            defenseAction.actor,
+            attackAction.cardState
+        );
+        CommitCardUsedOnce(
+            defenseAction.actor,
+            attackAction.actor,
+            defenseAction.cardState
+        );
         attackAction.actor.CheckBuffsByTiming(BattleTiming.ClashStart, false);
         defenseAction.actor.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
@@ -3035,6 +3045,11 @@ public static class BattleResolver
             CaptureResourceSnapshot(playerUnit, defenseCardState);
         TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit,
             defenseCardState, 0, 0, false, false);
+        CommitCardUsedOnce(
+            playerUnit,
+            enemyUnit,
+            defenseCardState
+        );
         playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
         return BattleClashSession.CreateDefenseVsAttack(
@@ -3199,6 +3214,11 @@ public static class BattleResolver
             CaptureResourceSnapshot(playerUnit, dodgeCardState);
         TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit,
             dodgeCardState, 0, 0, false, false);
+        CommitCardUsedOnce(
+            playerUnit,
+            enemyUnit,
+            dodgeCardState
+        );
         playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
         return BattleClashSession.CreateDodgeVsAttack(
@@ -3511,6 +3531,20 @@ public static class BattleResolver
                 0,
                 false,
                 false
+            );
+        }
+
+        CommitCardUsedOnce(
+            attackAction.actor,
+            dodgeAction.actor,
+            attackAction.cardState
+        );
+        if (!isContinuousDodgeContinuation)
+        {
+            CommitCardUsedOnce(
+                dodgeAction.actor,
+                attackAction.actor,
+                dodgeAction.cardState
             );
         }
 
