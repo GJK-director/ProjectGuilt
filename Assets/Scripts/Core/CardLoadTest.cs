@@ -105,7 +105,8 @@ public enum BattleTestMode
     BattleLifecycleTimingBasic = 116,
     BattleUsePolicyDataBasic = 117,
     BattleAttackUsePolicyResolutionBasic = 118,
-    BattleCardUsedCommitBasic = 119
+    BattleCardUsedCommitBasic = 119,
+    BattleGuardCardUsedCommitBasic = 120
 }
 
 public static class BattleLifecycleTimingTests
@@ -3366,6 +3367,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleCardUsedCommitBasic)
         {
             BattleCardUsedCommitTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleGuardCardUsedCommitBasic)
+        {
+            BattleGuardCardUsedCommitTests.Run();
             return;
         }
 
