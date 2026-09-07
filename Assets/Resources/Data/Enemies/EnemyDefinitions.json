@@ -6,8 +6,14 @@
     "minSpeed": 2,
     "maxSpeed": 6,
     "cardIDs": [
-      "enemy_atk_001",
-      "def_001"
+      "enemy_probe_001",
+      "enemy_probe_001",
+      "enemy_smash_001",
+      "enemy_smash_001",
+      "enemy_fierce_001",
+      "enemy_fierce_001",
+      "enemy_guard_001",
+      "enemy_guard_001"
     ],
     "initialBuffs": [],
     "prefabKey": "enemy_test_prefab",

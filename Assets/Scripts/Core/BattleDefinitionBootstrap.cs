@@ -422,7 +422,18 @@ public static class BattleDefinitionBootstrap
             return BattleDefinitionIntentQueueResult.Failure("创建敌人意图失败：allyByID 为空");
         }
 
-        if (!encounterDefinition.repeatIntentPattern && currentTurn > 1)
+        EnemyIntentDefinitionData[] intentDefinitions;
+        string errorMessage;
+        if (!TryGetIntentDefinitionsForTurn(
+                encounterDefinition,
+                currentTurn,
+                out intentDefinitions,
+                out errorMessage))
+        {
+            return BattleDefinitionIntentQueueResult.Failure(errorMessage);
+        }
+
+        if (intentDefinitions == null || intentDefinitions.Length == 0)
         {
             result.intentQueue = BattleEnemyIntentManager.CreateIntentQueue();
             return result;
@@ -434,8 +445,6 @@ public static class BattleDefinitionBootstrap
                 "创建敌人意图失败：targetActionSlots 为空"
             );
         }
-
-        string errorMessage;
 
         if (runtimeState.enemyUnits == null ||
             runtimeState.enemyUnits.Count < 1 ||
@@ -454,7 +463,7 @@ public static class BattleDefinitionBootstrap
         {
             CharacterData enemyUnit = runtimeState.enemyUnits[enemyIndex];
             if (!ValidateIntentPatternAgainstEnemy(
-                    encounterDefinition,
+                    intentDefinitions,
                     enemyUnit,
                     out errorMessage))
             {
@@ -464,7 +473,7 @@ public static class BattleDefinitionBootstrap
             HashSet<int> usedEnemyCardIndexes = new HashSet<int>();
             int enemySlotIndex = 0;
             foreach (EnemyIntentDefinitionData intentDefinition in
-                encounterDefinition.intentPattern)
+                intentDefinitions)
             {
                 enemySlotIndex++;
                 // 每名敌人的同一BattleCardState在一回合最多绑定一个意图。
@@ -575,8 +584,62 @@ public static class BattleDefinitionBootstrap
             return false;
         }
 
-        foreach (EnemyIntentDefinitionData intentDefinition in encounterDefinition.intentPattern)
+        if (!ValidateIntentReferences(
+                encounterDefinition,
+                encounterDefinition.intentPattern,
+                enemyDefinition,
+                cards,
+                characterDefinitions,
+                out errorMessage))
         {
+            return false;
+        }
+
+        if (encounterDefinition.intentCycle != null)
+        {
+            foreach (EnemyIntentRoundDefinitionData round in
+                encounterDefinition.intentCycle)
+            {
+                if (!ValidateIntentReferences(
+                        encounterDefinition,
+                        round != null ? round.intents : null,
+                        enemyDefinition,
+                        cards,
+                        characterDefinitions,
+                        out errorMessage))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    static bool ValidateIntentReferences(
+        EncounterDefinitionData encounterDefinition,
+        EnemyIntentDefinitionData[] intentDefinitions,
+        EnemyDefinitionData enemyDefinition,
+        List<CardTestData> cards,
+        List<CharacterDefinitionData> characterDefinitions,
+        out string errorMessage
+    )
+    {
+        errorMessage = "";
+
+        if (intentDefinitions == null)
+        {
+            return true;
+        }
+
+        foreach (EnemyIntentDefinitionData intentDefinition in intentDefinitions)
+        {
+            if (intentDefinition == null)
+            {
+                errorMessage = "创建Runtime失败：存在空敌人意图定义";
+                return false;
+            }
+
             if (intentDefinition.enemyCardIndex > enemyDefinition.cardIDs.Length)
             {
                 errorMessage = "创建Runtime失败：enemyCardIndex 超出敌人卡牌数量：" + intentDefinition.enemyCardIndex;
@@ -584,7 +647,6 @@ public static class BattleDefinitionBootstrap
             }
 
             string enemyCardID = enemyDefinition.cardIDs[intentDefinition.enemyCardIndex - 1];
-
             if (CardDataLoader.FindCardByID(cards, enemyCardID) == null)
             {
                 errorMessage = "创建Runtime失败：敌人意图引用不存在的卡牌 " + enemyCardID;
@@ -603,7 +665,7 @@ public static class BattleDefinitionBootstrap
     }
 
     static bool ValidateIntentPatternAgainstEnemy(
-        EncounterDefinitionData encounterDefinition,
+        EnemyIntentDefinitionData[] intentDefinitions,
         CharacterData enemy,
         out string errorMessage
     )
@@ -618,7 +680,7 @@ public static class BattleDefinitionBootstrap
 
         HashSet<int> enemyCardIndexes = new HashSet<int>();
 
-        foreach (EnemyIntentDefinitionData intentDefinition in encounterDefinition.intentPattern)
+        foreach (EnemyIntentDefinitionData intentDefinition in intentDefinitions)
         {
             if (intentDefinition == null)
             {
@@ -641,6 +703,57 @@ public static class BattleDefinitionBootstrap
             enemyCardIndexes.Add(intentDefinition.enemyCardIndex);
         }
 
+        return true;
+    }
+
+    static bool TryGetIntentDefinitionsForTurn(
+        EncounterDefinitionData encounterDefinition,
+        int currentTurn,
+        out EnemyIntentDefinitionData[] intentDefinitions,
+        out string errorMessage
+    )
+    {
+        intentDefinitions = null;
+        errorMessage = "";
+
+        if (currentTurn <= 0)
+        {
+            errorMessage = "创建敌人意图失败：currentTurn 必须大于0";
+            return false;
+        }
+
+        if (encounterDefinition.intentCycle != null &&
+            encounterDefinition.intentCycle.Length > 0)
+        {
+            if (!encounterDefinition.repeatIntentPattern &&
+                currentTurn > encounterDefinition.intentCycle.Length)
+            {
+                return true;
+            }
+
+            int roundIndex = encounterDefinition.repeatIntentPattern
+                ? (currentTurn - 1) % encounterDefinition.intentCycle.Length
+                : currentTurn - 1;
+            EnemyIntentRoundDefinitionData round =
+                encounterDefinition.intentCycle[roundIndex];
+            if (round == null || round.intents == null ||
+                round.intents.Length == 0)
+            {
+                errorMessage = "创建敌人意图失败：intentCycle 第" +
+                    (roundIndex + 1) + " 回合为空";
+                return false;
+            }
+
+            intentDefinitions = round.intents;
+            return true;
+        }
+
+        if (!encounterDefinition.repeatIntentPattern && currentTurn > 1)
+        {
+            return true;
+        }
+
+        intentDefinitions = encounterDefinition.intentPattern;
         return true;
     }
 

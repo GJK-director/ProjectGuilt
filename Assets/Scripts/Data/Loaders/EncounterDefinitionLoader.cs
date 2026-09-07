@@ -115,54 +115,51 @@ public static class EncounterDefinitionLoader
             return false;
         }
 
-        if (definition.intentPattern == null || definition.intentPattern.Length == 0)
+        bool hasIntentPattern = definition.intentPattern != null &&
+            definition.intentPattern.Length > 0;
+        bool hasIntentCycle = definition.intentCycle != null &&
+            definition.intentCycle.Length > 0;
+
+        if (!hasIntentPattern && !hasIntentCycle)
         {
-            errorMessage = definition.encounterID + " 的 intentPattern 为空";
+            errorMessage = definition.encounterID + " 的 intentPattern 与 intentCycle 均为空";
             return false;
         }
 
-        HashSet<int> enemyCardIndexes = new HashSet<int>();
-
-        foreach (EnemyIntentDefinitionData intentDefinition in definition.intentPattern)
+        if (hasIntentPattern && !ValidateIntentDefinitions(
+                definition,
+                definition.intentPattern,
+                "intentPattern",
+                out errorMessage))
         {
-            if (intentDefinition == null)
-            {
-                errorMessage = definition.encounterID + " 存在空 intentPattern 项";
-                return false;
-            }
+            return false;
+        }
 
-            if (intentDefinition.enemyCardIndex <= 0)
+        if (hasIntentCycle)
+        {
+            for (int roundIndex = 0;
+                roundIndex < definition.intentCycle.Length;
+                roundIndex++)
             {
-                errorMessage = definition.encounterID + " 的 enemyCardIndex 必须大于0";
-                return false;
-            }
+                EnemyIntentRoundDefinitionData round =
+                    definition.intentCycle[roundIndex];
+                if (round == null || round.intents == null ||
+                    round.intents.Length == 0)
+                {
+                    errorMessage = definition.encounterID +
+                        " 的 intentCycle 第" + (roundIndex + 1) +
+                        " 回合为空";
+                    return false;
+                }
 
-            if (enemyCardIndexes.Contains(intentDefinition.enemyCardIndex))
-            {
-                errorMessage = definition.encounterID + " 同一轮 intentPattern 重复使用 enemyCardIndex：" + intentDefinition.enemyCardIndex;
-                return false;
-            }
-
-            enemyCardIndexes.Add(intentDefinition.enemyCardIndex);
-
-            if (intentDefinition.targetRule != TargetRuleFixedCharacterSlot &&
-                intentDefinition.targetRule != TargetRuleFirstLivingCharacterSlot)
-            {
-                errorMessage = definition.encounterID + " 的 targetRule 非法：" + intentDefinition.targetRule;
-                return false;
-            }
-
-            if (intentDefinition.targetRule == TargetRuleFixedCharacterSlot &&
-                string.IsNullOrEmpty(intentDefinition.targetCharacterID))
-            {
-                errorMessage = definition.encounterID + " 的 FixedCharacterSlot 缺少 targetCharacterID";
-                return false;
-            }
-
-            if (intentDefinition.targetSlotIndex <= 0)
-            {
-                errorMessage = definition.encounterID + " 的 targetSlotIndex 必须大于0";
-                return false;
+                if (!ValidateIntentDefinitions(
+                        definition,
+                        round.intents,
+                        "intentCycle 第" + (roundIndex + 1) + " 回合",
+                        out errorMessage))
+                {
+                    return false;
+                }
             }
         }
 
@@ -172,6 +169,66 @@ public static class EncounterDefinitionLoader
             return false;
         }
 
+        return true;
+    }
+
+    static bool ValidateIntentDefinitions(
+        EncounterDefinitionData definition,
+        EnemyIntentDefinitionData[] intentDefinitions,
+        string sourceName,
+        out string errorMessage
+    )
+    {
+        errorMessage = "";
+        HashSet<int> enemyCardIndexes = new HashSet<int>();
+
+        foreach (EnemyIntentDefinitionData intentDefinition in intentDefinitions)
+        {
+            if (intentDefinition == null)
+            {
+                errorMessage = definition.encounterID + " 的 " + sourceName + " 存在空项";
+                return false;
+            }
+
+            if (intentDefinition.enemyCardIndex <= 0)
+            {
+                errorMessage = definition.encounterID + " 的 " + sourceName +
+                    " enemyCardIndex 必须大于0";
+                return false;
+            }
+
+            if (enemyCardIndexes.Contains(intentDefinition.enemyCardIndex))
+            {
+                errorMessage = definition.encounterID + " 的 " + sourceName +
+                    " 同一轮重复使用 enemyCardIndex：" + intentDefinition.enemyCardIndex;
+                return false;
+            }
+
+            enemyCardIndexes.Add(intentDefinition.enemyCardIndex);
+
+            if (intentDefinition.targetRule != TargetRuleFixedCharacterSlot &&
+                intentDefinition.targetRule != TargetRuleFirstLivingCharacterSlot)
+            {
+                errorMessage = definition.encounterID + " 的 " + sourceName +
+                    " targetRule 非法：" + intentDefinition.targetRule;
+                return false;
+            }
+
+            if (intentDefinition.targetRule == TargetRuleFixedCharacterSlot &&
+                string.IsNullOrEmpty(intentDefinition.targetCharacterID))
+            {
+                errorMessage = definition.encounterID + " 的 " + sourceName +
+                    " FixedCharacterSlot 缺少 targetCharacterID";
+                return false;
+            }
+
+            if (intentDefinition.targetSlotIndex <= 0)
+            {
+                errorMessage = definition.encounterID + " 的 " + sourceName +
+                    " targetSlotIndex 必须大于0";
+                return false;
+            }
+        }
         return true;
     }
 }

@@ -7,7 +7,15 @@ public class EncounterDefinitionData
     public string[] allyCharacterIDs;
     public string enemyID;
     public EnemyIntentDefinitionData[] intentPattern;
+    public EnemyIntentRoundDefinitionData[] intentCycle;
     public bool repeatIntentPattern;
     public string battleBackgroundKey;
     public string battleMusicKey;
+}
+
+// 每个回合定义一组敌方行动；运行时卡牌实例仍由EnemyDefinition持有。
+[System.Serializable]
+public sealed class EnemyIntentRoundDefinitionData
+{
+    public EnemyIntentDefinitionData[] intents;
 }

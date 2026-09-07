@@ -15,6 +15,8 @@ public static class FullBattleIntegrationRegressionTests
             VerifyProductionEnemyBootstrap(production),
             VerifyProductionCardOwnership(production),
             VerifyProductionMultiSlotIntents(production),
+            VerifyLegacyIntentPatternFallback(production),
+            VerifyPointAsDamage250Percent(),
             VerifyAttackVsAttack(production),
             VerifyDirectionalInteraction(CardType.Defense),
             VerifyDirectionalInteraction(CardType.Dodge),
@@ -42,9 +44,11 @@ public static class FullBattleIntegrationRegressionTests
         string[] names =
         {
             "Production Character Definition可建立正式Runtime Ally",
-            "Production Enemy Definition可建立正式Runtime Enemy",
+            "Production Enemy Definition可建立四种正式Runtime Enemy卡",
             "Production Card ownership与Definition引用一致",
-            "Enemy Turn1/Turn2均保持Slot1 Attack/Slot2 Defense",
+            "Enemy 10回合双槽Intent Cycle与回合循环正确",
+            "Legacy intentPattern在无Cycle时继续可用",
+            "PointAsDamage250Percent按2.5倍计算",
             "Production Melee/Melee归类AttackVsAttack",
             "AttackVsDefense两个方向归一为同一Interaction",
             "AttackVsDodge两个方向归一为同一Interaction",
@@ -128,7 +132,12 @@ public static class FullBattleIntegrationRegressionTests
             fixture.runtime.enemy != null && fixture.enemyDefinition != null &&
             fixture.runtime.enemy.runtimeUnitID == fixture.enemyDefinition.enemyID &&
             fixture.enemyDefinition.cardIDs != null &&
-            fixture.enemyDefinition.cardIDs.Length == 2;
+            fixture.enemyDefinition.cardIDs.Length == 8 &&
+            CountUniqueCardIDs(fixture.enemyDefinition.cardIDs) == 4 &&
+            HasCardDefinition(fixture.cards, "enemy_probe_001", CardType.Attack, 3, 5, "PointAsDamage") &&
+            HasCardDefinition(fixture.cards, "enemy_smash_001", CardType.Attack, 9, 12, "PointAsDamage") &&
+            HasCardDefinition(fixture.cards, "enemy_fierce_001", CardType.Attack, 2, 4, "PointAsDamage250Percent") &&
+            HasCardDefinition(fixture.cards, "enemy_guard_001", CardType.Defense, 5, 7, "PointAsDefense");
     }
 
     private static bool VerifyProductionCardOwnership(
@@ -148,18 +157,15 @@ public static class FullBattleIntegrationRegressionTests
         ProductionFixture fixture
     )
     {
-        if (!fixture.IsValid || fixture.runtime.intentQueue.Count != 2)
+        if (!fixture.IsValid || fixture.runtime.intentQueue.Count != 2 ||
+            fixture.bootstrap.encounterDefinition.intentCycle == null ||
+            fixture.bootstrap.encounterDefinition.intentCycle.Length != 10)
         {
             return false;
         }
 
-        BattleEnemyIntent first = fixture.runtime.intentQueue[0];
-        BattleEnemyIntent second = fixture.runtime.intentQueue[1];
-        bool turnOneCorrect =
-            IsIntent(first, 1, CardType.Attack, "enemy_atk_001") &&
-            IsIntent(second, 2, CardType.Defense, "def_001") &&
-            fixture.bootstrap.encounterDefinition.repeatIntentPattern;
-        if (!turnOneCorrect)
+        if (!VerifyIntentCycleTurns(fixture) ||
+            !fixture.bootstrap.encounterDefinition.repeatIntentPattern)
         {
             return false;
         }
@@ -243,7 +249,7 @@ public static class FullBattleIntegrationRegressionTests
                 runtime.allyA,
                 runtime.allyB,
                 runtime.enemy,
-                FindCard(runtime.enemy, "enemy_atk_001"),
+                FindCard(runtime.enemy, "enemy_probe_001"),
                 runtime.enemy2,
                 null,
                 provider
@@ -264,7 +270,7 @@ public static class FullBattleIntegrationRegressionTests
                 rejectedProvider,
                 runtime,
                 runtime.enemy,
-                FindCard(runtime.enemy, "enemy_atk_001"),
+                FindCard(runtime.enemy, "enemy_probe_001"),
                 runtime.enemy2,
                 null,
                 runtime.allyA,
@@ -284,12 +290,150 @@ public static class FullBattleIntegrationRegressionTests
                 runtime.intentQueue[0],
                 1,
                 CardType.Attack,
-                "enemy_atk_001") &&
+                "enemy_probe_001") &&
             IsIntent(
                 runtime.intentQueue[1],
                 2,
                 CardType.Defense,
-                "def_001");
+                "enemy_guard_001");
+    }
+
+    private static bool VerifyPointAsDamage250Percent()
+    {
+        CharacterData attacker = CreateCharacter("mode103_250_attacker");
+        CharacterData defender = CreateCharacter("mode103_250_defender");
+        CardTestData fierce = new CardTestData
+        {
+            cardID = "mode103_250",
+            cardName = "Mode103 2.5x",
+            cardType = CardType.Attack,
+            minPoint = 2,
+            maxPoint = 4,
+            damageFormula = "PointAsDamage250Percent"
+        };
+        return BattleCalculator.ConvertScaledDamageToHPDamage(
+                BattleCalculator.GetFinalDamageScaled(attacker, defender, fierce, 2)) == 5 &&
+            BattleCalculator.ConvertScaledDamageToHPDamage(
+                BattleCalculator.GetFinalDamageScaled(attacker, defender, fierce, 3)) == 7 &&
+            BattleCalculator.ConvertScaledDamageToHPDamage(
+                BattleCalculator.GetFinalDamageScaled(attacker, defender, fierce, 4)) == 10;
+    }
+
+    private static bool VerifyLegacyIntentPatternFallback(
+        ProductionFixture fixture
+    )
+    {
+        if (!fixture.IsValid)
+        {
+            return false;
+        }
+
+        EncounterDefinitionData legacyDefinition =
+            new EncounterDefinitionData
+            {
+                encounterID = "mode103_legacy_pattern",
+                encounterName = "Mode103 Legacy Pattern",
+                allyCharacterIDs = fixture.bootstrap.encounterDefinition.allyCharacterIDs,
+                enemyID = fixture.enemyDefinition.enemyID,
+                intentPattern = fixture.bootstrap.encounterDefinition.intentPattern,
+                repeatIntentPattern = true,
+                battleBackgroundKey = "mode103_background",
+                battleMusicKey = "mode103_music"
+            };
+        string validationError;
+        if (!EncounterDefinitionLoader.ValidateDefinition(
+                legacyDefinition,
+                out validationError))
+        {
+            return false;
+        }
+
+        BattleDefinitionIntentQueueResult result =
+            BattleDefinitionBootstrap.CreateIntentQueueForTurn(
+                fixture.runtime,
+                legacyDefinition,
+                fixture.enemyDefinition,
+                fixture.bootstrap.allyByID,
+                2,
+                fixture.runtime.actionSlots
+            );
+        return result != null && result.isSuccess &&
+            result.intentQueue != null && result.intentQueue.Count == 2 &&
+            IsCycleIntent(result.intentQueue[0], fixture.runtime.enemy, 1,
+                "enemy_probe_001", fixture.runtime.allyA) &&
+            IsCycleIntent(result.intentQueue[1], fixture.runtime.enemy, 2,
+                "enemy_probe_001", fixture.runtime.allyA);
+    }
+
+    private static bool VerifyIntentCycleTurns(ProductionFixture fixture)
+    {
+        string[][] expectedCardIDs =
+        {
+            new[] { "enemy_probe_001", "enemy_probe_001" },
+            new[] { "enemy_probe_001", "enemy_guard_001" },
+            new[] { "enemy_smash_001", "enemy_probe_001" },
+            new[] { "enemy_fierce_001", "enemy_probe_001" },
+            new[] { "enemy_guard_001", "enemy_guard_001" },
+            new[] { "enemy_smash_001", "enemy_fierce_001" },
+            new[] { "enemy_probe_001", "enemy_probe_001" },
+            new[] { "enemy_smash_001", "enemy_smash_001" },
+            new[] { "enemy_guard_001", "enemy_fierce_001" },
+            new[] { "enemy_smash_001", "enemy_fierce_001" }
+        };
+
+        for (int turn = 1; turn <= 21; turn++)
+        {
+            int cycleIndex = (turn - 1) % expectedCardIDs.Length;
+            BattleDefinitionIntentQueueResult result =
+                BattleDefinitionBootstrap.CreateIntentQueueForTurn(
+                    fixture.runtime,
+                    fixture.bootstrap.encounterDefinition,
+                    fixture.enemyDefinition,
+                    fixture.bootstrap.allyByID,
+                    turn,
+                    fixture.runtime.actionSlots
+                );
+            if (result == null || !result.isSuccess || result.intentQueue == null ||
+                result.intentQueue.Count != 2 ||
+                !IsCycleIntent(result.intentQueue[0], fixture.runtime.enemy, 1,
+                    expectedCardIDs[cycleIndex][0], fixture.runtime.allyA) ||
+                !IsCycleIntent(result.intentQueue[1], fixture.runtime.enemy, 2,
+                    expectedCardIDs[cycleIndex][1], fixture.runtime.allyA))
+            {
+                return false;
+            }
+
+            if (expectedCardIDs[cycleIndex][0] == expectedCardIDs[cycleIndex][1] &&
+                object.ReferenceEquals(
+                    result.intentQueue[0].enemyCardState,
+                    result.intentQueue[1].enemyCardState))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsCycleIntent(
+        BattleEnemyIntent intent,
+        CharacterData enemy,
+        int enemySlotIndex,
+        string cardID,
+        CharacterData target
+    )
+    {
+        return intent != null &&
+            object.ReferenceEquals(intent.enemy, enemy) &&
+            intent.enemySlotIndex == enemySlotIndex &&
+            intent.enemyCardState != null &&
+            intent.enemyCardState.cardData != null &&
+            intent.enemyCardState.cardData.cardID == cardID &&
+            object.ReferenceEquals(intent.originalTargetCharacter, target) &&
+            intent.originalTargetSlotIndex == 1 &&
+            object.ReferenceEquals(intent.actualTargetCharacter, target) &&
+            intent.actualTargetSlotIndex == 1 &&
+            !intent.isResponded && !intent.isConsumedAsReactiveGuard;
     }
 
     private static bool VerifyAttackVsAttack(ProductionFixture fixture)
@@ -300,7 +444,7 @@ public static class FullBattleIntegrationRegressionTests
         );
         BattleCardState enemyAttack = FindCard(
             fixture.runtime?.enemy,
-            "enemy_atk_001"
+            "enemy_probe_001"
         );
         return BattleInteractionClassifier.Classify(
             allyAttack,
@@ -609,7 +753,7 @@ public static class FullBattleIntegrationRegressionTests
 
     private static bool VerifyEnemySlot2Descriptor(ProductionFixture fixture)
     {
-        if (!fixture.IsValid || fixture.runtime.intentQueue.Count < 2)
+        if (!TrySetProductionIntentsForTurn(fixture, 2))
         {
             return false;
         }
@@ -645,7 +789,7 @@ public static class FullBattleIntegrationRegressionTests
     private static bool VerifyResponseBindsEnemySlot2()
     {
         ProductionFixture fixture = CreateProductionFixture();
-        if (!fixture.IsValid || fixture.runtime.intentQueue.Count < 2)
+        if (!TrySetProductionIntentsForTurn(fixture, 2))
         {
             return false;
         }
@@ -669,6 +813,35 @@ public static class FullBattleIntegrationRegressionTests
             relations[0].ResponseSlot != null &&
             object.ReferenceEquals(relations[0].ResponseSlot.enemyIntent, intent) &&
             relations[0].Kind == BattleActionRelationKind.DefenseResponse;
+    }
+
+    private static bool TrySetProductionIntentsForTurn(
+        ProductionFixture fixture,
+        int turn
+    )
+    {
+        if (!fixture.IsValid)
+        {
+            return false;
+        }
+
+        BattleDefinitionIntentQueueResult result =
+            BattleDefinitionBootstrap.CreateIntentQueueForTurn(
+                fixture.runtime,
+                fixture.bootstrap.encounterDefinition,
+                fixture.enemyDefinition,
+                fixture.bootstrap.allyByID,
+                turn,
+                fixture.runtime.actionSlots
+            );
+        if (result == null || !result.isSuccess || result.intentQueue == null ||
+            result.intentQueue.Count != 2)
+        {
+            return false;
+        }
+
+        fixture.runtime.SetIntentQueue(result.intentQueue);
+        return true;
     }
 
     private static bool VerifyProductionPresentationRequirements(
@@ -1071,6 +1244,46 @@ public static class FullBattleIntegrationRegressionTests
     )
     {
         return CardDataLoader.FindCardByID(cards, cardID);
+    }
+
+    private static int CountUniqueCardIDs(string[] cardIDs)
+    {
+        if (cardIDs == null)
+        {
+            return 0;
+        }
+
+        HashSet<string> uniqueIDs = new HashSet<string>();
+        foreach (string cardID in cardIDs)
+        {
+            if (!string.IsNullOrEmpty(cardID))
+            {
+                uniqueIDs.Add(cardID);
+            }
+        }
+
+        return uniqueIDs.Count;
+    }
+
+    private static bool HasCardDefinition(
+        List<CardTestData> cards,
+        string cardID,
+        string cardType,
+        int minPoint,
+        int maxPoint,
+        string formula
+    )
+    {
+        CardTestData card = FindCardData(cards, cardID);
+        if (card == null || card.cardType != cardType ||
+            card.minPoint != minPoint || card.maxPoint != maxPoint)
+        {
+            return false;
+        }
+
+        return cardType == CardType.Defense
+            ? card.defenseFormula == formula
+            : card.damageFormula == formula;
     }
 
     private static bool HasCapabilities(
