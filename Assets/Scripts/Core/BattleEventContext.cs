@@ -4,8 +4,12 @@
 // 后面 CD / Buff / 罪卡 / 负罪感 / 成就 / UI 都可以读取这里的信息
 public class BattleEventContext
 {
-    // timing = 当前事件阶段
-    // 例如：BeforeUse / Clash / Resolved / Hit / AfterDamage / AfterKill / TurnEnd
+    // timing = 当前事件阶段。
+    // 新时间点词汇包括：
+    // TurnStart / ExecutionStart / ActionStart / CardUsed / ClashStart /
+    // Clash / ClashWin / ClashLose / DamageModifier / Hit / AfterDamage /
+    // AfterKill / CardResolved / ActionFinished / TurnEnd。
+    // BeforeUse / OnPlay / Resolved 仍属于 Legacy / 兼容旧代码的时间点。
     public string timing;
 
     // user = 行动者

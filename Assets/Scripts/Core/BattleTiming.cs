@@ -1,4 +1,4 @@
-// 脚本中文说明：战斗时机常量。负责保存回合开始、拼点开始、卡牌生效、命中、伤害后等事件时机名称。
+// 脚本中文说明：战斗时机常量。负责保存回合、行动、拼点、伤害及结算事件时机名称。
 // BattleTiming = 战斗触发时机常量表
 // 以后 JSON 里的 trigger 字段，尽量都从这里找对应名字
 public static class BattleTiming
@@ -11,27 +11,28 @@ public static class BattleTiming
     // 例如：回合开始时获得 Buff、处理待生效状态
     public const string TurnStart = "TurnStart";
 
-    // TurnEnd = 回合结束
-    // 例如：Buff 持续时间减少、卡牌自然 CD -1
-    public const string TurnEnd = "TurnEnd";
-
+    // ExecutionStart = 完成 Planning，正式进入本回合执行阶段
+    public const string ExecutionStart = "ExecutionStart";
 
     // ================================
-    // 卡牌使用阶段
+    // 单次行动 / 使用阶段
     // ================================
 
-    // BeforeUse = 卡牌使用前
-    // 旧名字 OnPlay 等同于 BeforeUse
-    // 以后新 JSON 统一写 BeforeUse
-    // ActionStart：当前执行项确认开始处理该卡后触发。
-    // 晚于回合开始与硬性使用条件检查，
-    // 早于资源快照、BeforeUse和正式点数结算。
+    // ActionStart = 当前 ExecutionItem / Action 正式开始处理
+    // 晚于回合开始与硬性使用条件检查。
     public const string ActionStart = "ActionStart";
 
+    // CardUsed = 卡牌已经被正式判定为 Used
+    public const string CardUsed = "CardUsed";
+
+    // ================================
+    // Legacy 使用阶段
+    // ================================
+
+    // BeforeUse = Legacy / 兼容旧代码的卡牌使用前时机
     public const string BeforeUse = "BeforeUse";
 
-    // OnPlay = 旧版字段
-    // 只用于兼容旧 JSON，不建议新卡继续使用
+    // OnPlay = Legacy / 兼容旧 JSON 的旧版使用时机
     public const string OnPlay = "OnPlay";
 
 
@@ -59,13 +60,11 @@ public static class BattleTiming
 
 
     // ================================
-    // 卡牌结果阶段
+    // 伤害阶段
     // ================================
 
-    // Resolved = 卡牌生效
-    // 普通卡牌在这里进入 CD
-    // 如果要写“这张卡生效后减少自己的 CD”，优先用这个阶段
-    public const string Resolved = "Resolved";
+    // DamageModifier = 伤害正式写入 HP 前的伤害修正阶段
+    public const string DamageModifier = "DamageModifier";
 
     // Hit = 命中
     // 攻击打到目标时触发
@@ -79,4 +78,29 @@ public static class BattleTiming
     // AfterKill = 击杀后
     // 用于击杀奖励、击杀后 CD 减少、负罪感变化等
     public const string AfterKill = "AfterKill";
+
+    // ================================
+    // 卡牌 / 行动结束阶段
+    // ================================
+
+    // CardResolved = 已 Used 的卡完成自身直接逻辑后的新结算时机
+    public const string CardResolved = "CardResolved";
+
+    // ActionFinished = Execution Action / Item 在程序层正式结束
+    public const string ActionFinished = "ActionFinished";
+
+    // ================================
+    // Legacy 结算阶段
+    // ================================
+
+    // Resolved = Legacy / 兼容旧代码的卡牌结算时机
+    public const string Resolved = "Resolved";
+
+    // ================================
+    // 回合结束
+    // ================================
+
+    // TurnEnd = 回合结束
+    // 例如：Buff 持续时间减少、卡牌自然 CD -1
+    public const string TurnEnd = "TurnEnd";
 }

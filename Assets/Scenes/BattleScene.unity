@@ -980,6 +980,7 @@ MonoBehaviour:
   formalPresentationTestHarness: {fileID: 283409993}
   useDebugTestInitialization: 0
   useSingleUnitDemo: 1
+  playerDeckPreset: 0
 --- !u!4 &283409991
 Transform:
   m_ObjectHideFlags: 0
