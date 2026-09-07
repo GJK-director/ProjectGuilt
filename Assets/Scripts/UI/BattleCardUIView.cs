@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Text;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -26,9 +25,9 @@ public class BattleCardUIView : MonoBehaviour,
     private CanvasGroup availabilityCanvasGroup;
     private float availableCanvasGroupAlpha = 1f;
     private bool hasCachedAvailableCanvasGroupAlpha;
-    private readonly Dictionary<string, CardKeywordData>
+    private readonly Dictionary<string, BattleCardKeywordBinding>
         keywordByLinkID =
-            new Dictionary<string, CardKeywordData>();
+            new Dictionary<string, BattleCardKeywordBinding>();
     private string activeKeywordLinkID;
 
     public CharacterData BoundOwner => boundOwner;
@@ -199,7 +198,7 @@ public class BattleCardUIView : MonoBehaviour,
 
     void SetKeywordDescription(
         string description,
-        CardKeywordData[] keywords
+        CardKeywordData[] previewKeywords
     )
     {
         ClearKeywordHover();
@@ -211,81 +210,30 @@ public class BattleCardUIView : MonoBehaviour,
         }
 
         descriptionText.richText = true;
-        descriptionText.text = BuildKeywordRichText(
-            description ?? string.Empty,
-            keywords
-        );
-    }
+        CardTestData cardData =
+            boundCardState != null ? boundCardState.cardData : null;
 
-    string BuildKeywordRichText(
-        string description,
-        CardKeywordData[] keywords
-    )
-    {
-        if (string.IsNullOrEmpty(description) ||
-            keywords == null ||
-            keywords.Length == 0)
+        // SetCard is also used by unbound previews, whose local keywords live
+        // only in BattleCardUIPreviewData.
+        if (previewKeywords != null &&
+            (cardData == null ||
+                !object.ReferenceEquals(previewKeywords, cardData.keywords)))
         {
-            return description;
+            cardData = new CardTestData
+            {
+                cardID = cardData != null ? cardData.cardID : "preview",
+                keywords = previewKeywords
+            };
         }
 
-        StringBuilder builder = new StringBuilder();
-        int textIndex = 0;
-        while (textIndex < description.Length)
+        BattleCardDescriptionFormatResult result =
+            BattleCardDescriptionFormatter.Format(description, cardData);
+        foreach (KeyValuePair<string, BattleCardKeywordBinding> pair in
+            result.keywordBindings)
         {
-            int matchedKeywordIndex = -1;
-            int matchedLength = 0;
-
-            for (int keywordIndex = 0;
-                keywordIndex < keywords.Length;
-                keywordIndex++)
-            {
-                CardKeywordData keyword = keywords[keywordIndex];
-                if (keyword == null ||
-                    string.IsNullOrEmpty(keyword.displayName) ||
-                    string.IsNullOrEmpty(keyword.tooltipText) ||
-                    keyword.displayName.Length <= matchedLength ||
-                    textIndex + keyword.displayName.Length >
-                        description.Length)
-                {
-                    continue;
-                }
-
-                if (string.CompareOrdinal(
-                    description,
-                    textIndex,
-                    keyword.displayName,
-                    0,
-                    keyword.displayName.Length
-                ) == 0)
-                {
-                    matchedKeywordIndex = keywordIndex;
-                    matchedLength = keyword.displayName.Length;
-                }
-            }
-
-            if (matchedKeywordIndex < 0)
-            {
-                builder.Append(description[textIndex]);
-                textIndex++;
-                continue;
-            }
-
-            CardKeywordData matchedKeyword =
-                keywords[matchedKeywordIndex];
-            string linkID =
-                "battle-card-keyword-" + matchedKeywordIndex;
-            keywordByLinkID[linkID] = matchedKeyword;
-
-            builder.Append("<link=\"");
-            builder.Append(linkID);
-            builder.Append("\"><color=#E8C56A><u>");
-            builder.Append(matchedKeyword.displayName);
-            builder.Append("</u></color></link>");
-            textIndex += matchedLength;
+            keywordByLinkID[pair.Key] = pair.Value;
         }
-
-        return builder.ToString();
+        descriptionText.text = result.richText;
     }
 
     void RefreshKeywordHover(PointerEventData eventData)
@@ -312,7 +260,7 @@ public class BattleCardUIView : MonoBehaviour,
 
         string linkID =
             descriptionText.textInfo.linkInfo[linkIndex].GetLinkID();
-        CardKeywordData keyword;
+        BattleCardKeywordBinding keyword;
         if (!keywordByLinkID.TryGetValue(linkID, out keyword) ||
             keyword == null)
         {
@@ -327,12 +275,12 @@ public class BattleCardUIView : MonoBehaviour,
         }
 
         activeKeywordLinkID = linkID;
-        BattleSecondaryInfoContent content =
-            new BattleSecondaryInfoContent(
-                keyword.displayName,
-                keyword.tooltipText,
-                "卡牌关键词"
-            );
+        if (!BattleCardTooltipResolver.TryResolve(keyword, boundOwner, out
+                BattleSecondaryInfoContent content))
+        {
+            ClearKeywordHover();
+            return;
+        }
         BattleSecondaryInfoPanelHost.HandlePointer(
             new BattleSecondaryInfoHoverRequest(
                 gameObject,

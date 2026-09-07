@@ -117,7 +117,8 @@ public enum BattleTestMode
     BattleResourceSpecialStateNormalizationBasic = 128,
     BattleRuntimeInteractionLifecycleBasic = 129,
     BattleRuleEvaluationAndEffectHookupBasic = 130,
-    BattleDeckFrozenSemanticsMigration = 131
+    BattleDeckFrozenSemanticsMigration = 131,
+    BattleCardKeywordPresentationBasic = 132
 }
 
 public static class BattleLifecycleTimingTests
@@ -5132,6 +5133,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleDeckFrozenSemanticsMigration)
         {
             BattleDeckFrozenSemanticsMigrationTests.Run(cards);
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleCardKeywordPresentationBasic)
+        {
+            BattleCardKeywordPresentationTests.Run(cards);
             return;
         }
 
@@ -30322,12 +30329,13 @@ public static class BattleDeckFrozenSemanticsMigrationTests
 
         BattleCardState normalLoss = State(owner, cards, "atk_001");
         BattleResolutionPlan normalPlan = Respond(normalLoss, Attack(Unit(
-            "mode131_breath_loss_enemy"), 100
+            "mode131_breath_loss_enemy"), 20
         ));
         bool borrowed = normalPlan != null && normalLoss.borrowedBreathPointBonus == 2 &&
             normalPlan.clashSession.SideAPoint >= 6 && normalPlan.clashSession.SideAPoint <= 9;
         BattleResolveResult loss = Complete(normalPlan);
-        if (!borrowed || loss == null || normalLoss.cardUsedCommittedForCurrentAction ||
+        if (!borrowed || loss == null || owner.currentHP <= 0 ||
+            normalLoss.cardUsedCommittedForCurrentAction ||
             owner.battlePending.nextUsedAttackPointBonus != 2) return false;
 
         BattleCardState used = State(owner, cards, "atk_001");
@@ -30601,6 +30609,312 @@ public static class BattleDeckFrozenSemanticsMigrationTests
     static CharacterData Unit(string id)
     {
         return BattleTimingMigrationFixture.Unit(id);
+    }
+}
+
+public static class BattleCardKeywordPresentationTests
+{
+    public static bool Run(List<CardTestData> cards)
+    {
+        bool timing = VerifyTimingToken();
+        bool global = VerifyGlobalKeyword();
+        bool vocabulary = VerifyTimingVocabulary();
+        bool bullet = VerifyBulletDynamicCapacity();
+        bool anger = VerifyGlobalTooltip("怒", "global:anger", "怒层数");
+        bool conservation = VerifyGlobalTooltip("节约", "global:conservation", "下一张符合条件的射击");
+        bool modification = VerifyGlobalTooltip("改装", "global:modification", "弹仓容量");
+        bool localOverride = VerifyLocalOverride();
+        bool stableLinks = VerifyStableLocalLinkIDs();
+        bool allIn = VerifyAllInTooltip(cards);
+        bool visibleMultipliers = VerifyVisibleMultipliers();
+        bool longest = VerifyLongestMatch();
+        bool repeated = VerifyRepeatedKeyword();
+        bool adjacent = VerifyAdjacentTimingAndKeyword();
+        bool missing = VerifyMissingKeywordFallback();
+        bool descriptionOnly = VerifyDescriptionOnlyPresentation();
+        bool pureRead = VerifyTooltipResolverPureRead();
+
+        Debug.Log("===== Mode132 BattleCardKeywordPresentationBasic =====");
+        Check("Timing uses gray-blue presentation", timing);
+        Check("Global keyword uses gold TMP link", global);
+        Check("Only frozen player timing vocabulary is recognized", vocabulary);
+        Check("Bullet tooltip reads dynamic capacity", bullet);
+        Check("Anger global tooltip resolves", anger);
+        Check("Conservation global tooltip resolves", conservation);
+        Check("Modification global tooltip resolves", modification);
+        Check("Card-local keyword overrides global", localOverride);
+        Check("Stable link IDs disambiguate local keywords", stableLinks);
+        Check("ALL IN local formula tooltip resolves", allIn);
+        Check("Simple multipliers remain directly visible", visibleMultipliers);
+        Check("Longest keyword match wins", longest);
+        Check("Repeated keywords format consistently", repeated);
+        Check("Timing and keyword tokens coexist", adjacent);
+        Check("Missing keyword data falls back safely", missing);
+        Check("Description formatting does not mutate gameplay metadata", descriptionOnly);
+        Check("Tooltip resolution is pure read", pureRead);
+        bool passed = timing && global && vocabulary && bullet && anger && conservation &&
+            modification && localOverride && stableLinks && allIn && visibleMultipliers &&
+            longest && repeated && adjacent && missing && descriptionOnly && pureRead;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyTimingToken()
+    {
+        BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format(
+            "使用时：获得1层子弹", null
+        );
+        return result.richText.Contains("<color=#7FA9C9>使用时</color>") &&
+            !result.richText.Contains("<link=\"使用时\"") &&
+            result.TryGetBinding("global:bullet", out _);
+    }
+
+    static bool VerifyGlobalKeyword()
+    {
+        BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format(
+            "子弹", null
+        );
+        return result.richText.Contains("<link=\"global:bullet\"><color=#E8C56A><u>子弹") &&
+            result.TryGetBinding("global:bullet", out BattleCardKeywordBinding binding) &&
+            binding.kind == BattleCardDescriptionTokenKind.GlobalKeyword;
+    }
+
+    static bool VerifyTimingVocabulary()
+    {
+        string[] recognized =
+        {
+            "回合开始时", "行动开始时", "使用时", "拼点时", "拼点胜利", "拼点失败",
+            "命中时", "造成伤害后", "击杀时", "结算时", "回合结束时"
+        };
+        foreach (string phrase in recognized)
+        {
+            if (!BattleCardDescriptionFormatter.Format(phrase, null).richText.Contains(
+                    "<color=#7FA9C9>" + phrase + "</color>")) return false;
+        }
+        string[] internalOnly = { "成功时", "拼点前", "CardUsed", "ActionStart" };
+        foreach (string phrase in internalOnly)
+        {
+            if (BattleCardDescriptionFormatter.Format(phrase, null).richText.Contains(
+                    "#7FA9C9")) return false;
+        }
+        return true;
+    }
+
+    static bool VerifyBulletDynamicCapacity()
+    {
+        CharacterData owner = BattleTimingMigrationFixture.Unit("mode132_bullet");
+        BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format("子弹", null);
+        if (!result.TryGetBinding("global:bullet", out BattleCardKeywordBinding binding) ||
+            !BattleCardTooltipResolver.TryResolve(binding, owner,
+                out BattleSecondaryInfoContent before) || !before.body.Contains("6"))
+        {
+            return false;
+        }
+        BattleModificationRules.Activate(owner);
+        return BattleCardTooltipResolver.TryResolve(binding, owner,
+            out BattleSecondaryInfoContent after) && after.body.Contains("4") &&
+            !after.body.Contains("容量：6");
+    }
+
+    static bool VerifyGlobalTooltip(string text, string linkID, string requiredBody)
+    {
+        BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format(text, null);
+        return result.TryGetBinding(linkID, out BattleCardKeywordBinding binding) &&
+            BattleCardTooltipResolver.TryResolve(binding, null,
+                out BattleSecondaryInfoContent content) && content.body.Contains(requiredBody);
+    }
+
+    static bool VerifyLocalOverride()
+    {
+        CardTestData card = new CardTestData
+        {
+            cardID = "mode132_local_override",
+            keywords = new[] { Keyword("local_allin_multiplier", "倍率", "本卡倍率说明") }
+        };
+        BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format("倍率", card);
+        return result.TryGetBinding("local:mode132_local_override:local_allin_multiplier",
+            out BattleCardKeywordBinding binding) &&
+            binding.kind == BattleCardDescriptionTokenKind.CardLocalKeyword &&
+            !result.keywordBindings.ContainsKey("global:global_multiplier");
+    }
+
+    static bool VerifyStableLocalLinkIDs()
+    {
+        CardTestData first = new CardTestData
+        {
+            cardID = "mode132_a",
+            keywords = new[] { Keyword("multiplier_a", "倍率", "A") }
+        };
+        CardTestData second = new CardTestData
+        {
+            cardID = "mode132_b",
+            keywords = new[] { Keyword("multiplier_b", "倍率", "B") }
+        };
+        BattleCardDescriptionFormatResult firstResult = BattleCardDescriptionFormatter.Format("倍率", first);
+        BattleCardDescriptionFormatResult secondResult = BattleCardDescriptionFormatter.Format("倍率", second);
+        return firstResult.TryGetBinding("local:mode132_a:multiplier_a", out _) &&
+            secondResult.TryGetBinding("local:mode132_b:multiplier_b", out _) &&
+            firstResult.richText != secondResult.richText;
+    }
+
+    static bool VerifyAllInTooltip(List<CardTestData> cards)
+    {
+        CardTestData allIn = CardDataLoader.FindCardByID(cards, "shoot_all_in_001");
+        if (allIn == null) return false;
+        BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format(
+            allIn.description, allIn
+        );
+        if (!result.TryGetBinding("local:shoot_all_in_001:allin_multiplier",
+                out BattleCardKeywordBinding binding) ||
+            !BattleCardTooltipResolver.TryResolve(binding, null,
+                out BattleSecondaryInfoContent content)) return false;
+        string[] values = { "100%", "180%", "230%", "270%", "300%", "320%" };
+        foreach (string value in values)
+        {
+            if (!content.body.Contains(value)) return false;
+        }
+        return true;
+    }
+
+    static bool VerifyVisibleMultipliers()
+    {
+        string text = "拼点失败：本次受到伤害 ×1.25；×1.5";
+        string richText = BattleCardDescriptionFormatter.Format(text, null).richText;
+        return richText.Contains("×1.25") && richText.Contains("×1.5");
+    }
+
+    static bool VerifyLongestMatch()
+    {
+        CardTestData card = new CardTestData
+        {
+            cardID = "mode132_longest",
+            keywords = new[]
+            {
+                Keyword("short", "子弹", "short"),
+                Keyword("long", "子弹容量", "long")
+            }
+        };
+        BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format("子弹容量", card);
+        return result.keywordBindings.Count == 1 &&
+            result.TryGetBinding("local:mode132_longest:long", out _) &&
+            !result.richText.Contains("local:mode132_longest:short");
+    }
+
+    static bool VerifyRepeatedKeyword()
+    {
+        BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format(
+            "消耗子弹，击杀后回复子弹", null
+        );
+        return Count(result.richText, "<link=\"global:bullet\"") == 2 &&
+            result.keywordBindings.Count == 1;
+    }
+
+    static bool VerifyAdjacentTimingAndKeyword()
+    {
+        BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format(
+            "使用时：消耗子弹", null
+        );
+        return result.richText.Contains("<color=#7FA9C9>使用时</color>") &&
+            result.richText.Contains("<link=\"global:bullet\"") &&
+            !result.richText.Contains("<link=\"使用时\"");
+    }
+
+    static bool VerifyMissingKeywordFallback()
+    {
+        CardTestData card = new CardTestData
+        {
+            cardID = "mode132_missing",
+            keywords = new[] { Keyword("missing", "未知规则", string.Empty) }
+        };
+        BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format("未知规则", card);
+        return result.richText.Contains("未知规则") &&
+            result.TryGetBinding("local:mode132_missing:missing", out BattleCardKeywordBinding binding) &&
+            !BattleCardTooltipResolver.TryResolve(binding, null, out _);
+    }
+
+    static bool VerifyDescriptionOnlyPresentation()
+    {
+        CardResourceRuleData rule = new CardResourceRuleData
+        {
+            resourceType = "BuffStack", resourceID = BattleResourceID.Bullet,
+            consumeAmountOnSuccess = 1
+        };
+        BattleCardTrait[] traits = { BattleCardTrait.FirstStrike };
+        List<CardEffectData> effects = new List<CardEffectData>();
+        CardTestData described = new CardTestData
+        {
+            description = "子弹 怒 使用时 ×999", usePolicy = CardUsePolicy.ImmediateCommit,
+            resourceRule = rule, traits = traits, effects = effects
+        };
+        CardTestData plain = new CardTestData
+        {
+            description = string.Empty, usePolicy = CardUsePolicy.ImmediateCommit,
+            resourceRule = rule, traits = traits, effects = effects
+        };
+        string describedText = BattleCardDescriptionFormatter.Format(
+            described.description, described
+        ).richText;
+        string plainText = BattleCardDescriptionFormatter.Format(
+            plain.description, plain
+        ).richText;
+        return describedText != plainText && described.GetUsePolicy() == plain.GetUsePolicy() &&
+            object.ReferenceEquals(described.resourceRule, rule) &&
+            object.ReferenceEquals(plain.resourceRule, rule) &&
+            object.ReferenceEquals(described.traits, traits) &&
+            object.ReferenceEquals(described.effects, effects);
+    }
+
+    static bool VerifyTooltipResolverPureRead()
+    {
+        CharacterData owner = BattleTimingMigrationFixture.Unit("mode132_pure_read");
+        BattleBulletRules.AddBulletCapped(owner, 3);
+        owner.SetAngerMechanicEnabledForBattle(true);
+        BattleAngerRules.AddAnger(owner, 2);
+        owner.AddBuff("mode132_buff", 1, -1);
+        BattleCardState card = BattleTimingMigrationFixture.Card(owner, CardType.Attack, 1);
+        card.currentCooldown = 4;
+        int hp = owner.currentHP;
+        int bullet = BattleBulletRules.GetBullet(owner);
+        int anger = BattleAngerRules.GetAnger(owner);
+        int buff = owner.GetBuffStack("mode132_buff");
+        BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format(
+            "子弹 怒 节约 改装", null
+        );
+        foreach (KeyValuePair<string, BattleCardKeywordBinding> pair in result.keywordBindings)
+        {
+            if (!BattleCardTooltipResolver.TryResolve(pair.Value, owner, out _)) return false;
+        }
+        return owner.currentHP == hp && BattleBulletRules.GetBullet(owner) == bullet &&
+            BattleAngerRules.GetAnger(owner) == anger &&
+            owner.GetBuffStack("mode132_buff") == buff && card.currentCooldown == 4;
+    }
+
+    static CardKeywordData Keyword(string id, string displayName, string tooltip)
+    {
+        return new CardKeywordData
+        {
+            keywordID = id,
+            displayName = displayName,
+            tooltipText = tooltip
+        };
+    }
+
+    static int Count(string text, string value)
+    {
+        int count = 0;
+        int index = 0;
+        while (!string.IsNullOrEmpty(text) && !string.IsNullOrEmpty(value) &&
+            (index = text.IndexOf(value, index)) >= 0)
+        {
+            count++;
+            index += value.Length;
+        }
+        return count;
+    }
+
+    static void Check(string label, bool passed)
+    {
+        Debug.Log((passed ? "PASS: " : "FAIL: ") + label);
     }
 }
 
