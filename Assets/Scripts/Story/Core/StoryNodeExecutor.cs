@@ -215,7 +215,7 @@ namespace ProjectGuilt.Story
                 node.nodeId,
                 node.dialogue.speakerId,
                 node.dialogue.speakerName,
-                node.dialogue.text
+                context.TextPresenter.FullText
             );
             context.View.SetContinueIndicator(false);
             context.View.ShowDialogue(
