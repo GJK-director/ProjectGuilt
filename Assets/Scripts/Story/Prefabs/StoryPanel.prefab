@@ -861,7 +861,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &4449492401178417166
 RectTransform:
   m_ObjectHideFlags: 0
@@ -1866,7 +1866,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1241081842944468532
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2693,6 +2693,21 @@ MonoBehaviour:
   dialogueText: {fileID: 5248015568918513391}
   continueText: {fileID: 7609922162514389429}
   statusText: {fileID: 1222391231600156948}
+  backgroundBindings:
+  - backgroundId: corridor_door_closed
+    sprite: {fileID: 21300000, guid: ef49bddd6d5eb044bb06a8e71767a290, type: 3}
+  - backgroundId: corridor_door_open
+    sprite: {fileID: 21300000, guid: bc7eb80a87a56eb43aae686061213fde, type: 3}
+  - backgroundId: phone_off
+    sprite: {fileID: 21300000, guid: 547ca8631db880c4980425e66fefdcd4, type: 3}
+  - backgroundId: phone_on
+    sprite: {fileID: 21300000, guid: e8ee28b60237e4545a24acbbd51a1bfb, type: 3}
+  - backgroundId: tv_viewer_wide
+    sprite: {fileID: 21300000, guid: 7e30314e3f1cdf04f8abb58da9e6a298, type: 3}
+  - backgroundId: tv_viewer_variant
+    sprite: {fileID: 21300000, guid: 8cffe478001aa634b8345ef2194297c0, type: 3}
+  - backgroundId: monster_turn_closeup
+    sprite: {fileID: 21300000, guid: fcd6e7b2f4e3bcc40b4570a8762e87e5, type: 3}
   leftPortrait:
     root: {fileID: 8800661179620957476}
     panel: {fileID: 776643805130359980}

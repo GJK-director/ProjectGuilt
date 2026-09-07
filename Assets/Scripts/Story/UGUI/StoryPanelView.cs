@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
@@ -13,6 +14,13 @@ namespace ProjectGuilt.Story
 [DisallowMultipleComponent]
 public sealed class StoryPanelView : StoryViewBehaviour
 {
+    [Serializable]
+    private sealed class BackgroundBinding
+    {
+        public string backgroundId = string.Empty;
+        public Sprite sprite = null;
+    }
+
     [Serializable]
     private sealed class PortraitBinding
     {
@@ -49,6 +57,10 @@ public sealed class StoryPanelView : StoryViewBehaviour
     [SerializeField] private Text continueText = null;
     [SerializeField] private Text statusText = null;
 
+    [Header("Background Assets")]
+    [SerializeField] private List<BackgroundBinding> backgroundBindings =
+        new List<BackgroundBinding>();
+
     [Header("Portraits And Choices")]
     [SerializeField] private PortraitBinding leftPortrait = new PortraitBinding();
     [SerializeField] private PortraitBinding rightPortrait = new PortraitBinding();
@@ -73,6 +85,7 @@ public sealed class StoryPanelView : StoryViewBehaviour
     private static readonly Color Accent = new Color32(171, 66, 78, 255);
     private static readonly Color ButtonNormal = new Color32(44, 53, 70, 245);
     private string lastStartedStoryId = string.Empty;
+    private Coroutine backgroundTransition;
 
     private void Awake()
     {
@@ -241,29 +254,139 @@ public sealed class StoryPanelView : StoryViewBehaviour
 
     public override void SetBackground(string backgroundId, float fadeSeconds)
     {
-        if (backgroundImage != null)
+        if (backgroundTransition != null)
         {
-            switch (backgroundId)
-            {
-                case "rainy_street":
-                    backgroundImage.color = new Color32(20, 33, 50, 255);
-                    break;
-                case "archive_room":
-                    backgroundImage.color = new Color32(38, 43, 36, 255);
-                    break;
-                case "morning_window":
-                    backgroundImage.color = new Color32(88, 81, 74, 255);
-                    break;
-                default:
-                    backgroundImage.color = new Color32(25, 29, 42, 255);
-                    break;
-            }
+            StopCoroutine(backgroundTransition);
+            backgroundTransition = null;
         }
+
+        Sprite sprite;
+        bool hasSprite = TryGetBackgroundSprite(backgroundId, out sprite);
+        bool isBlack = string.Equals(
+            backgroundId,
+            "black",
+            StringComparison.OrdinalIgnoreCase
+        );
 
         if (backgroundLabel != null)
         {
-            backgroundLabel.text = "背景占位 · " + (backgroundId ?? "未指定");
+            backgroundLabel.gameObject.SetActive(!hasSprite && !isBlack);
+
+            if (!hasSprite && !isBlack)
+            {
+                backgroundLabel.text = "背景占位 · " + (backgroundId ?? "未指定");
+            }
         }
+
+        if (backgroundImage == null)
+        {
+            return;
+        }
+
+        float safeFadeSeconds = Mathf.Max(0f, fadeSeconds);
+
+        if (safeFadeSeconds <= 0f || !isActiveAndEnabled)
+        {
+            ApplyBackground(sprite, hasSprite, isBlack, 1f);
+            return;
+        }
+
+        backgroundTransition = StartCoroutine(
+            FadeBackground(sprite, hasSprite, isBlack, safeFadeSeconds)
+        );
+    }
+
+    private IEnumerator FadeBackground(
+        Sprite sprite,
+        bool hasSprite,
+        bool isBlack,
+        float fadeSeconds
+    )
+    {
+        float halfDuration = Mathf.Max(0.01f, fadeSeconds * 0.5f);
+        float elapsed = 0f;
+        Color startColor = backgroundImage.color;
+
+        while (elapsed < halfDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            Color color = startColor;
+            color.a = Mathf.Lerp(startColor.a, 0f, elapsed / halfDuration);
+            backgroundImage.color = color;
+            yield return null;
+        }
+
+        ApplyBackground(sprite, hasSprite, isBlack, 0f);
+        elapsed = 0f;
+
+        while (elapsed < halfDuration)
+        {
+            elapsed += Time.unscaledDeltaTime;
+            Color color = backgroundImage.color;
+            color.a = Mathf.Clamp01(elapsed / halfDuration);
+            backgroundImage.color = color;
+            yield return null;
+        }
+
+        Color completedColor = backgroundImage.color;
+        completedColor.a = 1f;
+        backgroundImage.color = completedColor;
+        backgroundTransition = null;
+    }
+
+    private void ApplyBackground(
+        Sprite sprite,
+        bool hasSprite,
+        bool isBlack,
+        float alpha
+    )
+    {
+        backgroundImage.sprite = hasSprite ? sprite : null;
+        backgroundImage.type = Image.Type.Simple;
+        backgroundImage.preserveAspect = hasSprite;
+
+        Color color = ResolveFallbackBackgroundColor(hasSprite, isBlack);
+        color.a = Mathf.Clamp01(alpha);
+        backgroundImage.color = color;
+    }
+
+    private bool TryGetBackgroundSprite(string backgroundId, out Sprite sprite)
+    {
+        sprite = null;
+
+        if (string.IsNullOrWhiteSpace(backgroundId))
+        {
+            return false;
+        }
+
+        foreach (BackgroundBinding binding in backgroundBindings)
+        {
+            if (binding != null &&
+                binding.sprite != null &&
+                string.Equals(
+                    binding.backgroundId,
+                    backgroundId,
+                    StringComparison.OrdinalIgnoreCase
+                ))
+            {
+                sprite = binding.sprite;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static Color ResolveFallbackBackgroundColor(bool hasSprite, bool isBlack)
+    {
+        if (hasSprite)
+        {
+            return Color.white;
+        }
+
+        return isBlack
+            ? Color.black
+            : new Color32(25, 29, 42, 255);
     }
 
     public override void ApplyPortraits(
