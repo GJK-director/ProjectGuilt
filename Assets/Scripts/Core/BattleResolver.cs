@@ -32,6 +32,7 @@ public class BattleResolveResult
     public bool triggeredEventChain;
 
     public BattleActionSlot triggeredPassiveGuardSlot;
+    public BattleRuntimeInteraction runtimeInteraction;
 
     public string message;
 }
@@ -51,6 +52,14 @@ public static class BattleResolver
     // ResolveFreeAction = 正式结算自由行动
     // 第一版支持 Ability FreeAction 和 Attack FreeAction，不处理防御、闪避等自由行动。
     public static BattleResolveResult ResolveFreeAction(BattleActionSlot actionSlot)
+    {
+        return ResolveFreeAction(actionSlot, null);
+    }
+
+    internal static BattleResolveResult ResolveFreeAction(
+        BattleActionSlot actionSlot,
+        BattleExecutionItem executionItem
+    )
     {
         if (actionSlot == null)
         {
@@ -82,12 +91,12 @@ public static class BattleResolver
 
         if (isAbilityCard)
         {
-            return ResolveFreeAbilityAction(actionSlot);
+            return ResolveFreeAbilityAction(actionSlot, executionItem);
         }
 
         if (isAttackCard)
         {
-            return ResolveFreeAttackAction(actionSlot);
+            return ResolveFreeAttackAction(actionSlot, executionItem);
         }
 
         return CreateUnsupportedResolveResult(
@@ -96,7 +105,10 @@ public static class BattleResolver
         );
     }
 
-    static BattleResolveResult ResolveFreeAbilityAction(BattleActionSlot actionSlot)
+    static BattleResolveResult ResolveFreeAbilityAction(
+        BattleActionSlot actionSlot,
+        BattleExecutionItem executionItem
+    )
     {
         CharacterData user = actionSlot.actor;
         CharacterData target = actionSlot.target != null ? actionSlot.target : user;
@@ -118,11 +130,55 @@ public static class BattleResolver
             "，不进入拼点"
         );
 
+        BattleRuntimeInteraction runtimeInteraction =
+            new BattleRuntimeInteraction(
+                BattleInteractionType.NoInteraction,
+                new BattleExecutionAction(
+                    user,
+                    actionSlot.cardState,
+                    actionSlot,
+                    null,
+                    target
+                ),
+                null,
+                executionItem
+            );
         actionSlot.cardState.ResetCardUsedCommitForNewAction();
-        CommitCardUsedOnce(user, target, actionSlot.cardState);
-        TriggerBattleEvent(BattleTiming.OnPlay, user, target, actionSlot.cardState, 0, 0, false, false);
-        TriggerBattleEvent(BattleTiming.Resolved, user, target, actionSlot.cardState, 0, 0, false, false);
-        CommitCardResolvedOnce(user, target, actionSlot.cardState);
+        CommitCardUsedOnce(
+            user,
+            target,
+            actionSlot.cardState,
+            runtimeInteraction: runtimeInteraction
+        );
+        TriggerBattleEvent(
+            BattleTiming.OnPlay,
+            user,
+            target,
+            actionSlot.cardState,
+            0,
+            0,
+            false,
+            false,
+            runtimeInteraction: runtimeInteraction
+        );
+        TriggerBattleEvent(
+            BattleTiming.Resolved,
+            user,
+            target,
+            actionSlot.cardState,
+            0,
+            0,
+            false,
+            false,
+            runtimeInteraction: runtimeInteraction
+        );
+        CommitCardResolvedOnce(
+            user,
+            target,
+            actionSlot.cardState,
+            runtimeInteraction: runtimeInteraction
+        );
+        runtimeInteraction.TryComplete();
 
         BattleResolveResult result = new BattleResolveResult();
         result.isSuccess = true;
@@ -138,6 +194,7 @@ public static class BattleResolver
         result.clashAttemptCount = 0;
         result.isTieLimitReached = false;
         result.triggeredEventChain = true;
+        result.runtimeInteraction = runtimeInteraction;
         result.message =
             "ResolveFreeAction 完成：Ability FreeAction 已触发 OnPlay / Resolved，不造成伤害";
 
@@ -146,11 +203,14 @@ public static class BattleResolver
         return result;
     }
 
-    static BattleResolveResult ResolveFreeAttackAction(BattleActionSlot actionSlot)
+    static BattleResolveResult ResolveFreeAttackAction(
+        BattleActionSlot actionSlot,
+        BattleExecutionItem executionItem
+    )
     {
         BattleResolveResult failureResult;
         BattleResolutionPlan plan = BuildFreeAttackResolutionPlan(
-            null,
+            executionItem,
             actionSlot,
             out failureResult
         );
@@ -163,6 +223,7 @@ public static class BattleResolver
 
         if (!TryRollFreeAttackResolutionPlan(plan, out int rolledPoint))
         {
+            plan.runtimeInteraction?.TryAbort();
             return CreateInvalidResolveResult(
                 "ResolveFreeAction 失败：无法生成 FreeAttack 点数"
             );
@@ -206,9 +267,17 @@ public static class BattleResolver
         BattleExecutionAction attackAction
     )
     {
+        return ResolveUnilateralAttack(attackAction, null);
+    }
+
+    internal static BattleResolveResult ResolveUnilateralAttack(
+        BattleExecutionAction attackAction,
+        BattleExecutionItem executionItem
+    )
+    {
         BattleResolutionPlan plan = BuildUnilateralAttackResolutionPlan(
             attackAction,
-            null,
+            executionItem,
             null,
             out BattleResolveResult failureResult
         );
@@ -221,6 +290,7 @@ public static class BattleResolver
 
         if (!TryRollUnilateralAttackResolutionPlan(plan, out _))
         {
+            plan.runtimeInteraction?.TryAbort();
             return CreateInvalidResolveResult(
                 "ResolveUnilateralAttack 失败：无法生成Attack点数"
             );
@@ -278,12 +348,24 @@ public static class BattleResolver
         }
 
         BattleClashPointSnapshot pointSnapshot = CapturePointBuffSnapshot(user);
+        BattleRuntimeInteraction runtimeInteraction =
+            new BattleRuntimeInteraction(
+                BattleInteractionType.UnilateralAttack,
+                attackAction,
+                null,
+                executionItem
+            );
 
         // BattleClashPointSnapshot 在 ActionStart 前捕获。
         // 因此 ActionStart 新增的 NextCardPointUp / NextClashPointUp
         // 不影响当前卡，只保留给后续卡牌或后续正式拼点。
         // ActionStart 中对资源的修改会影响随后捕获的 ResourceSnapshot。
-        TriggerActionStart(user, target, attackAction.cardState);
+        TriggerActionStart(
+            user,
+            target,
+            attackAction.cardState,
+            runtimeInteraction
+        );
         // 资源快照在 ActionStart 结算后、BeforeUse 之前捕获。
         // ActionStart 中产生或减少的资源可以影响当前卡。
         // BeforeUse 中产生或减少的资源不会回头改变当前卡资源快照，
@@ -296,6 +378,7 @@ public static class BattleResolver
         );
         if (IsResourceUnavailableForExecution(resourceSnapshot))
         {
+            runtimeInteraction.TryAbort();
             failureResult = CreateActionUnavailableResult(
                 "ResolveUnilateralAttack：执行资源不足，本次攻击不进入成功结算"
             );
@@ -310,7 +393,8 @@ public static class BattleResolver
             0,
             0,
             false,
-            false
+            false,
+            runtimeInteraction: runtimeInteraction
         );
 
         bool usesEnemyCompatibilityMetadata =
@@ -322,6 +406,7 @@ public static class BattleResolver
             attackAction.enemyIntent,
             null
         );
+        plan.runtimeInteraction = runtimeInteraction;
         plan.planKind = usesEnemyCompatibilityMetadata
             ? BattleResolutionPlanKind.UnrespondedEnemyAttack
             : BattleResolutionPlanKind.FreeActionAttack;
@@ -423,7 +508,8 @@ public static class BattleResolver
             rolledPoint,
             ClashResult.None,
             true,
-            true
+            true,
+            plan.runtimeInteraction
         );
         // Roll时固定点数与伤害，HP仍只在Impact提交边界写入。
         impact.SetPrecalculatedDamage(finalHpDamage);
@@ -543,7 +629,12 @@ public static class BattleResolver
         BattleEnemyIntent enemyIntent
     )
     {
-        return ResolveRespondedEnemyIntent(actionSlot, enemyIntent, null);
+        return ResolveRespondedEnemyIntent(
+            actionSlot,
+            enemyIntent,
+            null,
+            null
+        );
     }
 
     public static BattleResolveResult ResolveRespondedEnemyIntent(
@@ -552,10 +643,26 @@ public static class BattleResolver
         IReadOnlyList<BattleActionSlot> passiveGuardCandidates
     )
     {
+        return ResolveRespondedEnemyIntent(
+            actionSlot,
+            enemyIntent,
+            passiveGuardCandidates,
+            null
+        );
+    }
+
+    internal static BattleResolveResult ResolveRespondedEnemyIntent(
+        BattleActionSlot actionSlot,
+        BattleEnemyIntent enemyIntent,
+        IReadOnlyList<BattleActionSlot> passiveGuardCandidates,
+        BattleExecutionItem executionItem
+    )
+    {
         BattleClashSession session;
         BattleResolveResult beginFailure = TryBeginRespondedClash(
             actionSlot,
             enemyIntent,
+            executionItem,
             out session
         );
         if (beginFailure != null)
@@ -569,7 +676,12 @@ public static class BattleResolver
             session.RollNextAttempt();
         }
 
-        return FinalizeRespondedClash(actionSlot, enemyIntent, session);
+        return FinalizeRespondedClash(
+            actionSlot,
+            enemyIntent,
+            session,
+            executionItem
+        );
     }
 
     internal static bool TryGetAttackAndDefenseActions(
@@ -769,6 +881,21 @@ public static class BattleResolver
         out BattleClashSession session
     )
     {
+        return TryBeginAttackVsDefense(
+            attackAction,
+            defenseAction,
+            null,
+            out session
+        );
+    }
+
+    internal static BattleResolveResult TryBeginAttackVsDefense(
+        BattleExecutionAction attackAction,
+        BattleExecutionAction defenseAction,
+        BattleExecutionItem executionItem,
+        out BattleClashSession session
+    )
+    {
         session = null;
         if (!IsValidExecutionAction(attackAction) ||
             attackAction.cardState.cardData.cardType != CardType.Attack)
@@ -800,7 +927,8 @@ public static class BattleResolver
 
         session = CreateAttackVsDefenseClashSession(
             attackAction,
-            defenseAction
+            defenseAction,
+            executionItem
         );
         return session != null
             ? null
@@ -846,6 +974,7 @@ public static class BattleResolver
             attackAction,
             dodgeAction,
             false,
+            null,
             out session
         );
     }
@@ -854,6 +983,23 @@ public static class BattleResolver
         BattleExecutionAction attackAction,
         BattleExecutionAction dodgeAction,
         bool isContinuousDodgeContinuation,
+        out BattleClashSession session
+    )
+    {
+        return TryBeginAttackVsDodge(
+            attackAction,
+            dodgeAction,
+            isContinuousDodgeContinuation,
+            null,
+            out session
+        );
+    }
+
+    internal static BattleResolveResult TryBeginAttackVsDodge(
+        BattleExecutionAction attackAction,
+        BattleExecutionAction dodgeAction,
+        bool isContinuousDodgeContinuation,
+        BattleExecutionItem executionItem,
         out BattleClashSession session
     )
     {
@@ -889,7 +1035,8 @@ public static class BattleResolver
         session = CreateAttackVsDodgeClashSession(
             attackAction,
             dodgeAction,
-            isContinuousDodgeContinuation
+            isContinuousDodgeContinuation,
+            executionItem
         );
         return session != null
             ? null
@@ -902,6 +1049,21 @@ public static class BattleResolver
     internal static BattleResolveResult TryBeginRespondedClash(
         BattleActionSlot actionSlot,
         BattleEnemyIntent enemyIntent,
+        out BattleClashSession session
+    )
+    {
+        return TryBeginRespondedClash(
+            actionSlot,
+            enemyIntent,
+            null,
+            out session
+        );
+    }
+
+    internal static BattleResolveResult TryBeginRespondedClash(
+        BattleActionSlot actionSlot,
+        BattleEnemyIntent enemyIntent,
+        BattleExecutionItem executionItem,
         out BattleClashSession session
     )
     {
@@ -1000,6 +1162,7 @@ public static class BattleResolver
             return TryBeginAttackVsDefense(
                 attackAction,
                 defenseAction,
+                executionItem,
                 out session
             );
         }
@@ -1036,6 +1199,7 @@ public static class BattleResolver
                 attackAction,
                 dodgeAction,
                 false,
+                executionItem,
                 out session
             );
         }
@@ -1082,7 +1246,11 @@ public static class BattleResolver
                 );
             }
 
-            session = CreateRespondedAttackClashSession(actionSlot, enemyIntent);
+            session = CreateRespondedAttackClashSession(
+                actionSlot,
+                enemyIntent,
+                executionItem
+            );
             return null;
         }
 
@@ -1108,7 +1276,12 @@ public static class BattleResolver
                 );
             }
 
-            session = CreateRespondedDodgeClashSession(actionSlot, enemyIntent);
+            session = CreateRespondedDodgeClashSession(
+                actionSlot,
+                enemyIntent,
+                false,
+                executionItem
+            );
             return null;
         }
 
@@ -1134,7 +1307,11 @@ public static class BattleResolver
                 );
             }
 
-            session = CreateRespondedDefenseClashSession(actionSlot, enemyIntent);
+            session = CreateRespondedDefenseClashSession(
+                actionSlot,
+                enemyIntent,
+                executionItem
+            );
             return null;
         }
 
@@ -1204,6 +1381,21 @@ public static class BattleResolver
         BattleClashSession session
     )
     {
+        return FinalizeRespondedClash(
+            actionSlot,
+            enemyIntent,
+            session,
+            null
+        );
+    }
+
+    internal static BattleResolveResult FinalizeRespondedClash(
+        BattleActionSlot actionSlot,
+        BattleEnemyIntent enemyIntent,
+        BattleClashSession session,
+        BattleExecutionItem executionItem
+    )
+    {
         if (session == null)
         {
             return CreateInvalidResolveResult("FinalizeRespondedClash 失败：ClashSession为空");
@@ -1217,7 +1409,8 @@ public static class BattleResolver
         BattleResolutionPlan plan = BuildRespondedClashResolutionPlan(
             actionSlot,
             enemyIntent,
-            session
+            session,
+            executionItem
         );
         if (plan == null)
         {
@@ -1240,6 +1433,7 @@ public static class BattleResolver
         if (actionSlot == null || enemyIntent == null || session == null ||
             !session.IsFinalized || session.SideA == null || session.SideB == null)
         {
+            session?.runtimeInteraction?.TryAbort();
             return null;
         }
 
@@ -1266,6 +1460,7 @@ public static class BattleResolver
                     out BattleExecutionAction defenseAction
                 ))
             {
+                session.runtimeInteraction?.TryAbort();
                 return null;
             }
 
@@ -1287,6 +1482,7 @@ public static class BattleResolver
                     out BattleExecutionAction dodgeAction
                 ))
             {
+                session.runtimeInteraction?.TryAbort();
                 return null;
             }
 
@@ -1298,6 +1494,7 @@ public static class BattleResolver
             );
         }
 
+        session.runtimeInteraction?.TryAbort();
         return null;
     }
 
@@ -1347,6 +1544,7 @@ public static class BattleResolver
                 attackAction.cardState
             ))
         {
+            session?.runtimeInteraction?.TryAbort();
             return null;
         }
 
@@ -1412,6 +1610,7 @@ public static class BattleResolver
                 attackAction.cardState
             ))
         {
+            session?.runtimeInteraction?.TryAbort();
             return null;
         }
 
@@ -1483,7 +1682,8 @@ public static class BattleResolver
                 winnerPoint,
                 ClashResult.Win,
                 winnerIsAttack,
-                winnerIsAttack
+                winnerIsAttack,
+                plan.runtimeInteraction
             );
             BattleClashSideState loser = playerWon
                 ? session.SideB
@@ -1550,7 +1750,8 @@ public static class BattleResolver
             session.RemainingAttackPoint,
             ClashResult.None,
             session.RemainingAttackPoint > 0,
-            session.RemainingAttackPoint > 0
+            session.RemainingAttackPoint > 0,
+            plan.runtimeInteraction
         );
         plan.impacts.Add(impact);
     }
@@ -1605,7 +1806,8 @@ public static class BattleResolver
             session.SideBPoint,
             ClashResult.Win,
             true,
-            true
+            true,
+            plan.runtimeInteraction
         );
         if (session.SideA.cardState != null &&
             session.SideA.cardState.HasTrait(
@@ -1644,12 +1846,14 @@ public static class BattleResolver
         if (plan.State == BattleResolutionPlanState.Pending &&
             !ActivateResolution(plan))
         {
+            plan.runtimeInteraction?.TryAbort();
             return false;
         }
 
         BattleImpact pendingImpact = plan.GetNextPendingImpact();
         if (pendingImpact != null && !CommitImpact(plan, pendingImpact))
         {
+            plan.runtimeInteraction?.TryAbort();
             return false;
         }
 
@@ -1678,6 +1882,7 @@ public static class BattleResolver
         if (plan.State == BattleResolutionPlanState.Pending &&
             !ActivateResolution(plan))
         {
+            plan.runtimeInteraction?.TryAbort();
             return false;
         }
         if (plan.State != BattleResolutionPlanState.Activated)
@@ -1829,6 +2034,7 @@ public static class BattleResolver
         {
             if (!plan.freeActionHasRolled)
             {
+                plan.runtimeInteraction?.TryAbort();
                 return false;
             }
 
@@ -1840,6 +2046,7 @@ public static class BattleResolver
         BattleClashSession session = plan.clashSession;
         if (session == null || !session.IsFinalized)
         {
+            plan.runtimeInteraction?.TryAbort();
             return false;
         }
 
@@ -1860,6 +2067,7 @@ public static class BattleResolver
         }
         else
         {
+            plan.runtimeInteraction?.TryAbort();
             return false;
         }
 
@@ -1876,7 +2084,8 @@ public static class BattleResolver
             plan.sourceCardState,
             plan.freeActionPoint,
             ClashResult.None,
-            plan.freeActionResourceSnapshot
+            plan.freeActionResourceSnapshot,
+            plan.runtimeInteraction
         );
         ConsumeSuccessfulPointCardBuffs(
             plan.attacker,
@@ -1890,7 +2099,8 @@ public static class BattleResolver
             plan.freeActionPoint,
             0,
             false,
-            false
+            false,
+            runtimeInteraction: plan.runtimeInteraction
         );
     }
 
@@ -1918,15 +2128,19 @@ public static class BattleResolver
             winner.cardState,
             winnerPoint,
             ClashResult.Win,
-            winner.resourceSnapshot
+            winner.resourceSnapshot,
+            plan.runtimeInteraction
         );
         ConsumeSuccessfulPointCardBuffs(winner.actor, winner.pointSnapshot);
         TriggerBattleEvent(BattleTiming.ClashWin, winner.actor, defender,
-            winner.cardState, winnerPoint, 0, false, false, ClashResult.Win);
+            winner.cardState, winnerPoint, 0, false, false, ClashResult.Win,
+            runtimeInteraction: plan.runtimeInteraction);
         TriggerBattleEvent(BattleTiming.ClashLose, loser.actor, winner.actor,
-            loser.cardState, loserPoint, 0, false, false, ClashResult.Lose);
+            loser.cardState, loserPoint, 0, false, false, ClashResult.Lose,
+            runtimeInteraction: plan.runtimeInteraction);
         TriggerBattleEvent(BattleTiming.Resolved, winner.actor, defender,
-            winner.cardState, winnerPoint, 0, false, false, ClashResult.Win);
+            winner.cardState, winnerPoint, 0, false, false, ClashResult.Win,
+            runtimeInteraction: plan.runtimeInteraction);
     }
 
     static void ActivateDefenseResolution(BattleResolutionPlan plan)
@@ -1953,11 +2167,13 @@ public static class BattleResolver
             );
             TriggerBattleEvent(BattleTiming.Resolved, session.SideB.actor,
                 session.ActualTarget, session.SideB.cardState,
-                session.SideBPoint, 0, false, false);
+                session.SideBPoint, 0, false, false,
+                runtimeInteraction: plan.runtimeInteraction);
         }
 
         TriggerBattleEvent(BattleTiming.Resolved, player, session.SideB.actor,
-            session.SideA.cardState, session.SideAPoint, 0, false, false);
+            session.SideA.cardState, session.SideAPoint, 0, false, false,
+            runtimeInteraction: plan.runtimeInteraction);
     }
 
     static void ActivateDodgeResolution(BattleResolutionPlan plan)
@@ -1982,12 +2198,14 @@ public static class BattleResolver
                 0,
                 false,
                 false,
-                success ? ClashResult.Win : ClashResult.Lose
+                success ? ClashResult.Win : ClashResult.Lose,
+                runtimeInteraction: plan.runtimeInteraction
             );
             TriggerBattleEvent(BattleTiming.Resolved, session.SideA.actor,
                 session.SideB.actor, session.SideA.cardState,
                 session.SideAPoint, 0, false, false,
-                success ? ClashResult.Win : ClashResult.Lose);
+                success ? ClashResult.Win : ClashResult.Lose,
+                runtimeInteraction: plan.runtimeInteraction);
             return;
         }
 
@@ -2007,13 +2225,16 @@ public static class BattleResolver
         CharacterData winnerTarget = success ? session.SideB.actor : session.ActualTarget;
 
         TriggerBattleEvent(BattleTiming.ClashWin, winner, winnerTarget,
-            winnerCard, winnerPoint, 0, false, false, ClashResult.Win);
+            winnerCard, winnerPoint, 0, false, false, ClashResult.Win,
+            runtimeInteraction: plan.runtimeInteraction);
         TriggerBattleEvent(BattleTiming.ClashLose, loser, winner,
-            loserCard, loserPoint, 0, false, false, ClashResult.Lose);
+            loserCard, loserPoint, 0, false, false, ClashResult.Lose,
+            runtimeInteraction: plan.runtimeInteraction);
         TriggerBattleEvent(BattleTiming.Resolved, session.SideB.actor,
             success ? session.SideA.actor : session.ActualTarget,
             session.SideB.cardState, session.SideBPoint, 0, false, false,
-            success ? ClashResult.Lose : ClashResult.Win);
+            success ? ClashResult.Lose : ClashResult.Win,
+            runtimeInteraction: plan.runtimeInteraction);
         bool deferDodgeResolution = success &&
             plan.playerCardUseDisposition ==
                 BattleCardUseDisposition.DeferForContinuousDodge;
@@ -2022,7 +2243,8 @@ public static class BattleResolver
             TriggerBattleEvent(BattleTiming.Resolved, session.SideA.actor,
                 session.SideB.actor, session.SideA.cardState,
                 session.SideAPoint, 0, false, false,
-                success ? ClashResult.Win : ClashResult.Lose);
+                success ? ClashResult.Win : ClashResult.Lose,
+                runtimeInteraction: plan.runtimeInteraction);
         }
     }
 
@@ -2073,7 +2295,8 @@ public static class BattleResolver
                 ? plan.target
                 : damagedCharacter,
             resultType = plan.resultType,
-            triggeredEventChain = plan.triggeredEventChain
+            triggeredEventChain = plan.triggeredEventChain,
+            runtimeInteraction = plan.runtimeInteraction
         };
         if (plan.planKind == BattleResolutionPlanKind.UnrespondedEnemyAttack)
         {
@@ -2135,6 +2358,7 @@ public static class BattleResolver
 
         plan.CompletedResult = result;
         plan.State = BattleResolutionPlanState.Completed;
+        plan.runtimeInteraction?.TryComplete();
         Debug.Log(result.message);
         return result;
     }
@@ -2342,6 +2566,14 @@ public static class BattleResolver
         BattleEnemyIntent enemyIntent
     )
     {
+        return ResolveUnrespondedEnemyIntent(enemyIntent, null);
+    }
+
+    internal static BattleResolveResult ResolveUnrespondedEnemyIntent(
+        BattleEnemyIntent enemyIntent,
+        BattleExecutionItem executionItem
+    )
+    {
         if (!TryCreateUnrespondedAttackAction(
                 enemyIntent,
                 out BattleExecutionAction attackAction
@@ -2352,7 +2584,7 @@ public static class BattleResolver
             );
         }
 
-        return ResolveUnilateralAttack(attackAction);
+        return ResolveUnilateralAttack(attackAction, executionItem);
     }
 
     // 无响应攻击与Pausable路径共用同一份Calculate结果，伤害只在Impact提交时发生。
@@ -2376,10 +2608,16 @@ public static class BattleResolver
             responseActionSlot,
             out _
         );
-        return plan != null &&
-            TryRollUnilateralAttackResolutionPlan(plan, out _)
-            ? plan
-            : null;
+        if (plan == null)
+        {
+            return null;
+        }
+        if (!TryRollUnilateralAttackResolutionPlan(plan, out _))
+        {
+            plan.runtimeInteraction?.TryAbort();
+            return null;
+        }
+        return plan;
     }
 
     static bool TryCreateUnrespondedAttackAction(
@@ -2508,7 +2746,8 @@ public static class BattleResolver
     // 只初始化一次正式Attack Clash，供同步Resolver与后续逐Attempt执行入口共用。
     internal static BattleClashSession CreateRespondedAttackClashSession(
         BattleActionSlot actionSlot,
-        BattleEnemyIntent enemyIntent
+        BattleEnemyIntent enemyIntent,
+        BattleExecutionItem executionItem = null
     )
     {
         CharacterData playerUnit = actionSlot.actor;
@@ -2516,14 +2755,33 @@ public static class BattleResolver
         CharacterData enemyUnit = enemyIntent.enemy;
         BattleCardState enemyCardState = enemyIntent.enemyCardState;
         CharacterData actualTarget = enemyIntent.actualTargetCharacter;
+        BattleExecutionInteractionContext interactionContext =
+            CreateRespondedInteractionContext(actionSlot, enemyIntent);
+        BattleRuntimeInteraction runtimeInteraction =
+            new BattleRuntimeInteraction(
+                BattleInteractionType.AttackVsAttack,
+                interactionContext.sideA,
+                interactionContext.sideB,
+                executionItem
+            );
 
         BattleClashPointSnapshot playerPointBuffSnapshot =
             CapturePointBuffSnapshot(playerUnit);
         BattleClashPointSnapshot enemyPointBuffSnapshot =
             CapturePointBuffSnapshot(enemyUnit);
 
-        TriggerActionStart(enemyUnit, actualTarget, enemyCardState);
-        TriggerActionStart(playerUnit, enemyUnit, playerCardState);
+        TriggerActionStart(
+            enemyUnit,
+            actualTarget,
+            enemyCardState,
+            runtimeInteraction
+        );
+        TriggerActionStart(
+            playerUnit,
+            enemyUnit,
+            playerCardState,
+            runtimeInteraction
+        );
 
         BattleConservationRules.TryAssignPendingBonus(enemyUnit, enemyCardState);
         BattleConservationRules.TryAssignPendingBonus(playerUnit, playerCardState);
@@ -2534,9 +2792,11 @@ public static class BattleResolver
             CaptureResourceSnapshot(enemyUnit, enemyCardState);
 
         TriggerBattleEvent(BattleTiming.BeforeUse, enemyUnit, actualTarget,
-            enemyCardState, 0, 0, false, false);
+            enemyCardState, 0, 0, false, false,
+            runtimeInteraction: runtimeInteraction);
         TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit,
-            playerCardState, 0, 0, false, false);
+            playerCardState, 0, 0, false, false,
+            runtimeInteraction: runtimeInteraction);
 
         if (playerCardState.IsImmediateCommit())
         {
@@ -2546,7 +2806,8 @@ public static class BattleResolver
                 playerCardState,
                 0,
                 ClashResult.None,
-                playerResourceSnapshot
+                playerResourceSnapshot,
+                runtimeInteraction
             );
         }
         if (enemyCardState.IsImmediateCommit())
@@ -2557,7 +2818,8 @@ public static class BattleResolver
                 enemyCardState,
                 0,
                 ClashResult.None,
-                enemyResourceSnapshot
+                enemyResourceSnapshot,
+                runtimeInteraction
             );
         }
 
@@ -2577,7 +2839,8 @@ public static class BattleResolver
                 enemyPointBuffSnapshot,
                 enemyResourceSnapshot
             ),
-            actualTarget
+            actualTarget,
+            runtimeInteraction
         );
     }
 
@@ -2921,7 +3184,8 @@ public static class BattleResolver
 
     internal static BattleClashSession CreateRespondedDefenseClashSession(
         BattleActionSlot defenseSlot,
-        BattleEnemyIntent enemyIntent
+        BattleEnemyIntent enemyIntent,
+        BattleExecutionItem executionItem = null
     )
     {
         BattleExecutionInteractionContext context =
@@ -2931,13 +3195,18 @@ public static class BattleResolver
                 out BattleExecutionAction attackAction,
                 out BattleExecutionAction defenseAction
             )
-            ? CreateAttackVsDefenseClashSession(attackAction, defenseAction)
+            ? CreateAttackVsDefenseClashSession(
+                attackAction,
+                defenseAction,
+                executionItem
+            )
             : null;
     }
 
     internal static BattleClashSession CreateAttackVsDefenseClashSession(
         BattleExecutionAction attackAction,
-        BattleExecutionAction defenseAction
+        BattleExecutionAction defenseAction,
+        BattleExecutionItem executionItem = null
     )
     {
         if (!IsValidExecutionAction(attackAction) ||
@@ -2945,6 +3214,14 @@ public static class BattleResolver
         {
             return null;
         }
+
+        BattleRuntimeInteraction runtimeInteraction =
+            new BattleRuntimeInteraction(
+                BattleInteractionType.AttackVsDefense,
+                attackAction,
+                defenseAction,
+                executionItem
+            );
 
         BattleClashPointSnapshot defensePointSnapshot =
             CapturePointBuffSnapshot(defenseAction.actor);
@@ -2954,12 +3231,14 @@ public static class BattleResolver
         TriggerActionStart(
             attackAction.actor,
             defenseAction.actor,
-            attackAction.cardState
+            attackAction.cardState,
+            runtimeInteraction
         );
         TriggerActionStart(
             defenseAction.actor,
             attackAction.actor,
-            defenseAction.cardState
+            defenseAction.cardState,
+            runtimeInteraction
         );
 
         BattleConservationRules.TryAssignPendingBonus(
@@ -2990,7 +3269,8 @@ public static class BattleResolver
             0,
             0,
             false,
-            false
+            false,
+            runtimeInteraction: runtimeInteraction
         );
         TriggerBattleEvent(
             BattleTiming.BeforeUse,
@@ -3000,7 +3280,8 @@ public static class BattleResolver
             0,
             0,
             false,
-            false
+            false,
+            runtimeInteraction: runtimeInteraction
         );
         CommitCardUsedOnce(
             attackAction.actor,
@@ -3008,7 +3289,8 @@ public static class BattleResolver
             attackAction.cardState,
             0,
             ClashResult.None,
-            attackResourceSnapshot
+            attackResourceSnapshot,
+            runtimeInteraction
         );
         CommitCardUsedOnce(
             defenseAction.actor,
@@ -3016,7 +3298,8 @@ public static class BattleResolver
             defenseAction.cardState,
             0,
             ClashResult.None,
-            defenseResourceSnapshot
+            defenseResourceSnapshot,
+            runtimeInteraction
         );
         attackAction.actor.CheckBuffsByTiming(BattleTiming.ClashStart, false);
         defenseAction.actor.CheckBuffsByTiming(BattleTiming.ClashStart, false);
@@ -3034,7 +3317,8 @@ public static class BattleResolver
                 attackPointSnapshot,
                 attackResourceSnapshot
             ),
-            defenseAction.actor
+            defenseAction.actor,
+            runtimeInteraction: runtimeInteraction
         );
     }
 
@@ -3048,21 +3332,49 @@ public static class BattleResolver
         BattleCardState defenseCardState = defenseSlot.cardState;
         CharacterData enemyUnit = enemyIntent.enemy;
         BattleCardState enemyCardState = enemyIntent.enemyCardState;
+        BattleExecutionAction defenseAction = new BattleExecutionAction(
+            playerUnit,
+            defenseCardState,
+            defenseSlot,
+            enemyIntent,
+            enemyUnit
+        );
+        BattleExecutionAction attackAction = new BattleExecutionAction(
+            enemyUnit,
+            enemyCardState,
+            null,
+            enemyIntent,
+            enemyIntent.actualTargetCharacter
+        );
+        BattleRuntimeInteraction runtimeInteraction =
+            new BattleRuntimeInteraction(
+                BattleInteractionType.AttackVsDefense,
+                attackAction,
+                defenseAction,
+                null
+            );
         BattleClashPointSnapshot playerPointBuffSnapshot =
             CapturePointBuffSnapshot(playerUnit);
 
-        TriggerActionStart(playerUnit, enemyUnit, defenseCardState);
+        TriggerActionStart(
+            playerUnit,
+            enemyUnit,
+            defenseCardState,
+            runtimeInteraction
+        );
         BattleClashResourceSnapshot playerResourceSnapshot =
             CaptureResourceSnapshot(playerUnit, defenseCardState);
         TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit,
-            defenseCardState, 0, 0, false, false);
+            defenseCardState, 0, 0, false, false,
+            runtimeInteraction: runtimeInteraction);
         CommitCardUsedOnce(
             playerUnit,
             enemyUnit,
             defenseCardState,
             0,
             ClashResult.None,
-            playerResourceSnapshot
+            playerResourceSnapshot,
+            runtimeInteraction
         );
         playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
@@ -3084,7 +3396,8 @@ public static class BattleResolver
             ),
             enemyIntent.actualTargetCharacter,
             true,
-            Mathf.Max(0, knownEnemyAttackPoint)
+            Mathf.Max(0, knownEnemyAttackPoint),
+            runtimeInteraction
         );
     }
 
@@ -3220,21 +3533,49 @@ public static class BattleResolver
         BattleCardState dodgeCardState = dodgeSlot.cardState;
         CharacterData enemyUnit = enemyIntent.enemy;
         BattleCardState enemyCardState = enemyIntent.enemyCardState;
+        BattleExecutionAction dodgeAction = new BattleExecutionAction(
+            playerUnit,
+            dodgeCardState,
+            dodgeSlot,
+            enemyIntent,
+            enemyUnit
+        );
+        BattleExecutionAction attackAction = new BattleExecutionAction(
+            enemyUnit,
+            enemyCardState,
+            null,
+            enemyIntent,
+            enemyIntent.actualTargetCharacter
+        );
+        BattleRuntimeInteraction runtimeInteraction =
+            new BattleRuntimeInteraction(
+                BattleInteractionType.AttackVsDodge,
+                attackAction,
+                dodgeAction,
+                null
+            );
         BattleClashPointSnapshot playerPointBuffSnapshot =
             CapturePointBuffSnapshot(playerUnit);
 
-        TriggerActionStart(playerUnit, enemyUnit, dodgeCardState);
+        TriggerActionStart(
+            playerUnit,
+            enemyUnit,
+            dodgeCardState,
+            runtimeInteraction
+        );
         BattleClashResourceSnapshot playerResourceSnapshot =
             CaptureResourceSnapshot(playerUnit, dodgeCardState);
         TriggerBattleEvent(BattleTiming.BeforeUse, playerUnit, enemyUnit,
-            dodgeCardState, 0, 0, false, false);
+            dodgeCardState, 0, 0, false, false,
+            runtimeInteraction: runtimeInteraction);
         CommitCardUsedOnce(
             playerUnit,
             enemyUnit,
             dodgeCardState,
             0,
             ClashResult.None,
-            playerResourceSnapshot
+            playerResourceSnapshot,
+            runtimeInteraction
         );
         playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
@@ -3256,7 +3597,9 @@ public static class BattleResolver
             ),
             enemyIntent.actualTargetCharacter,
             true,
-            Mathf.Max(0, knownEnemyAttackPoint)
+            Mathf.Max(0, knownEnemyAttackPoint),
+            false,
+            runtimeInteraction
         );
     }
 
@@ -3265,10 +3608,31 @@ public static class BattleResolver
         BattleEnemyIntent enemyIntent
     )
     {
-        return ResolveRespondedDodgeVsAttack(playerSlot, enemyIntent, true);
+        return ResolveContinuousDodgeVsAttack(
+            playerSlot,
+            enemyIntent,
+            null
+        );
     }
 
-    public static void FinalizeDeferredDodgeCardUse(BattleActionSlot slot)
+    internal static BattleResolveResult ResolveContinuousDodgeVsAttack(
+        BattleActionSlot playerSlot,
+        BattleEnemyIntent enemyIntent,
+        BattleExecutionItem executionItem
+    )
+    {
+        return ResolveRespondedDodgeVsAttack(
+            playerSlot,
+            enemyIntent,
+            true,
+            executionItem
+        );
+    }
+
+    public static void FinalizeDeferredDodgeCardUse(
+        BattleActionSlot slot,
+        BattleRuntimeInteraction runtimeInteraction = null
+    )
     {
         if (slot == null ||
             slot.actor == null ||
@@ -3293,27 +3657,31 @@ public static class BattleResolver
             0,
             false,
             false,
-            ClashResult.Win
+            ClashResult.Win,
+            runtimeInteraction: runtimeInteraction
         );
         CommitCardResolvedOnce(
             slot.actor,
             target,
             slot.cardState,
             slot.lastContinuousDodgePoint,
-            ClashResult.Win
+            ClashResult.Win,
+            runtimeInteraction
         );
     }
 
     static BattleResolveResult ResolveRespondedDodgeVsAttack(
         BattleActionSlot playerSlot,
         BattleEnemyIntent enemyIntent,
-        bool isContinuousDodgeContinuation = false
+        bool isContinuousDodgeContinuation = false,
+        BattleExecutionItem executionItem = null
     )
     {
         BattleResolveResult beginFailure = TryBeginDodgeClash(
             playerSlot,
             enemyIntent,
             isContinuousDodgeContinuation,
+            executionItem,
             out BattleClashSession session
         );
         if (beginFailure != null)
@@ -3323,10 +3691,16 @@ public static class BattleResolver
 
         if (!session.RollNextAttempt())
         {
+            session.runtimeInteraction?.TryAbort();
             return CreateInvalidResolveResult("ResolveRespondedDodgeVsAttack 失败：Dodge Clash无法Roll");
         }
 
-        return FinalizeRespondedClash(playerSlot, enemyIntent, session);
+        return FinalizeRespondedClash(
+            playerSlot,
+            enemyIntent,
+            session,
+            executionItem
+        );
     }
 
     internal static BattleResolveResult TryBeginContinuousDodgeClash(
@@ -3335,10 +3709,26 @@ public static class BattleResolver
         out BattleClashSession session
     )
     {
+        return TryBeginContinuousDodgeClash(
+            playerSlot,
+            enemyIntent,
+            null,
+            out session
+        );
+    }
+
+    internal static BattleResolveResult TryBeginContinuousDodgeClash(
+        BattleActionSlot playerSlot,
+        BattleEnemyIntent enemyIntent,
+        BattleExecutionItem executionItem,
+        out BattleClashSession session
+    )
+    {
         return TryBeginDodgeClash(
             playerSlot,
             enemyIntent,
             true,
+            executionItem,
             out session
         );
     }
@@ -3348,6 +3738,23 @@ public static class BattleResolver
         BattleActionSlot playerSlot,
         BattleEnemyIntent enemyIntent,
         bool isContinuousDodgeContinuation,
+        out BattleClashSession session
+    )
+    {
+        return TryBeginDodgeClash(
+            playerSlot,
+            enemyIntent,
+            isContinuousDodgeContinuation,
+            null,
+            out session
+        );
+    }
+
+    static BattleResolveResult TryBeginDodgeClash(
+        BattleActionSlot playerSlot,
+        BattleEnemyIntent enemyIntent,
+        bool isContinuousDodgeContinuation,
+        BattleExecutionItem executionItem,
         out BattleClashSession session
     )
     {
@@ -3446,6 +3853,7 @@ public static class BattleResolver
             attackAction,
             dodgeAction,
             isContinuousDodgeContinuation,
+            executionItem,
             out session
         );
     }
@@ -3453,7 +3861,8 @@ public static class BattleResolver
     internal static BattleClashSession CreateRespondedDodgeClashSession(
         BattleActionSlot playerSlot,
         BattleEnemyIntent enemyIntent,
-        bool isContinuousDodgeContinuation = false
+        bool isContinuousDodgeContinuation = false,
+        BattleExecutionItem executionItem = null
     )
     {
         BattleExecutionInteractionContext context =
@@ -3466,7 +3875,8 @@ public static class BattleResolver
             ? CreateAttackVsDodgeClashSession(
                 attackAction,
                 dodgeAction,
-                isContinuousDodgeContinuation
+                isContinuousDodgeContinuation,
+                executionItem
             )
             : null;
     }
@@ -3474,7 +3884,8 @@ public static class BattleResolver
     internal static BattleClashSession CreateAttackVsDodgeClashSession(
         BattleExecutionAction attackAction,
         BattleExecutionAction dodgeAction,
-        bool isContinuousDodgeContinuation = false
+        bool isContinuousDodgeContinuation = false,
+        BattleExecutionItem executionItem = null
     )
     {
         if (!IsValidExecutionAction(attackAction) ||
@@ -3482,6 +3893,14 @@ public static class BattleResolver
         {
             return null;
         }
+
+        BattleRuntimeInteraction runtimeInteraction =
+            new BattleRuntimeInteraction(
+                BattleInteractionType.AttackVsDodge,
+                attackAction,
+                dodgeAction,
+                executionItem
+            );
 
         BattleClashPointSnapshot dodgePointBuffSnapshot =
             isContinuousDodgeContinuation
@@ -3493,14 +3912,16 @@ public static class BattleResolver
         TriggerActionStart(
             attackAction.actor,
             dodgeAction.actor,
-            attackAction.cardState
+            attackAction.cardState,
+            runtimeInteraction
         );
         if (!isContinuousDodgeContinuation)
         {
             TriggerActionStart(
                 dodgeAction.actor,
                 attackAction.actor,
-                dodgeAction.cardState
+                dodgeAction.cardState,
+                runtimeInteraction
             );
         }
 
@@ -3542,7 +3963,8 @@ public static class BattleResolver
             0,
             0,
             false,
-            false
+            false,
+            runtimeInteraction: runtimeInteraction
         );
         if (!isContinuousDodgeContinuation)
         {
@@ -3554,7 +3976,8 @@ public static class BattleResolver
                 0,
                 0,
                 false,
-                false
+                false,
+                runtimeInteraction: runtimeInteraction
             );
         }
 
@@ -3564,7 +3987,8 @@ public static class BattleResolver
             attackAction.cardState,
             0,
             ClashResult.None,
-            attackResourceSnapshot
+            attackResourceSnapshot,
+            runtimeInteraction
         );
         if (!isContinuousDodgeContinuation)
         {
@@ -3574,7 +3998,8 @@ public static class BattleResolver
                 dodgeAction.cardState,
                 0,
                 ClashResult.None,
-                dodgeResourceSnapshot
+                dodgeResourceSnapshot,
+                runtimeInteraction
             );
         }
 
@@ -3603,7 +4028,8 @@ public static class BattleResolver
             dodgeAction.actor,
             false,
             0,
-            isContinuousDodgeContinuation
+            isContinuousDodgeContinuation,
+            runtimeInteraction
         );
     }
 
@@ -3819,7 +4245,8 @@ public static class BattleResolver
         CharacterData target,
         BattleCardState cardState,
         int clashPoint = 0,
-        string clashResult = ClashResult.None
+        string clashResult = ClashResult.None,
+        BattleRuntimeInteraction runtimeInteraction = null
     )
     {
         if (user == null || cardState == null || cardState.cardData == null ||
@@ -3842,7 +4269,8 @@ public static class BattleResolver
             0,
             false,
             false,
-            clashResult
+            clashResult,
+            runtimeInteraction: runtimeInteraction
         );
         return true;
     }
@@ -3853,7 +4281,8 @@ public static class BattleResolver
         BattleCardState cardState,
         int clashPoint = 0,
         string clashResult = ClashResult.None,
-        BattleClashResourceSnapshot resourceSnapshot = null
+        BattleClashResourceSnapshot resourceSnapshot = null,
+        BattleRuntimeInteraction runtimeInteraction = null
     )
     {
         if (user == null || cardState == null || cardState.cardData == null)
@@ -3877,7 +4306,8 @@ public static class BattleResolver
             0,
             false,
             false,
-            clashResult
+            clashResult,
+            runtimeInteraction: runtimeInteraction
         );
         return true;
     }
@@ -3896,7 +4326,8 @@ public static class BattleResolver
                 plan.target,
                 plan.sourceCardState,
                 plan.freeActionPoint,
-                ClashResult.None
+                ClashResult.None,
+                plan.runtimeInteraction
             );
             return;
         }
@@ -3946,7 +4377,8 @@ public static class BattleResolver
                 sideATarget,
                 sideA.cardState,
                 session.SideAPoint,
-                sideAResult
+                sideAResult,
+                plan.runtimeInteraction
             );
             return;
         }
@@ -3962,7 +4394,8 @@ public static class BattleResolver
                 sideATarget,
                 sideA.cardState,
                 session.SideAPoint,
-                sideAResult
+                sideAResult,
+                plan.runtimeInteraction
             );
         }
         CommitCardResolvedOnce(
@@ -3970,7 +4403,8 @@ public static class BattleResolver
             sideBTarget,
             sideB.cardState,
             session.SideBPoint,
-            sideBResult
+            sideBResult,
+            plan.runtimeInteraction
         );
     }
 
@@ -3985,7 +4419,8 @@ public static class BattleResolver
         bool isHit,
         bool isKill,
         string clashResult = ClashResult.None,
-        BattleImpact impact = null
+        BattleImpact impact = null,
+        BattleRuntimeInteraction runtimeInteraction = null
     )
     {
         BattleEventContext context = new BattleEventContext(timing)
@@ -3996,7 +4431,10 @@ public static class BattleResolver
             .SetDamage(damage)
             .SetHit(isHit)
             .SetKill(isKill)
-            .SetImpact(impact);
+            .SetImpact(impact)
+            .SetRuntimeInteraction(
+                runtimeInteraction ?? impact?.runtimeInteraction
+            );
 
         // 先让事件系统处理
         // 例如 CD、消耗、以后成就/UI/负罪感等
@@ -4223,7 +4661,12 @@ public static class BattleResolver
         return null;
     }
 
-    static void TriggerActionStart(CharacterData user, CharacterData target, BattleCardState cardState)
+    static void TriggerActionStart(
+        CharacterData user,
+        CharacterData target,
+        BattleCardState cardState,
+        BattleRuntimeInteraction runtimeInteraction = null
+    )
     {
         if (cardState != null)
         {
@@ -4231,7 +4674,17 @@ public static class BattleResolver
         }
         BattleKnifeCardRules.CaptureActionStart(cardState);
         BattlePendingRules.CaptureAttackBonus(cardState);
-        TriggerBattleEvent(BattleTiming.ActionStart, user, target, cardState, 0, 0, false, false);
+        TriggerBattleEvent(
+            BattleTiming.ActionStart,
+            user,
+            target,
+            cardState,
+            0,
+            0,
+            false,
+            false,
+            runtimeInteraction: runtimeInteraction
+        );
     }
 
     static void PayCardUsedResourceCost(

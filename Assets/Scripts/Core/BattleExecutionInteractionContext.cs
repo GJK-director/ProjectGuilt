@@ -1,3 +1,62 @@
+// 脚本中文说明：一次直接交互的稳定 identity 与生命周期，不参与玩法判断。
+public enum BattleRuntimeInteractionState
+{
+    Active,
+    Completed,
+    Aborted
+}
+
+public sealed class BattleRuntimeInteraction
+{
+    static long nextInteractionId;
+
+    public long interactionId { get; private set; }
+    public BattleInteractionType interactionType { get; private set; }
+    public BattleExecutionAction sideA { get; private set; }
+    public BattleExecutionAction sideB { get; private set; }
+    public BattleExecutionItem executionItem { get; private set; }
+    public BattleRuntimeInteractionState State { get; private set; }
+
+    public BattleRuntimeInteraction(
+        BattleInteractionType interactionType,
+        BattleExecutionAction sideA,
+        BattleExecutionAction sideB,
+        BattleExecutionItem executionItem
+    )
+    {
+        interactionId = System.Threading.Interlocked.Increment(
+            ref nextInteractionId
+        );
+        this.interactionType = interactionType;
+        this.sideA = sideA;
+        this.sideB = sideB;
+        this.executionItem = executionItem;
+        State = BattleRuntimeInteractionState.Active;
+    }
+
+    public bool TryComplete()
+    {
+        if (State != BattleRuntimeInteractionState.Active)
+        {
+            return false;
+        }
+
+        State = BattleRuntimeInteractionState.Completed;
+        return true;
+    }
+
+    public bool TryAbort()
+    {
+        if (State != BattleRuntimeInteractionState.Active)
+        {
+            return false;
+        }
+
+        State = BattleRuntimeInteractionState.Aborted;
+        return true;
+    }
+}
+
 // 脚本中文说明：统一保存当前 ExecutionItem 的两侧 Action 与运行时有效 Interaction。
 public sealed class BattleExecutionInteractionContext
 {

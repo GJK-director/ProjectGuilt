@@ -102,6 +102,7 @@ public sealed class BattleClashSession
     public bool IsContinuousDodgeContinuation { get; private set; }
     public bool UsesKnownSideBPoint { get; private set; }
     public int KnownSideBPoint { get; private set; }
+    public BattleRuntimeInteraction runtimeInteraction { get; private set; }
 
     public int AttemptIndex { get; private set; }
     public int AttackTieCount { get; private set; }
@@ -124,7 +125,8 @@ public sealed class BattleClashSession
         CharacterData actualTarget,
         bool usesKnownSideBPoint,
         int knownSideBPoint,
-        bool isContinuousDodgeContinuation
+        bool isContinuousDodgeContinuation,
+        BattleRuntimeInteraction runtimeInteraction
     )
     {
         ClashType = clashType;
@@ -134,6 +136,7 @@ public sealed class BattleClashSession
         UsesKnownSideBPoint = usesKnownSideBPoint;
         KnownSideBPoint = Mathf.Max(0, knownSideBPoint);
         IsContinuousDodgeContinuation = isContinuousDodgeContinuation;
+        this.runtimeInteraction = runtimeInteraction;
         AttemptResult = BattleClashAttemptResult.None;
         FinalResult = BattleClashFinalResult.None;
     }
@@ -141,9 +144,16 @@ public sealed class BattleClashSession
     public static BattleClashSession CreateAttackVsAttack(
         BattleClashSideState sideA,
         BattleClashSideState sideB,
-        CharacterData actualTarget
+        CharacterData actualTarget,
+        BattleRuntimeInteraction runtimeInteraction = null
     )
     {
+        runtimeInteraction = runtimeInteraction ?? CreateRuntimeInteraction(
+            BattleInteractionType.AttackVsAttack,
+            sideA,
+            sideB,
+            actualTarget
+        );
         return new BattleClashSession(
             BattleClashType.AttackVsAttack,
             sideA,
@@ -151,7 +161,8 @@ public sealed class BattleClashSession
             actualTarget,
             false,
             0,
-            false
+            false,
+            runtimeInteraction
         );
     }
 
@@ -161,9 +172,16 @@ public sealed class BattleClashSession
         CharacterData actualTarget,
         bool usesKnownAttackPoint = false,
         int knownAttackPoint = 0,
-        bool isContinuousDodgeContinuation = false
+        bool isContinuousDodgeContinuation = false,
+        BattleRuntimeInteraction runtimeInteraction = null
     )
     {
+        runtimeInteraction = runtimeInteraction ?? CreateRuntimeInteraction(
+            BattleInteractionType.AttackVsDodge,
+            dodgeSide,
+            attackSide,
+            actualTarget
+        );
         return new BattleClashSession(
             BattleClashType.DodgeVsAttack,
             dodgeSide,
@@ -171,7 +189,8 @@ public sealed class BattleClashSession
             actualTarget,
             usesKnownAttackPoint,
             knownAttackPoint,
-            isContinuousDodgeContinuation
+            isContinuousDodgeContinuation,
+            runtimeInteraction
         );
     }
 
@@ -180,9 +199,16 @@ public sealed class BattleClashSession
         BattleClashSideState attackSide,
         CharacterData actualTarget,
         bool usesKnownAttackPoint = false,
-        int knownAttackPoint = 0
+        int knownAttackPoint = 0,
+        BattleRuntimeInteraction runtimeInteraction = null
     )
     {
+        runtimeInteraction = runtimeInteraction ?? CreateRuntimeInteraction(
+            BattleInteractionType.AttackVsDefense,
+            defenseSide,
+            attackSide,
+            actualTarget
+        );
         return new BattleClashSession(
             BattleClashType.DefenseVsAttack,
             defenseSide,
@@ -190,7 +216,43 @@ public sealed class BattleClashSession
             actualTarget,
             usesKnownAttackPoint,
             knownAttackPoint,
-            false
+            false,
+            runtimeInteraction
+        );
+    }
+
+    static BattleRuntimeInteraction CreateRuntimeInteraction(
+        BattleInteractionType interactionType,
+        BattleClashSideState sideA,
+        BattleClashSideState sideB,
+        CharacterData actualTarget
+    )
+    {
+        BattleExecutionAction actionA = sideA != null
+            ? new BattleExecutionAction(
+                sideA.actor,
+                sideA.cardState,
+                null,
+                null,
+                sideB != null ? sideB.actor : actualTarget
+            )
+            : null;
+        BattleExecutionAction actionB = sideB != null
+            ? new BattleExecutionAction(
+                sideB.actor,
+                sideB.cardState,
+                null,
+                null,
+                actualTarget != null
+                    ? actualTarget
+                    : sideA != null ? sideA.actor : null
+            )
+            : null;
+        return new BattleRuntimeInteraction(
+            interactionType,
+            actionA,
+            actionB,
+            null
         );
     }
 

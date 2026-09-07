@@ -424,8 +424,17 @@ public static class BattleExecutionPlanExecutor
             );
 
             result = guardSelection.selectionType == BattleGuardSelectionType.ContinuousDodge
-                ? BattleResolver.ResolveContinuousDodgeVsAttack(passiveGuardSlot, item.enemyIntent)
-                : BattleResolver.ResolveRespondedEnemyIntent(passiveGuardSlot, item.enemyIntent);
+                ? BattleResolver.ResolveContinuousDodgeVsAttack(
+                    passiveGuardSlot,
+                    item.enemyIntent,
+                    item
+                )
+                : BattleResolver.ResolveRespondedEnemyIntent(
+                    passiveGuardSlot,
+                    item.enemyIntent,
+                    null,
+                    item
+                );
 
             return CompleteUnrespondedGuardResult(
                 item,
@@ -435,7 +444,10 @@ public static class BattleExecutionPlanExecutor
             );
         }
 
-        result = BattleResolver.ResolveUnrespondedEnemyIntent(item.enemyIntent);
+        result = BattleResolver.ResolveUnrespondedEnemyIntent(
+            item.enemyIntent,
+            item
+        );
 
         LogResolveResult(item.order, "UnrespondedEnemyIntent Resolver 结算结果", result);
 
@@ -658,7 +670,9 @@ public static class BattleExecutionPlanExecutor
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             item.actionSlot,
-            item.enemyIntent
+            item.enemyIntent,
+            null,
+            item
         );
 
         return CompleteRespondedEnemyIntentResult(item, runtimeState, result);
@@ -725,6 +739,7 @@ public static class BattleExecutionPlanExecutor
         BattleResolveResult beginFailure = BattleResolver.TryBeginRespondedClash(
             item.actionSlot,
             item.enemyIntent,
+            item,
             out session
         );
         if (beginFailure == null && session != null)
@@ -980,6 +995,7 @@ public static class BattleExecutionPlanExecutor
         BattleResolveResult beginFailure = BattleResolver.TryBeginRespondedClash(
             item.actionSlot,
             item.reactiveEnemyGuardIntent,
+            item,
             out session
         );
         if (beginFailure == null && session != null)
@@ -1098,11 +1114,13 @@ public static class BattleExecutionPlanExecutor
             ? BattleResolver.TryBeginContinuousDodgeClash(
                 actionSlot,
                 item.enemyIntent,
+                item,
                 out session
             )
             : BattleResolver.TryBeginRespondedClash(
                 actionSlot,
                 item.enemyIntent,
+                item,
                 out session
             );
         if (beginFailure == null && session != null)
@@ -1358,7 +1376,8 @@ public static class BattleExecutionPlanExecutor
         }
 
         BattleResolveResult result = BattleResolver.ResolveUnrespondedEnemyIntent(
-            item.enemyIntent
+            item.enemyIntent,
+            item
         );
         LogResolveResult(
             item.order,
@@ -1658,7 +1677,10 @@ public static class BattleExecutionPlanExecutor
             return true;
         }
 
-        BattleResolveResult result = BattleResolver.ResolveFreeAction(item.actionSlot);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(
+            item.actionSlot,
+            item
+        );
 
         Debug.Log(
             item.order +

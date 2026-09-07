@@ -77,6 +77,7 @@ public sealed class BattleImpact
     public int damageMultiplierPercent = 100;
     public int hpDisplayStageCount = 1;
     public BattleScopedDamageModifier scopedDamageModifier;
+    public BattleRuntimeInteraction runtimeInteraction;
 
     public BattleImpact(
         int impactIndex,
@@ -87,7 +88,8 @@ public sealed class BattleImpact
         int clashPoint,
         string clashResult,
         bool allowsDamage,
-        bool shouldTriggerHit
+        bool shouldTriggerHit,
+        BattleRuntimeInteraction runtimeInteraction = null
     )
     {
         this.impactIndex = impactIndex;
@@ -99,6 +101,7 @@ public sealed class BattleImpact
         this.clashResult = clashResult;
         this.allowsDamage = allowsDamage;
         this.shouldTriggerHit = shouldTriggerHit;
+        this.runtimeInteraction = runtimeInteraction;
         didHit = false;
         actualDamage = 0;
         committedDamage = 0;
@@ -124,6 +127,7 @@ public sealed class BattleResolutionPlan
     public BattleActionSlot actionSlot;
     public BattleEnemyIntent enemyIntent;
     public BattleClashSession clashSession;
+    public BattleRuntimeInteraction runtimeInteraction;
 
     public string resultType;
     public bool playerCardUsed;
@@ -164,6 +168,9 @@ public sealed class BattleResolutionPlan
         this.actionSlot = actionSlot;
         this.enemyIntent = enemyIntent;
         this.clashSession = clashSession;
+        runtimeInteraction = clashSession != null
+            ? clashSession.runtimeInteraction
+            : null;
         planKind = clashSession != null
             ? BattleResolutionPlanKind.RespondedClash
             : BattleResolutionPlanKind.UnrespondedEnemyAttack;

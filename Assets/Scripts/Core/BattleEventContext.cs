@@ -30,6 +30,9 @@ public class BattleEventContext
     // impact = 本次事件对应的精确 BattleImpact（DamageModifier/Hit/AfterDamage/AfterKill）。
     public BattleImpact impact;
 
+    // runtimeInteraction = 本次事件所属的直接交互 identity。
+    public BattleRuntimeInteraction runtimeInteraction;
+
     // clashPoint = 本次拼点点数
     public int clashPoint;
     // clashResult = 拼点结果
@@ -86,6 +89,18 @@ public class BattleEventContext
     public BattleEventContext SetImpact(BattleImpact impact)
     {
         this.impact = impact;
+        if (runtimeInteraction == null && impact != null)
+        {
+            runtimeInteraction = impact.runtimeInteraction;
+        }
+        return this;
+    }
+
+    public BattleEventContext SetRuntimeInteraction(
+        BattleRuntimeInteraction runtimeInteraction
+    )
+    {
+        this.runtimeInteraction = runtimeInteraction;
         return this;
     }
 

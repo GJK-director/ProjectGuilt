@@ -102,6 +102,7 @@ public class BattleActionSlot
     public ContinuousDodgeSource continuousDodgeSource;
     public int lastContinuousDodgePoint;
     public CharacterData lastContinuousDodgeOpponent;
+    public BattleRuntimeInteraction lastContinuousDodgeRuntimeInteraction;
 
     // BattleActionSlot = 行动槽位构造函数
     // slotIndex = 槽位编号。
@@ -281,7 +282,8 @@ public class BattleActionSlot
     public void ActivateContinuousDodge(
         ContinuousDodgeSource source,
         int dodgePoint,
-        CharacterData opponent
+        CharacterData opponent,
+        BattleRuntimeInteraction runtimeInteraction = null
     )
     {
         isContinuousDodgeActive = true;
@@ -290,9 +292,14 @@ public class BattleActionSlot
         continuousDodgeSource = source;
         lastContinuousDodgePoint = dodgePoint;
         lastContinuousDodgeOpponent = opponent;
+        lastContinuousDodgeRuntimeInteraction = runtimeInteraction;
     }
 
-    public void RegisterContinuousDodgeSuccess(int dodgePoint, CharacterData opponent)
+    public void RegisterContinuousDodgeSuccess(
+        int dodgePoint,
+        CharacterData opponent,
+        BattleRuntimeInteraction runtimeInteraction = null
+    )
     {
         if (!isContinuousDodgeActive || isCardUseFinalized)
         {
@@ -302,6 +309,7 @@ public class BattleActionSlot
         successfulDodgeCount++;
         lastContinuousDodgePoint = dodgePoint;
         lastContinuousDodgeOpponent = opponent;
+        lastContinuousDodgeRuntimeInteraction = runtimeInteraction;
     }
 
     public void FinishContinuousDodge()
@@ -323,6 +331,7 @@ public class BattleActionSlot
         continuousDodgeSource = ContinuousDodgeSource.None;
         lastContinuousDodgePoint = 0;
         lastContinuousDodgeOpponent = null;
+        lastContinuousDodgeRuntimeInteraction = null;
     }
 
     // UnbindEnemyIntent = 解除敌人意图绑定
@@ -454,7 +463,8 @@ public static class BattleContinuousDodgeManager
         {
             slot.RegisterContinuousDodgeSuccess(
                 result.playerPoint,
-                enemyIntent != null ? enemyIntent.enemy : null
+                enemyIntent != null ? enemyIntent.enemy : null,
+                result.runtimeInteraction
             );
             UnityEngine.Debug.Log(
                 "[ContinuousDodge Success]\n" +
@@ -470,7 +480,8 @@ public static class BattleContinuousDodgeManager
         slot.ActivateContinuousDodge(
             source,
             result.playerPoint,
-            enemyIntent != null ? enemyIntent.enemy : null
+            enemyIntent != null ? enemyIntent.enemy : null,
+            result.runtimeInteraction
         );
         UnityEngine.Debug.Log(
             "[ContinuousDodge]\n" +
@@ -524,7 +535,10 @@ public static class BattleContinuousDodgeManager
 
         // 先锁定幂等状态，再触发 Resolved，避免任何回调重复结算同一槽位。
         slot.MarkCardUseFinalized();
-        BattleResolver.FinalizeDeferredDodgeCardUse(slot);
+        BattleResolver.FinalizeDeferredDodgeCardUse(
+            slot,
+            slot.lastContinuousDodgeRuntimeInteraction
+        );
         slot.MarkUsed();
 
         int newUseCount = slot.cardState != null ? slot.cardState.currentUseCount : oldUseCount;
