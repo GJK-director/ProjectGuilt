@@ -23,11 +23,62 @@ public static class IntroStorySceneSetup
     {
         public string id;
         public string assetPath;
+        public string overlayAssetPath;
+        public Vector2 overlayAnchoredPosition;
+        public Vector2 overlaySize;
+        public string foregroundAssetPath;
+        public Vector2 foregroundAnchoredPosition;
+        public Vector2 foregroundSize;
 
         public BackgroundEntry(string id, string assetPath)
         {
             this.id = id;
             this.assetPath = assetPath;
+            overlayAssetPath = string.Empty;
+            overlayAnchoredPosition = Vector2.zero;
+            overlaySize = Vector2.zero;
+            foregroundAssetPath = string.Empty;
+            foregroundAnchoredPosition = Vector2.zero;
+            foregroundSize = Vector2.zero;
+        }
+
+        public BackgroundEntry(
+            string id,
+            string assetPath,
+            string overlayAssetPath,
+            Vector2 overlayAnchoredPosition,
+            Vector2 overlaySize
+        )
+        {
+            this.id = id;
+            this.assetPath = assetPath;
+            this.overlayAssetPath = overlayAssetPath;
+            this.overlayAnchoredPosition = overlayAnchoredPosition;
+            this.overlaySize = overlaySize;
+            foregroundAssetPath = string.Empty;
+            foregroundAnchoredPosition = Vector2.zero;
+            foregroundSize = Vector2.zero;
+        }
+
+        public BackgroundEntry(
+            string id,
+            string assetPath,
+            string overlayAssetPath,
+            Vector2 overlayAnchoredPosition,
+            Vector2 overlaySize,
+            string foregroundAssetPath,
+            Vector2 foregroundAnchoredPosition,
+            Vector2 foregroundSize
+        )
+        {
+            this.id = id;
+            this.assetPath = assetPath;
+            this.overlayAssetPath = overlayAssetPath;
+            this.overlayAnchoredPosition = overlayAnchoredPosition;
+            this.overlaySize = overlaySize;
+            this.foregroundAssetPath = foregroundAssetPath;
+            this.foregroundAnchoredPosition = foregroundAnchoredPosition;
+            this.foregroundSize = foregroundSize;
         }
     }
 
@@ -43,11 +94,11 @@ public static class IntroStorySceneSetup
         ),
         new BackgroundEntry(
             "phone_off",
-            "Assets/Art/Story/Prologue501/Layers/PhoneOff.png"
+            "Assets/Art/Story/Prologue501/CG/PhoneBlackFull.jpg"
         ),
         new BackgroundEntry(
             "phone_on",
-            "Assets/Art/Story/Prologue501/Layers/PhoneOn.png"
+            "Assets/Art/Story/Prologue501/CG/PhoneLitFull.png"
         ),
         new BackgroundEntry(
             "tv_viewer_wide",
@@ -58,8 +109,8 @@ public static class IntroStorySceneSetup
             "Assets/Art/Story/Prologue501/CG/TVViewerVariant.png"
         ),
         new BackgroundEntry(
-            "monster_turn_closeup",
-            "Assets/Art/Story/Prologue501/CG/MonsterTurnCloseup.png"
+            "monster_turn_reveal",
+            "Assets/Art/Story/Prologue501/CG/MonsterTurnReveal.png"
         )
     };
 
@@ -103,7 +154,7 @@ public static class IntroStorySceneSetup
         StoryTextPresenter presenter = new StoryTextPresenter(100f);
         presenter.Begin(
             "pause_test",
-            new StoryDialogueData { text = "一下||又一下。" }
+            new StoryDialogueData { text = "一下｜｜又一下。" }
         );
         presenter.Tick(0.02f);
         int countBeforePause = presenter.VisibleCharacterCount;
@@ -111,7 +162,10 @@ public static class IntroStorySceneSetup
 
         if (presenter.FullText != "一下又一下。" ||
             countBeforePause != 2 ||
-            presenter.VisibleCharacterCount != countBeforePause)
+            presenter.VisibleCharacterCount != countBeforePause ||
+            !presenter.IsWaitingForInlinePause ||
+            presenter.CompleteImmediately() ||
+            !presenter.ResumeInlinePause())
         {
             throw new InvalidOperationException("剧情 || 停顿标记行为校验失败。 ");
         }
@@ -148,6 +202,44 @@ public static class IntroStorySceneSetup
             throw new InvalidOperationException("剧情面板的序章 CG 绑定不完整。 ");
         }
 
+        for (int index = 0; index < BackgroundEntries.Length; index++)
+        {
+            BackgroundEntry expected = BackgroundEntries[index];
+            SerializedProperty binding = bindings.GetArrayElementAtIndex(index);
+            string backgroundId = binding
+                .FindPropertyRelative("backgroundId")
+                .stringValue;
+            Sprite boundSprite = binding
+                .FindPropertyRelative("sprite")
+                .objectReferenceValue as Sprite;
+            Sprite expectedSprite = AssetDatabase.LoadAssetAtPath<Sprite>(
+                expected.assetPath
+            );
+
+            if (backgroundId != expected.id)
+            {
+                throw new InvalidOperationException(
+                    "剧情 CG 绑定顺序错误：应为 " + expected.id +
+                    "，实际为 " + backgroundId + "。"
+                );
+            }
+
+            if (expectedSprite == null)
+            {
+                throw new InvalidOperationException(
+                    "序章图片未按单张 Sprite 导入：" + expected.assetPath
+                );
+            }
+
+            if (boundSprite != expectedSprite)
+            {
+                throw new InvalidOperationException(
+                    "剧情 CG 引用无效或不是最新素材：" + expected.id +
+                    " -> " + expected.assetPath
+                );
+            }
+        }
+
         Debug.Log(
             "序章校验通过：" +
             definition.nodes.Count + " 个节点，" +
@@ -157,26 +249,51 @@ public static class IntroStorySceneSetup
 
     private static void ConfigureStoryTextureImports()
     {
+        HashSet<string> importedPaths = new HashSet<string>();
+
         foreach (BackgroundEntry entry in BackgroundEntries)
         {
-            TextureImporter importer = AssetImporter.GetAtPath(entry.assetPath)
-                as TextureImporter;
+            ConfigureStoryTextureImport(entry.assetPath, importedPaths);
 
-            if (importer == null)
+            if (!string.IsNullOrWhiteSpace(entry.overlayAssetPath))
             {
-                throw new InvalidOperationException(
-                    "找不到序章图片或导入器：" + entry.assetPath
-                );
+                ConfigureStoryTextureImport(entry.overlayAssetPath, importedPaths);
             }
 
-            importer.textureType = TextureImporterType.Sprite;
-            importer.spriteImportMode = SpriteImportMode.Single;
-            importer.mipmapEnabled = false;
-            importer.alphaIsTransparency = true;
-            importer.maxTextureSize = 2048;
-            importer.textureCompression = TextureImporterCompression.CompressedHQ;
-            importer.SaveAndReimport();
+            if (!string.IsNullOrWhiteSpace(entry.foregroundAssetPath))
+            {
+                ConfigureStoryTextureImport(entry.foregroundAssetPath, importedPaths);
+            }
         }
+    }
+
+    private static void ConfigureStoryTextureImport(
+        string assetPath,
+        HashSet<string> importedPaths
+    )
+    {
+        if (!importedPaths.Add(assetPath))
+        {
+            return;
+        }
+
+        TextureImporter importer = AssetImporter.GetAtPath(assetPath)
+            as TextureImporter;
+
+        if (importer == null)
+        {
+            throw new InvalidOperationException(
+                "找不到序章图片或导入器：" + assetPath
+            );
+        }
+
+        importer.textureType = TextureImporterType.Sprite;
+        importer.spriteImportMode = SpriteImportMode.Single;
+        importer.mipmapEnabled = false;
+        importer.alphaIsTransparency = true;
+        importer.maxTextureSize = 2048;
+        importer.textureCompression = TextureImporterCompression.CompressedHQ;
+        importer.SaveAndReimport();
     }
 
     private static void ConfigureStoryPanelPrefab()
@@ -227,7 +344,52 @@ public static class IntroStorySceneSetup
                 SerializedProperty element = bindings.GetArrayElementAtIndex(index);
                 element.FindPropertyRelative("backgroundId").stringValue = entry.id;
                 element.FindPropertyRelative("sprite").objectReferenceValue = sprite;
+                SerializedProperty overlaySprite = element.FindPropertyRelative(
+                    "overlaySprite"
+                );
+                overlaySprite.objectReferenceValue = string.IsNullOrWhiteSpace(
+                    entry.overlayAssetPath
+                )
+                    ? null
+                    : AssetDatabase.LoadAssetAtPath<Sprite>(entry.overlayAssetPath);
+                element.FindPropertyRelative("overlayAnchoredPosition").vector2Value =
+                    entry.overlayAnchoredPosition;
+                element.FindPropertyRelative("overlaySize").vector2Value =
+                    entry.overlaySize;
+
+                if (!string.IsNullOrWhiteSpace(entry.overlayAssetPath) &&
+                    overlaySprite.objectReferenceValue == null)
+                {
+                    throw new InvalidOperationException(
+                        "序章差分图片未按 Sprite 导入：" + entry.overlayAssetPath
+                    );
+                }
+
+                SerializedProperty foregroundSprite = element.FindPropertyRelative(
+                    "foregroundSprite"
+                );
+                foregroundSprite.objectReferenceValue = string.IsNullOrWhiteSpace(
+                    entry.foregroundAssetPath
+                )
+                    ? null
+                    : AssetDatabase.LoadAssetAtPath<Sprite>(
+                        entry.foregroundAssetPath
+                    );
+                element.FindPropertyRelative("foregroundAnchoredPosition").vector2Value =
+                    entry.foregroundAnchoredPosition;
+                element.FindPropertyRelative("foregroundSize").vector2Value =
+                    entry.foregroundSize;
+
+                if (!string.IsNullOrWhiteSpace(entry.foregroundAssetPath) &&
+                    foregroundSprite.objectReferenceValue == null)
+                {
+                    throw new InvalidOperationException(
+                        "序章前景图片未按 Sprite 导入：" + entry.foregroundAssetPath
+                    );
+                }
             }
+
+            ConfigureStoryPanelLayout(prefabRoot.transform);
 
             SetReferencedObjectInactive(
                 serializedView.FindProperty("backgroundLabel")
@@ -252,6 +414,56 @@ public static class IntroStorySceneSetup
         {
             component.gameObject.SetActive(false);
         }
+    }
+
+    // 操作条放在对话框下方，保持底部操作与文本阅读区分离。
+    private static void ConfigureStoryPanelLayout(Transform prefabRoot)
+    {
+        RectTransform dialoguePanel = FindNamedRectTransform(
+            prefabRoot,
+            "DialoguePanel_EditLayoutHere"
+        );
+        RectTransform header = FindNamedRectTransform(
+            prefabRoot,
+            "Header_EditLayoutHere"
+        );
+
+        if (dialoguePanel == null || header == null)
+        {
+            throw new InvalidOperationException(
+                "StoryPanel.prefab 缺少对话框或操作条布局节点。"
+            );
+        }
+
+        dialoguePanel.anchorMin = new Vector2(0.08f, 0.125f);
+        dialoguePanel.anchorMax = new Vector2(0.92f, 0.375f);
+        dialoguePanel.anchoredPosition = Vector2.zero;
+        dialoguePanel.sizeDelta = Vector2.zero;
+
+        header.anchorMin = new Vector2(0.08f, 0.035f);
+        header.anchorMax = new Vector2(0.92f, 0.095f);
+        header.anchoredPosition = Vector2.zero;
+        header.sizeDelta = Vector2.zero;
+    }
+
+    private static RectTransform FindNamedRectTransform(
+        Transform root,
+        string objectName
+    )
+    {
+        RectTransform[] rectTransforms = root.GetComponentsInChildren<RectTransform>(
+            true
+        );
+
+        foreach (RectTransform rectTransform in rectTransforms)
+        {
+            if (rectTransform.name == objectName)
+            {
+                return rectTransform;
+            }
+        }
+
+        return null;
     }
 
     private static void BuildIntroScene()

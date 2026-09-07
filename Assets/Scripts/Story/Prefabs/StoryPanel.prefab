@@ -1641,8 +1641,8 @@ RectTransform:
   - {fileID: 6708367325493990875}
   m_Father: {fileID: 372501356564244968}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.08, y: 0.045}
-  m_AnchorMax: {x: 0.92, y: 0.305}
+  m_AnchorMin: {x: 0.08, y: 0.125}
+  m_AnchorMax: {x: 0.92, y: 0.375}
   m_AnchoredPosition: {x: 0, y: 0}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
@@ -2688,6 +2688,8 @@ MonoBehaviour:
   choicePanel: {fileID: 7988028791157569267}
   endPanel: {fileID: 6652354537678358280}
   backgroundImage: {fileID: 8792853681931800531}
+  backgroundOverlayImage: {fileID: 0}
+  backgroundForegroundImage: {fileID: 0}
   backgroundLabel: {fileID: 5872392989541354846}
   speakerText: {fileID: 7221792050879920228}
   dialogueText: {fileID: 5248015568918513391}
@@ -2699,15 +2701,15 @@ MonoBehaviour:
   - backgroundId: corridor_door_open
     sprite: {fileID: 21300000, guid: bc7eb80a87a56eb43aae686061213fde, type: 3}
   - backgroundId: phone_off
-    sprite: {fileID: 21300000, guid: 547ca8631db880c4980425e66fefdcd4, type: 3}
+    sprite: {fileID: 21300000, guid: d8ff65d46c4641d8886e4f05f680e28f, type: 3}
   - backgroundId: phone_on
-    sprite: {fileID: 21300000, guid: e8ee28b60237e4545a24acbbd51a1bfb, type: 3}
+    sprite: {fileID: 21300000, guid: c4848406382c4e48b4bbac57aad0b4cd, type: 3}
   - backgroundId: tv_viewer_wide
     sprite: {fileID: 21300000, guid: 7e30314e3f1cdf04f8abb58da9e6a298, type: 3}
   - backgroundId: tv_viewer_variant
     sprite: {fileID: 21300000, guid: 8cffe478001aa634b8345ef2194297c0, type: 3}
-  - backgroundId: monster_turn_closeup
-    sprite: {fileID: 21300000, guid: fcd6e7b2f4e3bcc40b4570a8762e87e5, type: 3}
+  - backgroundId: monster_turn_reveal
+    sprite: {fileID: 21300000, guid: ec62bef904184a4aa48dd68cbb4dc81e, type: 3}
   leftPortrait:
     root: {fileID: 8800661179620957476}
     panel: {fileID: 776643805130359980}
@@ -3200,10 +3202,10 @@ RectTransform:
   - {fileID: 6480869788158814747}
   m_Father: {fileID: 372501356564244968}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0, y: 1}
-  m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: -57}
-  m_SizeDelta: {x: -56, y: 70}
+  m_AnchorMin: {x: 0.08, y: 0.035}
+  m_AnchorMax: {x: 0.92, y: 0.095}
+  m_AnchoredPosition: {x: 0, y: 0}
+  m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &4450234476909290642
 MonoBehaviour:

@@ -127,6 +127,11 @@ namespace ProjectGuilt.Story
                     RenderDialogue();
                 }
 
+                if (textPresenter.IsWaitingForInlinePause)
+                {
+                    view.SetContinueIndicator(true);
+                }
+
                 if (!textPresenter.IsTyping)
                 {
                     EnterWaitingAdvance();
@@ -187,9 +192,26 @@ namespace ProjectGuilt.Story
 
             if (state.MainState == StoryMainState.Typing)
             {
+                if (textPresenter.IsWaitingForInlinePause)
+                {
+                    textPresenter.ResumeInlinePause();
+                    view.SetContinueIndicator(false);
+                    RenderDialogue();
+                    return true;
+                }
+
                 textPresenter.CompleteImmediately();
                 RenderDialogue();
-                EnterWaitingAdvance();
+
+                if (!textPresenter.IsTyping)
+                {
+                    EnterWaitingAdvance();
+                }
+                else if (textPresenter.IsWaitingForInlinePause)
+                {
+                    view.SetContinueIndicator(true);
+                }
+
                 return true;
             }
 
@@ -461,6 +483,11 @@ namespace ProjectGuilt.Story
                         if (textPresenter.IsTyping)
                         {
                             state.SetMainState(StoryMainState.Typing);
+
+                            if (textPresenter.IsWaitingForInlinePause)
+                            {
+                                view.SetContinueIndicator(true);
+                            }
                         }
                         else
                         {

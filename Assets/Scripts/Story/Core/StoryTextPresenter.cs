@@ -8,13 +8,12 @@ namespace ProjectGuilt.Story
     public sealed class StoryTextPresenter
     {
         private const string PauseMarker = "||";
-        private const float InlinePauseSeconds = 0.65f;
+        private const string FullWidthPauseMarker = "｜｜";
 
         // 使用浮点累计保留不足一个字符的帧间进度，避免低帧率下丢失速度。
         private float visibleCharacterProgress;
         private readonly List<int> inlinePausePositions = new List<int>();
         private int nextInlinePauseIndex;
-        private float inlinePauseRemaining;
 
         public float CharactersPerSecond { get; set; }
         public string NodeId { get; private set; }
@@ -30,9 +29,14 @@ namespace ProjectGuilt.Story
             get
             {
                 return VisibleCharacterCount < FullText.Length ||
-                    inlinePauseRemaining > 0f ||
                     HasPauseAtCurrentPosition();
             }
+        }
+
+        // || 停在当前显示位置时，必须由玩家点击继续，不能由自动播放或快进越过。
+        public bool IsWaitingForInlinePause
+        {
+            get { return HasPauseAtCurrentPosition(); }
         }
 
         // 最低速度限制为每秒一个字符，防止配置为零后对白永久停住。
@@ -54,7 +58,6 @@ namespace ProjectGuilt.Story
             VisibleCharacterCount = 0;
             visibleCharacterProgress = 0f;
             nextInlinePauseIndex = 0;
-            inlinePauseRemaining = 0f;
             AutoDelayOverride = dialogue != null ? dialogue.autoDelayOverride : -1f;
             Skippable = dialogue == null || dialogue.skippable;
         }
@@ -67,19 +70,8 @@ namespace ProjectGuilt.Story
                 return false;
             }
 
-            if (inlinePauseRemaining > 0f)
-            {
-                inlinePauseRemaining = Math.Max(
-                    0f,
-                    inlinePauseRemaining - Math.Max(0f, deltaTime)
-                );
-                return false;
-            }
-
             if (HasPauseAtCurrentPosition())
             {
-                nextInlinePauseIndex++;
-                inlinePauseRemaining = InlinePauseSeconds;
                 return false;
             }
 
@@ -95,8 +87,6 @@ namespace ProjectGuilt.Story
             {
                 VisibleCharacterCount = inlinePausePositions[nextInlinePauseIndex];
                 visibleCharacterProgress = VisibleCharacterCount;
-                nextInlinePauseIndex++;
-                inlinePauseRemaining = InlinePauseSeconds;
             }
             else
             {
@@ -106,7 +96,7 @@ namespace ProjectGuilt.Story
             return VisibleCharacterCount != previousCount;
         }
 
-        // 玩家点击或跳过时立即显示整条文本，并报告本次是否确实发生变化。
+        // 玩家点击或快进时立即显示到下一个 || 之前，停顿本身仍需玩家再次点击。
         public bool CompleteImmediately()
         {
             if (!IsTyping)
@@ -114,10 +104,34 @@ namespace ProjectGuilt.Story
                 return false;
             }
 
-            VisibleCharacterCount = FullText.Length;
-            visibleCharacterProgress = FullText.Length;
-            nextInlinePauseIndex = inlinePausePositions.Count;
-            inlinePauseRemaining = 0f;
+            if (HasPauseAtCurrentPosition())
+            {
+                return false;
+            }
+
+            int targetCount = FullText.Length;
+
+            if (nextInlinePauseIndex < inlinePausePositions.Count)
+            {
+                targetCount = inlinePausePositions[nextInlinePauseIndex];
+            }
+
+            bool changed = VisibleCharacterCount != targetCount;
+            VisibleCharacterCount = targetCount;
+            visibleCharacterProgress = targetCount;
+            return changed;
+        }
+
+        // 只有普通玩家点击可以解除 || 的断句；Auto 与 Skip 不调用此方法。
+        public bool ResumeInlinePause()
+        {
+            if (!HasPauseAtCurrentPosition())
+            {
+                return false;
+            }
+
+            nextInlinePauseIndex++;
+            visibleCharacterProgress = VisibleCharacterCount;
             return true;
         }
 
@@ -132,12 +146,11 @@ namespace ProjectGuilt.Story
             visibleCharacterProgress = 0f;
             inlinePausePositions.Clear();
             nextInlinePauseIndex = 0;
-            inlinePauseRemaining = 0f;
             AutoDelayOverride = -1f;
             Skippable = true;
         }
 
-        // “||” 是仅影响逐字节奏的隐藏标记，不进入 UI 文本和历史记录。
+        // “||” / “｜｜” 是隐藏断句标记，不进入 UI 文本和历史记录。
         private string ParseDisplayText(string sourceText)
         {
             inlinePausePositions.Clear();
@@ -151,9 +164,8 @@ namespace ProjectGuilt.Story
 
             for (int index = 0; index < sourceText.Length; index++)
             {
-                bool isPauseMarker = index + 1 < sourceText.Length &&
-                    sourceText[index] == PauseMarker[0] &&
-                    sourceText[index + 1] == PauseMarker[1];
+                bool isPauseMarker = IsPauseMarkerAt(sourceText, index, PauseMarker) ||
+                    IsPauseMarkerAt(sourceText, index, FullWidthPauseMarker);
 
                 if (isPauseMarker)
                 {
@@ -172,6 +184,17 @@ namespace ProjectGuilt.Story
         {
             return nextInlinePauseIndex < inlinePausePositions.Count &&
                 inlinePausePositions[nextInlinePauseIndex] <= VisibleCharacterCount;
+        }
+
+        private static bool IsPauseMarkerAt(
+            string sourceText,
+            int index,
+            string marker
+        )
+        {
+            return index + marker.Length <= sourceText.Length &&
+                sourceText[index] == marker[0] &&
+                sourceText[index + 1] == marker[1];
         }
     }
 }

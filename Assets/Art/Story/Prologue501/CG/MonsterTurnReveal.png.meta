@@ -1,13 +1,10 @@
 fileFormatVersion: 2
-guid: 547ca8631db880c4980425e66fefdcd4
+guid: ec62bef904184a4aa48dd68cbb4dc81e
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -4746930369150179868
-    second: PhoneOff_0
-  - first:
-      213: 389860624035373457
-    second: PhoneOff_1
+      213: 4953846390588678184
+    second: MonsterTurnReveal_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -103,13 +100,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: PhoneOff_0
+      name: MonsterTurnReveal_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 523
-        height: 1100
+        width: 3853
+        height: 2160
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -118,30 +115,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: 4e52a45caf38f1eb0800000000000000
-      internalID: -4746930369150179868
-      vertices: []
-      indices: 
-      edges: []
-      weights: []
-    - serializedVersion: 2
-      name: PhoneOff_1
-      rect:
-        serializedVersion: 2
-        x: 543
-        y: 884
-        width: 20
-        height: 85
-      alignment: 0
-      pivot: {x: 0, y: 0}
-      border: {x: 0, y: 0, z: 0, w: 0}
-      customData: 
-      outline: []
-      physicsShape: []
-      tessellationDetail: -1
-      bones: []
-      spriteID: 1916a870c20196500800000000000000
-      internalID: 389860624035373457
+      spriteID: 820a3eeab099fb440800000000000000
+      internalID: 4953846390588678184
       vertices: []
       indices: 
       edges: []
@@ -160,8 +135,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      PhoneOff_0: -4746930369150179868
-      PhoneOff_1: 389860624035373457
+      MonsterTurnReveal_0: 4953846390588678184
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

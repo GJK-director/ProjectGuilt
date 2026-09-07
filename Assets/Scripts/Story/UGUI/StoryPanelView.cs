@@ -19,6 +19,12 @@ public sealed class StoryPanelView : StoryViewBehaviour
     {
         public string backgroundId = string.Empty;
         public Sprite sprite = null;
+        public Sprite overlaySprite = null;
+        public Vector2 overlayAnchoredPosition = Vector2.zero;
+        public Vector2 overlaySize = Vector2.zero;
+        public Sprite foregroundSprite = null;
+        public Vector2 foregroundAnchoredPosition = Vector2.zero;
+        public Vector2 foregroundSize = Vector2.zero;
     }
 
     [Serializable]
@@ -51,6 +57,8 @@ public sealed class StoryPanelView : StoryViewBehaviour
 
     [Header("Background And Dialogue")]
     [SerializeField] private Image backgroundImage = null;
+    [SerializeField] private Image backgroundOverlayImage = null;
+    [SerializeField] private Image backgroundForegroundImage = null;
     [SerializeField] private Text backgroundLabel = null;
     [SerializeField] private Text speakerText = null;
     [SerializeField] private Text dialogueText = null;
@@ -100,6 +108,7 @@ public sealed class StoryPanelView : StoryViewBehaviour
             return;
         }
 
+        EnsureBackgroundLayerImages();
         BindSceneButtons();
         storyFacade.StoryStarted += HandleStoryStarted;
         storyFacade.StoryEnded += HandleStoryEnded;
@@ -182,7 +191,7 @@ public sealed class StoryPanelView : StoryViewBehaviour
         if (speakerText != null)
         {
             speakerText.text = string.IsNullOrWhiteSpace(speakerName)
-                ? "旁白"
+                ? ""
                 : speakerName;
         }
 
@@ -260,8 +269,9 @@ public sealed class StoryPanelView : StoryViewBehaviour
             backgroundTransition = null;
         }
 
-        Sprite sprite;
-        bool hasSprite = TryGetBackgroundSprite(backgroundId, out sprite);
+        BackgroundBinding binding;
+        bool hasSprite = TryGetBackgroundBinding(backgroundId, out binding);
+        Sprite sprite = hasSprite ? binding.sprite : null;
         bool isBlack = string.Equals(
             backgroundId,
             "black",
@@ -287,16 +297,17 @@ public sealed class StoryPanelView : StoryViewBehaviour
 
         if (safeFadeSeconds <= 0f || !isActiveAndEnabled)
         {
-            ApplyBackground(sprite, hasSprite, isBlack, 1f);
+            ApplyBackground(binding, sprite, hasSprite, isBlack, 1f);
             return;
         }
 
         backgroundTransition = StartCoroutine(
-            FadeBackground(sprite, hasSprite, isBlack, safeFadeSeconds)
+            FadeBackground(binding, sprite, hasSprite, isBlack, safeFadeSeconds)
         );
     }
 
     private IEnumerator FadeBackground(
+        BackgroundBinding binding,
         Sprite sprite,
         bool hasSprite,
         bool isBlack,
@@ -313,10 +324,11 @@ public sealed class StoryPanelView : StoryViewBehaviour
             Color color = startColor;
             color.a = Mathf.Lerp(startColor.a, 0f, elapsed / halfDuration);
             backgroundImage.color = color;
+            SetBackgroundLayerAlpha(color.a);
             yield return null;
         }
 
-        ApplyBackground(sprite, hasSprite, isBlack, 0f);
+        ApplyBackground(binding, sprite, hasSprite, isBlack, 0f);
         elapsed = 0f;
 
         while (elapsed < halfDuration)
@@ -325,16 +337,19 @@ public sealed class StoryPanelView : StoryViewBehaviour
             Color color = backgroundImage.color;
             color.a = Mathf.Clamp01(elapsed / halfDuration);
             backgroundImage.color = color;
+            SetBackgroundLayerAlpha(color.a);
             yield return null;
         }
 
         Color completedColor = backgroundImage.color;
         completedColor.a = 1f;
         backgroundImage.color = completedColor;
+        SetBackgroundLayerAlpha(1f);
         backgroundTransition = null;
     }
 
     private void ApplyBackground(
+        BackgroundBinding binding,
         Sprite sprite,
         bool hasSprite,
         bool isBlack,
@@ -348,11 +363,15 @@ public sealed class StoryPanelView : StoryViewBehaviour
         Color color = ResolveFallbackBackgroundColor(hasSprite, isBlack);
         color.a = Mathf.Clamp01(alpha);
         backgroundImage.color = color;
+        ApplyBackgroundLayers(binding, alpha);
     }
 
-    private bool TryGetBackgroundSprite(string backgroundId, out Sprite sprite)
+    private bool TryGetBackgroundBinding(
+        string backgroundId,
+        out BackgroundBinding result
+    )
     {
-        sprite = null;
+        result = null;
 
         if (string.IsNullOrWhiteSpace(backgroundId))
         {
@@ -369,12 +388,148 @@ public sealed class StoryPanelView : StoryViewBehaviour
                     StringComparison.OrdinalIgnoreCase
                 ))
             {
-                sprite = binding.sprite;
+                result = binding;
                 return true;
             }
         }
 
         return false;
+    }
+
+    // 只有少数 CG 需要叠层（当前为手机在后、手在前）。运行时创建，避免
+    // 把每一种可能差分都固化到预制体层级中。
+    private void EnsureBackgroundLayerImages()
+    {
+        if (backgroundImage == null)
+        {
+            return;
+        }
+
+        Transform parent = backgroundImage.transform.parent;
+
+        if (parent == null)
+        {
+            return;
+        }
+
+        if (backgroundOverlayImage == null)
+        {
+            backgroundOverlayImage = CreateBackgroundLayerImage(
+                parent,
+                "StoryBackgroundOverlay",
+                backgroundImage.transform.GetSiblingIndex() + 1
+            );
+        }
+
+        if (backgroundForegroundImage == null)
+        {
+            backgroundForegroundImage = CreateBackgroundLayerImage(
+                parent,
+                "StoryBackgroundForeground",
+                backgroundOverlayImage.transform.GetSiblingIndex() + 1
+            );
+        }
+    }
+
+    private Image CreateBackgroundLayerImage(
+        Transform parent,
+        string objectName,
+        int siblingIndex
+    )
+    {
+        GameObject layerObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(CanvasRenderer),
+            typeof(Image)
+        );
+        layerObject.layer = backgroundImage.gameObject.layer;
+        layerObject.transform.SetParent(parent, false);
+        layerObject.transform.SetSiblingIndex(
+            Mathf.Min(
+                siblingIndex,
+                parent.childCount - 1
+            )
+        );
+
+        Image layerImage = layerObject.GetComponent<Image>();
+        layerImage.raycastTarget = false;
+        layerImage.type = Image.Type.Simple;
+        layerImage.preserveAspect = true;
+        layerObject.SetActive(false);
+        return layerImage;
+    }
+
+    private void ApplyBackgroundLayers(BackgroundBinding binding, float alpha)
+    {
+        EnsureBackgroundLayerImages();
+        ApplyBackgroundLayer(
+            backgroundOverlayImage,
+            binding != null ? binding.overlaySprite : null,
+            binding != null ? binding.overlayAnchoredPosition : Vector2.zero,
+            binding != null ? binding.overlaySize : Vector2.zero,
+            alpha
+        );
+        ApplyBackgroundLayer(
+            backgroundForegroundImage,
+            binding != null ? binding.foregroundSprite : null,
+            binding != null ? binding.foregroundAnchoredPosition : Vector2.zero,
+            binding != null ? binding.foregroundSize : Vector2.zero,
+            alpha
+        );
+    }
+
+    private static void ApplyBackgroundLayer(
+        Image layerImage,
+        Sprite sprite,
+        Vector2 anchoredPosition,
+        Vector2 size,
+        float alpha
+    )
+    {
+        bool visible = layerImage != null && sprite != null;
+
+        if (layerImage == null)
+        {
+            return;
+        }
+
+        layerImage.gameObject.SetActive(visible);
+
+        if (!visible)
+        {
+            return;
+        }
+
+        RectTransform layerRect = layerImage.rectTransform;
+        layerRect.anchorMin = new Vector2(0.5f, 0.5f);
+        layerRect.anchorMax = new Vector2(0.5f, 0.5f);
+        layerRect.pivot = new Vector2(0.5f, 0.5f);
+        layerRect.anchoredPosition = anchoredPosition;
+        layerRect.sizeDelta = size;
+        layerImage.sprite = sprite;
+
+        Color color = Color.white;
+        color.a = Mathf.Clamp01(alpha);
+        layerImage.color = color;
+    }
+
+    private void SetBackgroundLayerAlpha(float alpha)
+    {
+        SetBackgroundLayerAlpha(backgroundOverlayImage, alpha);
+        SetBackgroundLayerAlpha(backgroundForegroundImage, alpha);
+    }
+
+    private static void SetBackgroundLayerAlpha(Image layerImage, float alpha)
+    {
+        if (layerImage == null || !layerImage.gameObject.activeSelf)
+        {
+            return;
+        }
+
+        Color color = layerImage.color;
+        color.a = Mathf.Clamp01(alpha);
+        layerImage.color = color;
     }
 
     private static Color ResolveFallbackBackgroundColor(bool hasSprite, bool isBlack)
