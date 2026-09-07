@@ -103,7 +103,8 @@ public enum BattleTestMode
     BattleDeckBootstrapPreset = 114,
     BattleDeckHandGroupingBasic = 115,
     BattleLifecycleTimingBasic = 116,
-    BattleUsePolicyDataBasic = 117
+    BattleUsePolicyDataBasic = 117,
+    BattleAttackUsePolicyResolutionBasic = 118
 }
 
 public static class BattleLifecycleTimingTests
@@ -500,6 +501,318 @@ public static class BattleUsePolicyDataTests
             }
         }
         return null;
+    }
+}
+
+public static class BattleAttackUsePolicyResolutionTests
+{
+    public static bool Run()
+    {
+        bool normalWinner = VerifyResolvedCase(
+            "mode118_normal_winner",
+            10,
+            CardUsePolicy.Normal,
+            1,
+            CardUsePolicy.Normal,
+            true,
+            false,
+            true
+        );
+        bool normalLoser = VerifyResolvedCase(
+            "mode118_normal_loser",
+            1,
+            CardUsePolicy.Normal,
+            10,
+            CardUsePolicy.Normal,
+            false,
+            true,
+            false
+        );
+        bool immediateLoser = VerifyResolvedCase(
+            "mode118_immediate_loser",
+            1,
+            CardUsePolicy.ImmediateCommit,
+            10,
+            CardUsePolicy.Normal,
+            true,
+            true,
+            false
+        );
+        bool enemyImmediateLoser = VerifyResolvedCase(
+            "mode118_enemy_immediate_loser",
+            10,
+            CardUsePolicy.Normal,
+            1,
+            CardUsePolicy.ImmediateCommit,
+            true,
+            true,
+            true
+        );
+        bool normalTie = VerifyTieLimitCase(
+            "mode118_normal_tie",
+            CardUsePolicy.Normal,
+            CardUsePolicy.Normal,
+            false,
+            false
+        );
+        bool immediatePlayerTie = VerifyTieLimitCase(
+            "mode118_immediate_player_tie",
+            CardUsePolicy.ImmediateCommit,
+            CardUsePolicy.Normal,
+            true,
+            false
+        );
+        bool immediateEnemyTie = VerifyTieLimitCase(
+            "mode118_immediate_enemy_tie",
+            CardUsePolicy.Normal,
+            CardUsePolicy.ImmediateCommit,
+            false,
+            true
+        );
+        bool helperMatrix = VerifyHelperMatrix();
+
+        Debug.Log("===== Mode118 BattleAttackUsePolicyResolutionBasic =====");
+        LogCheck("PASS: Normal winner Used", normalWinner);
+        LogCheck("PASS: Normal loser Not Used", normalLoser);
+        LogCheck("PASS: ImmediateCommit loser Used", immediateLoser);
+        LogCheck(
+            "PASS: ImmediateCommit loser no damage ownership",
+            immediateLoser
+        );
+        LogCheck("PASS: enemy ImmediateCommit loser Used", enemyImmediateLoser);
+        LogCheck("PASS: Normal TieLimit Not Used", normalTie);
+        LogCheck("PASS: ImmediateCommit TieLimit Used", immediatePlayerTie);
+        LogCheck("PASS: enemy ImmediateCommit TieLimit Used", immediateEnemyTie);
+        LogCheck("PASS: use policy helper matrix", helperMatrix);
+
+        bool passed = normalWinner && normalLoser && immediateLoser &&
+            enemyImmediateLoser && normalTie && immediatePlayerTie &&
+            immediateEnemyTie && helperMatrix;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyResolvedCase(
+        string id,
+        int playerPoint,
+        string playerPolicy,
+        int enemyPoint,
+        string enemyPolicy,
+        bool expectedPlayerUsed,
+        bool expectedEnemyUsed,
+        bool expectedImpactOwnerIsPlayer
+    )
+    {
+        CharacterData player = Unit(id + "_player");
+        CharacterData enemy = Unit(id + "_enemy");
+        BattleCardState playerCard = Card(
+            player,
+            id + "_player_card",
+            playerPoint,
+            playerPolicy
+        );
+        BattleCardState enemyCard = Card(
+            enemy,
+            id + "_enemy_card",
+            enemyPoint,
+            enemyPolicy
+        );
+        BattleClashSession session = CreateSession(
+            player,
+            playerCard,
+            enemy,
+            enemyCard
+        );
+        BattleResolutionPlan plan = BuildPlan(
+            player,
+            playerCard,
+            enemy,
+            enemyCard,
+            session
+        );
+        BattleCardState expectedImpactOwner = expectedImpactOwnerIsPlayer
+            ? playerCard
+            : enemyCard;
+        return plan != null &&
+            plan.playerCardUsed == expectedPlayerUsed &&
+            plan.enemyCardUsed == expectedEnemyUsed &&
+            plan.impacts.Count == 1 &&
+            object.ReferenceEquals(
+                plan.impacts[0].sourceCardState,
+                expectedImpactOwner
+            );
+    }
+
+    static bool VerifyTieLimitCase(
+        string id,
+        string playerPolicy,
+        string enemyPolicy,
+        bool expectedPlayerUsed,
+        bool expectedEnemyUsed
+    )
+    {
+        CharacterData player = Unit(id + "_player");
+        CharacterData enemy = Unit(id + "_enemy");
+        BattleCardState playerCard = Card(
+            player,
+            id + "_player_card",
+            5,
+            playerPolicy
+        );
+        BattleCardState enemyCard = Card(
+            enemy,
+            id + "_enemy_card",
+            5,
+            enemyPolicy
+        );
+        BattleClashSession session = CreateSession(
+            player,
+            playerCard,
+            enemy,
+            enemyCard
+        );
+        int rollGuard = 0;
+        while (!session.IsFinalized &&
+            rollGuard++ < BattleClashSession.MaxAttackTieCount)
+        {
+            session.RollNextAttempt();
+        }
+        BattleResolutionPlan plan = BuildPlan(
+            player,
+            playerCard,
+            enemy,
+            enemyCard,
+            session
+        );
+        return plan != null &&
+            session.FinalResult == BattleClashFinalResult.TieLimit &&
+            plan.resultType == "TieLimit" &&
+            plan.playerCardUsed == expectedPlayerUsed &&
+            plan.enemyCardUsed == expectedEnemyUsed &&
+            plan.impacts.Count == 0;
+    }
+
+    static bool VerifyHelperMatrix()
+    {
+        CharacterData owner = Unit("mode118_helper_owner");
+        BattleCardState normal = Card(
+            owner,
+            "mode118_helper_normal",
+            1,
+            CardUsePolicy.Normal
+        );
+        BattleCardState immediate = Card(
+            owner,
+            "mode118_helper_immediate",
+            1,
+            CardUsePolicy.ImmediateCommit
+        );
+        return BattleResolver.ShouldAttackCardBeUsedAfterAttackVsAttack(
+                normal,
+                true
+            ) &&
+            !BattleResolver.ShouldAttackCardBeUsedAfterAttackVsAttack(
+                normal,
+                false
+            ) &&
+            BattleResolver.ShouldAttackCardBeUsedAfterAttackVsAttack(
+                immediate,
+                true
+            ) &&
+            BattleResolver.ShouldAttackCardBeUsedAfterAttackVsAttack(
+                immediate,
+                false
+            );
+    }
+
+    static BattleResolutionPlan BuildPlan(
+        CharacterData player,
+        BattleCardState playerCard,
+        CharacterData enemy,
+        BattleCardState enemyCard,
+        BattleClashSession session
+    )
+    {
+        BattleEnemyIntent intent = new BattleEnemyIntent(
+            "mode118_intent_" + playerCard.instanceID,
+            enemy,
+            enemyCard,
+            player,
+            1
+        );
+        BattleActionSlot slot = new BattleActionSlot(player, 1);
+        slot.AssignResponse(player, playerCard, intent, false);
+        return BattleResolver.BuildRespondedClashResolutionPlan(
+            slot,
+            intent,
+            session
+        );
+    }
+
+    static BattleClashSession CreateSession(
+        CharacterData player,
+        BattleCardState playerCard,
+        CharacterData enemy,
+        BattleCardState enemyCard
+    )
+    {
+        BattleClashSession session = BattleClashSession.CreateAttackVsAttack(
+            Side(player, playerCard),
+            Side(enemy, enemyCard),
+            player
+        );
+        session.RollNextAttempt();
+        return session;
+    }
+
+    static BattleClashSideState Side(
+        CharacterData owner,
+        BattleCardState card
+    )
+    {
+        return new BattleClashSideState(
+            owner,
+            card,
+            new BattleClashPointSnapshot(),
+            new BattleClashResourceSnapshot
+            {
+                cardState = card,
+                selectedMinPoint = card.cardData.minPoint,
+                selectedMaxPoint = card.cardData.maxPoint
+            }
+        );
+    }
+
+    static BattleCardState Card(
+        CharacterData owner,
+        string id,
+        int point,
+        string usePolicy
+    )
+    {
+        CardTestData data = new CardTestData
+        {
+            cardID = id,
+            cardName = id,
+            cardType = CardType.Attack,
+            attackDeliveryMode = AttackDeliveryMode.Melee,
+            isClashable = true,
+            minPoint = point,
+            maxPoint = point,
+            damageFormula = "PointAsDamage",
+            usePolicy = usePolicy
+        };
+        return BattleCardManager.CreateBattleCard(owner, data, id);
+    }
+
+    static CharacterData Unit(string id)
+    {
+        return new CharacterData(id, 100, 5, 5, id);
+    }
+
+    static void LogCheck(string label, bool passed)
+    {
+        Debug.Log(passed ? label : "FAIL: " + label.Substring(6));
     }
 }
 
@@ -2065,6 +2378,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleUsePolicyDataBasic)
         {
             BattleUsePolicyDataTests.Run(cards);
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleAttackUsePolicyResolutionBasic)
+        {
+            BattleAttackUsePolicyResolutionTests.Run();
             return;
         }
 

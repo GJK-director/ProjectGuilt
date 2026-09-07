@@ -1431,13 +1431,27 @@ public static class BattleResolver
         if (session.FinalResult == BattleClashFinalResult.TieLimit)
         {
             plan.resultType = "TieLimit";
+            plan.playerCardUsed = ShouldAttackCardBeUsedAfterAttackVsAttack(
+                session.SideA.cardState,
+                false
+            );
+            plan.enemyCardUsed = ShouldAttackCardBeUsedAfterAttackVsAttack(
+                session.SideB.cardState,
+                false
+            );
             return;
         }
 
         bool playerWon = session.FinalResult == BattleClashFinalResult.SideAWin;
         plan.resultType = playerWon ? "PlayerWin" : "EnemyWin";
-        plan.playerCardUsed = playerWon;
-        plan.enemyCardUsed = !playerWon;
+        plan.playerCardUsed = ShouldAttackCardBeUsedAfterAttackVsAttack(
+            session.SideA.cardState,
+            playerWon
+        );
+        plan.enemyCardUsed = ShouldAttackCardBeUsedAfterAttackVsAttack(
+            session.SideB.cardState,
+            !playerWon
+        );
         plan.triggeredEventChain = true;
         plan.attacker = playerWon ? session.SideA.actor : session.SideB.actor;
         plan.target = playerWon
@@ -1483,6 +1497,20 @@ public static class BattleResolver
             );
             plan.impacts.Add(impact);
         }
+    }
+
+    internal static bool ShouldAttackCardBeUsedAfterAttackVsAttack(
+        BattleCardState cardState,
+        bool wonClash
+    )
+    {
+        if (cardState == null || cardState.cardData == null ||
+            cardState.cardData.cardType != CardType.Attack)
+        {
+            return false;
+        }
+
+        return wonClash || cardState.IsImmediateCommit();
     }
 
     static void BuildDefenseResolutionPlan(BattleResolutionPlan plan)
@@ -2186,7 +2214,7 @@ public static class BattleResolver
         {
             return "ResolveRespondedEnemyIntent 连续拼点 " +
                 session.AttackTieCount +
-                " 次仍未分出胜负，自动结束，双方不造成伤害，双方卡牌不算成功使用";
+                " 次仍未分出胜负，自动结束，双方不造成伤害；卡牌 Used 状态按各自 UsePolicy 判定";
         }
 
         if (session.ClashType == BattleClashType.DefenseVsAttack)

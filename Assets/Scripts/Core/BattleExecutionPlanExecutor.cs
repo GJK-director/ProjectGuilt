@@ -529,7 +529,8 @@ public static class BattleExecutionPlanExecutor
             return false;
         }
 
-        // TieLimit是合法的无胜负终态：当前项完成，但双方卡牌都不提交使用。
+        // TieLimit 是合法的无胜负终态；卡牌 Used 事实由 Resolver / UsePolicy 决定，
+        // Executor 此处只完成 ExecutionItem。
         item.MarkExecuted(BattleExecutionItemOutcomeReason.TieLimitReached);
         Debug.Log(item.order + ". TieLimit正常结束，ExecutionPlan继续下一项");
         return true;
