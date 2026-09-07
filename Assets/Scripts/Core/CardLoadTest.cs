@@ -3621,18 +3621,39 @@ public static class BattleAngerAndKnifeCardsBasicTests
             FixedAttack("mode107_dodge_attack", 1),
             "mode107_dodge_attack"
         );
-        BattleClashSession success = BattleClashSession.CreateDodgeVsAttack(
-            Side(dodger, dodgeState),
-            Side(attacker, attackState),
+        BattleExecutionAction successAttack = new BattleExecutionAction(
+            attacker,
+            attackState,
+            null,
+            null,
             dodger
         );
+        BattleExecutionAction successDodge = new BattleExecutionAction(
+            dodger,
+            dodgeState,
+            null,
+            null,
+            attacker
+        );
+        BattleResolveResult successBegin = BattleResolver.TryBeginAttackVsDodge(
+            successAttack,
+            successDodge,
+            out BattleClashSession success
+        );
+        if (successBegin != null || success == null)
+        {
+            return false;
+        }
         success.RollNextAttempt();
         BattleResolutionPlan successPlan = PlanForSession(success, dodgeState, attackState);
         CompletePlan(successPlan);
-        int rewarded = dodger.GetBuffStack("NextClashPointUp");
+        int rewarded = dodger.battlePending.nextUsedAttackPointBonus;
+        long generation = dodger.battlePending.breathGeneration;
         BattleResolver.TryCommitNextResolutionStep(successPlan, out _);
         bool exactlyOnce = rewarded == 2 &&
-            dodger.GetBuffStack("NextClashPointUp") == 2;
+            dodger.GetBuffStack("NextClashPointUp") == 0 &&
+            dodger.battlePending.nextUsedAttackPointBonus == 2 &&
+            dodger.battlePending.breathGeneration == generation;
 
         CharacterData failedDodger = Unit("mode107_failed_dodger", false);
         BattleCardState failedDodge = new BattleCardState(
@@ -3640,15 +3661,38 @@ public static class BattleAngerAndKnifeCardsBasicTests
             FixedCopy(dodge, 1, 1),
             "mode107_failed_dodge"
         );
-        BattleClashSession failed = BattleClashSession.CreateDodgeVsAttack(
-            Side(failedDodger, failedDodge),
-            Side(attacker, new BattleCardState(attacker,
-                FixedAttack("mode107_dodge_attack_high", 12), "mode107_high")),
+        BattleCardState failedAttackCard = new BattleCardState(
+            attacker,
+            FixedAttack("mode107_dodge_attack_high", 12),
+            "mode107_high"
+        );
+        BattleExecutionAction failedAttack = new BattleExecutionAction(
+            attacker,
+            failedAttackCard,
+            null,
+            null,
             failedDodger
         );
+        BattleExecutionAction failedDodgeAction = new BattleExecutionAction(
+            failedDodger,
+            failedDodge,
+            null,
+            null,
+            attacker
+        );
+        BattleResolveResult failedBegin = BattleResolver.TryBeginAttackVsDodge(
+            failedAttack,
+            failedDodgeAction,
+            out BattleClashSession failed
+        );
+        if (failedBegin != null || failed == null)
+        {
+            return false;
+        }
         failed.RollNextAttempt();
         CompletePlan(PlanForSession(failed, failedDodge, failed.SideB.cardState));
-        bool failureNoReward = failedDodger.GetBuffStack("NextClashPointUp") == 0;
+        bool failureNoReward = failedDodger.battlePending.nextUsedAttackPointBonus == 0 &&
+            failedDodger.GetBuffStack("NextClashPointUp") == 0;
         return exactlyOnce && failureNoReward;
     }
 
@@ -4184,13 +4228,34 @@ public static class BattleBasicShootingLoopTests
     static bool VerifyReload(List<CardTestData> cards)
     {
         CardTestData reload = Find(cards, "shoot_reload_001");
-        bool success = ResolveDodge(reload, 3, 1, 0, out int afterSuccess,
-            out BattleResolutionPlan successPlan) && afterSuccess == 6 &&
-            successPlan.CompletedResult.resultType == "DodgeSuccess";
-        bool failure = ResolveDodge(reload, 1, 10, 2, out int afterFailure,
-            out BattleResolutionPlan failurePlan) && afterFailure == 6 &&
+        bool successResolved = ResolveDodge(reload, 3, 1, 0, out int afterSuccess,
+            out BattleResolutionPlan successPlan, out CharacterData successPlayer) &&
+            successPlan != null && successPlan.CompletedResult != null &&
+            successPlan.CompletedResult.resultType == "DodgeSuccess" &&
+            afterSuccess == 0 && successPlayer.battlePending.reloadAtTurnEnd;
+        bool success = false;
+        if (successResolved)
+        {
+            BattleTurnProcessor.EndTurn(new List<CharacterData> { successPlayer });
+            success = BattleBulletRules.GetBullet(successPlayer) ==
+                    BattleBulletRules.GetMagazineCapacity(successPlayer) &&
+                !successPlayer.battlePending.reloadAtTurnEnd;
+        }
+
+        bool failureResolved = ResolveDodge(reload, 1, 10, 2, out int afterFailure,
+            out BattleResolutionPlan failurePlan, out CharacterData failurePlayer) &&
+            failurePlan != null && failurePlan.CompletedResult != null &&
             failurePlan.CompletedResult.resultType == "DodgeFailed" &&
-            failurePlan.CompletedResult.damage == 15;
+            failurePlan.CompletedResult.damage == 15 && afterFailure == 2 &&
+            failurePlayer.battlePending.reloadAtTurnEnd;
+        bool failure = false;
+        if (failureResolved)
+        {
+            BattleTurnProcessor.EndTurn(new List<CharacterData> { failurePlayer });
+            failure = BattleBulletRules.GetBullet(failurePlayer) ==
+                    BattleBulletRules.GetMagazineCapacity(failurePlayer) &&
+                !failurePlayer.battlePending.reloadAtTurnEnd;
+        }
         return success && failure;
     }
 
@@ -4315,6 +4380,7 @@ public static class BattleBasicShootingLoopTests
         CardTestData close = Find(cards, "shoot_close_001");
         CardTestData successfulUseShoot = Clone(Find(cards, "atk_bullet_001"), 1, 1);
         successfulUseShoot.resourceRule = CopyResourceRule(successfulUseShoot.resourceRule);
+        successfulUseShoot.usePolicy = CardUsePolicy.Normal;
         successfulUseShoot.resourceRule.consumeTiming =
             CardResourceConsumeTiming.OnSuccessfulUse;
         bool loserDoesNotPaySuccessfulUseTiming = ResolveRespondedShoot(
@@ -4380,8 +4446,13 @@ public static class BattleBasicShootingLoopTests
         {
             return false;
         }
+        bool immediateCommit = source.IsImmediateCommit();
         return session.RequiresAnotherRoll && !session.IsFinalized &&
-            BattleBulletRules.GetBullet(player) == bullet;
+            (immediateCommit
+                ? playerCard.cardUsedCommittedForCurrentAction &&
+                    BattleBulletRules.GetBullet(player) == 0
+                : !playerCard.cardUsedCommittedForCurrentAction &&
+                    BattleBulletRules.GetBullet(player) == bullet);
     }
 
     static bool ResolveDodge(
@@ -4393,7 +4464,28 @@ public static class BattleBasicShootingLoopTests
         out BattleResolutionPlan plan
     )
     {
-        CharacterData player = Unit("mode108_dodge_player");
+        return ResolveDodge(
+            source,
+            dodgePoint,
+            enemyPoint,
+            bullet,
+            out bulletAfter,
+            out plan,
+            out _
+        );
+    }
+
+    static bool ResolveDodge(
+        CardTestData source,
+        int dodgePoint,
+        int enemyPoint,
+        int bullet,
+        out int bulletAfter,
+        out BattleResolutionPlan plan,
+        out CharacterData player
+    )
+    {
+        player = Unit("mode108_dodge_player");
         CharacterData enemy = Unit("mode108_dodge_enemy");
         BattleBulletRules.AddBulletCapped(player, bullet);
         BattleCardState dodge = State(player, Clone(source, dodgePoint, dodgePoint), "dodge");
@@ -4436,7 +4528,7 @@ public static class BattleBasicShootingLoopTests
 
     static CardTestData Clone(CardTestData source, int min, int max)
     {
-        return new CardTestData { cardID = source.cardID, cardName = source.cardName, cardType = source.cardType, attackDeliveryMode = source.attackDeliveryMode, presentationVariant = source.presentationVariant, isClashable = true, minPoint = min, maxPoint = max, cooldown = source.cooldown, damageFormula = source.damageFormula, resourceRule = source.resourceRule, traits = source.traits };
+        return new CardTestData { cardID = source.cardID, cardName = source.cardName, cardType = source.cardType, attackDeliveryMode = source.attackDeliveryMode, presentationVariant = source.presentationVariant, isClashable = true, minPoint = min, maxPoint = max, cooldown = source.cooldown, damageFormula = source.damageFormula, resourceRule = source.resourceRule, usePolicy = source.usePolicy, traits = source.traits };
     }
 
     static CardResourceRuleData CopyResourceRule(CardResourceRuleData source)
