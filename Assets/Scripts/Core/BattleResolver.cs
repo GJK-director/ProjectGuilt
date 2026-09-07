@@ -1549,8 +1549,8 @@ public static class BattleResolver
             session.RemainingAttackPoint,
             session.RemainingAttackPoint,
             ClashResult.None,
-            !session.IsFullBlock,
-            true
+            session.RemainingAttackPoint > 0,
+            session.RemainingAttackPoint > 0
         );
         plan.impacts.Add(impact);
     }
@@ -1677,6 +1677,11 @@ public static class BattleResolver
             return plan.State == BattleResolutionPlanState.Completed;
         }
 
+        impact.didHit = false;
+        impact.actualDamage = 0;
+        impact.committedDamage = 0;
+        impact.didKill = false;
+
         if (impact.attacker == null || impact.target == null ||
             impact.sourceCardState == null ||
             impact.sourceCardState.cardData == null)
@@ -1685,14 +1690,13 @@ public static class BattleResolver
             return true;
         }
 
-        bool wasDeadBeforeImpact = impact.target.IsDead();
-        if (impact.allowsDamage && wasDeadBeforeImpact)
+        if (impact.allowsDamage && impact.target.IsDead())
         {
             impact.state = BattleImpactState.Skipped;
             return true;
         }
 
-        int hpDamage = impact.usesPrecalculatedDamage
+        int candidateDamage = impact.usesPrecalculatedDamage
             ? Mathf.Max(0, impact.precalculatedDamage)
             : 0;
         if (impact.allowsDamage && !impact.usesPrecalculatedDamage)
@@ -1705,46 +1709,78 @@ public static class BattleResolver
             );
             damageScaled = damageScaled *
                 Mathf.Max(0, impact.damageMultiplierPercent) / 100;
-            hpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+            candidateDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+        }
+
+        if (impact.allowsDamage)
+        {
+            BattleEventContext modifierContext = TriggerBattleEvent(
+                BattleTiming.DamageModifier,
+                impact.attacker,
+                impact.target,
+                impact.sourceCardState,
+                impact.clashPoint,
+                candidateDamage,
+                false,
+                false,
+                impact.clashResult,
+                impact
+            );
+            candidateDamage = modifierContext != null
+                ? Mathf.Max(0, modifierContext.damage)
+                : Mathf.Max(0, candidateDamage);
         }
 
         if (impact.shouldTriggerHit)
         {
+            impact.didHit = true;
             TriggerBattleEvent(
                 BattleTiming.Hit,
                 impact.attacker,
                 impact.target,
                 impact.sourceCardState,
                 impact.clashPoint,
-                hpDamage,
+                candidateDamage,
                 true,
                 false,
-                impact.clashResult
+                impact.clashResult,
+                impact
             );
         }
 
-        if (impact.allowsDamage && hpDamage > 0)
+        int sourceHpBefore = impact.target.currentHP;
+        int sourceHpAfter = sourceHpBefore;
+        int actualDamage = 0;
+        if (impact.allowsDamage && candidateDamage > 0 && sourceHpBefore > 0)
         {
-            int hpBefore = impact.target.currentHP;
             int preHitAnger = BattleAngerRules.GetAnger(impact.target);
-            impact.target.TakeDamage(hpDamage);
-            int actualDamage = Mathf.Max(0, hpBefore - impact.target.currentHP);
-            BattleAngerRules.ApplyCommittedDamage(
-                impact.attacker,
-                impact.target,
-                preHitAnger,
-                actualDamage
-            );
-            bool didKill = !wasDeadBeforeImpact && impact.target.IsDead();
+            impact.target.TakeDamage(candidateDamage);
+            sourceHpAfter = impact.target.currentHP;
+            actualDamage = Mathf.Max(0, sourceHpBefore - sourceHpAfter);
+            if (actualDamage > 0)
+            {
+                BattleAngerRules.ApplyCommittedDamage(
+                    impact.attacker,
+                    impact.target,
+                    preHitAnger,
+                    actualDamage
+                );
+            }
+            bool didKill = sourceHpBefore > 0 &&
+                actualDamage > 0 &&
+                sourceHpAfter <= 0;
+            impact.didKill = didKill;
             TriggerBattleEvent(
                 BattleTiming.AfterDamage,
                 impact.attacker,
                 impact.target,
                 impact.sourceCardState,
                 impact.clashPoint,
-                hpDamage,
-                true,
-                didKill
+                actualDamage,
+                impact.didHit,
+                didKill,
+                impact.clashResult,
+                impact
             );
             if (didKill)
             {
@@ -1754,15 +1790,17 @@ public static class BattleResolver
                     impact.target,
                     impact.sourceCardState,
                     impact.clashPoint,
-                    hpDamage,
+                    actualDamage,
+                    impact.didHit,
                     true,
-                    true
+                    impact.clashResult,
+                    impact
                 );
             }
-            impact.didKill = didKill;
         }
 
-        impact.committedDamage = hpDamage;
+        impact.actualDamage = actualDamage;
+        impact.committedDamage = actualDamage;
         impact.state = BattleImpactState.Committed;
         return true;
     }
@@ -2000,11 +2038,11 @@ public static class BattleResolver
         CharacterData damagedCharacter = null;
         foreach (BattleImpact impact in plan.impacts)
         {
-            if (impact == null || impact.committedDamage <= 0)
+            if (impact == null || impact.actualDamage <= 0)
             {
                 continue;
             }
-            totalDamage += impact.committedDamage;
+            totalDamage += impact.actualDamage;
             damagedCharacter = impact.target;
         }
 
@@ -3939,7 +3977,7 @@ public static class BattleResolver
     }
 
     // TriggerBattleEvent = 触发战斗事件
-    static void TriggerBattleEvent(
+    static BattleEventContext TriggerBattleEvent(
         string timing,
         CharacterData user,
         CharacterData target,
@@ -3948,7 +3986,8 @@ public static class BattleResolver
         int damage,
         bool isHit,
         bool isKill,
-        string clashResult = ClashResult.None
+        string clashResult = ClashResult.None,
+        BattleImpact impact = null
     )
     {
         BattleEventContext context = new BattleEventContext(timing)
@@ -3958,7 +3997,8 @@ public static class BattleResolver
             .SetClashResult(clashResult)
             .SetDamage(damage)
             .SetHit(isHit)
-            .SetKill(isKill);
+            .SetKill(isKill)
+            .SetImpact(impact);
 
         // 先让事件系统处理
         // 例如 CD、消耗、以后成就/UI/负罪感等
@@ -3966,6 +4006,8 @@ public static class BattleResolver
 
         // 再让卡牌效果处理对应阶段
         ExecuteCardEffectsByTiming(user, target, cardState, timing, clashResult);
+
+        return context;
     }
 
     // ExecuteCardEffectsByTiming = 按战斗阶段执行卡牌效果

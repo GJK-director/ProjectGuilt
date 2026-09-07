@@ -110,7 +110,8 @@ public enum BattleTestMode
     BattleCardUsedConsequencesBasic = 121,
     BattleCardUsedResourceConsequencesBasic = 122,
     BattleCardResolvedBasic = 123,
-    BattleActionFinishedBasic = 124
+    BattleActionFinishedBasic = 124,
+    BattleImpactFactsBasic = 125
 }
 
 public static class BattleLifecycleTimingTests
@@ -4945,6 +4946,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleActionFinishedBasic)
         {
             BattleActionFinishedTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleImpactFactsBasic)
+        {
+            BattleImpactFactsTests.Run();
             return;
         }
 
@@ -29848,5 +29855,387 @@ public static class BattleActionFinishedTests
     static void LogCheck(string label, bool passed)
     {
         Debug.Log(passed ? label : "FAIL: " + label.Substring(6));
+    }
+}
+
+public static class BattleImpactFactsTests
+{
+    sealed class ImpactFixture
+    {
+        public CharacterData attacker;
+        public CharacterData target;
+        public BattleCardState card;
+        public BattleImpact impact;
+        public BattleResolutionPlan plan;
+    }
+
+    public static bool Run()
+    {
+        bool fullBlock = WithObserver(VerifyFullBlockHasNoHitOrDamageEvents);
+        bool reducedDefense = WithObserver(VerifyReducedDefenseStillHits);
+        bool dodgeSuccess = WithObserver(VerifyDodgeSuccessHasNoHit);
+        bool hitIndependent = WithObserver(VerifyHitIsIndependentFromActualDamage);
+        bool modifierBinding = WithObserver(VerifyDamageModifierBindsExactImpact);
+        bool modifierMutation = WithObserver(VerifyDamageModifierCanChangePendingDamage);
+        bool modifierClamp = WithObserver(VerifyDamageModifierCannotCreateNegativeDamage);
+        bool overkill = WithObserver(VerifyOverkillUsesActualDamage);
+        bool killOwnership = WithObserver(VerifyLethalImpactOwnsAfterKill);
+        bool laterDeath = WithObserver(VerifyLaterDeathIsNotAttributedToEarlierImpact);
+        bool eventOrder = WithObserver(VerifyFormalFreeAttackEventOrder);
+        bool eventImpact = WithObserver(VerifyDamageEventsKeepExactImpact);
+
+        Debug.Log("===== Mode125 BattleImpactFactsBasic =====");
+        LogCheck("PASS: FullBlock has no Hit", fullBlock);
+        LogCheck("PASS: FullBlock has no damage events", fullBlock);
+        LogCheck("PASS: reduced Defense still Hit", reducedDefense);
+        LogCheck("PASS: DodgeSuccess has no Hit", dodgeSuccess);
+        LogCheck("PASS: Hit is independent from actualDamage", hitIndependent);
+        LogCheck("PASS: DamageModifier binds exact Impact", modifierBinding);
+        LogCheck("PASS: DamageModifier can change pending damage", modifierMutation);
+        LogCheck("PASS: DamageModifier cannot create negative HP damage", modifierClamp);
+        LogCheck("PASS: overkill reports actualDamage only", overkill);
+        LogCheck("PASS: lethal source owns exact AfterKill", killOwnership);
+        LogCheck("PASS: later independent death is not attributed to source", laterDeath);
+        LogCheck("PASS: Impact event order is DamageModifier Hit AfterDamage CardResolved", eventOrder);
+        LogCheck("PASS: damage events keep exact source Impact", eventImpact);
+
+        bool passed = fullBlock && reducedDefense && dodgeSuccess && hitIndependent &&
+            modifierBinding && modifierMutation && modifierClamp && overkill &&
+            killOwnership && laterDeath && eventOrder && eventImpact;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyFullBlockHasNoHitOrDamageEvents(List<BattleEventContext> events)
+    {
+        BattleResolutionPlan plan = CreateDefensePlan("mode125_full_block", 5, 10);
+        bool completed = Complete(plan, out BattleResolveResult result);
+        return completed && result != null && result.resultType == "DefenseFullBlock" &&
+            result.damage == 0 && plan.impacts.Count == 1 &&
+            !plan.impacts[0].didHit && plan.impacts[0].actualDamage == 0 &&
+            Count(events, BattleTiming.DamageModifier) == 0 &&
+            Count(events, BattleTiming.Hit) == 0 &&
+            Count(events, BattleTiming.AfterDamage) == 0 &&
+            Count(events, BattleTiming.AfterKill) == 0;
+    }
+
+    static bool VerifyReducedDefenseStillHits(List<BattleEventContext> events)
+    {
+        BattleResolutionPlan plan = CreateDefensePlan("mode125_reduced_defense", 5, 1);
+        bool completed = Complete(plan, out BattleResolveResult result);
+        return completed && result != null && result.resultType == "DefenseReducedDamage" &&
+            result.damage > 0 && plan.impacts.Count == 1 && plan.impacts[0].didHit &&
+            plan.impacts[0].actualDamage > 0 && Count(events, BattleTiming.DamageModifier) == 1 &&
+            Count(events, BattleTiming.Hit) == 1 && Count(events, BattleTiming.AfterDamage) == 1;
+    }
+
+    static bool VerifyDodgeSuccessHasNoHit(List<BattleEventContext> events)
+    {
+        BattleResolutionPlan plan = CreateDodgePlan("mode125_dodge_success", 10, 1);
+        bool completed = Complete(plan, out BattleResolveResult result);
+        return completed && result != null && result.resultType == "DodgeSuccess" &&
+            result.damage == 0 && plan.impacts.Count == 0 &&
+            Count(events, BattleTiming.DamageModifier) == 0 &&
+            Count(events, BattleTiming.Hit) == 0 &&
+            Count(events, BattleTiming.AfterDamage) == 0 &&
+            Count(events, BattleTiming.AfterKill) == 0;
+    }
+
+    static bool VerifyHitIsIndependentFromActualDamage(List<BattleEventContext> events)
+    {
+        ImpactFixture fixture = CreateImpactFixture("mode125_hit_zero", 100, 0);
+        fixture.impact.allowsDamage = true;
+        fixture.impact.shouldTriggerHit = true;
+        bool committed = BattleResolver.CommitImpact(fixture.plan, fixture.impact);
+        return committed && fixture.impact.didHit && fixture.impact.actualDamage == 0 &&
+            Count(events, BattleTiming.Hit) == 1 && Count(events, BattleTiming.AfterDamage) == 0;
+    }
+
+    static bool VerifyDamageModifierBindsExactImpact(List<BattleEventContext> events)
+    {
+        ImpactFixture fixture = CreateImpactFixture("mode125_modifier_binding", 100, 4);
+        bool sawExactImpact = false;
+        BattleEventProcessor.TestEventObserver += context =>
+        {
+            if (context != null && context.timing == BattleTiming.DamageModifier)
+            {
+                sawExactImpact = object.ReferenceEquals(context.impact, fixture.impact);
+            }
+        };
+        bool committed = BattleResolver.CommitImpact(fixture.plan, fixture.impact);
+        return committed && sawExactImpact && fixture.impact.actualDamage == 4 &&
+            Count(events, BattleTiming.DamageModifier) == 1;
+    }
+
+    static bool VerifyDamageModifierCanChangePendingDamage(List<BattleEventContext> events)
+    {
+        ImpactFixture fixture = CreateImpactFixture("mode125_modifier_change", 100, 4);
+        BattleEventProcessor.TestEventObserver += context =>
+        {
+            if (context != null && context.timing == BattleTiming.DamageModifier &&
+                object.ReferenceEquals(context.impact, fixture.impact))
+            {
+                context.damage = 1;
+            }
+        };
+        bool committed = BattleResolver.CommitImpact(fixture.plan, fixture.impact);
+        return committed && fixture.impact.actualDamage == 1 &&
+            fixture.target.currentHP == 99 && Count(events, BattleTiming.AfterDamage) == 1;
+    }
+
+    static bool VerifyDamageModifierCannotCreateNegativeDamage(List<BattleEventContext> events)
+    {
+        ImpactFixture fixture = CreateImpactFixture("mode125_modifier_negative", 100, 4);
+        BattleEventProcessor.TestEventObserver += context =>
+        {
+            if (context != null && context.timing == BattleTiming.DamageModifier &&
+                object.ReferenceEquals(context.impact, fixture.impact))
+            {
+                context.damage = -50;
+            }
+        };
+        bool committed = BattleResolver.CommitImpact(fixture.plan, fixture.impact);
+        return committed && fixture.impact.actualDamage == 0 &&
+            fixture.target.currentHP == 100 && Count(events, BattleTiming.AfterDamage) == 0;
+    }
+
+    static bool VerifyOverkillUsesActualDamage(List<BattleEventContext> events)
+    {
+        ImpactFixture fixture = CreateImpactFixture("mode125_overkill", 3, 10);
+        bool committed = BattleResolver.CommitImpact(fixture.plan, fixture.impact);
+        bool completed = Complete(fixture.plan, out BattleResolveResult result);
+        return committed && completed && result != null && result.damage == 3 &&
+            fixture.impact.actualDamage == 3 && fixture.impact.committedDamage == 3 &&
+            fixture.impact.didKill && Count(events, BattleTiming.AfterDamage) == 1 &&
+            Count(events, BattleTiming.AfterKill) == 1;
+    }
+
+    static bool VerifyLethalImpactOwnsAfterKill(List<BattleEventContext> events)
+    {
+        ImpactFixture fixture = CreateImpactFixture("mode125_kill_owner", 3, 3);
+        bool committed = BattleResolver.CommitImpact(fixture.plan, fixture.impact);
+        BattleEventContext afterKill = Find(events, BattleTiming.AfterKill);
+        return committed && fixture.impact.didKill && afterKill != null &&
+            object.ReferenceEquals(afterKill.impact, fixture.impact) &&
+            object.ReferenceEquals(afterKill.cardState, fixture.card) &&
+            afterKill.damage == fixture.impact.actualDamage;
+    }
+
+    static bool VerifyLaterDeathIsNotAttributedToEarlierImpact(List<BattleEventContext> events)
+    {
+        ImpactFixture fixture = CreateImpactFixture("mode125_later_death", 3, 1);
+        bool committed = BattleResolver.CommitImpact(fixture.plan, fixture.impact);
+        fixture.target.TakeDamage(2);
+        return committed && fixture.impact.actualDamage == 1 && !fixture.impact.didKill &&
+            fixture.target.IsDead() && Count(events, BattleTiming.AfterKill) == 0;
+    }
+
+    static bool VerifyFormalFreeAttackEventOrder(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode125_formal_owner");
+        CharacterData target = Unit("mode125_formal_target");
+        BattleCardState card = BattleCardManager.CreateBattleCard(
+            owner,
+            FixedAttack("mode125_formal_card", 3),
+            "mode125_formal_card_instance"
+        );
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, card, target);
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
+        return result != null && result.isSuccess && result.damage == 3 &&
+            IndexOf(events, BattleTiming.DamageModifier) >= 0 &&
+            IndexOf(events, BattleTiming.Hit) > IndexOf(events, BattleTiming.DamageModifier) &&
+            IndexOf(events, BattleTiming.AfterDamage) > IndexOf(events, BattleTiming.Hit) &&
+            IndexOf(events, BattleTiming.CardResolved) > IndexOf(events, BattleTiming.AfterDamage);
+    }
+
+    static bool VerifyDamageEventsKeepExactImpact(List<BattleEventContext> events)
+    {
+        BattleEventContext modifier = Find(events, BattleTiming.DamageModifier);
+        BattleEventContext hit = Find(events, BattleTiming.Hit);
+        BattleEventContext afterDamage = Find(events, BattleTiming.AfterDamage);
+        return modifier != null && hit != null && afterDamage != null &&
+            modifier.impact != null && object.ReferenceEquals(modifier.impact, hit.impact) &&
+            object.ReferenceEquals(modifier.impact, afterDamage.impact) &&
+            modifier.cardState != null && object.ReferenceEquals(modifier.cardState, hit.cardState) &&
+            object.ReferenceEquals(modifier.cardState, afterDamage.cardState);
+    }
+
+    static BattleResolutionPlan CreateDefensePlan(string id, int attackPoint, int defensePoint)
+    {
+        CharacterData player = Unit(id + "_player");
+        CharacterData enemy = Unit(id + "_enemy");
+        BattleCardState defense = Card(player, id + "_defense", CardType.Defense, defensePoint);
+        BattleCardState attack = Card(enemy, id + "_attack", CardType.Attack, attackPoint);
+        BattleEnemyIntent intent = new BattleEnemyIntent(
+            id + "_intent", enemy, attack, player, 1
+        );
+        BattleActionSlot slot = new BattleActionSlot(player, 1);
+        slot.AssignResponse(player, defense, intent, false);
+        BattleClashSession session = BattleResolver.CreateAttackVsDefenseClashSession(
+            new BattleExecutionAction(enemy, attack, null, intent, player),
+            new BattleExecutionAction(player, defense, slot, intent, enemy)
+        );
+        return session != null && session.RollNextAttempt()
+            ? BattleResolver.BuildRespondedClashResolutionPlan(slot, intent, session)
+            : null;
+    }
+
+    static BattleResolutionPlan CreateDodgePlan(string id, int dodgePoint, int attackPoint)
+    {
+        CharacterData player = Unit(id + "_player");
+        CharacterData enemy = Unit(id + "_enemy");
+        BattleCardState dodge = Card(player, id + "_dodge", CardType.Dodge, dodgePoint);
+        BattleCardState attack = Card(enemy, id + "_attack", CardType.Attack, attackPoint);
+        BattleEnemyIntent intent = new BattleEnemyIntent(
+            id + "_intent", enemy, attack, player, 1
+        );
+        BattleActionSlot slot = new BattleActionSlot(player, 1);
+        slot.AssignResponse(player, dodge, intent, false);
+        BattleClashSession session = BattleResolver.CreateAttackVsDodgeClashSession(
+            new BattleExecutionAction(enemy, attack, null, intent, player),
+            new BattleExecutionAction(player, dodge, slot, intent, enemy),
+            false
+        );
+        return session != null && session.RollNextAttempt()
+            ? BattleResolver.BuildRespondedClashResolutionPlan(slot, intent, session)
+            : null;
+    }
+
+    static ImpactFixture CreateImpactFixture(string id, int targetHp, int damage)
+    {
+        ImpactFixture fixture = new ImpactFixture
+        {
+            attacker = Unit(id + "_attacker"),
+            target = new CharacterData(id + "_target", targetHp, 5, 5, id + "_target")
+        };
+        fixture.card = BattleCardManager.CreateBattleCard(
+            fixture.attacker,
+            FixedAttack(id + "_card", damage),
+            id + "_card_instance"
+        );
+        fixture.impact = new BattleImpact(
+            0,
+            fixture.attacker,
+            fixture.target,
+            fixture.card,
+            damage,
+            damage,
+            ClashResult.Win,
+            true,
+            true
+        );
+        fixture.impact.SetPrecalculatedDamage(damage);
+        fixture.plan = new BattleResolutionPlan(null, null, null, null);
+        fixture.plan.planKind = BattleResolutionPlanKind.FreeActionAttack;
+        fixture.plan.resultType = "Mode125";
+        fixture.plan.attacker = fixture.attacker;
+        fixture.plan.target = fixture.target;
+        fixture.plan.sourceCardState = fixture.card;
+        fixture.plan.State = BattleResolutionPlanState.Activated;
+        fixture.plan.impacts.Add(fixture.impact);
+        return fixture;
+    }
+
+    static bool Complete(BattleResolutionPlan plan, out BattleResolveResult result)
+    {
+        result = null;
+        int guard = 0;
+        while (plan != null && plan.State != BattleResolutionPlanState.Completed && guard++ < 4)
+        {
+            if (!BattleResolver.TryCommitNextResolutionStep(plan, out result))
+            {
+                return false;
+            }
+        }
+        return plan != null && plan.State == BattleResolutionPlanState.Completed && result != null;
+    }
+
+    static BattleCardState Card(CharacterData owner, string id, string type, int point)
+    {
+        return BattleCardManager.CreateBattleCard(owner, FixedCard(id, type, point), id + "_instance");
+    }
+
+    static CardTestData FixedCard(string id, string type, int point)
+    {
+        return new CardTestData
+        {
+            cardID = id,
+            cardName = id,
+            cardType = type,
+            attackDeliveryMode = AttackDeliveryMode.Melee,
+            isClashable = true,
+            minPoint = point,
+            maxPoint = point,
+            damageFormula = type == CardType.Attack ? "PointAsDamage" : "",
+            defenseFormula = type == CardType.Defense ? "PointAsDefense" : ""
+        };
+    }
+
+    static CardTestData FixedAttack(string id, int point)
+    {
+        return FixedCard(id, CardType.Attack, point);
+    }
+
+    static CharacterData Unit(string id)
+    {
+        return new CharacterData(id, 100, 5, 5, id);
+    }
+
+    static BattleEventContext Find(List<BattleEventContext> events, string timing)
+    {
+        foreach (BattleEventContext context in events)
+        {
+            if (context != null && context.timing == timing)
+            {
+                return context;
+            }
+        }
+        return null;
+    }
+
+    static int Count(List<BattleEventContext> events, string timing)
+    {
+        int count = 0;
+        foreach (BattleEventContext context in events)
+        {
+            if (context != null && context.timing == timing)
+            {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    static int IndexOf(List<BattleEventContext> events, string timing)
+    {
+        for (int index = 0; index < events.Count; index++)
+        {
+            if (events[index] != null && events[index].timing == timing)
+            {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    static bool WithObserver(System.Func<List<BattleEventContext>, bool> test)
+    {
+        List<BattleEventContext> events = new List<BattleEventContext>();
+        System.Action<BattleEventContext> previousObserver = BattleEventProcessor.TestEventObserver;
+        BattleEventProcessor.TestEventObserver = events.Add;
+        try
+        {
+            return test(events);
+        }
+        finally
+        {
+            BattleEventProcessor.TestEventObserver = previousObserver;
+        }
+    }
+
+    static void LogCheck(string label, bool passed)
+    {
+        Debug.Log((passed ? label : "FAIL: " + label.Substring(6)));
     }
 }

@@ -34,6 +34,8 @@ public sealed class BattleImpact
     public bool allowsDamage;
     public bool shouldTriggerHit;
     public BattleImpactState state;
+    public bool didHit;
+    public int actualDamage;
     public int committedDamage;
     public bool didKill;
     public bool usesPrecalculatedDamage;
@@ -62,6 +64,10 @@ public sealed class BattleImpact
         this.clashResult = clashResult;
         this.allowsDamage = allowsDamage;
         this.shouldTriggerHit = shouldTriggerHit;
+        didHit = false;
+        actualDamage = 0;
+        committedDamage = 0;
+        didKill = false;
         hpDisplayStageCount = sourceCardState != null &&
             sourceCardState.cardData != null
             ? System.Math.Max(1, sourceCardState.cardData.hpDisplayStageCount)

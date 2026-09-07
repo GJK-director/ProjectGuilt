@@ -27,6 +27,9 @@ public class BattleEventContext
     // 现在我们还没正式接 BattleCardState，可以先预留
     public BattleCardState cardState;
 
+    // impact = 本次事件对应的精确 BattleImpact（DamageModifier/Hit/AfterDamage/AfterKill）。
+    public BattleImpact impact;
+
     // clashPoint = 本次拼点点数
     public int clashPoint;
     // clashResult = 拼点结果
@@ -34,7 +37,8 @@ public class BattleEventContext
     // Win = 拼点胜利
     // Lose = 拼点失败
     public string clashResult;
-    // damage = 本次实际造成的伤害
+    // damage = 当前时间点的伤害值。
+    // DamageModifier/Hit 为写入HP前的候选伤害；AfterDamage/AfterKill为实际HP损失。
     public int damage;
 
     // isHit = 是否命中
@@ -76,6 +80,12 @@ public class BattleEventContext
             this.cardData = cardState.cardData;
         }
 
+        return this;
+    }
+
+    public BattleEventContext SetImpact(BattleImpact impact)
+    {
+        this.impact = impact;
         return this;
     }
 
