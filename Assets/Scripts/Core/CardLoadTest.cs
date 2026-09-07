@@ -31526,37 +31526,88 @@ public static class BattleRuleEvaluationAndEffectHookupTests
 
     static bool VerifyClashResultCondition()
     {
-        CharacterData owner = Unit("mode130_clash_result_owner");
-        CharacterData enemy = Unit("mode130_clash_result_enemy");
-        BattleCardState winningAttack = Card(owner, "clash_win", CardType.Attack, 10);
-        BattleCardState losingAttack = Card(owner, "clash_lose", CardType.Attack, 1);
-        BattleResolutionPlan winningPlan = BattleTimingMigrationFixture.Respond(
-            winningAttack,
-            Card(enemy, "clash_win_enemy", CardType.Attack, 1)
-        );
-        BattleResolutionPlan losingPlan = BattleTimingMigrationFixture.Respond(
-            losingAttack,
-            Card(enemy, "clash_lose_enemy", CardType.Attack, 10)
-        );
-        BattleRuleEvaluationContext win = Context(owner, enemy, winningAttack,
-            ClashResult.Win, null, winningPlan != null
-                ? winningPlan.runtimeInteraction
-                : null);
-        BattleRuleEvaluationContext lose = Context(owner, enemy, losingAttack,
-            ClashResult.Lose, null, losingPlan != null
-                ? losingPlan.runtimeInteraction
-                : null);
+        bool winningPlanCreated = false;
+        bool losingPlanCreated = false;
+        bool newWinMatched = false;
+        bool newLoseRejected = false;
         CardEffectConditionData condition = new CardEffectConditionData
         {
             conditionType = CardEffectConditionType.ClashResultIs,
             clashResult = ClashResult.Win
         };
-        CardEffectData legacy = new CardEffectData { requireClashResult = ClashResult.Win };
-        return winningPlan != null && losingPlan != null &&
-            CardEffectExecutor.AreConditionsMet(new[] { condition }, win) &&
-            !CardEffectExecutor.AreConditionsMet(new[] { condition }, lose) &&
-            InvokeLegacyClashGate(legacy, ClashResult.Win) &&
-            !InvokeLegacyClashGate(legacy, ClashResult.Lose);
+        BattleTimingMigrationFixture.Observe(events =>
+        {
+            CharacterData owner = Unit("mode130_clash_result_owner");
+            CharacterData enemy = Unit("mode130_clash_result_enemy");
+            BattleCardState winningAttack = Card(
+                owner,
+                "clash_win",
+                CardType.Attack,
+                10
+            );
+            BattleCardState losingAttack = Card(
+                owner,
+                "clash_lose",
+                CardType.Attack,
+                1
+            );
+            BattleResolutionPlan winningPlan = BattleTimingMigrationFixture.Respond(
+                winningAttack,
+                Card(enemy, "clash_win_enemy", CardType.Attack, 1)
+            );
+            BattleResolutionPlan losingPlan = BattleTimingMigrationFixture.Respond(
+                losingAttack,
+                Card(enemy, "clash_lose_enemy", CardType.Attack, 10)
+            );
+            winningPlanCreated = winningPlan != null;
+            losingPlanCreated = losingPlan != null;
+            if (winningPlan == null || losingPlan == null ||
+                BattleTimingMigrationFixture.Complete(winningPlan) == null ||
+                BattleTimingMigrationFixture.Complete(losingPlan) == null)
+            {
+                return false;
+            }
+
+            BattleEventContext winEvent = Find(
+                events,
+                BattleTiming.ClashWin,
+                winningAttack
+            );
+            BattleEventContext loseEvent = Find(
+                events,
+                BattleTiming.ClashLose,
+                losingAttack
+            );
+            BattleRuleEvaluationContext win = CardEffectExecutor
+                .CreateEvaluationContext(winEvent);
+            BattleRuleEvaluationContext lose = CardEffectExecutor
+                .CreateEvaluationContext(loseEvent);
+            newWinMatched = winEvent != null &&
+                winEvent.clashResult == ClashResult.Win &&
+                CardEffectExecutor.AreConditionsMet(new[] { condition }, win);
+            newLoseRejected = loseEvent != null &&
+                loseEvent.clashResult == ClashResult.Lose &&
+                !CardEffectExecutor.AreConditionsMet(new[] { condition }, lose);
+            return true;
+        });
+
+        bool legacyWinMatched = InvokeLegacyClashGate(
+            new CardEffectData { requireClashResult = ClashResult.Win },
+            ClashResult.Win
+        );
+        bool legacyLoseRejected = !InvokeLegacyClashGate(
+            new CardEffectData { requireClashResult = ClashResult.Win },
+            ClashResult.Lose
+        );
+        Debug.Log("ClashResult diagnostic:" +
+            " winningPlanCreated = " + winningPlanCreated +
+            ", losingPlanCreated = " + losingPlanCreated +
+            ", newWinMatched = " + newWinMatched +
+            ", newLoseRejected = " + newLoseRejected +
+            ", legacyWinMatched = " + legacyWinMatched +
+            ", legacyLoseRejected = " + legacyLoseRejected);
+        return winningPlanCreated && losingPlanCreated && newWinMatched &&
+            newLoseRejected && legacyWinMatched && legacyLoseRejected;
     }
 
     static bool VerifyCardTypeFilter()
