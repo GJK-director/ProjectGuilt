@@ -30398,7 +30398,7 @@ public static class BattleResourceSpecialStateNormalizationTests
         bool notUsedKept = losingResult != null &&
             losingResult.resultType == "EnemyWin" &&
             !losingHeavy.cardUsedCommittedForCurrentAction &&
-            BattleAngerRules.GetAnger(loser) == 2 &&
+            BattleAngerRules.GetAnger(loser) == 1 &&
             !losingHeavy.pendingHeavyAngerSpend;
         return usedRange && usedSettled && notUsedKept;
     }
@@ -30425,7 +30425,7 @@ public static class BattleResourceSpecialStateNormalizationTests
 
         CharacterData loser = BattleTimingMigrationFixture.Unit("mode128_iai_not_used");
         loser.SetAngerMechanicEnabledForBattle(true);
-        BattleAngerRules.AddAnger(loser, 1);
+        BattleAngerRules.AddAnger(loser, 3);
         BattleCardState losingIai = BattleTimingMigrationFixture.Card(
             loser,
             CardType.Attack,
@@ -30435,13 +30435,13 @@ public static class BattleResourceSpecialStateNormalizationTests
         CharacterData secondEnemy = BattleTimingMigrationFixture.Unit("mode128_iai_not_used_enemy");
         BattleResolutionPlan losingPlan = BattleTimingMigrationFixture.Respond(
             losingIai,
-            BattleTimingMigrationFixture.Card(secondEnemy, CardType.Attack, 4)
+            BattleTimingMigrationFixture.Card(secondEnemy, CardType.Attack, 20)
         );
         BattleResolveResult losingResult = BattleTimingMigrationFixture.Complete(losingPlan);
         bool notUsedKept = losingResult != null &&
             losingResult.resultType == "EnemyWin" &&
             !losingIai.cardUsedCommittedForCurrentAction &&
-            BattleAngerRules.GetAnger(loser) == 1 && !losingIai.pendingIaiAngerClear;
+            BattleAngerRules.GetAnger(loser) == 2 && !losingIai.pendingIaiAngerClear;
         return usedCleared && notUsedKept;
     }
 
