@@ -114,7 +114,8 @@ public enum BattleTestMode
     BattleImpactFactsBasic = 125,
     BattleScopedDamageModifierBasic = 126,
     BattleHiddenPendingStateBasic = 127,
-    BattleResourceSpecialStateNormalizationBasic = 128
+    BattleResourceSpecialStateNormalizationBasic = 128,
+    BattleRuntimeInteractionLifecycleBasic = 129
 }
 
 public static class BattleLifecycleTimingTests
@@ -5111,6 +5112,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleResourceSpecialStateNormalizationBasic)
         {
             BattleResourceSpecialStateNormalizationTests.Run();
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleRuntimeInteractionLifecycleBasic)
+        {
+            BattleRuntimeInteractionLifecycleTests.Run();
             return;
         }
 
@@ -30661,6 +30668,715 @@ public static class BattleResourceSpecialStateNormalizationTests
         return borrowed && firstCompletion != null && secondCompletion != null &&
             duplicateRejected && owner.battlePending.nextUsedAttackPointBonus == 0 &&
             BattleBulletRules.GetBullet(owner) == 5;
+    }
+}
+
+public static class BattleRuntimeInteractionLifecycleTests
+{
+    public static bool Run()
+    {
+        bool attack = Observe(VerifyAttackVsAttack);
+        bool defense = Observe(VerifyAttackVsDefense);
+        bool dodge = Observe(VerifyDodgeFailure);
+        bool freeAttack = Observe(VerifyFreeAttack);
+        bool unresponded = Observe(VerifyUnrespondedAttack);
+        bool ability = Observe(VerifyFreeAbility);
+        bool tie = VerifyTieReroll();
+        bool distinct = Observe(VerifyDistinctInteractions);
+        bool completion = VerifyCompletionIdempotence();
+        bool abort = VerifyAbortIdempotence();
+        bool continuousDodge = Observe(VerifyContinuousDodge);
+        bool pending = VerifyPendingSurvival();
+        bool actionFinished = Observe(VerifyActionFinishedRemainsItemLevel);
+
+        Debug.Log("===== Mode129 BattleRuntimeInteractionLifecycleBasic =====");
+        Check("Responded Attack-v-Attack shares one runtime interaction", attack);
+        Check("Attack-v-Defense keeps interaction identity", defense);
+        Check("Dodge impact events keep exact interaction and impact", dodge);
+        Check("Free Attack receives runtime interaction", freeAttack);
+        Check("Unresponded Attack receives runtime interaction", unresponded);
+        Check("Free Ability receives runtime interaction", ability);
+        Check("Tie reroll keeps same interaction", tie);
+        Check("Distinct interactions do not leak identity", distinct);
+        Check("Interaction completion is idempotent", completion);
+        Check("Interaction abort is idempotent", abort);
+        Check("Continuous Dodge uses distinct interactions without duplicate CardUsed", continuousDodge);
+        Check("Interaction completion preserves character pending", pending);
+        Check("ActionFinished remains item-level", actionFinished);
+
+        bool passed = attack && defense && dodge && freeAttack && unresponded &&
+            ability && tie && distinct && completion && abort && continuousDodge &&
+            pending && actionFinished;
+        Debug.Log("Passed: " + passed);
+        return passed;
+    }
+
+    static bool VerifyAttackVsAttack(List<BattleEventContext> events)
+    {
+        CharacterData player = Unit("mode129_attack_player");
+        CharacterData enemy = Unit("mode129_attack_enemy", 5);
+        BattleCardState playerAttack = Card(player, CardType.Attack, 10);
+        BattleCardState enemyAttack = Card(enemy, CardType.Attack, 5);
+        BattleResolutionPlan plan = CreateRespondedPlan(
+            playerAttack,
+            enemyAttack,
+            new BattleExecutionItem(
+                1,
+                BattleExecutionItemType.RespondedEnemyIntent,
+                null,
+                null
+            ),
+            out BattleClashSession session,
+            out _,
+            out _
+        );
+        BattleResolveResult result = Complete(plan);
+        BattleRuntimeInteraction interaction = session != null
+            ? session.runtimeInteraction
+            : null;
+        BattleImpact impact = plan != null && plan.impacts.Count == 1
+            ? plan.impacts[0]
+            : null;
+        return result != null && interaction != null &&
+            object.ReferenceEquals(plan.runtimeInteraction, interaction) &&
+            object.ReferenceEquals(impact.runtimeInteraction, interaction) &&
+            interaction.State == BattleRuntimeInteractionState.Completed &&
+            HasEvent(events, BattleTiming.ActionStart, playerAttack, interaction) &&
+            HasEvent(events, BattleTiming.ActionStart, enemyAttack, interaction) &&
+            HasEvent(events, BattleTiming.CardUsed, playerAttack, interaction) &&
+            HasEvent(events, BattleTiming.ClashWin, playerAttack, interaction) &&
+            HasEvent(events, BattleTiming.ClashLose, enemyAttack, interaction) &&
+            HasEvent(events, BattleTiming.DamageModifier, playerAttack, interaction, impact) &&
+            HasEvent(events, BattleTiming.Hit, playerAttack, interaction, impact) &&
+            HasEvent(events, BattleTiming.AfterDamage, playerAttack, interaction, impact) &&
+            HasEvent(events, BattleTiming.AfterKill, playerAttack, interaction, impact) &&
+            HasEvent(events, BattleTiming.CardResolved, playerAttack, interaction) &&
+            Count(events, BattleTiming.CardResolved, enemyAttack) == 0;
+    }
+
+    static bool VerifyAttackVsDefense(List<BattleEventContext> events)
+    {
+        CharacterData defender = Unit("mode129_defense_player");
+        CharacterData attacker = Unit("mode129_defense_enemy");
+        BattleCardState defense = Card(defender, CardType.Defense, 10);
+        BattleCardState attack = Card(attacker, CardType.Attack, 5);
+        BattleResolutionPlan plan = CreateRespondedPlan(
+            defense,
+            attack,
+            new BattleExecutionItem(
+                1,
+                BattleExecutionItemType.RespondedEnemyIntent,
+                null,
+                null
+            ),
+            out BattleClashSession session,
+            out _,
+            out _
+        );
+        BattleResolveResult result = Complete(plan);
+        BattleRuntimeInteraction interaction = session != null
+            ? session.runtimeInteraction
+            : null;
+        BattleImpact impact = plan != null && plan.impacts.Count == 1
+            ? plan.impacts[0]
+            : null;
+        return result != null && interaction != null && impact != null &&
+            object.ReferenceEquals(plan.runtimeInteraction, interaction) &&
+            object.ReferenceEquals(impact.runtimeInteraction, interaction) &&
+            AllRuntimeEventsMatch(events, interaction) &&
+            HasEvent(events, BattleTiming.CardUsed, defense, interaction) &&
+            HasEvent(events, BattleTiming.CardUsed, attack, interaction) &&
+            HasEvent(events, BattleTiming.CardResolved, defense, interaction) &&
+            HasEvent(events, BattleTiming.CardResolved, attack, interaction);
+    }
+
+    static bool VerifyDodgeFailure(List<BattleEventContext> events)
+    {
+        CharacterData dodgeOwner = Unit("mode129_dodge_player");
+        CharacterData attacker = Unit("mode129_dodge_enemy");
+        BattleCardState dodge = Card(
+            dodgeOwner,
+            CardType.Dodge,
+            1,
+            BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge
+        );
+        BattleCardState attack = Card(attacker, CardType.Attack, 8);
+        BattleResolutionPlan plan = CreateRespondedPlan(
+            dodge,
+            attack,
+            null,
+            out BattleClashSession session,
+            out _,
+            out _
+        );
+        BattleResolveResult result = Complete(plan);
+        BattleImpact impact = plan != null && plan.impacts.Count == 1
+            ? plan.impacts[0]
+            : null;
+        BattleRuntimeInteraction interaction = session != null
+            ? session.runtimeInteraction
+            : null;
+        return result != null && impact != null && interaction != null &&
+            impact.scopedDamageModifier != null && impact.scopedDamageModifier.Applied &&
+            HasEvent(events, BattleTiming.DamageModifier, attack, interaction, impact) &&
+            HasEvent(events, BattleTiming.Hit, attack, interaction, impact) &&
+            HasEvent(events, BattleTiming.AfterDamage, attack, interaction, impact) &&
+            Count(events, BattleTiming.DamageModifier, attack, null, impact) == 1;
+    }
+
+    static bool VerifyFreeAttack(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode129_free_attack_owner");
+        CharacterData target = Unit("mode129_free_attack_target");
+        BattleCardState card = Card(owner, CardType.Attack, 5);
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, card, target);
+        BattleExecutionItem item = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            slot
+        );
+        BattleResolutionPlan plan = BattleResolver.BuildFreeAttackResolutionPlan(
+            item,
+            slot,
+            out _
+        );
+        if (plan == null || !BattleResolver.TryRollFreeAttackResolutionPlan(plan, out _))
+        {
+            return false;
+        }
+
+        BattleResolveResult result = Complete(plan);
+        BattleImpact impact = plan.impacts.Count == 1 ? plan.impacts[0] : null;
+        BattleRuntimeInteraction interaction = plan.runtimeInteraction;
+        return result != null && interaction != null &&
+            object.ReferenceEquals(interaction.executionItem, item) &&
+            interaction.State == BattleRuntimeInteractionState.Completed &&
+            HasEvent(events, BattleTiming.CardUsed, card, interaction) &&
+            HasEvent(events, BattleTiming.Hit, card, interaction, impact) &&
+            HasEvent(events, BattleTiming.AfterDamage, card, interaction, impact) &&
+            HasEvent(events, BattleTiming.CardResolved, card, interaction);
+    }
+
+    static bool VerifyUnrespondedAttack(List<BattleEventContext> events)
+    {
+        CharacterData target = Unit("mode129_unresponded_target");
+        CharacterData enemy = Unit("mode129_unresponded_enemy");
+        BattleCardState attack = Card(enemy, CardType.Attack, 5);
+        BattleEnemyIntent intent = new BattleEnemyIntent(
+            "mode129_unresponded_intent",
+            enemy,
+            attack,
+            target,
+            1
+        );
+        BattleExecutionItem item = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.UnrespondedEnemyIntent,
+            intent,
+            null
+        );
+        BattleResolutionPlan plan = BattleResolver.BuildUnrespondedEnemyIntentResolutionPlan(
+            item,
+            null,
+            intent
+        );
+        BattleResolveResult result = Complete(plan);
+        BattleImpact impact = plan != null && plan.impacts.Count == 1
+            ? plan.impacts[0]
+            : null;
+        BattleRuntimeInteraction interaction = plan != null
+            ? plan.runtimeInteraction
+            : null;
+        return result != null && interaction != null && impact != null &&
+            object.ReferenceEquals(interaction.executionItem, item) &&
+            HasEvent(events, BattleTiming.CardUsed, attack, interaction) &&
+            HasEvent(events, BattleTiming.Hit, attack, interaction, impact) &&
+            HasEvent(events, BattleTiming.AfterDamage, attack, interaction, impact) &&
+            HasEvent(events, BattleTiming.CardResolved, attack, interaction);
+    }
+
+    static bool VerifyFreeAbility(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode129_ability_owner");
+        BattleCardState ability = Card(owner, CardType.Ability, 0);
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, ability, owner);
+        BattleExecutionItem item = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            slot
+        );
+        BattleResolveResult result = BattleResolver.ResolveFreeAction(slot, item);
+        BattleRuntimeInteraction interaction = result != null
+            ? result.runtimeInteraction
+            : null;
+        return result != null && interaction != null &&
+            object.ReferenceEquals(interaction.executionItem, item) &&
+            interaction.State == BattleRuntimeInteractionState.Completed &&
+            HasEvent(events, BattleTiming.CardUsed, ability, interaction) &&
+            HasEvent(events, BattleTiming.CardResolved, ability, interaction) &&
+            Count(events, BattleTiming.ActionStart, ability) == 0;
+    }
+
+    static bool VerifyTieReroll()
+    {
+        CharacterData player = Unit("mode129_tie_player");
+        CharacterData enemy = Unit("mode129_tie_enemy");
+        BattleCardState playerAttack = Card(player, CardType.Attack, 5);
+        BattleCardState enemyAttack = Card(enemy, CardType.Attack, 5);
+        BattleEnemyIntent intent = new BattleEnemyIntent(
+            "mode129_tie_intent",
+            enemy,
+            enemyAttack,
+            player,
+            1
+        );
+        BattleActionSlot slot = new BattleActionSlot(player, 1);
+        slot.AssignResponse(player, playerAttack, intent, false);
+        if (BattleResolver.TryBeginRespondedClash(slot, intent, out BattleClashSession session) != null ||
+            session == null || !session.RollNextAttempt() ||
+            session.AttemptResult != BattleClashAttemptResult.AttackTie)
+        {
+            return false;
+        }
+
+        BattleRuntimeInteraction interaction = session.runtimeInteraction;
+        long id = interaction != null ? interaction.interactionId : 0;
+        bool secondTie = session.RollNextAttempt() &&
+            session.AttemptResult == BattleClashAttemptResult.AttackTie &&
+            object.ReferenceEquals(session.runtimeInteraction, interaction) &&
+            session.runtimeInteraction.interactionId == id;
+        while (!session.IsFinalized && session.RollNextAttempt())
+        {
+        }
+
+        BattleResolutionPlan plan = BattleResolver.BuildRespondedClashResolutionPlan(
+            slot,
+            intent,
+            session
+        );
+        return secondTie && Complete(plan) != null &&
+            interaction.State == BattleRuntimeInteractionState.Completed;
+    }
+
+    static bool VerifyDistinctInteractions(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode129_distinct_owner");
+        CharacterData target = Unit("mode129_distinct_target");
+        BattleCardState firstCard = Card(owner, CardType.Attack, 3);
+        BattleCardState secondCard = Card(owner, CardType.Attack, 4);
+        BattleResolutionPlan first = CreateFreeAttackPlan(firstCard, target, 1);
+        BattleResolutionPlan second = CreateFreeAttackPlan(secondCard, target, 2);
+        if (Complete(first) == null || Complete(second) == null ||
+            first.runtimeInteraction == null || second.runtimeInteraction == null)
+        {
+            return false;
+        }
+
+        return first.runtimeInteraction.interactionId != second.runtimeInteraction.interactionId &&
+            !object.ReferenceEquals(first.runtimeInteraction, second.runtimeInteraction) &&
+            HasEvent(events, BattleTiming.CardUsed, firstCard, first.runtimeInteraction) &&
+            HasEvent(events, BattleTiming.CardUsed, secondCard, second.runtimeInteraction) &&
+            Count(events, BattleTiming.CardUsed, firstCard, second.runtimeInteraction) == 0 &&
+            Count(events, BattleTiming.CardUsed, secondCard, first.runtimeInteraction) == 0;
+    }
+
+    static bool VerifyCompletionIdempotence()
+    {
+        BattleRuntimeInteraction interaction = new BattleRuntimeInteraction(
+            BattleInteractionType.NoInteraction,
+            null,
+            null,
+            null
+        );
+        return interaction.TryComplete() && !interaction.TryComplete() &&
+            interaction.State == BattleRuntimeInteractionState.Completed &&
+            !interaction.TryAbort();
+    }
+
+    static bool VerifyAbortIdempotence()
+    {
+        BattleRuntimeInteraction interaction = new BattleRuntimeInteraction(
+            BattleInteractionType.NoInteraction,
+            null,
+            null,
+            null
+        );
+        return interaction.TryAbort() && !interaction.TryAbort() &&
+            interaction.State == BattleRuntimeInteractionState.Aborted &&
+            !interaction.TryComplete();
+    }
+
+    static bool VerifyContinuousDodge(List<BattleEventContext> events)
+    {
+        CharacterData dodgeOwner = Unit("mode129_continuous_owner");
+        CharacterData enemy = Unit("mode129_continuous_enemy");
+        BattleCardState dodge = Card(dodgeOwner, CardType.Dodge, 20);
+        BattleActionSlot slot = new BattleActionSlot(dodgeOwner, 1);
+        BattleCardState firstAttack = Card(enemy, CardType.Attack, 1);
+        BattleEnemyIntent firstIntent = new BattleEnemyIntent(
+            "mode129_continuous_first",
+            enemy,
+            firstAttack,
+            dodgeOwner,
+            1
+        );
+        slot.AssignResponse(dodgeOwner, dodge, firstIntent, false);
+        BattleExecutionItem firstItem = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.RespondedEnemyIntent,
+            firstIntent,
+            slot
+        );
+        if (BattleResolver.TryBeginRespondedClash(
+                slot,
+                firstIntent,
+                firstItem,
+                out BattleClashSession firstSession
+            ) != null ||
+            firstSession == null || !firstSession.RollNextAttempt())
+        {
+            return false;
+        }
+
+        BattleResolutionPlan firstPlan = BattleResolver.BuildRespondedClashResolutionPlan(
+            slot,
+            firstIntent,
+            firstSession,
+            firstItem
+        );
+        BattleResolveResult firstResult = Complete(firstPlan);
+        if (firstResult == null || firstSession.FinalResult !=
+                BattleClashFinalResult.DodgeSuccess)
+        {
+            return false;
+        }
+        BattleContinuousDodgeManager.RegisterSuccess(
+            slot,
+            firstResult,
+            ContinuousDodgeSource.ExactEnemyIntent,
+            firstIntent
+        );
+
+        BattleCardState secondAttack = Card(enemy, CardType.Attack, 1);
+        BattleEnemyIntent secondIntent = new BattleEnemyIntent(
+            "mode129_continuous_second",
+            enemy,
+            secondAttack,
+            dodgeOwner,
+            2
+        );
+        BattleExecutionItem secondItem = new BattleExecutionItem(
+            2,
+            BattleExecutionItemType.UnrespondedEnemyIntent,
+            secondIntent,
+            slot
+        );
+        if (BattleResolver.TryBeginContinuousDodgeClash(
+                slot,
+                secondIntent,
+                secondItem,
+                out BattleClashSession secondSession
+            ) != null ||
+            secondSession == null || !secondSession.RollNextAttempt())
+        {
+            return false;
+        }
+
+        BattleResolutionPlan secondPlan = BattleResolver.BuildRespondedClashResolutionPlan(
+            slot,
+            secondIntent,
+            secondSession,
+            secondItem
+        );
+        BattleResolveResult secondResult = Complete(secondPlan);
+        if (secondResult == null || secondSession.FinalResult !=
+                BattleClashFinalResult.DodgeSuccess ||
+            object.ReferenceEquals(
+                firstSession.runtimeInteraction,
+                secondSession.runtimeInteraction
+            ))
+        {
+            return false;
+        }
+        BattleContinuousDodgeManager.RegisterSuccess(
+            slot,
+            secondResult,
+            ContinuousDodgeSource.ContinuousDodge,
+            secondIntent
+        );
+
+        BattleRuntimeInteraction lastInteraction = slot.lastContinuousDodgeRuntimeInteraction;
+        bool finalized = BattleContinuousDodgeManager.FinalizeActionCardUse(
+            new BattleRuntimeState(),
+            slot,
+            "Mode129"
+        );
+        return finalized && lastInteraction != null &&
+            object.ReferenceEquals(lastInteraction, secondSession.runtimeInteraction) &&
+            Count(events, BattleTiming.CardUsed, dodge) == 1 &&
+            Count(events, BattleTiming.ActionStart, dodge) == 1 &&
+            Count(events, BattleTiming.CardResolved, dodge) == 1 &&
+            HasEvent(events, BattleTiming.CardResolved, dodge, lastInteraction) &&
+            slot.lastContinuousDodgeRuntimeInteraction == null;
+    }
+
+    static bool VerifyPendingSurvival()
+    {
+        CharacterData owner = Unit("mode129_pending_owner");
+        CharacterData enemy = Unit("mode129_pending_enemy");
+        owner.battlePending.nextUsedAttackPointBonus = 2;
+        BattleResolutionPlan plan = CreateRespondedPlan(
+            Card(owner, CardType.Defense, 10),
+            Card(enemy, CardType.Attack, 5),
+            null,
+            out BattleClashSession session,
+            out _,
+            out _
+        );
+        return Complete(plan) != null && session.runtimeInteraction.State ==
+            BattleRuntimeInteractionState.Completed &&
+            owner.battlePending.nextUsedAttackPointBonus == 2;
+    }
+
+    static bool VerifyActionFinishedRemainsItemLevel(List<BattleEventContext> events)
+    {
+        CharacterData owner = Unit("mode129_action_finished_owner");
+        CharacterData target = Unit("mode129_action_finished_target");
+        BattleCardState card = Card(owner, CardType.Attack, 3);
+        BattleActionSlot slot = new BattleActionSlot(owner, 1);
+        slot.AssignFreeAction(owner, card, target);
+        BattleExecutionItem item = new BattleExecutionItem(
+            1,
+            BattleExecutionItemType.FreeAction,
+            null,
+            slot
+        );
+        BattleResolutionPlan plan = BattleResolver.BuildFreeAttackResolutionPlan(
+            item,
+            slot,
+            out _
+        );
+        if (plan == null || !BattleResolver.TryRollFreeAttackResolutionPlan(plan, out _) ||
+            Complete(plan) == null || plan.runtimeInteraction == null ||
+            plan.runtimeInteraction.State != BattleRuntimeInteractionState.Completed ||
+            Count(events, BattleTiming.ActionFinished) != 0)
+        {
+            return false;
+        }
+
+        item.MarkExecuted();
+        bool first = BattleExecutionPlanExecutor.CommitActionFinishedOnce(item);
+        bool second = !BattleExecutionPlanExecutor.CommitActionFinishedOnce(item);
+        return first && second &&
+            Count(events, BattleTiming.ActionFinished) == 1 &&
+            Find(events, BattleTiming.ActionFinished).runtimeInteraction == null;
+    }
+
+    static BattleResolutionPlan CreateRespondedPlan(
+        BattleCardState response,
+        BattleCardState attack,
+        BattleExecutionItem item,
+        out BattleClashSession session,
+        out BattleActionSlot slot,
+        out BattleEnemyIntent intent
+    )
+    {
+        session = null;
+        slot = null;
+        intent = null;
+        if (response == null || attack == null || response.owner == null ||
+            attack.owner == null)
+        {
+            return null;
+        }
+
+        intent = new BattleEnemyIntent(
+            "mode129_intent_" + response.instanceID,
+            attack.owner,
+            attack,
+            response.owner,
+            1
+        );
+        slot = new BattleActionSlot(response.owner, 1);
+        slot.AssignResponse(response.owner, response, intent, false);
+        if (BattleResolver.TryBeginRespondedClash(slot, intent, item, out session) != null ||
+            session == null || !session.RollNextAttempt() || !session.IsFinalized)
+        {
+            session?.runtimeInteraction?.TryAbort();
+            return null;
+        }
+
+        return BattleResolver.BuildRespondedClashResolutionPlan(
+            slot,
+            intent,
+            session,
+            item
+        );
+    }
+
+    static BattleResolutionPlan CreateFreeAttackPlan(
+        BattleCardState card,
+        CharacterData target,
+        int order
+    )
+    {
+        BattleActionSlot slot = new BattleActionSlot(card.owner, order);
+        slot.AssignFreeAction(card.owner, card, target);
+        BattleExecutionItem item = new BattleExecutionItem(
+            order,
+            BattleExecutionItemType.FreeAction,
+            null,
+            slot
+        );
+        BattleResolutionPlan plan = BattleResolver.BuildFreeAttackResolutionPlan(
+            item,
+            slot,
+            out _
+        );
+        return plan != null && BattleResolver.TryRollFreeAttackResolutionPlan(
+            plan,
+            out _
+        ) ? plan : null;
+    }
+
+    static BattleResolveResult Complete(BattleResolutionPlan plan)
+    {
+        return plan != null && BattleResolver.TryCommitNextResolutionStep(
+            plan,
+            out BattleResolveResult result
+        ) ? result : null;
+    }
+
+    static CharacterData Unit(string id, int hp = 100)
+    {
+        return new CharacterData(id, hp, 5, 5, id);
+    }
+
+    static BattleCardState Card(
+        CharacterData owner,
+        string cardType,
+        int point,
+        params BattleCardTrait[] traits
+    )
+    {
+        string id = owner.runtimeUnitID + "_mode129_" + owner.battleCards.Count;
+        return BattleCardManager.CreateBattleCard(
+            owner,
+            new CardTestData
+            {
+                cardID = id,
+                cardName = id,
+                cardType = cardType,
+                attackDeliveryMode = AttackDeliveryMode.Melee,
+                isClashable = true,
+                minPoint = point,
+                maxPoint = point,
+                traits = traits,
+                damageFormula = cardType == CardType.Attack ? "PointAsDamage" : "",
+                defenseFormula = cardType == CardType.Defense ? "PointAsDefense" : ""
+            },
+            id + "_instance"
+        );
+    }
+
+    static bool Observe(System.Func<List<BattleEventContext>, bool> test)
+    {
+        List<BattleEventContext> events = new List<BattleEventContext>();
+        System.Action<BattleEventContext> previous =
+            BattleEventProcessor.TestEventObserver;
+        BattleEventProcessor.TestEventObserver = events.Add;
+        try
+        {
+            return test(events);
+        }
+        finally
+        {
+            BattleEventProcessor.TestEventObserver = previous;
+        }
+    }
+
+    static bool HasEvent(
+        List<BattleEventContext> events,
+        string timing,
+        BattleCardState card,
+        BattleRuntimeInteraction interaction,
+        BattleImpact impact = null
+    )
+    {
+        foreach (BattleEventContext context in events)
+        {
+            if (context != null && context.timing == timing &&
+                object.ReferenceEquals(context.cardState, card) &&
+                object.ReferenceEquals(context.runtimeInteraction, interaction) &&
+                (impact == null || object.ReferenceEquals(context.impact, impact)))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static bool AllRuntimeEventsMatch(
+        List<BattleEventContext> events,
+        BattleRuntimeInteraction interaction
+    )
+    {
+        foreach (BattleEventContext context in events)
+        {
+            if (context != null && context.runtimeInteraction != null &&
+                !object.ReferenceEquals(context.runtimeInteraction, interaction))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static int Count(
+        List<BattleEventContext> events,
+        string timing,
+        BattleCardState card = null,
+        BattleRuntimeInteraction interaction = null,
+        BattleImpact impact = null
+    )
+    {
+        int count = 0;
+        foreach (BattleEventContext context in events)
+        {
+            if (context == null || context.timing != timing ||
+                (card != null && !object.ReferenceEquals(context.cardState, card)) ||
+                (interaction != null && !object.ReferenceEquals(
+                    context.runtimeInteraction,
+                    interaction
+                )) ||
+                (impact != null && !object.ReferenceEquals(context.impact, impact)))
+            {
+                continue;
+            }
+            count++;
+        }
+        return count;
+    }
+
+    static BattleEventContext Find(List<BattleEventContext> events, string timing)
+    {
+        foreach (BattleEventContext context in events)
+        {
+            if (context != null && context.timing == timing)
+            {
+                return context;
+            }
+        }
+        return null;
+    }
+
+    static void Check(string label, bool passed)
+    {
+        Debug.Log((passed ? "PASS: " : "FAIL: ") + label);
     }
 }
 

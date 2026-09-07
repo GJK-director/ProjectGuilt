@@ -505,6 +505,7 @@ public static class BattleContinuousDodgeManager
 
         slot.MarkCardUseFinalized();
         slot.MarkUsed();
+        slot.lastContinuousDodgeRuntimeInteraction = null;
 
         UnityEngine.Debug.Log(
             "[ContinuousDodge Failed]\n" +
@@ -554,6 +555,7 @@ public static class BattleContinuousDodgeManager
             "Cooldown: " + newCooldown + "\n" +
             "Guilt delta: " + (newGuilt - oldGuilt)
         );
+        slot.lastContinuousDodgeRuntimeInteraction = null;
         return true;
     }
 
