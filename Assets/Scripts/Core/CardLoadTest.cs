@@ -31595,7 +31595,7 @@ public static class BattleRuleEvaluationAndEffectHookupTests
             new CardEffectData { requireClashResult = ClashResult.Win },
             ClashResult.Win
         );
-        bool legacyLoseRejected = !InvokeLegacyClashGate(
+        bool legacyLoseRejected = InvokeLegacyClashGate(
             new CardEffectData { requireClashResult = ClashResult.Win },
             ClashResult.Lose
         );
