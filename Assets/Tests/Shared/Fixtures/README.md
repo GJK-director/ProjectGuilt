@@ -2,6 +2,14 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Repository Basis: 当前本地 HEAD (`c35bd41a13587b11b43fd062f40a32d541f35d17`)
 
-未来记录 Character、Card、Runtime、Intent、Impact 等可复用 Fixture。当前没有迁移或新建 Fixture。
+Fixtures/ 只承载可复用的测试状态容器。
+
+当前：
+
+- `BattleTestContext.cs`：承载 Loader/Bootstrap 产生的 Cards、Definitions、Runtime 和 Bootstrap 结果。
+
+该类型不负责 Load、Create、Execute、Resolve、Assert 或推进战斗。
+
+Batch 4A 状态：`TEST_ONLY`、`TRANSITIONAL`、默认 `Assembly-CSharp`；没有迁移 Legacy Mode。

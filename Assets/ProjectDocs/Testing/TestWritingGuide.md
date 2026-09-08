@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Repository Basis: 当前本地 HEAD (`c35bd41a13587b11b43fd062f40a32d541f35d17`)
 
 新增测试前先确认：
 
@@ -24,4 +24,19 @@ existing Suite
 
 后续不应无理由继续增长 `Mode134`、`Mode135`、`Mode136` 等独立入口。
 
-本轮不迁移旧测试，不创建新测试代码。
+## Shared Construction
+
+新增非 Presentation 测试时，优先复用：
+
+- `BattleScenarioBuilder`
+- `TestCharacterFactory`
+- `TestCardFactory`
+- `TestIntentFactory`
+
+不要重复手写 `new CharacterData(...)`、`new CardTestData(...)`、`BattleCardManager.CreateBattleCard(...)` 或 `new BattleEnemyIntent(...)`，除非测试目的本身就是验证这些构造 API。
+
+Production Data test → `BattleScenarioBuilder`。
+
+Synthetic unit scenario → `TestCharacterFactory` + `TestCardFactory` + `TestIntentFactory`。
+
+Batch 4A 只建立 Shared construction infrastructure；没有迁移 Legacy Mode、创建 Suite 或改变 Runtime 行为。

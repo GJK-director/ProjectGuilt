@@ -36,6 +36,17 @@ Embedded Legacy Test classes extracted from `BattleDeckManifest.cs` and `GameSet
 
 本批仍是 `EXTRACTION`，不是 Test Refactor；没有改变 Mode、测试断言、测试数据或默认程序集边界。
 
+Batch 4A:
+Shared test construction infrastructure introduced:
+
+- `BattleTestContext`
+- `BattleScenarioBuilder`
+- `TestCharacterFactory`
+- `TestCardFactory`
+- `TestIntentFactory`
+
+这些类型仍编译在 `Assembly-CSharp`，没有新增 Test asmdef；本批没有迁移 Legacy Mode，也没有改变 Runtime/GamePlay 行为。
+
 这些文件暂时仍属于 `Legacy`，而不是 `Suites`；本批没有去重、删除 Mode、建立 shared fixtures 或创建 Test asmdef。
 
 ## Future Shared Facilities
@@ -49,7 +60,7 @@ TestIntentFactory
 TestAssertion
 ```
 
-本轮只记录设计，不创建这些 `.cs`。
+Batch 4A 已创建前五个 Shared 类型；`TestAssertion` 仍仅作为未来规划，尚未创建。
 
 ## Test Principles
 
@@ -61,4 +72,4 @@ TestAssertion
 
 ## Current Boundary
 
-当前测试仍由 `Assets/Tests/Legacy/Runner/CardLoadTest.cs`、Legacy 静态 Test 类、Presentation Sandbox 和正式 BattleScene Harness 共同承担；本批只完成 Legacy Core 测试物理隔离。
+当前测试仍由 `Assets/Tests/Legacy/Runner/CardLoadTest.cs`、Legacy 静态 Test 类、Shared construction infrastructure、Presentation Sandbox 和正式 BattleScene Harness 共同承担；本批没有迁移 Legacy Mode。
