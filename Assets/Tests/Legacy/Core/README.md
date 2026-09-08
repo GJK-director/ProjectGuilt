@@ -29,6 +29,12 @@ Repository Basis: 当前本地 HEAD (`b10297c9be5bc244e6ed08592f32f5ab63f992b4`)
 - `CharacterDefaultCardDataContractTests.cs`
 - `FullBattleIntegrationRegressionTests.cs`
 
+Batch 4B：
+
+`FullBattleIntegrationRegressionTests` 已开始消费 Shared Infrastructure，使用
+`BattleTestContext` 与 `BattleScenarioBuilder` 构造 production fixture，但仍属于
+Legacy；Mode103 仍为单一聚合入口，原有 28 项检查保持不变。
+
 Batch 3A 从 Production Runtime 文件提取的 Embedded Legacy Test classes：
 
 - `BattleDeckManifestTests.cs`

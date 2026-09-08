@@ -62,6 +62,12 @@ TestAssertion
 
 Batch 4A 已创建前五个 Shared 类型；`TestAssertion` 仍仅作为未来规划，尚未创建。
 
+Batch 4B:
+Mode103 的 production fixture 已迁移为消费 `BattleTestContext` 与
+`BattleScenarioBuilder.CreateProductionEncounter`。`FullBattleIntegrationRegressionTests`
+仍属于 Legacy，仍是一个聚合 Mode；原有 28 项检查、测试逻辑和 Mode 入口均保留，
+没有删除测试或 Mode。
+
 ## Test Principles
 
 - 一个系统 = 一个 Suite。
@@ -72,4 +78,4 @@ Batch 4A 已创建前五个 Shared 类型；`TestAssertion` 仍仅作为未来�
 
 ## Current Boundary
 
-当前测试仍由 `Assets/Tests/Legacy/Runner/CardLoadTest.cs`、Legacy 静态 Test 类、Shared construction infrastructure、Presentation Sandbox 和正式 BattleScene Harness 共同承担；本批没有迁移 Legacy Mode。
+当前测试仍由 `Assets/Tests/Legacy/Runner/CardLoadTest.cs`、Legacy 静态 Test 类、Shared construction infrastructure、Presentation Sandbox 和正式 BattleScene Harness 共同承担；Batch 4B 只让 Mode103 消费 Shared production fixture，未将其迁移为正式 Suite。

@@ -8,7 +8,7 @@ Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
 
 | Mode | Current Coverage | Future Domains | Status |
 |---|---|---|---|
-| 103 | Full Battle Integration；Enemy Intent cycle、target slot、当前 Definition/ownership 引用、legacy fallback、250% damage 相关回归 | EnemyIntent、Bootstrap、Resolution | LEGACY_ACTIVE |
+| 103 | Legacy Mode103 → Shared Production Fixture Consumer → 28 legacy checks retained；Enemy Intent cycle、target slot、当前 Definition/ownership 引用、legacy fallback、250% damage 相关回归 | EnemyIntent、Bootstrap、Resolution | LEGACY_ACTIVE |
 | 107 | Anger、Knife、Iai、Double Slash、Heavy、Breath、staged HP 等组合回归 | Cards/Knife、Resolution/MultiImpact | LEGACY_ACTIVE |
 | 113 | Conservation、0 Bullet、Cooldown、能力回归链，并调用部分 Shooting/Ability 回归 | Cards/Shooting、Buffs | LEGACY_ACTIVE |
 | 132 | Card Keyword Presentation、Timing Vocabulary、Tooltip/Description formatting | UI/Cards、Cards/Keywords | LEGACY_ACTIVE |
