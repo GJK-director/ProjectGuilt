@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`3e16a1d9c9eefcdac9c357a3d5cba12095767bec`)
+Repository Basis: 当前本地 HEAD (`3dc4f7132996bdced6ca5a5cbb128925eb1a071e`)
 
 本表记录当前路径到冻结目标功能域的映射，不表示已经移动文件。
 
@@ -48,11 +48,11 @@ Repository Basis: 当前本地 HEAD (`3e16a1d9c9eefcdac9c357a3d5cba12095767bec`)
 | `Core/BattleInteractionClassifier.cs` | classifier | Interaction 分类 | Battle/Interactions | NOT_MOVED | |
 | `Core/BattleUnitFactory.cs` | factory | Definition → Unit/CardState | Battle/Units | NOT_MOVED | |
 | `Characters/CharacterData.cs` | state | HP、速度、Buff、卡牌、Guilt | Battle/Units | NOT_MOVED | |
-| `Characters/BuffData.cs` | model | Buff 定义与运行时数据 | Battle/Buffs | NOT_MOVED | |
-| `Characters/PendingBuffData.cs` | model | 延迟 Buff | Battle/Buffs | NOT_MOVED | |
-| `Core/BuffApplyTiming.cs` | constants | Buff 触发时机 | Battle/Buffs | NOT_MOVED | |
-| `Core/BuffCategory.cs` | constants | Buff 分类 | Battle/Buffs | NOT_MOVED | |
-| `Core/BuffExpireRule.cs` | constants | Buff 过期规则 | Battle/Buffs | NOT_MOVED | |
+| `Battle/Buffs/Runtime/BuffData.cs` | model | Buff 定义与运行时数据 | Battle/Buffs | MOVED | Batch 2B feature-first physical migration |
+| `Battle/Buffs/Runtime/PendingBuffData.cs` | model | 延迟 Buff | Battle/Buffs | MOVED | Batch 2B feature-first physical migration |
+| `Battle/Buffs/Runtime/BuffApplyTiming.cs` | constants | Buff 触发时机 | Battle/Buffs | MOVED | Batch 2B feature-first physical migration |
+| `Battle/Buffs/Runtime/BuffCategory.cs` | constants | Buff 分类 | Battle/Buffs | MOVED | Batch 2B feature-first physical migration |
+| `Battle/Buffs/Runtime/BuffExpireRule.cs` | constants | Buff 过期规则 | Battle/Buffs | MOVED | Batch 2B feature-first physical migration |
 | `Core/BattleDefinitionBootstrap.cs` | bootstrap | Definition → Runtime/Intent | Battle/Bootstrap | NOT_MOVED | |
 | `Core/BattleSceneBootstrap.cs` | bootstrap | BattleScene 入口、Context 持有 | Battle/Bootstrap | NOT_MOVED | |
 | `Core/GuiltManager.cs` | manager | Guilt | Battle/Guilt | NOT_MOVED | |
@@ -64,6 +64,8 @@ Repository Basis: 当前本地 HEAD (`3e16a1d9c9eefcdac9c357a3d5cba12095767bec`)
 | `Presentation/*PresentationPlayer.cs` | players | Combat Presentation | Presentation/Combat | NOT_MOVED | |
 | `Presentation/Battle*FxPlayer.cs` | FX players | Hit/Guard FX | Presentation/Effects | NOT_MOVED | |
 | `Presentation/BattleTurnTransitionPresentationCoordinator.cs` | coordinator | Turn Transition | Presentation/Turn | NOT_MOVED | |
+| `Battle/Buffs/UI/BattleBuffGroupUIView.cs` | view | Buff group UI | UI/Buffs | MOVED | Batch 2B feature-first physical migration |
+| `Battle/Buffs/UI/BattleBuffIconUIView.cs` | view | Buff icon UI | UI/Buffs | MOVED | Batch 2B feature-first physical migration |
 | `Core/BattleSimpleUIController.cs` | MonoBehaviour | UI、Planning、Turn Cycle、兼容路径 | UI/Battle | KEEP_IN_PLACE_TEMP | 本阶段不拆分多职责 Controller |
 | `Core/CardDataLoader.cs` | loader | CardsTest JSON | Data/Loader | NOT_MOVED | |
 | `Scripts/Data/Definitions/*` | DTOs | Character/Enemy/Encounter Definition | Data/Definitions | NOT_MOVED | |

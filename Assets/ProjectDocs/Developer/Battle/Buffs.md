@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Repository Basis: 当前本地 HEAD (`3dc4f7132996bdced6ca5a5cbb128925eb1a071e`)
 
 ## Responsibilities
 
@@ -14,7 +14,20 @@ Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
 
 ## Current Main Files
 
-`BuffData.cs`、`PendingBuffData.cs`、`BuffApplyTiming.cs`、`BuffCategory.cs`、`BuffExpireRule.cs`、`BuffDefinitions.json`、`CardEffectExecutor.cs`、`BattleBuffGroupUIView.cs`、`BattleBuffIconUIView.cs`。
+Runtime：
+
+- `Assets/Scripts/Battle/Buffs/Runtime/BuffData.cs`
+- `Assets/Scripts/Battle/Buffs/Runtime/PendingBuffData.cs`
+- `Assets/Scripts/Battle/Buffs/Runtime/BuffApplyTiming.cs`
+- `Assets/Scripts/Battle/Buffs/Runtime/BuffCategory.cs`
+- `Assets/Scripts/Battle/Buffs/Runtime/BuffExpireRule.cs`
+
+UI：
+
+- `Assets/Scripts/Battle/Buffs/UI/BattleBuffGroupUIView.cs`
+- `Assets/Scripts/Battle/Buffs/UI/BattleBuffIconUIView.cs`
+
+相关数据与兼容入口仍为 `BuffDefinitions.json`、`CardEffectExecutor.cs`。
 
 ## Runtime Flow
 
@@ -34,4 +47,4 @@ Modes 47–50、70–72、105–113、126–131。
 
 ## Migration Status
 
-TRANSITIONAL；未物理迁移。
+TRANSITIONAL；Batch 2B 已完成上述 7 个 Buff Runtime/UI 文件的 feature-first 物理归类，未改变代码内容、namespace 或运行时行为。整体工程仍未完成最终模块化迁移。

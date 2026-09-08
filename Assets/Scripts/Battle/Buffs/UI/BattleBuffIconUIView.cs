@@ -1,0 +1,235 @@
+using System;
+using TMPro;
+using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.UI;
+
+public class BattleBuffIconUIView : MonoBehaviour,
+    IPointerClickHandler,
+    IPointerEnterHandler,
+    IPointerExitHandler
+{
+    [SerializeField] private Image iconImage;
+    [SerializeField] private TMP_Text stackText;
+    [SerializeField] private TMP_Text decayText;
+
+    private bool isOverflow;
+    private int overflowHiddenCount;
+    private Action<int> overflowClickHandler;
+    private bool hasExplicitVisualState;
+    private BattleSecondaryInfoContent secondaryInfoContent;
+    private string secondaryInfoKey;
+    private bool secondaryInfoHoverActive;
+
+    public bool IsOverflow => isOverflow;
+    public int OverflowHiddenCount => overflowHiddenCount;
+    public bool HasRequiredVisualReferences =>
+        iconImage != null && stackText != null;
+
+    void Awake()
+    {
+        if (!hasExplicitVisualState)
+        {
+            SetEmpty();
+        }
+    }
+
+    public void SetBuff(
+        Sprite iconSprite,
+        int stack,
+        int endTurnDelta = 0,
+        BattleSecondaryInfoContent infoContent = null,
+        string infoKey = null
+    )
+    {
+        hasExplicitVisualState = true;
+
+        if (stack <= 0)
+        {
+            SetEmpty();
+            return;
+        }
+
+        isOverflow = false;
+        overflowHiddenCount = 0;
+        if (secondaryInfoHoverActive &&
+            secondaryInfoKey != infoKey)
+        {
+            ClearSecondaryInfoHover();
+        }
+
+        secondaryInfoContent = infoContent;
+        secondaryInfoKey = infoKey ?? string.Empty;
+        gameObject.SetActive(true);
+
+        if (iconImage != null)
+        {
+            iconImage.sprite = iconSprite;
+            iconImage.enabled = iconSprite != null;
+        }
+
+        if (stackText != null)
+        {
+            stackText.gameObject.SetActive(true);
+            stackText.text = stack.ToString();
+        }
+
+        if (decayText != null)
+        {
+            bool showDecay = endTurnDelta < 0;
+            decayText.gameObject.SetActive(showDecay);
+            decayText.text = showDecay ? endTurnDelta.ToString() : "";
+        }
+    }
+
+    public void SetOverflow(
+        Sprite iconSprite,
+        int hiddenCount,
+        string prefix = "...+"
+    )
+    {
+        hasExplicitVisualState = true;
+        ClearSecondaryInfoHover();
+        secondaryInfoContent = null;
+        secondaryInfoKey = string.Empty;
+
+        if (hiddenCount <= 0)
+        {
+            SetEmpty();
+            return;
+        }
+
+        isOverflow = true;
+        overflowHiddenCount = hiddenCount;
+        gameObject.SetActive(true);
+
+        if (iconImage != null)
+        {
+            iconImage.sprite = iconSprite;
+            iconImage.enabled = iconSprite != null;
+        }
+
+        if (stackText != null)
+        {
+            stackText.gameObject.SetActive(true);
+            stackText.text =
+                (prefix ?? string.Empty) + hiddenCount;
+        }
+
+        if (decayText != null)
+        {
+            decayText.text = "";
+            decayText.gameObject.SetActive(false);
+        }
+    }
+
+    public void SetOverflowClickHandler(Action<int> handler)
+    {
+        overflowClickHandler = handler;
+    }
+
+    internal void ConfigureTestVisuals(
+        Image image,
+        TMP_Text stack,
+        TMP_Text decay
+    )
+    {
+        iconImage = image;
+        stackText = stack;
+        decayText = decay;
+        SetEmpty();
+    }
+
+    public void OnPointerClick(PointerEventData eventData)
+    {
+        if (eventData == null ||
+            eventData.button != PointerEventData.InputButton.Left ||
+            !isOverflow)
+        {
+            return;
+        }
+
+        overflowClickHandler?.Invoke(overflowHiddenCount);
+    }
+
+    public void OnPointerEnter(PointerEventData eventData)
+    {
+        if (eventData == null ||
+            isOverflow ||
+            secondaryInfoContent == null ||
+            !secondaryInfoContent.IsValid)
+        {
+            return;
+        }
+
+        secondaryInfoHoverActive = true;
+        BattleSecondaryInfoPanelHost.HandlePointer(
+            new BattleSecondaryInfoHoverRequest(
+                gameObject,
+                secondaryInfoKey,
+                secondaryInfoContent,
+                eventData.position,
+                true
+            )
+        );
+    }
+
+    public void OnPointerExit(PointerEventData eventData)
+    {
+        ClearSecondaryInfoHover();
+    }
+
+    public void SetEmpty()
+    {
+        hasExplicitVisualState = true;
+        ClearSecondaryInfoHover();
+        secondaryInfoContent = null;
+        secondaryInfoKey = string.Empty;
+        isOverflow = false;
+        overflowHiddenCount = 0;
+
+        if (iconImage != null)
+        {
+            iconImage.sprite = null;
+            iconImage.enabled = false;
+        }
+
+        if (stackText != null)
+        {
+            stackText.text = "";
+            stackText.gameObject.SetActive(false);
+        }
+
+        if (decayText != null)
+        {
+            decayText.text = "";
+            decayText.gameObject.SetActive(false);
+        }
+
+        gameObject.SetActive(false);
+    }
+
+    void ClearSecondaryInfoHover()
+    {
+        if (!secondaryInfoHoverActive)
+        {
+            return;
+        }
+
+        BattleSecondaryInfoPanelHost.HandlePointer(
+            new BattleSecondaryInfoHoverRequest(
+                gameObject,
+                secondaryInfoKey,
+                null,
+                Vector2.zero,
+                false
+            )
+        );
+        secondaryInfoHoverActive = false;
+    }
+
+    void OnDisable()
+    {
+        ClearSecondaryInfoHover();
+    }
+}

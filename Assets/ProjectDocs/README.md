@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Repository Basis: 当前本地 HEAD (`3dc4f7132996bdced6ca5a5cbb128925eb1a071e`)
 
 ## 阅读顺序
 
@@ -38,4 +38,4 @@ Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
 - [RegressionTestMap](Testing/RegressionTestMap.md)
 - [LegacyModeMigration](Testing/LegacyModeMigration.md)
 
-本轮只建立导航和事实记录；Production Script、Test Mode、Scene、Prefab 和数据尚未物理迁移。
+工程治理仍处于 `TRANSITIONAL`。Batch 2A 已开始 Legacy Test 的物理隔离，Batch 2B 已开始 Buff Production code 的 feature-first 物理归类；其余 Production Script、Test Mode、Scene、Prefab 和数据仍未完成整体迁移。
