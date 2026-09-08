@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Repository Basis: 当前本地 HEAD (`b10297c9be5bc244e6ed08592f32f5ab63f992b4`)
 
 ## Responsibilities
 
@@ -14,7 +14,7 @@ Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
 
 ## Current Main Files
 
-`MainMenuController.cs`、`GameSettingsState.cs`、`Menu.unity`。
+`MainMenuController.cs`、`GameSettingsState.cs`、`Menu.unity`；`BattleGameSettingsIntegrationTests` 位于 `Assets/Tests/Legacy/Core/`。
 
 ## Runtime Flow
 
@@ -30,7 +30,7 @@ Mode133、Menu/Story/Battle Scene 的入口检查。
 
 ## Known Technical Debt
 
-Settings 读取与 Battle Bootstrap 跨越默认程序集；场景字段和代码默认值需要同时核对。
+Settings 读取与 Battle Bootstrap 跨越默认程序集；场景字段和代码默认值需要同时核对。Mode133 仍是 Legacy Mode，不属于 Runtime Settings。
 
 ## Migration Status
 

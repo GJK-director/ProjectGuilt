@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`3dc4f7132996bdced6ca5a5cbb128925eb1a071e`)
+Repository Basis: 当前本地 HEAD (`b10297c9be5bc244e6ed08592f32f5ab63f992b4`)
 
 本表记录当前路径到冻结目标功能域的映射，不表示已经移动文件。
 
@@ -14,7 +14,7 @@ Repository Basis: 当前本地 HEAD (`3dc4f7132996bdced6ca5a5cbb128925eb1a071e`)
 | `Core/BattleCalculator.cs` | rules | 点数、伤害、Anger、Knife | Battle/Resolution | NOT_MOVED | |
 | `Core/BattleCardManager.cs` | manager | 卡牌可用性、CD、Used、资源 | Battle/Cards/Runtime | NOT_MOVED | |
 | `Core/BattleCardState.cs` | state | 运行时卡牌实例 | Battle/Cards/Runtime | NOT_MOVED | |
-| `Core/BattleDeckManifest.cs` | manifest/tests | Deck preset、分组及相关测试 | Battle/Cards/Decks | NOT_MOVED | 混合职责，需定向审查 |
+| `Core/BattleDeckManifest.cs` | manifest | Deck manifest、preset、分组 | Battle/Cards/Decks | NOT_MOVED | Embedded Legacy Tests extracted in Batch 3A |
 | `Core/CardEffectData.cs` | DTO | Effect、Condition、Filter、Formula | Battle/Cards/Effects | NOT_MOVED | |
 | `Core/CardEffectExecutor.cs` | executor | Effect 执行与旧兼容适配 | Battle/Cards/Effects | NOT_MOVED | |
 | `Core/CardEffectType.cs` | constants | Effect 类型 | Battle/Cards/Effects | NOT_MOVED | |
@@ -56,7 +56,7 @@ Repository Basis: 当前本地 HEAD (`3dc4f7132996bdced6ca5a5cbb128925eb1a071e`)
 | `Core/BattleDefinitionBootstrap.cs` | bootstrap | Definition → Runtime/Intent | Battle/Bootstrap | NOT_MOVED | |
 | `Core/BattleSceneBootstrap.cs` | bootstrap | BattleScene 入口、Context 持有 | Battle/Bootstrap | NOT_MOVED | |
 | `Core/GuiltManager.cs` | manager | Guilt | Battle/Guilt | NOT_MOVED | |
-| `Core/GameSettingsState.cs` | settings/tests | PlayerPrefs 设置及测试 | Settings | NEEDS_TARGETED_AUDIT | 混合职责 |
+| `Core/GameSettingsState.cs` | settings | PlayerPrefs 设置及运行时显示配置 | Settings | NOT_MOVED | BattleGameSettingsIntegrationTests extracted to Legacy/Core |
 | `Camera/BattleCameraDirector.cs` | director | Camera Focus、Approach、Shake、Recovery | Presentation/Camera | NOT_MOVED | |
 | `Camera/GrayboxBattleCameraController.cs` | controller | 实际 Camera Transform/Projection | Presentation/Camera | NOT_MOVED | |
 | `Presentation/BattleSceneExecutionPresenter.cs` | presenter | Scene Presentation 编排 | Presentation/Scene | NOT_MOVED | |

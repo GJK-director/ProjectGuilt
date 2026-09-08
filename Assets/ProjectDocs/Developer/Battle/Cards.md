@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Repository Basis: 当前本地 HEAD (`b10297c9be5bc244e6ed08592f32f5ab63f992b4`)
 
 ## Responsibilities
 
@@ -21,6 +21,8 @@ Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
 - `CardEffectExecutor.cs`
 - `CardKeywordData.cs`
 - `CardDataLoader.cs`
+
+Legacy Mode tests for deck manifests and abilities are kept in `Assets/Tests/Legacy/Core/`; they are not Production Runtime files.
 - `CardTestData.cs`
 
 ## Runtime Flow
@@ -37,8 +39,8 @@ Modes 53–55、62–66、85–86、101、105–115、117–122、127–132 等�
 
 ## Known Technical Debt
 
-`CardsTest.json` 文件名保留 Test；`CardTestData` 含兼容字段；Deck Manifest 与测试类共存于一个文件。
+`CardsTest.json` 文件名保留 Test；`CardTestData` 含兼容字段；其余卡牌兼容与 Legacy Mode 迁移仍处于过渡阶段。
 
 ## Migration Status
 
-TRANSITIONAL；未物理迁移。
+TRANSITIONAL；Batch 3A 已将嵌入 `BattleDeckManifest.cs` 的 Legacy Test classes 物理提取到 `Assets/Tests/Legacy/Core/`，Production 文件本身仍未迁移目录。
