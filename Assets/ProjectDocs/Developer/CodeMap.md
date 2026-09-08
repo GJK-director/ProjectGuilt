@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Repository Basis: 当前本地 HEAD (`3e16a1d9c9eefcdac9c357a3d5cba12095767bec`)
 
 本表记录当前路径到冻结目标功能域的映射，不表示已经移动文件。
 
@@ -25,7 +25,7 @@ Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
 | `Core/BattleEnemyIntent.cs` | model | Enemy Intent 和目标槽位 | Battle/EnemyIntent | NOT_MOVED | |
 | `Core/BattleEnemyIntentManager.cs` | manager | Intent 辅助处理 | Battle/EnemyIntent | NOT_MOVED | |
 | `Core/BattleExecutionAction.cs` | model | Execution Action | Battle/Execution | NOT_MOVED | |
-| `Core/BattleExecutionEffectiveInteractionTests.cs` | tests | Effective Interaction 测试文件 | Battle/Execution | NOT_MOVED | |
+| `Tests/Legacy/Core/BattleExecutionEffectiveInteractionTests.cs` | tests | Effective Interaction 测试文件 | Battle/Execution | MOVED_TO_LEGACY | Batch 2A physical isolation |
 | `Core/BattleExecutionInteractionContext.cs` | context | Execution Interaction Identity | Battle/Execution | NOT_MOVED | |
 | `Core/BattleExecutionItem.cs` | model | Execution Item 状态 | Battle/Execution | NOT_MOVED | |
 | `Core/BattleExecutionPausablePolicy.cs` | policy | Pausable 执行策略 | Battle/Execution | NOT_MOVED | |

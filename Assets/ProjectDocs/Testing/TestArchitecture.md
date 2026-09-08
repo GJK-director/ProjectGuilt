@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Repository Basis: 当前本地 HEAD (`3e16a1d9c9eefcdac9c357a3d5cba12095767bec`)
 
 ## Frozen Future Structure
 
@@ -20,6 +20,18 @@ Assets/Tests/
 - B. Runtime Integration
 - C. Presentation / UI
 - D. Camera / Visual Harness
+
+## Migration Progress
+
+Batch 1:
+Docs/Test skeleton created.
+
+Batch 2A:
+Legacy Runner and 22 standalone Core Test files physically isolated.
+
+`PHYSICAL ISOLATION` != `SUITE MIGRATION`.
+
+这些文件暂时仍属于 `Legacy`，而不是 `Suites`；本批没有去重、删除 Mode、建立 shared fixtures 或创建 Test asmdef。
 
 ## Future Shared Facilities
 
@@ -44,4 +56,4 @@ TestAssertion
 
 ## Current Boundary
 
-当前测试仍由 `CardLoadTest`、静态 Test 类、Presentation Sandbox 和正式 BattleScene Harness 共同承担；物理迁移尚未执行。
+当前测试仍由 `Assets/Tests/Legacy/Runner/CardLoadTest.cs`、Legacy 静态 Test 类、Presentation Sandbox 和正式 BattleScene Harness 共同承担；本批只完成 Legacy Core 测试物理隔离。

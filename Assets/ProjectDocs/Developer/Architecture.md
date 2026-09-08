@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Repository Basis: 当前本地 HEAD (`3e16a1d9c9eefcdac9c357a3d5cba12095767bec`)
 
 ## CURRENT
 
@@ -24,9 +24,11 @@ Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
 - Battle Runtime 基本位于默认 `Assembly-CSharp`。
 - Story 核心有独立 `ProjectGuilt.Story` asmdef。
 - Story UGUI 有独立 `ProjectGuilt.Story.UGUI` asmdef。
-- `Assets/Tests` 尚未有测试代码；本批只建立目录 README。
-- 大量测试仍在 `Assets/Scripts/Core`。
-- `CardLoadTest.cs` 是主要 Legacy Mode Runner。
+- `Assets/Tests` 已存在，Legacy physical isolation 已开始。
+- `CardLoadTest.cs` 已位于 `Assets/Tests/Legacy/Runner/CardLoadTest.cs`。
+- 22 个 standalone Core Regression 已位于 `Assets/Tests/Legacy/Core/`。
+- 这些测试仍与 Battle Runtime 处于默认 `Assembly-CSharp` 编译关系，没有独立 Test asmdef。
+- 113 个 active `BattleTestMode` enum members 尚未重构；当前 Migration Inventory 也有对应的 113 条记录。
 
 ## TARGET
 
@@ -61,7 +63,7 @@ Assets/Tests/
 Assets/ProjectDocs/
 ```
 
-本轮尚未执行 Production Script 物理迁移。
+本阶段只完成 Legacy 测试的第一层物理隔离，尚未执行 Production Script 迁移。
 
 ## Assembly Policy
 

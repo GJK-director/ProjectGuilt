@@ -2,6 +2,31 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Repository Basis: 当前本地 HEAD (`3e16a1d9c9eefcdac9c357a3d5cba12095767bec`)
 
-当前对应 `Assets/Scripts/Core` 下的 Core 测试文件和 `CardLoadTest.cs` 中的测试类。这里只记录目标落点，不迁移文件。
+本批从 `Assets/Scripts/Core` 物理隔离到此目录的 22 个 standalone Core Regression 文件如下：
+
+- `BattleClashSessionTests.cs`
+- `BattleExecutionEffectiveInteractionTests.cs`
+- `BattleExecutionInteractionContextTests.cs`
+- `BattleExecutionPlanFirstStrikePolicyTests.cs`
+- `BattleExecutionPlanInteractionTests.cs`
+- `BattleExecutionPlanSingleItemAdvanceTests.cs`
+- `BattleGenericAttackVsDefenseTests.cs`
+- `BattleGenericAttackVsDodgeTests.cs`
+- `BattleGenericPausableRoutingTests.cs`
+- `BattleGenericUnilateralAttackTests.cs`
+- `BattleInteractionClassifierTests.cs`
+- `BattleInteractionStateAndEndLockTests.cs`
+- `BattleLifecycleControllerTests.cs`
+- `BattleLifecyclePhaseContractTests.cs`
+- `BattleNeutralPresentationRouterTests.cs`
+- `BattlePresentationInteractionContextTests.cs`
+- `BattlePresentationProtocolTests.cs`
+- `BattleReadyMovementContinuationTests.cs`
+- `BattleResolutionPlanTests.cs`
+- `BattleRollGateTests.cs`
+- `CharacterDefaultCardDataContractTests.cs`
+- `FullBattleIntegrationRegressionTests.cs`
+
+这些文件只是从 Production Core 目录隔离，尚未转换为正式 Suite；不改变 class 名、namespace、方法、assertion 或 Mode。
