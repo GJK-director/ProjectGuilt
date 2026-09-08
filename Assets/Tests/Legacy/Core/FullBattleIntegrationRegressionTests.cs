@@ -300,8 +300,8 @@ public static class FullBattleIntegrationRegressionTests
 
     private static bool VerifyPointAsDamage250Percent()
     {
-        CharacterData attacker = CreateCharacter("mode103_250_attacker");
-        CharacterData defender = CreateCharacter("mode103_250_defender");
+        CharacterData attacker = TestCharacterFactory.Create("mode103_250_attacker");
+        CharacterData defender = TestCharacterFactory.Create("mode103_250_defender");
         CardTestData fierce = new CardTestData
         {
             cardID = "mode103_250",
@@ -473,8 +473,8 @@ public static class FullBattleIntegrationRegressionTests
 
     private static bool VerifyDirectionalInteraction(string responseType)
     {
-        CharacterData attacker = CreateCharacter("mode103_attacker");
-        CharacterData responder = CreateCharacter("mode103_responder");
+        CharacterData attacker = TestCharacterFactory.Create("mode103_attacker");
+        CharacterData responder = TestCharacterFactory.Create("mode103_responder");
         BattleExecutionAction attack = CreateAction(
             attacker,
             responder,
@@ -495,8 +495,8 @@ public static class FullBattleIntegrationRegressionTests
 
     private static bool VerifyUnilateralBothDirections()
     {
-        CharacterData actor = CreateCharacter("mode103_unilateral_actor");
-        CharacterData target = CreateCharacter("mode103_unilateral_target");
+        CharacterData actor = TestCharacterFactory.Create("mode103_unilateral_actor");
+        CharacterData target = TestCharacterFactory.Create("mode103_unilateral_target");
         BattleExecutionAction attack = CreateAction(
             actor,
             target,
@@ -518,8 +518,8 @@ public static class FullBattleIntegrationRegressionTests
 
     private static bool VerifyNoInteractionExecution()
     {
-        CharacterData actor = CreateCharacter("mode103_no_interaction_actor");
-        CharacterData target = CreateCharacter("mode103_no_interaction_target");
+        CharacterData actor = TestCharacterFactory.Create("mode103_no_interaction_actor");
+        CharacterData target = TestCharacterFactory.Create("mode103_no_interaction_target");
         BattleCardState defense = CreateCard(actor, CardType.Defense, 8);
         BattleActionSlot slot = new BattleActionSlot(actor, 1);
         slot.AssignFreeAction(actor, defense, target);
@@ -561,13 +561,14 @@ public static class FullBattleIntegrationRegressionTests
             true
         );
         BattleCardState enemyAttack = CreateCard(enemy, CardType.Attack, 5);
-        BattleEnemyIntent intent = new BattleEnemyIntent(
+        BattleEnemyIntent intent = TestIntentFactory.Create(
             "mode103_firststrike_intent",
             enemy,
             enemyAttack,
             ally,
-            1,
-            1
+            originalTargetSlotIndex: 1,
+            intentOrder: 1,
+            enemySlotIndex: 1
         );
         BattleActionSlot responseSlot = new BattleActionSlot(ally, 1);
         responseSlot.AssignResponse(ally, response, intent, false);
@@ -604,8 +605,8 @@ public static class FullBattleIntegrationRegressionTests
 
     private static bool VerifyLongRangeWithoutFirstStrikeIsNormalTier()
     {
-        CharacterData actor = CreateCharacter("mode103_long_range_normal");
-        CharacterData target = CreateCharacter("mode103_long_range_target");
+        CharacterData actor = TestCharacterFactory.Create("mode103_long_range_normal");
+        CharacterData target = TestCharacterFactory.Create("mode103_long_range_target");
         BattleCardState longRange = CreateCard(
             actor,
             CardType.Attack,
@@ -636,7 +637,7 @@ public static class FullBattleIntegrationRegressionTests
 
         CharacterData shooter = fixture.Runtime.allyA;
         BattleCardState longRange = FindCard(shooter, "atk_bullet_001");
-        CharacterData target = CreateCharacter("mode103_bullet_target");
+        CharacterData target = TestCharacterFactory.Create("mode103_bullet_target");
         int bulletBefore = shooter.GetBuffStack("Bullet");
         int hpBefore = target.currentHP;
         BattleResolveResult result = BattleResolver.ResolveUnilateralAttack(
@@ -656,8 +657,8 @@ public static class FullBattleIntegrationRegressionTests
             fixture.Cards,
             "atk_bullet_001"
         );
-        CharacterData shooter = CreateCharacter("mode103_empty_shooter");
-        CharacterData target = CreateCharacter("mode103_empty_target");
+        CharacterData shooter = TestCharacterFactory.Create("mode103_empty_shooter");
+        CharacterData target = TestCharacterFactory.Create("mode103_empty_target");
         BattleCardState card = BattleCardManager.CreateBattleCard(
             shooter,
             productionLongRange,
@@ -739,8 +740,8 @@ public static class FullBattleIntegrationRegressionTests
 
     private static bool VerifyUnilateralHasNoClashSession()
     {
-        CharacterData actor = CreateCharacter("mode103_policy_actor");
-        CharacterData target = CreateCharacter("mode103_policy_target");
+        CharacterData actor = TestCharacterFactory.Create("mode103_policy_actor");
+        CharacterData target = TestCharacterFactory.Create("mode103_policy_target");
         BattleExecutionAction action = CreateAction(
             actor,
             target,
@@ -1005,8 +1006,8 @@ public static class FullBattleIntegrationRegressionTests
         int responsePoint
     )
     {
-        CharacterData player = CreateCharacter(id + "_player");
-        CharacterData enemy = CreateCharacter(id + "_enemy");
+        CharacterData player = TestCharacterFactory.Create(id + "_player");
+        CharacterData enemy = TestCharacterFactory.Create(id + "_enemy");
         BattleCardState attackCard = CreateCard(
             player,
             CardType.Attack,
@@ -1017,13 +1018,14 @@ public static class FullBattleIntegrationRegressionTests
             responseType,
             responsePoint
         );
-        BattleEnemyIntent intent = new BattleEnemyIntent(
+        BattleEnemyIntent intent = TestIntentFactory.Create(
             id + "_intent",
             enemy,
             responseCard,
             player,
-            1,
-            1
+            originalTargetSlotIndex: 1,
+            intentOrder: 1,
+            enemySlotIndex: 1
         );
         BattleActionSlot slot = new BattleActionSlot(player, 1);
         slot.AssignResponse(player, attackCard, intent, false);
@@ -1055,8 +1057,8 @@ public static class FullBattleIntegrationRegressionTests
         bool preserveDodge
     )
     {
-        CharacterData sideA = CreateCharacter("mode103_route_a");
-        CharacterData sideB = CreateCharacter("mode103_route_b");
+        CharacterData sideA = TestCharacterFactory.Create("mode103_route_a");
+        CharacterData sideB = TestCharacterFactory.Create("mode103_route_b");
         BattleExecutionInteractionContext executionContext =
             new BattleExecutionInteractionContext(
                 null,
@@ -1099,8 +1101,8 @@ public static class FullBattleIntegrationRegressionTests
         string deliveryMode
     )
     {
-        CharacterData actor = CreateCharacter("mode103_unilateral_actor");
-        CharacterData target = CreateCharacter("mode103_unilateral_target");
+        CharacterData actor = TestCharacterFactory.Create("mode103_unilateral_actor");
+        CharacterData target = TestCharacterFactory.Create("mode103_unilateral_target");
         BattleExecutionInteractionContext executionContext =
             new BattleExecutionInteractionContext(
                 null,
@@ -1135,10 +1137,7 @@ public static class FullBattleIntegrationRegressionTests
         return route;
     }
 
-    private static CharacterData CreateCharacter(string id)
-    {
-        return new CharacterData(id, 30, 5, 5, id);
-    }
+
 
     private static BattleCardState CreateCard(
         CharacterData owner,
@@ -1148,17 +1147,19 @@ public static class FullBattleIntegrationRegressionTests
         bool firstStrike = false
     )
     {
-        CardTestData data = CreateCardData(cardType, point, delivery);
-        data.cardID = owner.runtimeUnitID + "_" + cardType + "_" +
+        string id =
+            owner.runtimeUnitID + "_" +
+            cardType + "_" +
             owner.battleCards.Count;
-        data.cardName = data.cardID;
-        data.traits = firstStrike
-            ? new[] { BattleCardTrait.FirstStrike }
-            : new BattleCardTrait[0];
-        return BattleCardManager.CreateBattleCard(
+
+        return TestCardFactory.CreateState(
             owner,
-            data,
-            data.cardID + "_instance"
+            id,
+            cardType,
+            point,
+            delivery,
+            2,
+            firstStrike
         );
     }
 

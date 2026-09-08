@@ -35,6 +35,13 @@ Batch 4B：
 `BattleTestContext` 与 `BattleScenarioBuilder` 构造 production fixture，但仍属于
 Legacy；Mode103 仍为单一聚合入口，原有 28 项检查保持不变。
 
+Batch 4C：
+
+Mode103 的默认 synthetic character、标准 card state 和 synthetic enemy intent 分别开始
+消费 `TestCharacterFactory`、`TestCardFactory` 和 `TestIntentFactory`。`CreateCardData`、
+2.5x 特殊 CardData 与 custom-speed CharacterData 仍保留在 Legacy 测试中，以保持原有
+fixture 语义。
+
 Batch 3A 从 Production Runtime 文件提取的 Embedded Legacy Test classes：
 
 - `BattleDeckManifestTests.cs`

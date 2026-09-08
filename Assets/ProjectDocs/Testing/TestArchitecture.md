@@ -68,6 +68,14 @@ Mode103 的 production fixture 已迁移为消费 `BattleTestContext` 与
 仍属于 Legacy，仍是一个聚合 Mode；原有 28 项检查、测试逻辑和 Mode 入口均保留，
 没有删除测试或 Mode。
 
+Batch 4C:
+Mode103 的 synthetic construction 开始消费 Shared Factories：默认角色构造使用
+`TestCharacterFactory`，标准卡牌状态构造通过保留 Mode103 ID compatibility wrapper
+委托 `TestCardFactory`，synthetic enemy intent 使用 `TestIntentFactory`。
+`CreateCardData` 仍保留为 Legacy compatibility helper，因为当前 Shared FixedData
+contract 无法完全保持旧 fixture 的 cardName / traits 语义；2.5x CardData 与 custom-speed
+CharacterData 仍保留为 case-specific 数据。本批仍未迁移 Mode 为正式 Suite，28 项检查保持不变。
+
 ## Test Principles
 
 - 一个系统 = 一个 Suite。
