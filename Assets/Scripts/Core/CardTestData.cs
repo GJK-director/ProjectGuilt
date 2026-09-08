@@ -150,7 +150,9 @@ public class CardTestData
                                 // guiltGain = 使用罪卡后增加的负罪感
                                 // 注意：这不是消耗，而是累计增加
     public int guiltGain;
-    // 逻辑伤害仍只提交一次；大于1时只把HP显示拆成多段。
+    // Gameplay 多段伤害百分比；缺省时保持单段 100% 伤害。
+    public int[] damageImpactPercents;
+    // 仅用于单个 Impact 的 HP 表现分段，不能决定 Combat 伤害段数。
     public int hpDisplayStageCount;
 
     public List<CardEffectData> effects; // 卡牌效果列表

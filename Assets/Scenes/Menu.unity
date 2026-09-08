@@ -256,7 +256,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &48632921
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2516,7 +2516,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1131406635
 RectTransform:
   m_ObjectHideFlags: 0
@@ -4851,6 +4851,11 @@ MonoBehaviour:
   mainMenuCanvasGroup: {fileID: 1491413267}
   newGameButton: {fileID: 523231848}
   newGameSceneName: NewGameText
+  deckSelectionButton: {fileID: 1270604928}
+  deckSelectionImage: {fileID: 48632920}
+  fullscreenButton: {fileID: 2041857477}
+  fullscreenSelectionImage: {fileID: 1131406634}
+  resolutionDropdown: {fileID: 1646850013}
 --- !u!1 &1903353240
 GameObject:
   m_ObjectHideFlags: 0

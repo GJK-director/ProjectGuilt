@@ -18,49 +18,49 @@
         "enemyCardIndex": 2,
         "targetRule": "FixedCharacterSlot",
         "targetCharacterID": "ally_001",
-        "targetSlotIndex": 1
+        "targetSlotIndex": 2
       }
     ],
     "intentCycle": [
       { "intents": [
         { "enemyCardIndex": 1, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 },
-        { "enemyCardIndex": 2, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 }
+        { "enemyCardIndex": 2, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 2 }
       ] },
       { "intents": [
         { "enemyCardIndex": 1, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 },
-        { "enemyCardIndex": 7, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 }
+        { "enemyCardIndex": 7, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 2 }
       ] },
       { "intents": [
         { "enemyCardIndex": 3, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 },
-        { "enemyCardIndex": 1, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 }
+        { "enemyCardIndex": 1, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 2 }
       ] },
       { "intents": [
         { "enemyCardIndex": 5, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 },
-        { "enemyCardIndex": 1, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 }
+        { "enemyCardIndex": 1, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 2 }
       ] },
       { "intents": [
         { "enemyCardIndex": 7, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 },
-        { "enemyCardIndex": 8, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 }
+        { "enemyCardIndex": 8, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 2 }
       ] },
       { "intents": [
         { "enemyCardIndex": 3, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 },
-        { "enemyCardIndex": 5, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 }
+        { "enemyCardIndex": 5, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 2 }
       ] },
       { "intents": [
         { "enemyCardIndex": 1, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 },
-        { "enemyCardIndex": 2, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 }
+        { "enemyCardIndex": 2, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 2 }
       ] },
       { "intents": [
         { "enemyCardIndex": 3, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 },
-        { "enemyCardIndex": 4, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 }
+        { "enemyCardIndex": 4, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 2 }
       ] },
       { "intents": [
         { "enemyCardIndex": 7, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 },
-        { "enemyCardIndex": 5, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 }
+        { "enemyCardIndex": 5, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 2 }
       ] },
       { "intents": [
         { "enemyCardIndex": 3, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 },
-        { "enemyCardIndex": 5, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 1 }
+        { "enemyCardIndex": 5, "targetRule": "FixedCharacterSlot", "targetCharacterID": "ally_001", "targetSlotIndex": 2 }
       ] }
     ],
     "repeatIntentPattern": true,

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -50,10 +50,10 @@ public static class BattleGlobalKeywordLibrary
     static readonly CardKeywordData[] globalKeywords =
     {
         Keyword("bullet", "子弹", "射击攻击使用的资源。"),
-        Keyword("anger", "怒", "部分刀系能力会生成或消耗的战斗资源。\n怒层数会强化部分攻击。\n不同卡牌对怒的使用方式不同。"),
-        Keyword("conservation", "节约", "强化下一张符合条件的射击攻击。\n剩余子弹越少，获得的点数提升越高。\n强化转移给符合条件的射击后不会因该攻击失败而返还。\n如果强化射击击杀目标，会重新装填。"),
-        Keyword("modification", "改装", "将弹仓容量调整为4。\n当前子弹会被限制在新的容量内。\n符合条件的射击攻击获得点数强化。"),
-        Keyword("global_multiplier", "倍率", "全局倍率说明。")
+        Keyword("anger", "怒", "每当使敌人发生 1 次实际生命损失，获得 1 怒。最多 5\n每层怒使自身受到的伤害 +10%。\n单个伤害段的实际伤害 ≥ (7 - 当前怒层数) 时，失去 1 怒\n3 怒攻击牌最大点数 +1\n4 更改为怒攻击牌点数+1\n5 怒保留 4 怒点数强化；造成伤害 ×1.2。"),
+        Keyword("conservation", "节约", "根据剩下的子弹量提升下一张带有子弹词条的射击卡的点数。点数增加为6-X（当前子弹数）\n回合结束时，根据剩余子弹损失最大生命值：0/1/2/3/4/5+ 发分别损失 30%/18%/12%/8%/5%/0%。"),
+        Keyword("modification", "改装", "将子弹最大值更改为4。\n所有有子弹词条的攻击卡牌点数 +2"),
+        Keyword("first_strike", "先攻", "回合开始时最先行动。\n一个回合只能使用一张先攻卡。")
     };
     public static IReadOnlyList<CardKeywordData> GlobalKeywords => globalKeywords;
     public static bool TryGetGlobalKeyword(string keywordID, out CardKeywordData keyword)

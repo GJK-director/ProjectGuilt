@@ -266,8 +266,8 @@ public static class BattleDeckManifestTests
         return Matches(slash, "顺斩", 4, 7, 0, "PointAsDamage") &&
             Matches(stab, "突刺", 4, 6, 1, "PointAsDamage") &&
             stab.HasTrait(BattleCardTrait.DoubleClashAgainstDefense) &&
-            Matches(doubleSlash, "连斩", 3, 6, 1, "PointAsDamage160Percent") &&
-            doubleSlash.hpDisplayStageCount == 2 &&
+            Matches(doubleSlash, "连斩", 3, 6, 1, "PointAsDamage") &&
+            HasDamageImpactPercents(doubleSlash, 80, 80) &&
             Matches(heavy, "重劈", 8, 11, 3, "PointAsDamage") &&
             heavy.HasTrait(BattleCardTrait.HeavyAnger) &&
             defense != null && defense.cardName == "架刀" &&
@@ -310,6 +310,25 @@ public static class BattleDeckManifestTests
         return card != null && card.cardName == cardName &&
             card.minPoint == minPoint && card.maxPoint == maxPoint &&
             card.cooldown == cooldown && card.damageFormula == damageFormula;
+    }
+
+    static bool HasDamageImpactPercents(CardTestData card, params int[] expected)
+    {
+        if (card == null || card.damageImpactPercents == null ||
+            expected == null || card.damageImpactPercents.Length != expected.Length)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < expected.Length; index++)
+        {
+            if (card.damageImpactPercents[index] != expected[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     static bool SharesCardID(BattleDeckManifest first, BattleDeckManifest second)
@@ -635,9 +654,9 @@ public static class BattleConservationAbilityTests
             conservation.sinCardCategory == SinCardCategory.Ability &&
             conservation.sinCardUseRule == SinCardUseRule.Permanent &&
             conservation.cooldown == 3 &&
-            conservation.useConditions != null &&
-            HasBulletCondition(conservation);
-        bool unavailable = VerifyZeroBullet(conservation);
+            !HasBulletCondition(conservation);
+        bool zeroBulletEligible = VerifyZeroBullet(conservation);
+        bool cooldownBlocks = VerifyZeroBulletCooldown(conservation);
         bool armed = VerifyAbilityArms(conservation);
         bool table = VerifyPointTable();
         bool transfer = VerifyCurrentBulletTransfer(closeShoot);
@@ -661,14 +680,15 @@ public static class BattleConservationAbilityTests
         bool allInRegression = BattleAllInBasicTests.Run(cards);
         BattleBasicShootingLoopTests.Run(cards);
 
-        bool passed = data && unavailable && armed && table && transfer && ownership &&
+        bool passed = data && zeroBulletEligible && cooldownBlocks && armed && table && transfer && ownership &&
             formal && modification && allInLink && tie && failed && nonShooting &&
             killReload && noReload && turnEnd && cleanup && reloadOrder && cooldown &&
             turnEndDeath && manifest && abilityRegression && angerRegression && allInRegression;
 
         Debug.Log("===== Mode113 BattleConservationAbility =====");
         Debug.Log("节约数据：" + data);
-        Debug.Log("0 Bullet不可用：" + unavailable);
+        Debug.Log("0 Bullet可用：" + zeroBulletEligible);
+        Debug.Log("0 Bullet时CD仍阻止：" + cooldownBlocks);
         Debug.Log("Ability只Arm：" + armed);
         Debug.Log("Clash前按当前Bullet赋值：" + transfer);
         Debug.Log("Bonus属于CardState：" + ownership);
@@ -697,6 +717,11 @@ public static class BattleConservationAbilityTests
 
     static bool HasBulletCondition(CardTestData card)
     {
+        if (card == null || card.useConditions == null)
+        {
+            return false;
+        }
+
         foreach (CardUseConditionData condition in card.useConditions)
         {
             if (condition != null && condition.conditionType == "BuffStackAtLeast" &&
@@ -715,7 +740,27 @@ public static class BattleConservationAbilityTests
         BattleActionSlot slot = new BattleActionSlot(owner, 1);
         slot.AssignFreeAction(owner, state, owner);
         BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
-        return result != null && !result.isSuccess && !BattleConservationRules.IsActive(owner);
+        return BattleBulletRules.GetBullet(owner) == 0 && result != null &&
+            result.isSuccess && BattleConservationRules.IsActive(owner);
+    }
+
+    static bool VerifyZeroBulletCooldown(CardTestData source)
+    {
+        CharacterData owner = Unit("mode113_zero_cooldown");
+        BattleCardState state = State(
+            owner,
+            source,
+            "mode113_zero_cooldown_conservation"
+        );
+        state.currentCooldown = 3;
+        CardEligibilityResult result = BattleCardManager.EvaluateCardEligibility(
+            owner,
+            owner,
+            state
+        );
+        return BattleBulletRules.GetBullet(owner) == 0 && result != null &&
+            !result.isEligible && result.failureReason ==
+            CardEligibilityFailureReason.CardOnCooldown;
     }
 
     static bool VerifyAbilityArms(CardTestData source)

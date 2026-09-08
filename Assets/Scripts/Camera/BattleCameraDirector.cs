@@ -307,7 +307,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
         CancelImpactShake();
 
         HideOverlay();
-        cameraController?.SetCinematicControl(false);
+        if (cameraController != null)
+        {
+            cameraController.SetCinematicControl(false);
+        }
         isIntroPlaying = false;
         turnEndRecoveryPhase = TurnEndRecoveryPhase.None;
         isTwoUnitFocusPlaying = false;
@@ -423,7 +426,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
         turnEndRecoveryPhase = TurnEndRecoveryPhase.None;
         HideOverlay();
-        cameraController?.SetCinematicControl(false);
+        if (cameraController != null)
+        {
+            cameraController.SetCinematicControl(false);
+        }
     }
 
     public bool TryPlayTwoUnitFocus(
@@ -503,7 +509,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
         isTwoUnitFocusPlaying = false;
         if (releaseCinematicControl)
         {
-            cameraController?.SetCinematicControl(false);
+            if (cameraController != null)
+            {
+                cameraController.SetCinematicControl(false);
+            }
         }
 
         return true;
@@ -658,7 +667,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
         ClearAnchoredTwoUnitApproachState();
         if (releaseCinematicControl)
         {
-            cameraController?.SetCinematicControl(false);
+            if (cameraController != null)
+            {
+                cameraController.SetCinematicControl(false);
+            }
         }
 
         return true;
@@ -872,7 +884,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
         ClearExternallyDrivenSingleActorApproachState();
         if (restoreSnapshot)
         {
-            cameraController?.SetCinematicControl(false);
+            if (cameraController != null)
+            {
+                cameraController.SetCinematicControl(false);
+            }
         }
         return true;
     }
@@ -889,7 +904,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
 
         ResolveReferences();
-        cameraController?.SetCinematicControl(false);
+        if (cameraController != null)
+        {
+            cameraController.SetCinematicControl(false);
+        }
     }
 
     public bool TryPlayGenericClashImpact()
@@ -988,7 +1006,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
             impactShakeCoroutine = null;
         }
 
-        cameraController?.ClearPresentationImpactShakeOffset();
+        if (cameraController != null)
+        {
+            cameraController.ClearPresentationImpactShakeOffset();
+        }
     }
 
     public bool TryPlayNormalHitImpact(
@@ -2022,7 +2043,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
 
         ClearAnchoredTwoUnitApproachState();
-        cameraController?.SetCinematicControl(false);
+        if (cameraController != null)
+        {
+            cameraController.SetCinematicControl(false);
+        }
         completion?.Invoke(false);
     }
 
@@ -2487,7 +2511,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
         }
 
         HideOverlay();
-        cameraController?.SetCinematicControl(false);
+        if (cameraController != null)
+        {
+            cameraController.SetCinematicControl(false);
+        }
         activePresentationCoroutine = null;
         isIntroPlaying = false;
         turnEndRecoveryPhase = TurnEndRecoveryPhase.None;
@@ -2504,7 +2531,10 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
         if (releaseCinematicControlOnComplete)
         {
-            cameraController?.SetCinematicControl(false);
+            if (cameraController != null)
+            {
+                cameraController.SetCinematicControl(false);
+            }
         }
 
         completion?.Invoke();

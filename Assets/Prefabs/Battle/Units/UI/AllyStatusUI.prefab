@@ -1539,6 +1539,22 @@ MonoBehaviour:
     displayName: "\u9632\u62A4"
     iconSprite: {fileID: 21300000, guid: 220a6f9688df72940b96f5ab4a495627, type: 3}
     iconView: {fileID: 0}
+  - buffID: Bullet
+    displayName: Bullet
+    iconSprite: {fileID: 21300000, guid: 36000667e0d089e419c4e40ddfd4fbed, type: 3}
+    iconView: {fileID: 0}
+  - buffID: Anger
+    displayName: Anger
+    iconSprite: {fileID: 21300000, guid: c79797e64b55369469af3f67bd315a73, type: 3}
+    iconView: {fileID: 0}
+  - buffID: Conservation
+    displayName: Conservation
+    iconSprite: {fileID: 21300000, guid: 46b18b682ccc607459556b5920418f2a, type: 3}
+    iconView: {fileID: 0}
+  - buffID: Modification
+    displayName: Modification
+    iconSprite: {fileID: 21300000, guid: 627731b0fc8d34148a48856ffa43907e, type: 3}
+    iconView: {fileID: 0}
   slotsRoot: {fileID: 4055418281999626856}
   slotTemplate: {fileID: 971524333724591902}
   defaultBuffIcon: {fileID: 21300000, guid: 4fd9aeb32404be546ad39df54fc601d1, type: 3}
@@ -1807,6 +1823,7 @@ MonoBehaviour:
   hpBackLostImage: {fileID: 8029673410584159477}
   hpText: {fileID: 8346922281648323443}
   showMaxHp: 0
+  stagedHpStepDelay: 0.12
 --- !u!1 &9178983552520420178
 GameObject:
   m_ObjectHideFlags: 0

@@ -487,20 +487,18 @@ public static class BattleResolver
             attackCard,
             rolledPoint
         );
-        int finalHpDamage = BattleCalculator.ConvertScaledDamageToHPDamage(
-            ApplyAllInDamageMultiplier(
-                damageScaled,
-                plan.sourceCardState,
-                resourceSnapshot
-            )
+        damageScaled = ApplyAllInDamageMultiplier(
+            damageScaled,
+            plan.sourceCardState,
+            resourceSnapshot
         );
 
         plan.freeActionPoint = rolledPoint;
         plan.unrespondedEnemyPoint = rolledPoint;
         plan.freeActionHasRolled = true;
 
-        BattleImpact impact = new BattleImpact(
-            0,
+        AddDamageImpacts(
+            plan,
             plan.attacker,
             plan.target,
             plan.sourceCardState,
@@ -509,12 +507,10 @@ public static class BattleResolver
             ClashResult.None,
             true,
             true,
-            plan.runtimeInteraction
+            resourceSnapshot,
+            100,
+            damageScaled
         );
-        // Roll时固定点数与伤害，HP仍只在Impact提交边界写入。
-        impact.SetPrecalculatedDamage(finalHpDamage);
-        ApplyAllInImpactData(impact, plan.sourceCardState, resourceSnapshot);
-        plan.impacts.Add(impact);
         return true;
     }
 
@@ -1673,35 +1669,29 @@ public static class BattleResolver
             plan.sourceCardState.cardData.cardType == CardType.Attack;
         if (winnerIsAttack)
         {
-            BattleImpact impact = new BattleImpact(
-                0,
+            BattleClashSideState loser = playerWon
+                ? session.SideB
+                : session.SideA;
+            BattleClashSideState winner = playerWon
+                ? session.SideA
+                : session.SideB;
+            int initialDamageMultiplierPercent = loser.cardState != null &&
+                loser.cardState.HasTrait(BattleCardTrait.IaiAnger)
+                ? 150
+                : 100;
+            AddDamageImpacts(
+                plan,
                 plan.attacker,
                 plan.target,
                 plan.sourceCardState,
                 winnerPoint,
                 winnerPoint,
                 ClashResult.Win,
-                winnerIsAttack,
-                winnerIsAttack,
-                plan.runtimeInteraction
+                true,
+                true,
+                winner.resourceSnapshot,
+                initialDamageMultiplierPercent
             );
-            BattleClashSideState loser = playerWon
-                ? session.SideB
-                : session.SideA;
-            if (loser.cardState != null &&
-                loser.cardState.HasTrait(BattleCardTrait.IaiAnger))
-            {
-                impact.damageMultiplierPercent = 150;
-            }
-            BattleClashSideState winner = playerWon
-                ? session.SideA
-                : session.SideB;
-            ApplyAllInImpactData(
-                impact,
-                plan.sourceCardState,
-                winner.resourceSnapshot
-            );
-            plan.impacts.Add(impact);
         }
     }
 
@@ -1741,8 +1731,8 @@ public static class BattleResolver
             BattleTiming.ClashStart,
             BuffGuardDown
         );
-        BattleImpact impact = new BattleImpact(
-            0,
+        AddDamageImpacts(
+            plan,
             plan.attacker,
             plan.target,
             plan.sourceCardState,
@@ -1751,9 +1741,8 @@ public static class BattleResolver
             ClashResult.None,
             session.RemainingAttackPoint > 0,
             session.RemainingAttackPoint > 0,
-            plan.runtimeInteraction
+            session.SideB.resourceSnapshot
         );
-        plan.impacts.Add(impact);
     }
 
     static void BuildDodgeResolutionPlan(BattleResolutionPlan plan)
@@ -1797,8 +1786,9 @@ public static class BattleResolver
         plan.attacker = session.SideB.actor;
         plan.target = session.ActualTarget;
         plan.sourceCardState = session.SideB.cardState;
-        BattleImpact impact = new BattleImpact(
-            0,
+        int impactStartIndex = plan.impacts.Count;
+        AddDamageImpacts(
+            plan,
             plan.attacker,
             plan.target,
             plan.sourceCardState,
@@ -1807,23 +1797,100 @@ public static class BattleResolver
             ClashResult.Win,
             true,
             true,
-            plan.runtimeInteraction
+            session.SideB.resourceSnapshot
         );
-        if (session.SideA.cardState != null &&
-            session.SideA.cardState.HasTrait(
-                BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge))
+        for (int impactIndex = impactStartIndex;
+            impactIndex < plan.impacts.Count;
+            impactIndex++)
         {
-            impact.scopedDamageModifier = new BattleScopedDamageModifier(
-                impact, session.SideA.cardState, session, 125);
+            BattleImpact impact = plan.impacts[impactIndex];
+            if (session.SideA.cardState != null &&
+                session.SideA.cardState.HasTrait(
+                    BattleCardTrait.GrantNextClashPointUpOnSuccessfulDodge))
+            {
+                impact.scopedDamageModifier = new BattleScopedDamageModifier(
+                    impact, session.SideA.cardState, session, 125);
+            }
+            if (session.SideA.cardState != null &&
+                session.SideA.cardState.HasTrait(
+                    BattleCardTrait.ReloadBulletOnDodgeResolution))
+            {
+                impact.scopedDamageModifier = new BattleScopedDamageModifier(
+                    impact, session.SideA.cardState, session, 150);
+            }
         }
-        if (session.SideA.cardState != null &&
-            session.SideA.cardState.HasTrait(
-                BattleCardTrait.ReloadBulletOnDodgeResolution))
+    }
+
+    static void AddDamageImpacts(
+        BattleResolutionPlan plan,
+        CharacterData attacker,
+        CharacterData target,
+        BattleCardState sourceCardState,
+        int basePower,
+        int clashPoint,
+        string clashResult,
+        bool allowsDamage,
+        bool shouldTriggerHit,
+        BattleClashResourceSnapshot resourceSnapshot = null,
+        int initialDamageMultiplierPercent = 100,
+        int precalculatedDamageScaled = -1
+    )
+    {
+        if (plan == null)
         {
-            impact.scopedDamageModifier = new BattleScopedDamageModifier(
-                impact, session.SideA.cardState, session, 150);
+            return;
         }
-        plan.impacts.Add(impact);
+
+        int[] segmentPercents = sourceCardState != null &&
+            sourceCardState.cardData != null
+            ? sourceCardState.cardData.damageImpactPercents
+            : null;
+        int segmentCount = segmentPercents != null && segmentPercents.Length > 0
+            ? segmentPercents.Length
+            : 1;
+
+        for (int segmentIndex = 0; segmentIndex < segmentCount; segmentIndex++)
+        {
+            int segmentPercent = segmentPercents != null &&
+                segmentIndex < segmentPercents.Length
+                ? Mathf.Max(0, segmentPercents[segmentIndex])
+                : 100;
+            BattleImpact impact = new BattleImpact(
+                plan.impacts.Count,
+                attacker,
+                target,
+                sourceCardState,
+                basePower,
+                clashPoint,
+                clashResult,
+                allowsDamage,
+                shouldTriggerHit,
+                plan.runtimeInteraction
+            );
+            impact.damageMultiplierPercent =
+                BattleAllInRules.CombineDamageMultiplierPercent(
+                    initialDamageMultiplierPercent,
+                    segmentPercent
+                );
+            if (precalculatedDamageScaled >= 0)
+            {
+                impact.SetPrecalculatedDamage(
+                    BattleCalculator.ConvertScaledDamageToHPDamage(
+                        BattleAllInRules.CombineDamageMultiplierPercent(
+                            precalculatedDamageScaled,
+                            segmentPercent
+                        )
+                    )
+                );
+            }
+
+            ApplyAllInImpactData(impact, sourceCardState, resourceSnapshot);
+            if (segmentCount > 1)
+            {
+                impact.hpDisplayStageCount = 1;
+            }
+            plan.impacts.Add(impact);
+        }
     }
 
     internal static bool TryCommitNextResolutionStep(

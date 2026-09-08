@@ -2,7 +2,7 @@
   {
     "characterID": "ally_001",
     "characterName": "Ally A",
-    "maxHP": 30,
+    "maxHP": 60,
     "minSpeed": 4,
     "maxSpeed": 8,
     "actionSlotCount": 2,

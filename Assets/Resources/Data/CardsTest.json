@@ -59,7 +59,7 @@
   {
     "cardID": "dodge_001",
     "cardName": "换气",
-    "description": "CD 2 成功：下一攻击牌点数+2。失败：本次受到伤害×1.25",
+    "description": "CD 2 拼点胜利时：下一攻击牌点数+2。拼点失败时：本次受到伤害×1.25",
     "keywords": [],
     "rarity": "White",
     "cardType": "Dodge",
@@ -75,7 +75,7 @@
   {
     "cardID": "knife_stab_001",
     "cardName": "突刺",
-    "description": "CD 1 与防御卡拼点时，拼点点数X2",
+    "description": "CD 1 与防御卡拼点时，点数X2",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
@@ -95,7 +95,7 @@
   {
     "cardID": "knife_double_slash_001",
     "cardName": "连斩",
-    "description": "CD 1 造成80%伤害X2",
+    "description": "CD 1 造成80%伤害X2次",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
@@ -106,14 +106,18 @@
     "cooldown": 1,
     "guiltCost": 0,
     "isSinCard": false,
-    "damageFormula": "PointAsDamage160Percent",
+    "damageFormula": "PointAsDamage",
+    "damageImpactPercents": [
+      80,
+      80
+    ],
     "hpDisplayStageCount": 2,
     "effects": []
   },
   {
     "cardID": "knife_heavy_001",
     "cardName": "重劈",
-    "description": "CD 3 若怒大于0，则消耗一层怒本卡点数 +2，并且cd-1",
+    "description": "CD 3 若怒大于0，使用时消耗一层怒本卡点数 +2，并且cd-1",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
@@ -247,7 +251,7 @@
   {
     "cardID": "atk_bullet_001",
     "cardName": "盲射",
-    "description": "CD 0 拼点前消耗一颗弹药",
+    "description": "CD 0 先攻 生效时消耗一颗弹药",
     "keywords": [
       {
         "keywordID": "Bullet",
@@ -366,7 +370,7 @@
   {
     "cardID": "shoot_reload_001",
     "cardName": "装填",
-    "description": "CD 4 战斗开始时回复所有弹药",
+    "description": "CD 4 生效时回复所有弹药",
     "keywords": [],
     "rarity": "White",
     "cardType": "Dodge",
@@ -381,7 +385,7 @@
   {
     "cardID": "shoot_aim_001",
     "cardName": "瞄准射击",
-    "description": "CD 3 拼点前消耗一颗弹药",
+    "description": "CD 3 先攻 生效时消耗一颗弹药",
     "keywords": [],
     "rarity": "White",
     "cardType": "Attack",
@@ -434,7 +438,7 @@
   {
     "cardID": "sin_anger_001",
     "cardName": "愤怒",
-    "description": "战斗开始时，获得愤怒buff",
+    "description": "战斗开始时，获得愤怒",
     "keywords": [],
     "rarity": "Sin",
     "cardType": "Ability",
@@ -460,7 +464,7 @@
   {
     "cardID": "ability_modification_001",
     "cardName": "改装",
-    "description": "将子弹最大值改为4，消耗子弹卡牌点数+2",
+    "description": "战斗开始时，获得改装",
     "keywords": [],
     "rarity": "White",
     "cardType": "Ability",
@@ -483,7 +487,7 @@
   {
     "cardID": "sin_conservation_001",
     "cardName": "节约",
-    "description": "获得节约1层",
+    "description": "战斗开始时，获得节约1层",
     "keywords": [],
     "rarity": "Sin",
     "cardType": "Ability",
@@ -498,14 +502,6 @@
     "maxUseCount": 0,
     "sinCardUseRule": "Permanent",
     "sinCardCategory": "Ability",
-    "useConditions": [
-      {
-        "conditionType": "BuffStackAtLeast",
-        "target": "Self",
-        "buffType": "Bullet",
-        "value": 1
-      }
-    ],
     "effects": [
       {
         "trigger": "OnPlay",

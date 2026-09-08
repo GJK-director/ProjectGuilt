@@ -360,9 +360,9 @@ public static class FullBattleIntegrationRegressionTests
         return result != null && result.isSuccess &&
             result.intentQueue != null && result.intentQueue.Count == 2 &&
             IsCycleIntent(result.intentQueue[0], fixture.runtime.enemy, 1,
-                "enemy_probe_001", fixture.runtime.allyA) &&
+                "enemy_probe_001", fixture.runtime.allyA, 1) &&
             IsCycleIntent(result.intentQueue[1], fixture.runtime.enemy, 2,
-                "enemy_probe_001", fixture.runtime.allyA);
+                "enemy_probe_001", fixture.runtime.allyA, 2);
     }
 
     private static bool VerifyIntentCycleTurns(ProductionFixture fixture)
@@ -384,6 +384,24 @@ public static class FullBattleIntegrationRegressionTests
         for (int turn = 1; turn <= 21; turn++)
         {
             int cycleIndex = (turn - 1) % expectedCardIDs.Length;
+            EnemyIntentRoundDefinitionData expectedRound =
+                fixture.bootstrap.encounterDefinition.intentCycle[cycleIndex];
+            if (expectedRound == null || expectedRound.intents == null ||
+                expectedRound.intents.Length != 2 ||
+                expectedRound.intents[0] == null ||
+                expectedRound.intents[1] == null ||
+                expectedRound.intents[0].targetRule !=
+                    EncounterDefinitionLoader.TargetRuleFixedCharacterSlot ||
+                expectedRound.intents[0].targetCharacterID != "ally_001" ||
+                expectedRound.intents[0].targetSlotIndex != 1 ||
+                expectedRound.intents[1].targetRule !=
+                    EncounterDefinitionLoader.TargetRuleFixedCharacterSlot ||
+                expectedRound.intents[1].targetCharacterID != "ally_001" ||
+                expectedRound.intents[1].targetSlotIndex != 2)
+            {
+                return false;
+            }
+
             BattleDefinitionIntentQueueResult result =
                 BattleDefinitionBootstrap.CreateIntentQueueForTurn(
                     fixture.runtime,
@@ -396,9 +414,9 @@ public static class FullBattleIntegrationRegressionTests
             if (result == null || !result.isSuccess || result.intentQueue == null ||
                 result.intentQueue.Count != 2 ||
                 !IsCycleIntent(result.intentQueue[0], fixture.runtime.enemy, 1,
-                    expectedCardIDs[cycleIndex][0], fixture.runtime.allyA) ||
+                    expectedCardIDs[cycleIndex][0], fixture.runtime.allyA, 1) ||
                 !IsCycleIntent(result.intentQueue[1], fixture.runtime.enemy, 2,
-                    expectedCardIDs[cycleIndex][1], fixture.runtime.allyA))
+                    expectedCardIDs[cycleIndex][1], fixture.runtime.allyA, 2))
             {
                 return false;
             }
@@ -420,7 +438,8 @@ public static class FullBattleIntegrationRegressionTests
         CharacterData enemy,
         int enemySlotIndex,
         string cardID,
-        CharacterData target
+        CharacterData target,
+        int targetSlotIndex
     )
     {
         return intent != null &&
@@ -430,9 +449,9 @@ public static class FullBattleIntegrationRegressionTests
             intent.enemyCardState.cardData != null &&
             intent.enemyCardState.cardData.cardID == cardID &&
             object.ReferenceEquals(intent.originalTargetCharacter, target) &&
-            intent.originalTargetSlotIndex == 1 &&
+            intent.originalTargetSlotIndex == targetSlotIndex &&
             object.ReferenceEquals(intent.actualTargetCharacter, target) &&
-            intent.actualTargetSlotIndex == 1 &&
+            intent.actualTargetSlotIndex == targetSlotIndex &&
             !intent.isResponded && !intent.isConsumedAsReactiveGuard;
     }
 

@@ -24,6 +24,15 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
     public BattleDeckPreset PlayerDeckPreset => playerDeckPreset;
     public string EncounterID => encounterID;
 
+    internal static BattleDeckPreset ResolvePlayerDeckPreset(
+        BattleDeckPreset inspectorFallback
+    )
+    {
+        return GameSettingsState.HasSelectedDeckPreference
+            ? GameSettingsState.SelectedDeck
+            : inspectorFallback;
+    }
+
     private void Start()
     {
         InitializeBattleScene();
@@ -74,10 +83,13 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
             return initialized;
         }
 
+        BattleDeckPreset effectivePlayerDeckPreset = ResolvePlayerDeckPreset(
+            playerDeckPreset
+        );
         BattleDefinitionBootstrapResult bootstrapResult =
             BattleDefinitionBootstrap.CreateRuntimeState(
                 encounterID,
-                playerDeckPreset,
+                effectivePlayerDeckPreset,
                 useSingleUnitDemo
             );
 

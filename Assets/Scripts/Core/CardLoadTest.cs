@@ -118,7 +118,8 @@ public enum BattleTestMode
     BattleRuntimeInteractionLifecycleBasic = 129,
     BattleRuleEvaluationAndEffectHookupBasic = 130,
     BattleDeckFrozenSemanticsMigration = 131,
-    BattleCardKeywordPresentationBasic = 132
+    BattleCardKeywordPresentationBasic = 132,
+    BattleGameSettingsIntegrationBasic = 133
 }
 
 public static class BattleLifecycleTimingTests
@@ -3405,8 +3406,8 @@ public static class BattleAngerAndKnifeCardsBasicTests
             IsCard(stab, CardType.Attack, 4, 6, 1, "PointAsDamage") &&
             stab.HasTrait(BattleCardTrait.DoubleClashAgainstDefense) &&
             doubleSlash != null && doubleSlash.cardName == "连斩" &&
-            IsCard(doubleSlash, CardType.Attack, 3, 6, 1, "PointAsDamage160Percent") &&
-            doubleSlash.hpDisplayStageCount == 2 &&
+            IsCard(doubleSlash, CardType.Attack, 3, 6, 1, "PointAsDamage") &&
+            HasDamageImpactPercents(doubleSlash, 80, 80) &&
             heavy != null && heavy.cardName == "重劈" &&
             IsCard(heavy, CardType.Attack, 8, 11, 3, "PointAsDamage") &&
             heavy.HasTrait(BattleCardTrait.HeavyAnger) &&
@@ -3540,33 +3541,162 @@ public static class BattleAngerAndKnifeCardsBasicTests
     static bool VerifyDoubleSlash(List<CardTestData> cards)
     {
         CardTestData doubleSlash = Find(cards, "knife_double_slash_001");
-        CharacterData attacker = Unit("mode107_double_attacker", true);
-        CharacterData target = Unit("mode107_double_target", false);
-        BattleCardState state = new BattleCardState(
-            attacker,
-            FixedCopy(doubleSlash, 4, 4),
-            "mode107_double"
+        if (doubleSlash == null || !HasDamageImpactPercents(doubleSlash, 80, 80))
+        {
+            return false;
+        }
+
+        bool freeAction = BattleTimingMigrationFixture.Observe(events =>
+        {
+            CharacterData attacker = Unit("mode107_double_attacker", true);
+            CharacterData target = Unit("mode107_double_target", false);
+            BattleCardState state = new BattleCardState(
+                attacker,
+                FixedCopy(doubleSlash, 5, 5),
+                "mode107_double"
+            );
+            BattleResolutionPlan plan = BattleTimingMigrationFixture.Free(state, target);
+            if (plan == null)
+            {
+                return false;
+            }
+            int before = target.currentHP;
+            bool firstCommitted = BattleResolver.TryCommitNextResolutionStep(
+                plan,
+                out BattleResolveResult firstResult
+            );
+            bool firstSegment = firstCommitted && firstResult == null &&
+                target.currentHP == before - 4 &&
+                BattleAngerRules.GetAnger(attacker) == 1 &&
+                plan.impacts.Count == 2 &&
+                plan.impacts[0].committedDamage == 4 &&
+                plan.impacts[1].state == BattleImpactState.Pending;
+            bool secondCommitted = BattleResolver.TryCommitNextResolutionStep(
+                plan,
+                out BattleResolveResult result
+            );
+            return firstSegment && secondCommitted && result != null &&
+                result.damage == 8 && target.currentHP == before - 8 &&
+                plan.impacts[1].committedDamage == 4 &&
+                BattleAngerRules.GetAnger(attacker) == 2 &&
+                state.cardUsedCommittedForCurrentAction && state.currentCooldown == 1 &&
+                state.currentUseCount == 0 && !state.isConsumed &&
+                CountTiming(events, BattleTiming.BeforeUse) == 1 &&
+                CountTiming(events, BattleTiming.CardUsed) == 1 &&
+                CountTiming(events, BattleTiming.Resolved) == 1 &&
+                CountTiming(events, BattleTiming.CardResolved) == 1;
+        });
+
+        bool attackVsAttack = HasTwoDoubleSlashImpacts(
+            CreateDoubleSlashAttackVsAttackPlan(doubleSlash)
         );
-        BattleResolutionPlan plan = ActivePlan();
-        BattleImpact impact = new BattleImpact(
-            0,
-            attacker,
-            target,
-            state,
-            4,
-            4,
-            ClashResult.Win,
-            true,
-            true
+        bool attackVsDefense = HasTwoDoubleSlashImpacts(
+            CreateDoubleSlashDefensePlan(doubleSlash)
         );
-        plan.impacts.Add(impact);
-        int before = target.currentHP;
-        bool committed = BattleResolver.CommitImpact(plan, impact);
-        return Damage(attacker, Unit("mode107_double_math", false), doubleSlash, 4) == 7 &&
-            plan.impacts.Count == 1 && committed &&
-            before - target.currentHP == 7 && impact.committedDamage == 7 &&
-            BattleAngerRules.GetAnger(attacker) == 1 &&
-            impact.hpDisplayStageCount == 2;
+        bool attackVsDodge = HasTwoDoubleSlashImpacts(
+            CreateDoubleSlashDodgePlan(doubleSlash)
+        );
+
+        CharacterData lethalAttacker = Unit("mode107_double_lethal_attacker", true);
+        CharacterData lethalTarget = new CharacterData(
+            "mode107_double_lethal_target", 4, 5, 5,
+            "mode107_double_lethal_target"
+        );
+        BattleCardState lethalState = new BattleCardState(
+            lethalAttacker,
+            FixedCopy(doubleSlash, 5, 5),
+            "mode107_double_lethal"
+        );
+        BattleResolutionPlan lethalPlan = BattleTimingMigrationFixture.Free(
+            lethalState,
+            lethalTarget
+        );
+        CompletePlan(lethalPlan);
+        bool killStopsSecond = lethalPlan != null && lethalPlan.impacts.Count == 2 &&
+            lethalPlan.impacts[0].didKill &&
+            lethalPlan.impacts[1].state == BattleImpactState.Skipped &&
+            lethalPlan.impacts[1].actualDamage == 0 &&
+            BattleAngerRules.GetAnger(lethalAttacker) == 1;
+
+        return freeAction && attackVsAttack && attackVsDefense && attackVsDodge &&
+            killStopsSecond;
+    }
+
+    static BattleResolutionPlan CreateDoubleSlashAttackVsAttackPlan(CardTestData doubleSlash)
+    {
+        CharacterData attacker = Unit("mode107_double_attack_attacker", false);
+        CharacterData defender = Unit("mode107_double_attack_defender", false);
+        BattleCardState attack = new BattleCardState(
+            attacker, FixedCopy(doubleSlash, 5, 5), "mode107_double_attack"
+        );
+        BattleCardState defense = new BattleCardState(
+            defender, FixedAttack("mode107_double_attack_enemy", 1),
+            "mode107_double_attack_enemy"
+        );
+        BattleClashSession session = BattleClashSession.CreateAttackVsAttack(
+            Side(attacker, attack), Side(defender, defense), defender
+        );
+        return session.RollNextAttempt() ? PlanForSession(session, attack, defense) : null;
+    }
+
+    static BattleResolutionPlan CreateDoubleSlashDefensePlan(CardTestData doubleSlash)
+    {
+        CharacterData attacker = Unit("mode107_double_defense_attacker", false);
+        CharacterData defender = Unit("mode107_double_defense_defender", false);
+        BattleCardState attack = new BattleCardState(
+            attacker, FixedCopy(doubleSlash, 5, 5), "mode107_double_defense"
+        );
+        BattleCardState defense = new BattleCardState(
+            defender, FixedCard("mode107_double_guard", CardType.Defense, 1, 1, 0),
+            "mode107_double_guard"
+        );
+        BattleClashSession session = BattleClashSession.CreateDefenseVsAttack(
+            Side(defender, defense), Side(attacker, attack), defender
+        );
+        return session.RollNextAttempt() ? PlanForSession(session, defense, attack) : null;
+    }
+
+    static BattleResolutionPlan CreateDoubleSlashDodgePlan(CardTestData doubleSlash)
+    {
+        CharacterData attacker = Unit("mode107_double_dodge_attacker", false);
+        CharacterData dodger = Unit("mode107_double_dodge_defender", false);
+        BattleCardState attack = new BattleCardState(
+            attacker, FixedCopy(doubleSlash, 5, 5), "mode107_double_dodge"
+        );
+        BattleCardState dodge = new BattleCardState(
+            dodger, FixedCard("mode107_double_dodge_card", CardType.Dodge, 1, 1, 0),
+            "mode107_double_dodge_card"
+        );
+        BattleClashSession session = BattleClashSession.CreateDodgeVsAttack(
+            Side(dodger, dodge), Side(attacker, attack), dodger
+        );
+        return session.RollNextAttempt() ? PlanForSession(session, dodge, attack) : null;
+    }
+
+    static bool HasTwoDoubleSlashImpacts(BattleResolutionPlan plan)
+    {
+        return plan != null && plan.impacts.Count == 2 &&
+            plan.impacts[0].impactIndex == 0 && plan.impacts[1].impactIndex == 1 &&
+            plan.impacts[0].damageMultiplierPercent == 80 &&
+            plan.impacts[1].damageMultiplierPercent == 80;
+    }
+
+    static int CountTiming(List<BattleEventContext> events, string timing)
+    {
+        int count = 0;
+        if (events == null)
+        {
+            return count;
+        }
+
+        foreach (BattleEventContext context in events)
+        {
+            if (context != null && context.timing == timing)
+            {
+                count++;
+            }
+        }
+        return count;
     }
 
     static bool VerifyHeavy(List<CardTestData> cards)
@@ -4059,6 +4189,24 @@ public static class BattleAngerAndKnifeCardsBasicTests
             card.damageFormula == formula;
     }
 
+    static bool HasDamageImpactPercents(CardTestData card, params int[] expected)
+    {
+        if (card == null || card.damageImpactPercents == null || expected == null ||
+            card.damageImpactPercents.Length != expected.Length)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < expected.Length; index++)
+        {
+            if (card.damageImpactPercents[index] != expected[index])
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     static CardTestData FixedAttack(string id, int point)
     {
         return FixedCard(id, CardType.Attack, point, point, 0);
@@ -4101,6 +4249,7 @@ public static class BattleAngerAndKnifeCardsBasicTests
             cooldown = source.cooldown,
             damageFormula = source.damageFormula,
             defenseFormula = source.defenseFormula,
+            damageImpactPercents = source.damageImpactPercents,
             hpDisplayStageCount = source.hpDisplayStageCount,
             isSinCard = source.isSinCard,
             sinCardCategory = source.sinCardCategory,
@@ -5139,6 +5288,12 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleCardKeywordPresentationBasic)
         {
             BattleCardKeywordPresentationTests.Run(cards);
+            return;
+        }
+
+        if (testMode == BattleTestMode.BattleGameSettingsIntegrationBasic)
+        {
+            BattleGameSettingsIntegrationTests.Run();
             return;
         }
 
@@ -22293,7 +22448,9 @@ public class CardLoadTest : MonoBehaviour
             result.runtimeState.allyB != null &&
             !object.ReferenceEquals(result.runtimeState.allyA, result.runtimeState.allyB) &&
             result.runtimeState.allyA.characterName == result.allyADefinition.characterName &&
-            result.runtimeState.allyB.characterName == result.allyBDefinition.characterName;
+            result.runtimeState.allyB.characterName == result.allyBDefinition.characterName &&
+            result.allyADefinition.maxHP == 60 &&
+            result.runtimeState.allyA.maxHP == 60;
 
         Debug.Log("模式56 C 两名玩家由真实bootstrap创建且实例独立：" + playersCreated);
     }
@@ -22313,6 +22470,7 @@ public class CardLoadTest : MonoBehaviour
             enemyUnit.runtimeUnitID != enemyUnit2.runtimeUnitID &&
             enemyUnit.characterName == result.enemyDefinition.enemyName &&
             enemyUnit2.characterName == result.enemyDefinition.enemyName &&
+            result.enemyDefinition.maxHP == 100 &&
             enemyUnit.maxHP == result.enemyDefinition.maxHP &&
             enemyUnit2.maxHP == result.enemyDefinition.maxHP &&
             enemyUnit.minSpeed == result.enemyDefinition.minSpeed &&
@@ -22584,18 +22742,18 @@ public class CardLoadTest : MonoBehaviour
         bool targetMapping =
             intent != null &&
             intent2 != null &&
-            intent.originalTargetCharacter == runtimeState.allyB &&
-            intent.actualTargetCharacter == runtimeState.allyB &&
+            intent.originalTargetCharacter == runtimeState.allyA &&
+            intent.actualTargetCharacter == runtimeState.allyA &&
             intent.originalTargetSlotIndex == 1 &&
             intent.actualTargetSlotIndex == 1 &&
-            intent2.originalTargetCharacter == runtimeState.allyB &&
-            intent2.actualTargetCharacter == runtimeState.allyB &&
-            intent2.originalTargetSlotIndex == 1 &&
-            intent2.actualTargetSlotIndex == 1 &&
+            intent2.originalTargetCharacter == runtimeState.allyA &&
+            intent2.actualTargetCharacter == runtimeState.allyA &&
+            intent2.originalTargetSlotIndex == 2 &&
+            intent2.actualTargetSlotIndex == 2 &&
             !intent.isResponded &&
             !intent2.isResponded;
 
-        Debug.Log("模式56 L FixedCharacterSlot目标映射到ally_002槽位1：" + targetMapping);
+        Debug.Log("模式56 L FixedCharacterSlot映射到ally_001槽位1/2：" + targetMapping);
     }
 
     void RunBattleDefinitionDataRuntimeStateSubTest()
@@ -22628,9 +22786,9 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
 
-        if (result != null && result.runtimeState != null && result.runtimeState.allyB != null)
+        if (result != null && result.runtimeState != null && result.runtimeState.allyA != null)
         {
-            result.runtimeState.allyB.currentHP = 0;
+            result.runtimeState.allyA.currentHP = 0;
         }
 
         BattleDefinitionIntentQueueResult intentResult = BattleDefinitionBootstrap.CreateIntentQueueForTurn(
@@ -22653,14 +22811,14 @@ public class CardLoadTest : MonoBehaviour
             intentResult.isSuccess &&
             intent != null &&
             intent2 != null &&
-            intent.originalTargetCharacter == result.runtimeState.allyA &&
-            intent.actualTargetCharacter == result.runtimeState.allyA &&
+            intent.originalTargetCharacter == result.runtimeState.allyB &&
+            intent.actualTargetCharacter == result.runtimeState.allyB &&
             intent.originalTargetSlotIndex == 1 &&
             intent.actualTargetSlotIndex == 1 &&
-            intent2.originalTargetCharacter == result.runtimeState.allyA &&
-            intent2.actualTargetCharacter == result.runtimeState.allyA &&
-            intent2.originalTargetSlotIndex == 1 &&
-            intent2.actualTargetSlotIndex == 1;
+            intent2.originalTargetCharacter == result.runtimeState.allyB &&
+            intent2.actualTargetCharacter == result.runtimeState.allyB &&
+            intent2.originalTargetSlotIndex == 2 &&
+            intent2.actualTargetSlotIndex == 2;
 
         Debug.Log("模式56 N 固定死亡目标在意图创建时回落到第一存活角色：" + fallback);
     }
@@ -30618,6 +30776,7 @@ public static class BattleCardKeywordPresentationTests
     {
         bool timing = VerifyTimingToken();
         bool global = VerifyGlobalKeyword();
+        bool productionGlobalVocabulary = VerifyProductionGlobalVocabulary();
         bool vocabulary = VerifyTimingVocabulary();
         bool bullet = VerifyBulletDynamicCapacity();
         bool anger = VerifyGlobalTooltip("怒", "global:anger", "怒层数");
@@ -30637,6 +30796,7 @@ public static class BattleCardKeywordPresentationTests
         Debug.Log("===== Mode132 BattleCardKeywordPresentationBasic =====");
         Check("Timing uses gray-blue presentation", timing);
         Check("Global keyword uses gold TMP link", global);
+        Check("Production global keyword library excludes multiplier", productionGlobalVocabulary);
         Check("Only frozen player timing vocabulary is recognized", vocabulary);
         Check("Bullet tooltip reads dynamic capacity", bullet);
         Check("Anger global tooltip resolves", anger);
@@ -30652,7 +30812,7 @@ public static class BattleCardKeywordPresentationTests
         Check("Missing keyword data falls back safely", missing);
         Check("Description formatting does not mutate gameplay metadata", descriptionOnly);
         Check("Tooltip resolution is pure read", pureRead);
-        bool passed = timing && global && vocabulary && bullet && anger && conservation &&
+        bool passed = timing && global && productionGlobalVocabulary && vocabulary && bullet && anger && conservation &&
             modification && localOverride && stableLinks && allIn && visibleMultipliers &&
             longest && repeated && adjacent && missing && descriptionOnly && pureRead;
         Debug.Log("Passed: " + passed);
@@ -30677,6 +30837,16 @@ public static class BattleCardKeywordPresentationTests
         return result.richText.Contains("<link=\"global:bullet\"><color=#E8C56A><u>子弹") &&
             result.TryGetBinding("global:bullet", out BattleCardKeywordBinding binding) &&
             binding.kind == BattleCardDescriptionTokenKind.GlobalKeyword;
+    }
+
+    static bool VerifyProductionGlobalVocabulary()
+    {
+        return BattleGlobalKeywordLibrary.GlobalKeywords.Count == 4 &&
+            BattleGlobalKeywordLibrary.TryGetGlobalKeyword("bullet", out _) &&
+            BattleGlobalKeywordLibrary.TryGetGlobalKeyword("anger", out _) &&
+            BattleGlobalKeywordLibrary.TryGetGlobalKeyword("conservation", out _) &&
+            BattleGlobalKeywordLibrary.TryGetGlobalKeyword("modification", out _) &&
+            !BattleGlobalKeywordLibrary.TryGetGlobalKeyword("global_multiplier", out _);
     }
 
     static bool VerifyTimingVocabulary()
@@ -30729,13 +30899,13 @@ public static class BattleCardKeywordPresentationTests
         CardTestData card = new CardTestData
         {
             cardID = "mode132_local_override",
-            keywords = new[] { Keyword("local_allin_multiplier", "倍率", "本卡倍率说明") }
+            keywords = new[] { Keyword("local_anger", "怒", "本卡怒说明") }
         };
-        BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format("倍率", card);
-        return result.TryGetBinding("local:mode132_local_override:local_allin_multiplier",
+        BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format("怒", card);
+        return result.TryGetBinding("local:mode132_local_override:local_anger",
             out BattleCardKeywordBinding binding) &&
             binding.kind == BattleCardDescriptionTokenKind.CardLocalKeyword &&
-            !result.keywordBindings.ContainsKey("global:global_multiplier");
+            !result.keywordBindings.ContainsKey("global:anger");
     }
 
     static bool VerifyStableLocalLinkIDs()

@@ -2,6 +2,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using TMPro;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -14,6 +15,12 @@ public sealed class MainMenuController : MonoBehaviour
     [SerializeField] private CanvasGroup mainMenuCanvasGroup;
     [SerializeField] private Button newGameButton;
     [SerializeField] private string newGameSceneName = "NewGameText";
+    [Header("Settings Controls")]
+    [SerializeField] private Button deckSelectionButton;
+    [SerializeField] private GameObject deckSelectionImage;
+    [SerializeField] private Button fullscreenButton;
+    [SerializeField] private GameObject fullscreenSelectionImage;
+    [SerializeField] private TMP_Dropdown resolutionDropdown;
 
     private bool isLoadingNewGame;
 
@@ -24,6 +31,10 @@ public sealed class MainMenuController : MonoBehaviour
         {
             return;
         }
+
+        BindSettingsControls();
+        RefreshSettingsControls();
+        GameSettingsState.ApplyDisplaySettings();
 
         mainMenuPanel.SetActive(true);
         settingsPanel.SetActive(false);
@@ -77,6 +88,7 @@ public sealed class MainMenuController : MonoBehaviour
         mainMenuPanel.SetActive(true);
         SetMainMenuInteraction(false);
         settingsPanel.SetActive(true);
+        RefreshSettingsControls();
     }
 
     public void CloseSettings()
@@ -136,6 +148,84 @@ public sealed class MainMenuController : MonoBehaviour
         mainMenuCanvasGroup.alpha = 1f;
         mainMenuCanvasGroup.interactable = enabled;
         mainMenuCanvasGroup.blocksRaycasts = enabled;
+    }
+
+    void BindSettingsControls()
+    {
+        if (deckSelectionButton != null)
+        {
+            deckSelectionButton.onClick.AddListener(ToggleDeckSelection);
+        }
+        else
+        {
+            Debug.LogError("设置初始化失败：deckSelectionButton 未绑定。");
+        }
+
+        if (fullscreenButton != null)
+        {
+            fullscreenButton.onClick.AddListener(ToggleFullscreen);
+        }
+        else
+        {
+            Debug.LogError("设置初始化失败：fullscreenButton 未绑定。");
+        }
+
+        if (resolutionDropdown != null)
+        {
+            resolutionDropdown.onValueChanged.AddListener(ChangeResolution);
+        }
+        else
+        {
+            Debug.LogError("设置初始化失败：resolutionDropdown 未绑定。");
+        }
+    }
+
+    void RefreshSettingsControls()
+    {
+        if (deckSelectionImage != null)
+        {
+            deckSelectionImage.SetActive(
+                GameSettingsState.SelectedDeck == BattleDeckPreset.Shooting
+            );
+        }
+
+        if (fullscreenSelectionImage != null)
+        {
+            fullscreenSelectionImage.SetActive(GameSettingsState.IsFullscreen);
+        }
+
+        if (resolutionDropdown != null)
+        {
+            resolutionDropdown.SetValueWithoutNotify(
+                GameSettingsState.GetResolutionDropdownIndex()
+            );
+        }
+    }
+
+    void ToggleDeckSelection()
+    {
+        BattleDeckPreset nextPreset = GameSettingsState.SelectedDeck ==
+            BattleDeckPreset.Knife
+            ? BattleDeckPreset.Shooting
+            : BattleDeckPreset.Knife;
+        GameSettingsState.SetSelectedDeck(nextPreset);
+        RefreshSettingsControls();
+    }
+
+    void ToggleFullscreen()
+    {
+        GameSettingsState.SetFullscreen(!GameSettingsState.IsFullscreen);
+        GameSettingsState.ApplyDisplaySettings();
+        RefreshSettingsControls();
+    }
+
+    void ChangeResolution(int dropdownIndex)
+    {
+        GameSettingsState.SetResolutionPreset(
+            GameSettingsState.ResolutionPresetFromDropdownIndex(dropdownIndex)
+        );
+        GameSettingsState.ApplyDisplaySettings();
+        RefreshSettingsControls();
     }
 
     bool HasPanelReferences(string callerName)

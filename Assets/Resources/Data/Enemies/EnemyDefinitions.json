@@ -2,7 +2,7 @@
   {
     "enemyID": "enemy_001",
     "enemyName": "Test Enemy",
-    "maxHP": 50,
+    "maxHP": 100,
     "minSpeed": 2,
     "maxSpeed": 6,
     "cardIDs": [
