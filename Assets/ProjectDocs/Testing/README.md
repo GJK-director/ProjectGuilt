@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`fea7fabf2bdf75f6c6eceb8ababf88c6565a3eb0`)
+Repository Basis: 当前本地 HEAD (`3d75eef67b8dc9d1c90ac09d613e634d9d240441`)
 
 ## CURRENT
 
@@ -15,9 +15,9 @@ SampleScene
 
 当前：
 
-- 112 个 active `BattleTestMode` enum members。
-- `LegacyModeMigration.md` 记录 113 条 Migration Inventory Records：112 条 `ACTIVE_ENUM` 加 1 条 `HISTORICAL_ONLY` Mode89 记录。
-- ID 范围 2–133，89 为已退休 standalone Mode 的保留空洞，其他 ID 非连续。
+- 111 个 active `BattleTestMode` enum members。
+- `LegacyModeMigration.md` 记录 113 条 Migration Inventory Records：111 条 `ACTIVE_ENUM` 加 2 条 `HISTORICAL_ONLY` 记录（Mode89、Mode109）。
+- ID 范围 2–133，89 与 109 为已退休 standalone Mode 的保留空洞，其他 ID 非连续。
 - 无重复 enum value。
 - 很多测试编译进默认 `Assembly-CSharp`。
 - Unity Test Framework 已安装。
@@ -36,6 +36,8 @@ SampleScene
 Batch 3A 没有改变任何 Mode；Legacy Runner 和 standalone Core Tests 仍保持原有代码与入口。
 
 Batch 6A 已开始 Legacy Mode retirement：Mode89 standalone enum 与 CardLoadTest dispatch 已移除，13 个 FirstStrike Case 及其兼容 wrapper 仍保留；整体 Legacy Mode 迁移仍处于进行中。
+
+Batch 6B：Mode109 standalone enum 与 CardLoadTest dispatch 已移除；`BattleDeckManifestTests` wrapper 为 Mode114 保留。Mode89/Mode109 均为 `HISTORICAL_ONLY`，整体 Legacy Mode 迁移仍未完成。
 
 ## Navigation
 

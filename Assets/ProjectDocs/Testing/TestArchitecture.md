@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`fea7fabf2bdf75f6c6eceb8ababf88c6565a3eb0`)
+Repository Basis: 当前本地 HEAD (`3d75eef67b8dc9d1c90ac09d613e634d9d240441`)
 
 ## Frozen Future Structure
 
@@ -98,7 +98,7 @@ Legacy；Test5 完全委托该 Suite。
 当前测试仍由 `Assets/Tests/Legacy/Runner/CardLoadTest.cs`、Legacy 静态 Test 类、Shared construction infrastructure、Formal Suites、Presentation Sandbox 和正式 BattleScene Harness 共同承担；Batch 5A 仅开始 EnemyIntent Formal Migration，未退役 Mode103。
 
 Batch 5B：
-建立第二套 Formal Suite：`Assets/Tests/Suites/Cards/CardDeckManifestTests.cs`，覆盖 Cards 域的四个独立 Case。Mode109 继续聚合并消费该 Suite；Mode89 的 Execution FirstStrike policy 仍由 Legacy 测试保留。TestRunner、TestResult 和 TestAssertion 仍待后续统一基础设施建立。
+建立第二套 Formal Suite：`Assets/Tests/Suites/Cards/CardDeckManifestTests.cs`，覆盖 Cards 域的四个独立 Case。Mode109 wrapper 继续聚合并消费该 Suite；Mode89 的 Execution FirstStrike policy 仍由 Legacy wrapper 保留。TestRunner、TestResult 和 TestAssertion 仍待后续统一基础设施建立。
 
 Batch 5C：
 建立第三套 Formal Suite：`Assets/Tests/Suites/Execution/FirstStrikeExecutionTests.cs`，覆盖 13 个 FirstStrike Execution Priority Case。当前已有 EnemyIntent、Cards、Execution 三个系统样板；Mode89 作为 compatibility aggregation wrapper，Mode109 通过 Mode89 消费 Execution Formal coverage。Formal Suite Migration != Legacy Mode Retirement；暂不创建统一 Runner / Result API。
@@ -110,3 +110,8 @@ Batch 6A：
 完成第一个 standalone Legacy Mode 的 retirement：Mode89 的 `BattleTestMode` enum member 与 `CardLoadTest.Start()` dispatch 已移除，保留 1 条历史 inventory record；13 个实际 FirstStrike Case 继续由 `FirstStrikeExecutionTests` 提供，`BattleExecutionPlanFirstStrikePolicyTests` 仅作为 Mode109 的 compatibility wrapper。当前 active enum 为 112 个。
 
 `FORMAL SUITE MIGRATION` != `STANDALONE MODE RETIREMENT` != `COMPATIBILITY WRAPPER DELETION`。本批只完成 standalone Mode retirement；wrapper deletion 等待 Mode109 不再依赖该兼容入口。
+
+Batch 6B：
+完成第二个 standalone Legacy Mode 的 retirement：Mode109 的 `BattleTestMode` enum member 与 `CardLoadTest.Start()` dispatch 已移除，保留 Mode109 历史 inventory record；Cards 实际所有权为 `CardDeckManifestTests`，`BattleDeckManifestTests` 仅作为 Mode114 的 compatibility wrapper，Execution 继续经 retained Mode89 wrapper → `FirstStrikeExecutionTests`。当前 active enum 为 111，historical-only 为 Mode89 与 Mode109。
+
+当前生命周期明确区分：Formal Test Ownership != Standalone Mode Entry != Compatibility Wrapper。Mode109 现为 formal ownership complete、standalone entry retired、wrapper retained（因 Mode114 仍消费）。

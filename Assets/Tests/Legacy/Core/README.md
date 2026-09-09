@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`fea7fabf2bdf75f6c6eceb8ababf88c6565a3eb0`)
+Repository Basis: 当前本地 HEAD (`3d75eef67b8dc9d1c90ac09d613e634d9d240441`)
 
 当前从 `Assets/Scripts/Core` 物理隔离到此目录的 28 个 Legacy Core Regression 文件如下：
 
@@ -50,7 +50,7 @@ Test5 的测试逻辑由 `EnemyIntentTests` 提供，Mode103 仅保留 compatibi
 
 Batch 5B：
 
-`BattleDeckManifestTests` 继续保留 Mode109 的聚合入口，并消费 `Assets/Tests/Suites/Cards/CardDeckManifestTests.cs` 的四个 Cards Formal Case。Mode89 standalone 已退休；其 FirstStrike policy regression 通过保留的 compatibility wrapper 继续服务 Mode109。
+`BattleDeckManifestTests` 继续保留 Mode109 的聚合入口，并消费 `Assets/Tests/Suites/Cards/CardDeckManifestTests.cs` 的四个 Cards Formal Case。Mode89 standalone 已退休；Mode109 standalone 也已退休，该 wrapper 现在为 Mode114 保留，FirstStrike policy regression 通过保留的 Mode89 compatibility wrapper 继续服务。
 
 Batch 5C：
 
@@ -74,3 +74,7 @@ Batch 3A 从 Production Runtime 文件提取的 Embedded Legacy Test classes：
 Batch 6A：
 
 Mode89 standalone enum 与 runner dispatch 已退休。该文件不再对应可选择的 standalone Mode，仅保留历史兼容 aggregation / logging；Mode109 是当前 consumer，13 个实际 FirstStrike Case 的正式所有者是 `FirstStrikeExecutionTests`。
+
+Batch 6B：
+
+`BattleDeckManifestTests.cs` 不再对应可直接选择的 Mode109；Mode109 standalone enum 与 runner dispatch 已退休。该文件只保留 historical compatibility aggregation / logging，consumer 为 `BattleDeckBootstrapPresetTests` / Mode114。实际 Cards tests 为 `CardDeckManifestTests`；Execution 继续使用 retained Mode89 wrapper → `FirstStrikeExecutionTests`。
