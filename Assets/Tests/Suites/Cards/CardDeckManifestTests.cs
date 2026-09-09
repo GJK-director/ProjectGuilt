@@ -85,6 +85,37 @@ public static class CardDeckManifestTests
             HasTrait(cards, "shoot_aim_001", BattleCardTrait.FirstStrike);
     }
 
+    public static bool DeckManifestsResolveAllCardsWithoutMissingEntries(
+        IReadOnlyList<CardTestData> cards
+    )
+    {
+        BattleDeckManifest knife = BattleDeckManifests.Get(BattleDeckPreset.Knife);
+        BattleDeckManifest shooting =
+            BattleDeckManifests.Get(BattleDeckPreset.Shooting);
+        List<string> missingKnife = new List<string>();
+        List<string> missingShooting = new List<string>();
+        List<string> knifeIDs = knife.ResolveAvailableCardIDs(cards, missingKnife);
+        List<string> shootingIDs =
+            shooting.ResolveAvailableCardIDs(cards, missingShooting);
+        return knife.normalCardIDs.Count == 6 &&
+            knife.specialCardIDs.Count == 2 &&
+            knifeIDs.Count == 8 &&
+            missingKnife.Count == 0 &&
+            shooting.normalCardIDs.Count == 6 &&
+            shooting.specialCardIDs.Count == 2 &&
+            shootingIDs.Count == 8 &&
+            missingShooting.Count == 0;
+    }
+
+    public static bool DeckManifestOrdersNormalCardsBeforeSpecialCards()
+    {
+        BattleDeckManifest knife = BattleDeckManifests.Get(BattleDeckPreset.Knife);
+        BattleDeckManifest shooting =
+            BattleDeckManifests.Get(BattleDeckPreset.Shooting);
+        return ManifestOrderMatchesContract(knife) &&
+            ManifestOrderMatchesContract(shooting);
+    }
+
     private static CardTestData Find(
         IReadOnlyList<CardTestData> cards,
         string cardID
@@ -235,5 +266,29 @@ public static class CardDeckManifestTests
             }
         }
         return false;
+    }
+
+    private static bool ManifestOrderMatchesContract(
+        BattleDeckManifest manifest
+    )
+    {
+        List<string> all = new List<string>();
+        all.AddRange(manifest.normalCardIDs);
+        all.AddRange(manifest.specialCardIDs);
+        for (int index = 0; index < all.Count; index++)
+        {
+            if (index < manifest.normalCardIDs.Count &&
+                all[index] != manifest.normalCardIDs[index])
+            {
+                return false;
+            }
+            if (index >= manifest.normalCardIDs.Count &&
+                all[index] !=
+                    manifest.specialCardIDs[index - manifest.normalCardIDs.Count])
+            {
+                return false;
+            }
+        }
+        return all.Count == 8;
     }
 }

@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`bcdd67f63e9579851edfcee37d7fa6fb2a41b9dd`)
+Repository Basis: 当前本地 HEAD (`1fab2f48f34395a5a4fb639a70da02c75b67c704`)
 
 当前从 `Assets/Scripts/Core` 物理隔离到此目录的 28 个 Legacy Core Regression 文件如下：
 
@@ -55,6 +55,10 @@ Batch 5B：
 Batch 5C：
 
 `BattleExecutionPlanFirstStrikePolicyTests` 现在是 Mode89 compatibility aggregation wrapper，13 个 FirstStrike test implementation 由 `Assets/Tests/Suites/Execution/FirstStrikeExecutionTests.cs` 提供。Mode109 仍调用 Mode89 wrapper。
+
+Batch 5D：
+
+`BattleDeckBootstrapPresetTests` 现在是 Mode114 compatibility aggregation wrapper。Cards domain 由 `CardDeckManifestTests` 提供，Bootstrap domain 由 `Assets/Tests/Suites/Bootstrap/DeckPresetBootstrapTests.cs` 提供；DeckManifest regression 仍通过 Mode109 wrapper。
 
 Batch 3A 从 Production Runtime 文件提取的 Embedded Legacy Test classes：
 

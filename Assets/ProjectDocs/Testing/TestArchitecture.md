@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`bcdd67f63e9579851edfcee37d7fa6fb2a41b9dd`)
+Repository Basis: 当前本地 HEAD (`1fab2f48f34395a5a4fb639a70da02c75b67c704`)
 
 ## Frozen Future Structure
 
@@ -102,3 +102,6 @@ Batch 5B：
 
 Batch 5C：
 建立第三套 Formal Suite：`Assets/Tests/Suites/Execution/FirstStrikeExecutionTests.cs`，覆盖 13 个 FirstStrike Execution Priority Case。当前已有 EnemyIntent、Cards、Execution 三个系统样板；Mode89 继续作为 compatibility aggregation wrapper，Mode109 通过 Mode89 消费 Execution Formal coverage。Formal Suite Migration != Legacy Mode Retirement；暂不创建统一 Runner / Result API。
+
+Batch 5D：
+建立第四套 Formal Suite：`Assets/Tests/Suites/Bootstrap/DeckPresetBootstrapTests.cs`，覆盖 11 个 Bootstrap Case。Mode114 的 Manifest 职责回到现有 Cards Suite 并新增两个 Case，Bootstrap 职责进入 Bootstrap Suite。Formal Suite 不是“一批迁移一个新类”：已有 Formal Suite 应增加 Case，不创建重复 Suite；Formal Suite Migration != Legacy Mode Retirement。
