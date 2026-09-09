@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`1fab2f48f34395a5a4fb639a70da02c75b67c704`)
+Repository Basis: 当前本地 HEAD (`fea7fabf2bdf75f6c6eceb8ababf88c6565a3eb0`)
 
 当前从 `Assets/Scripts/Core` 物理隔离到此目录的 28 个 Legacy Core Regression 文件如下：
 
@@ -50,11 +50,11 @@ Test5 的测试逻辑由 `EnemyIntentTests` 提供，Mode103 仅保留 compatibi
 
 Batch 5B：
 
-`BattleDeckManifestTests` 继续保留 Mode109 的聚合入口，并消费 `Assets/Tests/Suites/Cards/CardDeckManifestTests.cs` 的四个 Cards Formal Case。Mode89 的 Execution FirstStrike policy regression 仍保持在 Legacy。
+`BattleDeckManifestTests` 继续保留 Mode109 的聚合入口，并消费 `Assets/Tests/Suites/Cards/CardDeckManifestTests.cs` 的四个 Cards Formal Case。Mode89 standalone 已退休；其 FirstStrike policy regression 通过保留的 compatibility wrapper 继续服务 Mode109。
 
 Batch 5C：
 
-`BattleExecutionPlanFirstStrikePolicyTests` 现在是 Mode89 compatibility aggregation wrapper，13 个 FirstStrike test implementation 由 `Assets/Tests/Suites/Execution/FirstStrikeExecutionTests.cs` 提供。Mode109 仍调用 Mode89 wrapper。
+`BattleExecutionPlanFirstStrikePolicyTests` 是保留的历史 Mode89 compatibility aggregation wrapper，13 个 FirstStrike test implementation 由 `Assets/Tests/Suites/Execution/FirstStrikeExecutionTests.cs` 提供。Mode109 仍调用该 wrapper；Mode89 不再有可选择的 standalone enum/dispatch。
 
 Batch 5D：
 
@@ -70,3 +70,7 @@ Batch 3A 从 Production Runtime 文件提取的 Embedded Legacy Test classes：
 - `BattleGameSettingsIntegrationTests.cs`
 
 这些文件只是从 Production Core 目录隔离，尚未转换为正式 Suite；不改变 class 名、namespace、方法、assertion 或 Mode。
+
+Batch 6A：
+
+Mode89 standalone enum 与 runner dispatch 已退休。该文件不再对应可选择的 standalone Mode，仅保留历史兼容 aggregation / logging；Mode109 是当前 consumer，13 个实际 FirstStrike Case 的正式所有者是 `FirstStrikeExecutionTests`。

@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`1fab2f48f34395a5a4fb639a70da02c75b67c704`)
+Repository Basis: 当前本地 HEAD (`fea7fabf2bdf75f6c6eceb8ababf88c6565a3eb0`)
 
 ## Frozen Future Structure
 
@@ -101,7 +101,12 @@ Batch 5B：
 建立第二套 Formal Suite：`Assets/Tests/Suites/Cards/CardDeckManifestTests.cs`，覆盖 Cards 域的四个独立 Case。Mode109 继续聚合并消费该 Suite；Mode89 的 Execution FirstStrike policy 仍由 Legacy 测试保留。TestRunner、TestResult 和 TestAssertion 仍待后续统一基础设施建立。
 
 Batch 5C：
-建立第三套 Formal Suite：`Assets/Tests/Suites/Execution/FirstStrikeExecutionTests.cs`，覆盖 13 个 FirstStrike Execution Priority Case。当前已有 EnemyIntent、Cards、Execution 三个系统样板；Mode89 继续作为 compatibility aggregation wrapper，Mode109 通过 Mode89 消费 Execution Formal coverage。Formal Suite Migration != Legacy Mode Retirement；暂不创建统一 Runner / Result API。
+建立第三套 Formal Suite：`Assets/Tests/Suites/Execution/FirstStrikeExecutionTests.cs`，覆盖 13 个 FirstStrike Execution Priority Case。当前已有 EnemyIntent、Cards、Execution 三个系统样板；Mode89 作为 compatibility aggregation wrapper，Mode109 通过 Mode89 消费 Execution Formal coverage。Formal Suite Migration != Legacy Mode Retirement；暂不创建统一 Runner / Result API。
 
 Batch 5D：
 建立第四套 Formal Suite：`Assets/Tests/Suites/Bootstrap/DeckPresetBootstrapTests.cs`，覆盖 11 个 Bootstrap Case。Mode114 的 Manifest 职责回到现有 Cards Suite 并新增两个 Case，Bootstrap 职责进入 Bootstrap Suite。Formal Suite 不是“一批迁移一个新类”：已有 Formal Suite 应增加 Case，不创建重复 Suite；Formal Suite Migration != Legacy Mode Retirement。
+
+Batch 6A：
+完成第一个 standalone Legacy Mode 的 retirement：Mode89 的 `BattleTestMode` enum member 与 `CardLoadTest.Start()` dispatch 已移除，保留 1 条历史 inventory record；13 个实际 FirstStrike Case 继续由 `FirstStrikeExecutionTests` 提供，`BattleExecutionPlanFirstStrikePolicyTests` 仅作为 Mode109 的 compatibility wrapper。当前 active enum 为 112 个。
+
+`FORMAL SUITE MIGRATION` != `STANDALONE MODE RETIREMENT` != `COMPATIBILITY WRAPPER DELETION`。本批只完成 standalone Mode retirement；wrapper deletion 等待 Mode109 不再依赖该兼容入口。

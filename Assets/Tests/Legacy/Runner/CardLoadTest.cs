@@ -75,7 +75,6 @@ public enum BattleTestMode
     BattleFirstStrikeExecutionPlanBasic = 86,
     BattleInteractionClassifierBasic = 87,
     BattleExecutionPlanInteractionBasic = 88,
-    BattleExecutionPlanFirstStrikePolicyBasic = 89,
     BattleExecutionInteractionContextBasic = 90,
     BattleExecutionEffectiveInteractionBasic = 91,
     BattleGenericAttackVsDefenseBasic = 92,
@@ -5324,12 +5323,6 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleExecutionPlanInteractionBasic)
         {
             BattleExecutionPlanInteractionTests.Run();
-            return;
-        }
-
-        if (testMode == BattleTestMode.BattleExecutionPlanFirstStrikePolicyBasic)
-        {
-            BattleExecutionPlanFirstStrikePolicyTests.Run();
             return;
         }
 

@@ -1,27 +1,28 @@
 # Legacy Mode Migration Index
 
 Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`3e16a1d9c9eefcdac9c357a3d5cba12095767bec`)
+Last Verified: 2026-09-09
+Repository Basis: 当前本地 HEAD (`fea7fabf2bdf75f6c6eceb8ababf88c6565a3eb0`)
 
-下表是当前 `BattleTestMode` 的事实索引。所有 Mode 定义位于 `ROOT/Assets/Tests/Legacy/Runner/CardLoadTest.cs`，由 `CardLoadTest.Start()` 的连续 `if` 分发。除 103、107、113、132、133 外，本轮统一标记为 `NOT_ANALYZED_FOR_MIGRATION`；这些重要 Mode 标记为 `MAPPED_FOR_FUTURE_MIGRATION`。Mode 数量与 ID 不因本批移动而变化。
+下表是当前 `BattleTestMode` 与历史迁移记录的事实索引。112 个当前 Mode 定义位于 `ROOT/Assets/Tests/Legacy/Runner/CardLoadTest.cs`，由 `CardLoadTest.Start()` 的连续 `if` 分发；Mode89 另保留一条不再属于当前 enum 的历史记录。除 103、107、113、132、133 外，本轮统一标记为 `NOT_ANALYZED_FOR_MIGRATION`；这些重要 Mode 标记为 `MAPPED_FOR_FUTURE_MIGRATION`。
 
 ## Inventory Reconciliation
 
-- Active BattleTestMode enum members: **113**
+- Active BattleTestMode enum members: **112**
 - Migration inventory records: **113**
-- ACTIVE_ENUM: **113**
-- HISTORICAL_ONLY: **0**
+- ACTIVE_ENUM: **112**
+- HISTORICAL_ONLY: **1**
 - SUBCASE: **0**
 - DUPLICATE_RECORD: **0**
 - DOC_ONLY_UNKNOWN: **0**
 - INVALID_RECORD: **0**
-- Actual enum members covered by this table: **113/113**
+- Actual enum members covered by this table: **112/112**
 - Actual enum members not covered by this table: **0**
+- Historical records not in the current enum: **1**
 
-本次按当前源码逐项以 Mode ID 和成员名进行 exact matching；所有 113 条记录均对应一个当前 enum member。`CardLoadTest.Start()` 同样存在 113 个一对一 dispatch branch，没有发现缺失、额外或重复 dispatch。enum 数值没有 duplicate value，也没有 alias。
+本次按当前源码逐项以 Mode ID 和成员名进行 exact matching；112 条 ACTIVE_ENUM 记录均对应一个当前 enum member，Mode89 是保留的 HISTORICAL_ONLY 记录。`CardLoadTest.Start()` 当前存在 112 个一对一 dispatch branch，没有发现缺失、额外或重复 dispatch。enum 数值没有 duplicate value，也没有 alias。
 
-本次审计确认 `113` 的来源为当前 `BattleTestMode` enum 成员数；它同时与 dispatch branch 数和 Migration Inventory Record 数一致，不是未经证明的历史或子测试计数。
+本次审计确认当前 `112` 的来源为 `BattleTestMode` enum 成员数与 dispatch branch 数；Migration Inventory 为 `113`，其中额外的 1 条是 Mode89 历史记录，不是未经证明的子测试计数。
 
 | Mode | Current Name | Current Area | Current Entry | Migration Status | Inventory Class | Notes |
 |---:|---|---|---|---|---|---|
@@ -93,7 +94,7 @@ Repository Basis: 当前本地 HEAD (`3e16a1d9c9eefcdac9c357a3d5cba12095767bec`)
 | 86 | BattleFirstStrikeExecutionPlanBasic | Execution/Cards | CardLoadTest sequence | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
 | 87 | BattleInteractionClassifierBasic | Interactions | `BattleInteractionClassifierTests.Run()` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
 | 88 | BattleExecutionPlanInteractionBasic | Interactions/Execution | `BattleExecutionPlanInteractionTests.Run()` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
-| 89 | BattleExecutionPlanFirstStrikePolicyBasic | Execution | `BattleExecutionPlanFirstStrikePolicyTests.Run()` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
+| 89 | BattleExecutionPlanFirstStrikePolicyBasic | Execution | `BattleExecutionPlanFirstStrikePolicyTests.Run()` compatibility wrapper；无 standalone enum/dispatch | RETIRED_STANDALONE_MODE | HISTORICAL_ONLY | Phase6A 已退休 standalone Mode89 enum 与 dispatch；wrapper 为 Mode109 保留，13 个实际 Case 归 `FirstStrikeExecutionTests` 所有 |
 | 90 | BattleExecutionInteractionContextBasic | Interactions | `BattleExecutionInteractionContextTests.Run()` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
 | 91 | BattleExecutionEffectiveInteractionBasic | Interactions | `BattleExecutionEffectiveInteractionTests.Run()` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
 | 92 | BattleGenericAttackVsDefenseBasic | Resolution | `BattleGenericAttackVsDefenseTests.Run()` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
