@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`4abc9db9fb782b96255288f7504b5f1d848f0852`)
+Repository Basis: 当前本地 HEAD (`e9043550a20fe3f227b3c3da5c521a43e7991f13`)
 
 当前从 `Assets/Scripts/Core` 物理隔离到此目录的 28 个 Legacy Core Regression 文件如下：
 
@@ -47,6 +47,10 @@ Batch 5A：
 `FullBattleIntegrationRegressionTests` 开始消费第一套 Formal Suite。Test4 的 Intent
 Pattern / Cycle / Target 部分迁到 `EnemyIntentTests`，TurnCycle integration 仍为 Legacy；
 Test5 的测试逻辑由 `EnemyIntentTests` 提供，Mode103 仅保留 compatibility result slot。
+
+Batch 5B：
+
+`BattleDeckManifestTests` 继续保留 Mode109 的聚合入口，并消费 `Assets/Tests/Suites/Cards/CardDeckManifestTests.cs` 的四个 Cards Formal Case。Mode89 的 Execution FirstStrike policy regression 仍保持在 Legacy。
 
 Batch 3A 从 Production Runtime 文件提取的 Embedded Legacy Test classes：
 

@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`4abc9db9fb782b96255288f7504b5f1d848f0852`)
+Repository Basis: 当前本地 HEAD (`e9043550a20fe3f227b3c3da5c521a43e7991f13`)
 
 ## Frozen Future Structure
 
@@ -96,3 +96,6 @@ Legacy；Test5 完全委托该 Suite。
 ## Current Boundary
 
 当前测试仍由 `Assets/Tests/Legacy/Runner/CardLoadTest.cs`、Legacy 静态 Test 类、Shared construction infrastructure、Formal Suites、Presentation Sandbox 和正式 BattleScene Harness 共同承担；Batch 5A 仅开始 EnemyIntent Formal Migration，未退役 Mode103。
+
+Batch 5B：
+建立第二套 Formal Suite：`Assets/Tests/Suites/Cards/CardDeckManifestTests.cs`，覆盖 Cards 域的四个独立 Case。Mode109 继续聚合并消费该 Suite；Mode89 的 Execution FirstStrike policy 仍由 Legacy 测试保留。TestRunner、TestResult 和 TestAssertion 仍待后续统一基础设施建立。

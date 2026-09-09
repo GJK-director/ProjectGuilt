@@ -2,13 +2,14 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`4abc9db9fb782b96255288f7504b5f1d848f0852`)
+Repository Basis: 当前本地 HEAD (`e9043550a20fe3f227b3c3da5c521a43e7991f13`)
 
 ## Important Legacy Modes
 
 | Mode | Current Coverage | Future Domains | Status |
 |---|---|---|---|
 | 103 | Legacy Mode103 → Shared Production Fixture Consumer → Shared synthetic factories → 28 checks retained；Test4 部分委托 EnemyIntent Formal Suite，Test5 完全委托；剩余 Definition/ownership、250% damage、Response/Presentation 回归仍在 Legacy | EnemyIntent、Bootstrap、Resolution | LEGACY_ACTIVE |
+| 109 | Legacy Mode109 → Cards Formal Suite compatibility consumer；Cards-domain frozen values、Manifest membership/isolation、ResolveAvailableCardIDs、Shooting FirstStrike trait | Cards/Decks、Execution | LEGACY_ACTIVE |
 | 107 | Anger、Knife、Iai、Double Slash、Heavy、Breath、staged HP 等组合回归 | Cards/Knife、Resolution/MultiImpact | LEGACY_ACTIVE |
 | 113 | Conservation、0 Bullet、Cooldown、能力回归链，并调用部分 Shooting/Ability 回归 | Cards/Shooting、Buffs | LEGACY_ACTIVE |
 | 132 | Card Keyword Presentation、Timing Vocabulary、Tooltip/Description formatting | UI/Cards、Cards/Keywords | LEGACY_ACTIVE |
@@ -20,5 +21,10 @@ Batch 5A Formal Coverage：
 
 - Test4：PARTIAL。Formal coverage includes cycle fixed target definitions, repeat flag, runtime rounds 1..21 and duplicate runtime card-state identity；Automatic Turn Cycle / provider integration remains Legacy。
 - Test5：FORMAL COVERAGE COMPLETE，通过 `EnemyIntentTests.LegacyPatternFallbackCreatesExpectedTwoSlotQueue`。
+
+Batch 5B Formal Coverage：
+
+- Cards domain：`CardDeckManifestTests` 提供四个 Formal Case，覆盖 Knife 数值、两套 Manifest 成员与隔离、可用卡牌解析和 Shooting FirstStrike Trait；Mode109 继续作为 compatibility consumer。
+- Execution domain：`BattleExecutionPlanFirstStrikePolicyTests` 及 Mode89 保持 Legacy，作为 Mode109 的跨域回归依赖。
 
 其余 Mode 的当前索引见 `LegacyModeMigration.md`。
