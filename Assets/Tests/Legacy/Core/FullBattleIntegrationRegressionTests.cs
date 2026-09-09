@@ -15,7 +15,9 @@ public static class FullBattleIntegrationRegressionTests
             VerifyProductionEnemyBootstrap(production),
             VerifyProductionCardOwnership(production),
             VerifyProductionMultiSlotIntents(production),
-            VerifyLegacyIntentPatternFallback(production),
+            EnemyIntentTests.LegacyPatternFallbackCreatesExpectedTwoSlotQueue(
+                production
+            ),
             VerifyPointAsDamage250Percent(),
             VerifyAttackVsAttack(production),
             VerifyDirectionalInteraction(CardType.Defense),
@@ -164,8 +166,16 @@ public static class FullBattleIntegrationRegressionTests
             return false;
         }
 
-        if (!VerifyIntentCycleTurns(fixture) ||
-            !fixture.Bootstrap.encounterDefinition.repeatIntentPattern)
+        if (!EnemyIntentTests.ProductionCycleDefinitionsUseExpectedFixedTargets(
+                fixture
+            ) ||
+            !EnemyIntentTests.ProductionCycleRepeatFlagIsEnabled(fixture) ||
+            !EnemyIntentTests.ProductionCycleRuntimeQueuesRepeatThroughTurn21(
+                fixture
+            ) ||
+            !EnemyIntentTests.DuplicateCardEntriesCreateDistinctRuntimeStates(
+                fixture
+            ))
         {
             return false;
         }
@@ -317,142 +327,6 @@ public static class FullBattleIntegrationRegressionTests
                 BattleCalculator.GetFinalDamageScaled(attacker, defender, fierce, 3)) == 7 &&
             BattleCalculator.ConvertScaledDamageToHPDamage(
                 BattleCalculator.GetFinalDamageScaled(attacker, defender, fierce, 4)) == 10;
-    }
-
-    private static bool VerifyLegacyIntentPatternFallback(
-        BattleTestContext fixture
-    )
-    {
-        if (!fixture.IsValid)
-        {
-            return false;
-        }
-
-        EncounterDefinitionData legacyDefinition =
-            new EncounterDefinitionData
-            {
-                encounterID = "mode103_legacy_pattern",
-                encounterName = "Mode103 Legacy Pattern",
-                allyCharacterIDs = fixture.Bootstrap.encounterDefinition.allyCharacterIDs,
-                enemyID = fixture.EnemyDefinition.enemyID,
-                intentPattern = fixture.Bootstrap.encounterDefinition.intentPattern,
-                repeatIntentPattern = true,
-                battleBackgroundKey = "mode103_background",
-                battleMusicKey = "mode103_music"
-            };
-        string validationError;
-        if (!EncounterDefinitionLoader.ValidateDefinition(
-                legacyDefinition,
-                out validationError))
-        {
-            return false;
-        }
-
-        BattleDefinitionIntentQueueResult result =
-            BattleDefinitionBootstrap.CreateIntentQueueForTurn(
-                fixture.Runtime,
-                legacyDefinition,
-                fixture.EnemyDefinition,
-                fixture.Bootstrap.allyByID,
-                2,
-                fixture.Runtime.actionSlots
-            );
-        return result != null && result.isSuccess &&
-            result.intentQueue != null && result.intentQueue.Count == 2 &&
-            IsCycleIntent(result.intentQueue[0], fixture.Runtime.enemy, 1,
-                "enemy_probe_001", fixture.Runtime.allyA, 1) &&
-            IsCycleIntent(result.intentQueue[1], fixture.Runtime.enemy, 2,
-                "enemy_probe_001", fixture.Runtime.allyA, 2);
-    }
-
-    private static bool VerifyIntentCycleTurns(BattleTestContext fixture)
-    {
-        string[][] expectedCardIDs =
-        {
-            new[] { "enemy_probe_001", "enemy_probe_001" },
-            new[] { "enemy_probe_001", "enemy_guard_001" },
-            new[] { "enemy_smash_001", "enemy_probe_001" },
-            new[] { "enemy_fierce_001", "enemy_probe_001" },
-            new[] { "enemy_guard_001", "enemy_guard_001" },
-            new[] { "enemy_smash_001", "enemy_fierce_001" },
-            new[] { "enemy_probe_001", "enemy_probe_001" },
-            new[] { "enemy_smash_001", "enemy_smash_001" },
-            new[] { "enemy_guard_001", "enemy_fierce_001" },
-            new[] { "enemy_smash_001", "enemy_fierce_001" }
-        };
-
-        for (int turn = 1; turn <= 21; turn++)
-        {
-            int cycleIndex = (turn - 1) % expectedCardIDs.Length;
-            EnemyIntentRoundDefinitionData expectedRound =
-                fixture.Bootstrap.encounterDefinition.intentCycle[cycleIndex];
-            if (expectedRound == null || expectedRound.intents == null ||
-                expectedRound.intents.Length != 2 ||
-                expectedRound.intents[0] == null ||
-                expectedRound.intents[1] == null ||
-                expectedRound.intents[0].targetRule !=
-                    EncounterDefinitionLoader.TargetRuleFixedCharacterSlot ||
-                expectedRound.intents[0].targetCharacterID != "ally_001" ||
-                expectedRound.intents[0].targetSlotIndex != 1 ||
-                expectedRound.intents[1].targetRule !=
-                    EncounterDefinitionLoader.TargetRuleFixedCharacterSlot ||
-                expectedRound.intents[1].targetCharacterID != "ally_001" ||
-                expectedRound.intents[1].targetSlotIndex != 2)
-            {
-                return false;
-            }
-
-            BattleDefinitionIntentQueueResult result =
-                BattleDefinitionBootstrap.CreateIntentQueueForTurn(
-                    fixture.Runtime,
-                    fixture.Bootstrap.encounterDefinition,
-                    fixture.EnemyDefinition,
-                    fixture.Bootstrap.allyByID,
-                    turn,
-                    fixture.Runtime.actionSlots
-                );
-            if (result == null || !result.isSuccess || result.intentQueue == null ||
-                result.intentQueue.Count != 2 ||
-                !IsCycleIntent(result.intentQueue[0], fixture.Runtime.enemy, 1,
-                    expectedCardIDs[cycleIndex][0], fixture.Runtime.allyA, 1) ||
-                !IsCycleIntent(result.intentQueue[1], fixture.Runtime.enemy, 2,
-                    expectedCardIDs[cycleIndex][1], fixture.Runtime.allyA, 2))
-            {
-                return false;
-            }
-
-            if (expectedCardIDs[cycleIndex][0] == expectedCardIDs[cycleIndex][1] &&
-                object.ReferenceEquals(
-                    result.intentQueue[0].enemyCardState,
-                    result.intentQueue[1].enemyCardState))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
-    private static bool IsCycleIntent(
-        BattleEnemyIntent intent,
-        CharacterData enemy,
-        int enemySlotIndex,
-        string cardID,
-        CharacterData target,
-        int targetSlotIndex
-    )
-    {
-        return intent != null &&
-            object.ReferenceEquals(intent.enemy, enemy) &&
-            intent.enemySlotIndex == enemySlotIndex &&
-            intent.enemyCardState != null &&
-            intent.enemyCardState.cardData != null &&
-            intent.enemyCardState.cardData.cardID == cardID &&
-            object.ReferenceEquals(intent.originalTargetCharacter, target) &&
-            intent.originalTargetSlotIndex == targetSlotIndex &&
-            object.ReferenceEquals(intent.actualTargetCharacter, target) &&
-            intent.actualTargetSlotIndex == targetSlotIndex &&
-            !intent.isResponded && !intent.isConsumedAsReactiveGuard;
     }
 
     private static bool VerifyAttackVsAttack(BattleTestContext fixture)

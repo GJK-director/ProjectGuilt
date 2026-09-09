@@ -1,8 +1,8 @@
 # Legacy Core Tests
 
 Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`b10297c9be5bc244e6ed08592f32f5ab63f992b4`)
+Last Verified: 2026-09-09
+Repository Basis: 当前本地 HEAD (`4abc9db9fb782b96255288f7504b5f1d848f0852`)
 
 当前从 `Assets/Scripts/Core` 物理隔离到此目录的 28 个 Legacy Core Regression 文件如下：
 
@@ -41,6 +41,12 @@ Mode103 的默认 synthetic character、标准 card state 和 synthetic enemy in
 消费 `TestCharacterFactory`、`TestCardFactory` 和 `TestIntentFactory`。`CreateCardData`、
 2.5x 特殊 CardData 与 custom-speed CharacterData 仍保留在 Legacy 测试中，以保持原有
 fixture 语义。
+
+Batch 5A：
+
+`FullBattleIntegrationRegressionTests` 开始消费第一套 Formal Suite。Test4 的 Intent
+Pattern / Cycle / Target 部分迁到 `EnemyIntentTests`，TurnCycle integration 仍为 Legacy；
+Test5 的测试逻辑由 `EnemyIntentTests` 提供，Mode103 仅保留 compatibility result slot。
 
 Batch 3A 从 Production Runtime 文件提取的 Embedded Legacy Test classes：
 

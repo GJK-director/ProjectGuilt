@@ -1,8 +1,8 @@
 # Test Writing Guide
 
 Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`c35bd41a13587b11b43fd062f40a32d541f35d17`)
+Last Verified: 2026-09-09
+Repository Basis: 当前本地 HEAD (`4abc9db9fb782b96255288f7504b5f1d848f0852`)
 
 新增测试前先确认：
 
@@ -40,3 +40,15 @@ Production Data test → `BattleScenarioBuilder`。
 Synthetic unit scenario → `TestCharacterFactory` + `TestCardFactory` + `TestIntentFactory`。
 
 Batch 4A 只建立 Shared construction infrastructure；没有迁移 Legacy Mode、创建 Suite 或改变 Runtime 行为。
+
+## Formal Suite Cases
+
+- 一个 Case 验证一个条件。
+- 当前 Transitional Assembly-CSharp 阶段，Case 默认使用 `public static bool`。
+- Case 不直接 `Debug.Log`；Runner / compatibility caller 负责聚合日志。
+- Production Data Case 使用 `BattleScenarioBuilder` / `BattleTestContext`。
+- Synthetic Case 使用 Shared Factories。
+- 不因为一个新 Case 创建新 Mode；Legacy Mode 可以临时调用 Formal Case。
+- 不复制 Formal Case 回 Legacy。
+
+这是 Transitional contract。未来如果统一 Test Runner / Assertion API 建立，再集中迁移。

@@ -1,8 +1,8 @@
 # Test Architecture
 
 Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`b10297c9be5bc244e6ed08592f32f5ab63f992b4`)
+Last Verified: 2026-09-09
+Repository Basis: 当前本地 HEAD (`4abc9db9fb782b96255288f7504b5f1d848f0852`)
 
 ## Frozen Future Structure
 
@@ -76,6 +76,15 @@ Mode103 的 synthetic construction 开始消费 Shared Factories：默认角色�
 contract 无法完全保持旧 fixture 的 cardName / traits 语义；2.5x CardData 与 custom-speed
 CharacterData 仍保留为 case-specific 数据。本批仍未迁移 Mode 为正式 Suite，28 项检查保持不变。
 
+Stage5A / Batch5A:
+建立第一套 Formal Suite：`EnemyIntentTests`。Formal Suite 按系统拥有 Cases，Legacy Mode
+可以在迁移期调用 Formal Case 作为 compatibility runner；本批没有删除 Mode 或退役 Legacy
+入口。Mode103 Test4 部分委托 EnemyIntent Suite，TurnCycle / provider integration 仍留在
+Legacy；Test5 完全委托该 Suite。
+
+`PHYSICAL EXTRACTION` != `SHARED INFRASTRUCTURE` != `FORMAL SUITE MIGRATION` !=
+`LEGACY MODE RETIREMENT`。本批状态为 `FORMAL SUITE MIGRATION STARTED`。
+
 ## Test Principles
 
 - 一个系统 = 一个 Suite。
@@ -86,4 +95,4 @@ CharacterData 仍保留为 case-specific 数据。本批仍未迁移 Mode 为正
 
 ## Current Boundary
 
-当前测试仍由 `Assets/Tests/Legacy/Runner/CardLoadTest.cs`、Legacy 静态 Test 类、Shared construction infrastructure、Presentation Sandbox 和正式 BattleScene Harness 共同承担；Batch 4B 只让 Mode103 消费 Shared production fixture，未将其迁移为正式 Suite。
+当前测试仍由 `Assets/Tests/Legacy/Runner/CardLoadTest.cs`、Legacy 静态 Test 类、Shared construction infrastructure、Formal Suites、Presentation Sandbox 和正式 BattleScene Harness 共同承担；Batch 5A 仅开始 EnemyIntent Formal Migration，未退役 Mode103。
