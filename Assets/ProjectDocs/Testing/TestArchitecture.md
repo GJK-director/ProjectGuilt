@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`e9043550a20fe3f227b3c3da5c521a43e7991f13`)
+Repository Basis: 当前本地 HEAD (`bcdd67f63e9579851edfcee37d7fa6fb2a41b9dd`)
 
 ## Frozen Future Structure
 
@@ -99,3 +99,6 @@ Legacy；Test5 完全委托该 Suite。
 
 Batch 5B：
 建立第二套 Formal Suite：`Assets/Tests/Suites/Cards/CardDeckManifestTests.cs`，覆盖 Cards 域的四个独立 Case。Mode109 继续聚合并消费该 Suite；Mode89 的 Execution FirstStrike policy 仍由 Legacy 测试保留。TestRunner、TestResult 和 TestAssertion 仍待后续统一基础设施建立。
+
+Batch 5C：
+建立第三套 Formal Suite：`Assets/Tests/Suites/Execution/FirstStrikeExecutionTests.cs`，覆盖 13 个 FirstStrike Execution Priority Case。当前已有 EnemyIntent、Cards、Execution 三个系统样板；Mode89 继续作为 compatibility aggregation wrapper，Mode109 通过 Mode89 消费 Execution Formal coverage。Formal Suite Migration != Legacy Mode Retirement；暂不创建统一 Runner / Result API。
