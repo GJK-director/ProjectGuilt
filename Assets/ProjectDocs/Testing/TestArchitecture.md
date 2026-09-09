@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`3d75eef67b8dc9d1c90ac09d613e634d9d240441`)
+Repository Basis: 当前本地 HEAD (`610fba0ca460945658a3fa17cd1472d2f5fceb75`)
 
 ## Frozen Future Structure
 
@@ -115,3 +115,8 @@ Batch 6B：
 完成第二个 standalone Legacy Mode 的 retirement：Mode109 的 `BattleTestMode` enum member 与 `CardLoadTest.Start()` dispatch 已移除，保留 Mode109 历史 inventory record；Cards 实际所有权为 `CardDeckManifestTests`，`BattleDeckManifestTests` 仅作为 Mode114 的 compatibility wrapper，Execution 继续经 retained Mode89 wrapper → `FirstStrikeExecutionTests`。当前 active enum 为 111，historical-only 为 Mode89 与 Mode109。
 
 当前生命周期明确区分：Formal Test Ownership != Standalone Mode Entry != Compatibility Wrapper。Mode109 现为 formal ownership complete、standalone entry retired、wrapper retained（因 Mode114 仍消费）。
+
+Batch 6C：
+完成第三个 standalone Legacy Mode 的 retirement：Mode114 的 `BattleTestMode` enum member 与 `CardLoadTest.Start()` dispatch 已移除，保留 Mode114 历史 inventory record；Cards 所有权为 `CardDeckManifestTests`，Bootstrap 所有权为 `DeckPresetBootstrapTests`。`BattleDeckBootstrapPresetTests` 仅作为 Mode115 的 compatibility wrapper，因 Mode115 仍消费它而不能删除。当前 active enum 为 110，historical-only 为 Mode89、Mode109 与 Mode114。
+
+当前链为：Mode115 ACTIVE → retained Mode114 wrapper → retained Mode109 wrapper → retained Mode89 wrapper → Formal Suites。Standalone Retirement 不自动意味着 wrapper dead；必须先检查 consumer graph。

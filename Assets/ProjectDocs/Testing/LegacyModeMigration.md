@@ -2,27 +2,27 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`3d75eef67b8dc9d1c90ac09d613e634d9d240441`)
+Repository Basis: 当前本地 HEAD (`610fba0ca460945658a3fa17cd1472d2f5fceb75`)
 
-下表是当前 `BattleTestMode` 与历史迁移记录的事实索引。111 个当前 Mode 定义位于 `ROOT/Assets/Tests/Legacy/Runner/CardLoadTest.cs`，由 `CardLoadTest.Start()` 的连续 `if` 分发；Mode89 与 Mode109 各保留一条不再属于当前 enum 的历史记录。除 103、107、113、132、133 外，本轮统一标记为 `NOT_ANALYZED_FOR_MIGRATION`；这些重要 Mode 标记为 `MAPPED_FOR_FUTURE_MIGRATION`。
+下表是当前 `BattleTestMode` 与历史迁移记录的事实索引。110 个当前 Mode 定义位于 `ROOT/Assets/Tests/Legacy/Runner/CardLoadTest.cs`，由 `CardLoadTest.Start()` 的连续 `if` 分发；Mode89、Mode109 与 Mode114 各保留一条不再属于当前 enum 的历史记录。除 103、107、113、132、133 外，本轮统一标记为 `NOT_ANALYZED_FOR_MIGRATION`；这些重要 Mode 标记为 `MAPPED_FOR_FUTURE_MIGRATION`。
 
 ## Inventory Reconciliation
 
-- Active BattleTestMode enum members: **111**
+- Active BattleTestMode enum members: **110**
 - Migration inventory records: **113**
-- ACTIVE_ENUM: **111**
-- HISTORICAL_ONLY: **2**
+- ACTIVE_ENUM: **110**
+- HISTORICAL_ONLY: **3**
 - SUBCASE: **0**
 - DUPLICATE_RECORD: **0**
 - DOC_ONLY_UNKNOWN: **0**
 - INVALID_RECORD: **0**
-- Actual enum members covered by this table: **111/111**
+- Actual enum members covered by this table: **110/110**
 - Actual enum members not covered by this table: **0**
-- Historical records not in the current enum: **2**
+- Historical records not in the current enum: **3**
 
-本次按当前源码逐项以 Mode ID 和成员名进行 exact matching；111 条 ACTIVE_ENUM 记录均对应一个当前 enum member，Mode89 与 Mode109 是保留的 HISTORICAL_ONLY 记录。`CardLoadTest.Start()` 当前存在 111 个一对一 dispatch branch，没有发现缺失、额外或重复 dispatch。enum 数值没有 duplicate value，也没有 alias。
+本次按当前源码逐项以 Mode ID 和成员名进行 exact matching；110 条 ACTIVE_ENUM 记录均对应一个当前 enum member，Mode89、Mode109 与 Mode114 是保留的 HISTORICAL_ONLY 记录。`CardLoadTest.Start()` 当前存在 110 个一对一 dispatch branch，没有发现缺失、额外或重复 dispatch。enum 数值没有 duplicate value，也没有 alias。
 
-本次审计确认当前 `111` 的来源为 `BattleTestMode` enum 成员数与 dispatch branch 数；Migration Inventory 为 `113`，其中额外的 2 条是 Mode89 与 Mode109 历史记录，不是未经证明的子测试计数。
+本次审计确认当前 `110` 的来源为 `BattleTestMode` enum 成员数与 dispatch branch 数；Migration Inventory 为 `113`，其中额外的 3 条是 Mode89、Mode109 与 Mode114 历史记录，不是未经证明的子测试计数。
 
 | Mode | Current Name | Current Area | Current Entry | Migration Status | Inventory Class | Notes |
 |---:|---|---|---|---|---|---|
@@ -119,8 +119,8 @@ Repository Basis: 当前本地 HEAD (`3d75eef67b8dc9d1c90ac09d613e634d9d240441`)
 | 111 | BattleAngerAndModificationAbility | Cards/Ability | `BattleAngerAndModificationAbilityTests.Run(cards)` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
 | 112 | BattleAllInBasic | Cards/Shooting | `BattleAllInBasicTests.Run(cards)` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
 | 113 | BattleConservationAbility | Cards/Shooting/Buffs | `BattleConservationAbilityTests.Run(cards)` | MAPPED_FOR_FUTURE_MIGRATION | ACTIVE_ENUM | Conservation/0 Bullet/Cooldown |
-| 114 | BattleDeckBootstrapPreset | Bootstrap/Decks | `BattleDeckBootstrapPresetTests.Run(cards)` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
-| 115 | BattleDeckHandGroupingBasic | UI/Cards | `BattleDeckHandGroupingTests.Run(cards)` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
+| 114 | BattleDeckBootstrapPreset | Bootstrap/Decks | `BattleDeckBootstrapPresetTests.Run(cards)` compatibility wrapper；无 standalone enum/dispatch | RETIRED_STANDALONE_MODE | HISTORICAL_ONLY | Phase6C 已退休 standalone Mode114 enum 与 dispatch；wrapper 为 Mode115 保留，Cards 归 `CardDeckManifestTests`，Bootstrap 归 `DeckPresetBootstrapTests`，并继续经 retained Mode109 wrapper → retained Mode89 wrapper → `FirstStrikeExecutionTests` |
+| 115 | BattleDeckHandGroupingBasic | UI/Cards | `BattleDeckHandGroupingTests.Run(cards)` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM | 当前继续消费 retained Mode114 compatibility wrapper |
 | 116 | BattleLifecycleTimingBasic | Lifecycle/Events | `BattleLifecycleTimingTests.Run()` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
 | 117 | BattleUsePolicyDataBasic | Cards | `BattleUsePolicyDataTests.Run(cards)` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
 | 118 | BattleAttackUsePolicyResolutionBasic | Cards/Resolution | `BattleAttackUsePolicyResolutionTests.Run()` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |

@@ -98,7 +98,6 @@ public enum BattleTestMode
     BattleAngerAndModificationAbility = 111,
     BattleAllInBasic = 112,
     BattleConservationAbility = 113,
-    BattleDeckBootstrapPreset = 114,
     BattleDeckHandGroupingBasic = 115,
     BattleLifecycleTimingBasic = 116,
     BattleUsePolicyDataBasic = 117,
@@ -5166,12 +5165,6 @@ public class CardLoadTest : MonoBehaviour
         if (testMode == BattleTestMode.BattleConservationAbility)
         {
             BattleConservationAbilityTests.Run(cards);
-            return;
-        }
-
-        if (testMode == BattleTestMode.BattleDeckBootstrapPreset)
-        {
-            BattleDeckBootstrapPresetTests.Run(cards);
             return;
         }
 

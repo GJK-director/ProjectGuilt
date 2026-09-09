@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`3d75eef67b8dc9d1c90ac09d613e634d9d240441`)
+Repository Basis: 当前本地 HEAD (`610fba0ca460945658a3fa17cd1472d2f5fceb75`)
 
 当前从 `Assets/Scripts/Core` 物理隔离到此目录的 28 个 Legacy Core Regression 文件如下：
 
@@ -78,3 +78,7 @@ Mode89 standalone enum 与 runner dispatch 已退休。该文件不再对应可�
 Batch 6B：
 
 `BattleDeckManifestTests.cs` 不再对应可直接选择的 Mode109；Mode109 standalone enum 与 runner dispatch 已退休。该文件只保留 historical compatibility aggregation / logging，consumer 为 `BattleDeckBootstrapPresetTests` / Mode114。实际 Cards tests 为 `CardDeckManifestTests`；Execution 继续使用 retained Mode89 wrapper → `FirstStrikeExecutionTests`。
+
+Batch 6C：
+
+`BattleDeckBootstrapPresetTests.cs` 不再对应可直接选择的 Mode114；Mode114 standalone enum 与 runner dispatch 已退休。该文件只保留 historical compatibility aggregation / logging，consumer 为 `BattleDeckHandGroupingTests` / Mode115。实际 Cards tests 为 `CardDeckManifestTests`，Bootstrap tests 为 `DeckPresetBootstrapTests`；Execution 继续使用 retained Mode109 wrapper → retained Mode89 wrapper → `FirstStrikeExecutionTests`。

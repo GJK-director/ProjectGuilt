@@ -2,7 +2,7 @@
 
 Status: TRANSITIONAL
 Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`3d75eef67b8dc9d1c90ac09d613e634d9d240441`)
+Repository Basis: 当前本地 HEAD (`610fba0ca460945658a3fa17cd1472d2f5fceb75`)
 
 目标范围：CardState、UsePolicy、资源、Deck、Keyword 和卡牌效果相关测试。
 
