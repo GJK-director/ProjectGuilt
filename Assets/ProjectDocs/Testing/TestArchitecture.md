@@ -1,8 +1,8 @@
 # Test Architecture
 
 Status: TRANSITIONAL
-Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`610fba0ca460945658a3fa17cd1472d2f5fceb75`)
+Last Verified: 2026-09-10
+Repository Basis: `5db805ea452288e86502df0b3075becb7f8f4024`
 
 ## Frozen Future Structure
 
@@ -120,3 +120,10 @@ Batch 6C：
 完成第三个 standalone Legacy Mode 的 retirement：Mode114 的 `BattleTestMode` enum member 与 `CardLoadTest.Start()` dispatch 已移除，保留 Mode114 历史 inventory record；Cards 所有权为 `CardDeckManifestTests`，Bootstrap 所有权为 `DeckPresetBootstrapTests`。`BattleDeckBootstrapPresetTests` 仅作为 Mode115 的 compatibility wrapper，因 Mode115 仍消费它而不能删除。当前 active enum 为 110，historical-only 为 Mode89、Mode109 与 Mode114。
 
 当前链为：Mode115 ACTIVE → retained Mode114 wrapper → retained Mode109 wrapper → retained Mode89 wrapper → Formal Suites。Standalone Retirement 不自动意味着 wrapper dead；必须先检查 consumer graph。
+
+Batch 6D / 6E：
+完成 110 个 active Legacy Mode 的 value triage，并将其概念性归并为 30 个 Contract Cluster（24 个 automated-oriented、6 个 manual/design-oriented）。Mode86 的 FirstStrike execution priority/order/pairing 已有 `FirstStrikeExecutionTests` 覆盖，但 JSON traits missing/null/empty compatibility 与 LongRangeShoot non-implication 仍是 unique Legacy coverage，因此保持 active，不进行 standalone retirement。
+
+后续采用 `JUST_IN_TIME_TEST_MIGRATION`：Formal Suite 是首选 regression source；修改 Production system 前先查询 `RegressionTestMap.md` 与 `LegacyContractTriage.md`，只迁移相关且仍有价值的 Contract；不为历史 Mode 一对一创建 Suite，不以 active Legacy Mode = 0 作为当前 Demo 的阻塞条件。UI / Camera / Animation / Presentation 仅在相关系统实际修改时按需建立 shared harness。
+
+**Phase6 is CLOSED FOR CURRENT DEMO GOVERNANCE.** 这表示测试架构、inventory、triage 与已确认重复 standalone Mode 的治理边界已收口；不表示所有 Legacy Mode 已删除、所有 Legacy test 已 Formal 化或所有 Manual Harness 已建立。

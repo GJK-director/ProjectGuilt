@@ -1,10 +1,10 @@
 # Legacy Mode Migration Index
 
 Status: TRANSITIONAL
-Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`610fba0ca460945658a3fa17cd1472d2f5fceb75`)
+Last Verified: 2026-09-10
+Repository Basis: `5db805ea452288e86502df0b3075becb7f8f4024`
 
-下表是当前 `BattleTestMode` 与历史迁移记录的事实索引。110 个当前 Mode 定义位于 `ROOT/Assets/Tests/Legacy/Runner/CardLoadTest.cs`，由 `CardLoadTest.Start()` 的连续 `if` 分发；Mode89、Mode109 与 Mode114 各保留一条不再属于当前 enum 的历史记录。除 103、107、113、132、133 外，本轮统一标记为 `NOT_ANALYZED_FOR_MIGRATION`；这些重要 Mode 标记为 `MAPPED_FOR_FUTURE_MIGRATION`。
+下表是当前 `BattleTestMode` 与历史迁移记录的事实索引。110 个当前 Mode 定义位于 `ROOT/Assets/Tests/Legacy/Runner/CardLoadTest.cs`，由 `CardLoadTest.Start()` 的连续 `if` 分发；Mode89、Mode109 与 Mode114 各保留一条不再属于当前 enum 的历史记录。Mode86 仍是 active standalone Mode，因为它包含尚未由 Formal Suite 覆盖的 FirstStrike unique contract。除 103、107、113、132、133 外，本轮统一标记为 `NOT_ANALYZED_FOR_MIGRATION`；这些重要 Mode 标记为 `MAPPED_FOR_FUTURE_MIGRATION`。
 
 ## Inventory Reconciliation
 
@@ -20,7 +20,7 @@ Repository Basis: 当前本地 HEAD (`610fba0ca460945658a3fa17cd1472d2f5fceb75`)
 - Actual enum members not covered by this table: **0**
 - Historical records not in the current enum: **3**
 
-本次按当前源码逐项以 Mode ID 和成员名进行 exact matching；110 条 ACTIVE_ENUM 记录均对应一个当前 enum member，Mode89、Mode109 与 Mode114 是保留的 HISTORICAL_ONLY 记录。`CardLoadTest.Start()` 当前存在 110 个一对一 dispatch branch，没有发现缺失、额外或重复 dispatch。enum 数值没有 duplicate value，也没有 alias。
+本次按当前源码逐项以 Mode ID 和成员名进行 exact matching；110 条 ACTIVE_ENUM 记录均对应一个当前 enum member，Mode89、Mode109 与 Mode114 是保留的 HISTORICAL_ONLY 记录。`CardLoadTest.Start()` 当前存在 110 个一对一 dispatch branch，没有发现缺失、额外或重复 dispatch。enum 数值没有 duplicate value，也没有 alias。Mode86 的退役门槛未通过，详见 `LegacyContractTriage.md`。
 
 本次审计确认当前 `110` 的来源为 `BattleTestMode` enum 成员数与 dispatch branch 数；Migration Inventory 为 `113`，其中额外的 3 条是 Mode89、Mode109 与 Mode114 历史记录，不是未经证明的子测试计数。
 
@@ -91,7 +91,7 @@ Repository Basis: 当前本地 HEAD (`610fba0ca460945658a3fa17cd1472d2f5fceb75`)
 | 83 | BattlePresentationProtocolBasic | Presentation | `BattlePresentationProtocolTests.Run()` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
 | 84 | BattleClashEngagementBasic | Presentation | `BattleClashEngagementTests.Run()` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
 | 85 | BattleLongRangeShootResourceContractBasic | Cards/Resolution | `BattleLongRangeShootResourceContractTests.Run()` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
-| 86 | BattleFirstStrikeExecutionPlanBasic | Execution/Cards | CardLoadTest sequence | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
+| 86 | BattleFirstStrikeExecutionPlanBasic | Execution/Cards | CardLoadTest sequence | PARTIAL_FORMAL_COVERAGE | ACTIVE_ENUM | `FirstStrikeExecutionTests` 覆盖 execution priority/order/pairing；Mode86 仍独有 JSON traits missing/null/empty 兼容与 LongRangeShoot 不自动获得 FirstStrike 两项 contract；JIT_MIGRATION_PENDING |
 | 87 | BattleInteractionClassifierBasic | Interactions | `BattleInteractionClassifierTests.Run()` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
 | 88 | BattleExecutionPlanInteractionBasic | Interactions/Execution | `BattleExecutionPlanInteractionTests.Run()` | NOT_ANALYZED_FOR_MIGRATION | ACTIVE_ENUM |  |
 | 89 | BattleExecutionPlanFirstStrikePolicyBasic | Execution | `BattleExecutionPlanFirstStrikePolicyTests.Run()` compatibility wrapper；无 standalone enum/dispatch | RETIRED_STANDALONE_MODE | HISTORICAL_ONLY | Phase6A 已退休 standalone Mode89 enum 与 dispatch；wrapper 为 Mode109 保留，13 个实际 Case 归 `FirstStrikeExecutionTests` 所有 |
@@ -141,3 +141,13 @@ Repository Basis: 当前本地 HEAD (`610fba0ca460945658a3fa17cd1472d2f5fceb75`)
 | 133 | BattleGameSettingsIntegrationBasic | Settings/Bootstrap | `BattleGameSettingsIntegrationTests.Run()` | MAPPED_FOR_FUTURE_MIGRATION | ACTIVE_ENUM | Settings/Deck/Display |
 
 本索引不决定 KEEP、DELETE、MERGE 或 REPLACED。
+
+## Phase 6 Governance Closure
+
+Phase6D-A 完成 110 个 active Mode 的 inventory、数值与 dispatch 审计；Phase6D-B 将它们概念性归并为 30 个 Contract Cluster。完整 Cluster Map 与 carrier 建议见 `LegacyContractTriage.md`。
+
+Phase6E Revised 的结论是：Mode86 不能退休。它属于 `ACTIVE_ENUM`、`PARTIAL_FORMAL_COVERAGE`、`JIT_MIGRATION_PENDING`；未来只有在 FirstStrike、JSON trait parsing、LongRangeShoot 或 Execution priority 相关 Production 系统发生修改时，才迁移其两项 unique coverage。
+
+当前采用 `JUST_IN_TIME_TEST_MIGRATION`：Formal Suite 是首选 regression source；Legacy Mode 可以暂时保留；修改 Production 前先查 Contract Map / Regression Map，只迁移当前 Contract 有价值的覆盖，不为历史 Mode 一对一创建 Suite。`active Legacy Mode = 0` 不是当前 Demo 的阻塞条件。
+
+**Phase6 is CLOSED FOR CURRENT DEMO GOVERNANCE.** 这表示 inventory、Formal Suite 架构、Contract triage 与明确重复 standalone Mode 的治理边界已完成，不表示所有 Legacy Mode 已删除、所有 Legacy test 已 Formal 化或所有 Manual Harness 已建立。

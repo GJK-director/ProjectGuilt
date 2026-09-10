@@ -1,14 +1,15 @@
 # Regression Test Map
 
 Status: TRANSITIONAL
-Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`610fba0ca460945658a3fa17cd1472d2f5fceb75`)
+Last Verified: 2026-09-10
+Repository Basis: `5db805ea452288e86502df0b3075becb7f8f4024`
 
 ## Important Legacy Modes
 
 | Mode | Current Coverage | Future Domains | Status |
 |---|---|---|---|
 | 103 | Legacy Mode103 → Shared Production Fixture Consumer → Shared synthetic factories → 28 checks retained；Test4 部分委托 EnemyIntent Formal Suite，Test5 完全委托；剩余 Definition/ownership、250% damage、Response/Presentation 回归仍在 Legacy | EnemyIntent、Bootstrap、Resolution | LEGACY_ACTIVE |
+| 86 | `BattleFirstStrikeExecutionPlanBasic` 仍为 active standalone；`FirstStrikeExecutionTests` 覆盖 execution priority/order/pairing，但 JSON traits missing/null/empty compatibility 与 LongRangeShoot non-implication 仍为 Legacy unique coverage | Execution/Cards | PARTIAL_FORMAL_COVERAGE / LEGACY_ACTIVE / JIT_MIGRATION_PENDING |
 | 89 | 无 active enum/standalone dispatch；保留 `BattleExecutionPlanFirstStrikePolicyTests` compatibility wrapper，13 个 Case 由 `FirstStrikeExecutionTests` 提供 | Execution | STANDALONE_RETIRED |
 | 109 | 无 active enum/standalone dispatch；保留 `BattleDeckManifestTests` historical compatibility wrapper，Cards Cases 由 `CardDeckManifestTests` 提供，Execution 经 retained Mode89 wrapper → `FirstStrikeExecutionTests`；Mode114 仍消费 `BattleDeckManifestTests.Run(cards)` | Cards/Decks、Execution | STANDALONE_RETIRED |
 | 114 | 无 active enum/standalone dispatch；保留 `BattleDeckBootstrapPresetTests` historical compatibility wrapper，Cards 由 `CardDeckManifestTests`、Bootstrap 由 `DeckPresetBootstrapTests` 提供；Mode115 仍消费 `BattleDeckBootstrapPresetTests.Run(cards)`，Execution 经 retained Mode109 wrapper → retained Mode89 wrapper → `FirstStrikeExecutionTests` | Cards/Decks、Bootstrap、Execution | STANDALONE_RETIRED |
@@ -55,3 +56,13 @@ Batch 6C Retirement：
 - `BattleDeckBootstrapPresetTests` wrapper、Cards Formal Suite、Bootstrap Formal Suite、retained Mode109 wrapper 和 Mode115 consumer 全部保留。
 
 其余 Mode 的当前索引见 `LegacyModeMigration.md`。
+
+## Phase 6 Governance Closure
+
+- Phase6D-A：110 个 active Legacy Mode 已完成 inventory/value audit。
+- Phase6D-B：110 个 Mode 概念性归并为 30 个 Contract Cluster，其中 24 个 automated-oriented、6 个 manual/design-oriented；Map 与 carrier 建议见 `LegacyContractTriage.md`。
+- Phase6E Revised：Mode86 保持 active。其 Formal overlap 仅覆盖 FirstStrike execution priority/order/pairing；JSON trait compatibility 与 LongRangeShoot 不自动产生 FirstStrike 仍未迁移。
+
+采用 `JUST_IN_TIME_TEST_MIGRATION`：未来修改 Production system 前先查本表与 Contract Map，只迁移仍有价值的相关 Contract；不为历史 Mode 一对一创建 Suite，也不以 active Legacy Mode 清零作为当前 Demo 阻塞条件。
+
+**Phase6 is CLOSED FOR CURRENT DEMO GOVERNANCE.** 剩余 Legacy coverage 按需迁移；这不表示所有 Legacy Mode 已退休、所有测试已 Formal 化或所有 Manual Harness 已建立。UI / Camera / Animation / Presentation 继续使用按需 shared harness，不在本批创建。

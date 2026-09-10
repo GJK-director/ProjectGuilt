@@ -1,8 +1,8 @@
 # Testing
 
 Status: TRANSITIONAL
-Last Verified: 2026-09-09
-Repository Basis: 当前本地 HEAD (`610fba0ca460945658a3fa17cd1472d2f5fceb75`)
+Last Verified: 2026-09-10
+Repository Basis: `5db805ea452288e86502df0b3075becb7f8f4024`
 
 ## CURRENT
 
@@ -40,6 +40,12 @@ Batch 6A 已开始 Legacy Mode retirement：Mode89 standalone enum 与 CardLoadT
 Batch 6B：Mode109 standalone enum 与 CardLoadTest dispatch 已移除；`BattleDeckManifestTests` wrapper 为 Mode114 保留。Mode89/Mode109 均为 `HISTORICAL_ONLY`，整体 Legacy Mode 迁移仍未完成。
 
 Batch 6C：Mode114 standalone enum 与 CardLoadTest dispatch 已移除；`BattleDeckBootstrapPresetTests` wrapper 为 Mode115 保留。Mode89、Mode109、Mode114 均为 `HISTORICAL_ONLY`，整体 Legacy Mode 迁移仍未完成。
+
+Phase6D / 6E Revised：110 个 active Mode 已完成 value triage，并概念性归并为 30 个 Contract Cluster（24 个 automated-oriented、6 个 manual/design-oriented）。Mode86 保持 active，因为它仍有 JSON trait compatibility 与 LongRangeShoot non-implication 两项 unique coverage；不为了减少 Mode 数量主动补建 Suite。
+
+当前治理策略为 `JUST_IN_TIME_TEST_MIGRATION`：未来修改 Production system 前先查 Regression Map / Contract Triage，只迁移相关 Contract；Formal Suites 是首选 regression source。UI / Camera / Animation / Presentation 使用按需 shared harness，不在当前批次创建。
+
+**Phase6 is CLOSED FOR CURRENT DEMO GOVERNANCE.** 这不表示所有 Legacy Mode 已退休、所有 Legacy test 已 Formal 化、所有 Manual Harness 已建立，或 active Legacy Mode 必须为 0。
 
 ## Navigation
 
