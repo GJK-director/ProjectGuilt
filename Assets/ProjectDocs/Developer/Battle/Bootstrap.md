@@ -1,39 +1,47 @@
 # Battle Bootstrap
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: DOMAIN CONTRACT
+Last Verified: 2026-09-11
+
+路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
 ## Responsibilities
 
-记录正式 BattleScene 入口、Definition Loader、RuntimeState 和 Intent Provider。
+Definition 组装、RuntimeState、下一回合 provider。
 
-## Does Not Own
+## NOT Responsible
 
-不拥有 Data JSON 的内容编辑、不拥有 Resolver 规则、不拥有 UI 具体布局。
+Resolver 公式、UI 布局、JSON 设计。
 
-## Current Main Files
+## Main Entry
 
-`BattleSceneBootstrap.cs`、`BattleDefinitionBootstrap.cs`。
+BattleSceneBootstrap.InitializeBattleScene / BattleDefinitionBootstrap。
+
+## Data
+
+Character/Enemy/Encounter/Cards；deck preference。
 
 ## Runtime Flow
 
-`BattleSceneBootstrap.Start()` → `InitializeBattleScene()` → `BattleDefinitionBootstrap.CreateRuntimeState(...)` → `BattleSimpleUIController.InitializeFromRuntimeState(...)`。
+CreateRuntimeState → 可选 Harness 准备 → UI.InitializeFromRuntimeState；保留 activeBootstrapResult。
 
-`BattleSceneBootstrap` 保存 `activeBootstrapResult`，并向后续回合提供正式 `CreateIntentQueueForTurn` provider。
+## Invariants
 
-## Data Sources
+防止重复初始化；正式 provider 由 Bootstrap 持有；显式 Debug 初始化不是默认；preset 不修改源 Definition。
 
-Characters、Enemies、Encounters、Cards JSON；Deck preset 由 `GameSettingsState`/Inspector fallback 决定。
+## Dependencies
 
-## Related Tests
+Loaders、UnitFactory、Settings、UI。
 
-Modes 56、61、103、109、114、115、131、133。
+## Regression Tests
 
-## Known Technical Debt
+Bootstrap Suite、Mode103、Mode133。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
 
-正式 Bootstrap 与 Debug/Legacy 初始化路径共存；Controller 只消费 RuntimeState，但 provider 由 Scene Bootstrap 持有。
+## Manual Verification
 
-## Migration Status
+BattleScene/正式 Harness；步骤见 [ManualHarnesses](../../Testing/ManualHarnesses.md)。未运行不报告通过。
 
-TRANSITIONAL；未物理迁移。
+## Known Debt
+
+CURRENT + DEFERRED_DEBT；正式/Debug/注入并存。只在相关 feature/regression 需要时讨论，不因文件大小扩 scope。

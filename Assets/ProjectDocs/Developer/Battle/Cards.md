@@ -1,46 +1,47 @@
 # Battle Cards
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`b10297c9be5bc244e6ed08592f32f5ab63f992b4`)
+Status: CURRENT
+Role: DOMAIN CONTRACT
+Last Verified: 2026-09-11
+
+路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
 ## Responsibilities
 
-记录卡牌定义、运行时卡牌实例、资源规则、Deck Manifest 和卡牌效果入口。
+卡牌定义、实例、使用 eligibility、资源与 manifest。
 
-## Does Not Own
+## NOT Responsible
 
-不拥有 Resolver 的最终结算、不拥有 UI 的显示布局、不替代 JSON Source of Truth。
+最终伤害、UI 布局、Scene 编排。
 
-## Current Main Files
+## Main Entry
 
-- `BattleCardManager.cs`
-- `BattleCardState.cs`
-- `BattleBulletRules.cs`
-- `BattleDeckManifest.cs`
-- `CardEffectExecutor.cs`
-- `CardKeywordData.cs`
-- `CardDataLoader.cs`
+BattleCardManager / BattleCardState / BattleDeckManifest。
 
-Legacy Mode tests for deck manifests and abilities are kept in `Assets/Tests/Legacy/Core/`; they are not Production Runtime files.
-- `CardTestData.cs`
+## Data
+
+CardsTest；preset manifest。
 
 ## Runtime Flow
 
-`CardsTest.json` → `CardDataLoader` → `BattleUnitFactory`/`BattleDefinitionBootstrap` → `BattleCardState`；使用和资源提交由 `BattleCardManager`、Resolver、EventProcessor 协调。
+Loader → Factory/Bootstrap → CardState → CardUsed/Effects。
 
-## Data Sources
+## Invariants
 
-`ROOT/Assets/Resources/Data/CardsTest.json`。
+实例不可按同名混同；正式使用后果经 CardUsed 提交；Ability 不进入 clash；显式 preset 与默认牌来源区分。
 
-## Related Tests
+## Dependencies
 
-Modes 53–55、62–66、85–86、101、105–115、117–122、127–132 等相关测试。
+Events、Buff/资源、Resolver。
 
-## Known Technical Debt
+## Regression Tests
 
-`CardsTest.json` 文件名保留 Test；`CardTestData` 含兼容字段；其余卡牌兼容与 Legacy Mode 迁移仍处于过渡阶段。
+Cards/Bootstrap/FirstStrike Suite；资源/Ability Legacy。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
 
-## Migration Status
+## Manual Verification
 
-TRANSITIONAL；Batch 3A 已将嵌入 `BattleDeckManifest.cs` 的 Legacy Test classes 物理提取到 `Assets/Tests/Legacy/Core/`，Production 文件本身仍未迁移目录。
+SampleScene/BattleScene；步骤见 [ManualHarnesses](../../Testing/ManualHarnesses.md)。未运行不报告通过。
+
+## Known Debt
+
+CardTestData 兼容字段及 direct-call seam；不按 Test 命名退役。只在相关 feature/regression 需要时讨论，不因文件大小扩 scope。

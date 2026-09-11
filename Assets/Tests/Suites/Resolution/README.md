@@ -1,7 +1,7 @@
-# Resolution Suite
+# Suites — Resolution — README
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: TEST LOCATION GUIDE
+Last Verified: 2026-09-11
 
-目标范围：Clash、ResolutionPlan、Impact、DamageModifier 和 Resolver Contract。当前未迁移。
+placeholder：当前没有该目录的 Formal C# Suite。已有覆盖可能仍在 Legacy 或人工入口；查 [RegressionTestMap](../../../ProjectDocs/Testing/RegressionTestMap.md) 与 [ManualHarnesses](../../../ProjectDocs/Testing/ManualHarnesses.md)。不为填满目录主动创建 Suite。

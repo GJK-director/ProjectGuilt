@@ -1,41 +1,50 @@
-# Project Guilt Developer Documentation
+# Project Guilt Documentation
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`3dc4f7132996bdced6ca5a5cbb128925eb1a071e`)
+Status: CURRENT
+Role: DOCUMENTATION ROOT NAVIGATION
+Last Verified: 2026-09-11
 
-## 阅读顺序
+## 阅读链
 
-开发任何功能前：
+[AGENTS](../../AGENTS.md) → [FeatureGuide](Developer/FeatureGuide.md) → [CodeMap](Developer/CodeMap.md) → 相关领域契约 → [Testing](Testing/README.md)（修改 Production 时）→ 真实 Source / GitHub。
 
-1. 阅读 `AGENTS.md`
-2. 阅读本 README
-3. 找到对应功能文档
-4. 查看 `CodeMap`
-5. 最后再打开具体代码
+已知 Domain 可直接进入 CodeMap；不要求机械通读全部文档。
 
-## 文档分区
+## 文档所有权
 
-- `Developer`：正式 Runtime 架构、代码职责、数据入口、Scene 入口。
-- `Testing`：自动测试、Regression、Harness、Legacy Mode 迁移。
-- `Archive`：历史/废弃资料，不作为当前实现 Source of Truth。
+- FeatureGuide = “What do I edit?”：人类开发者的功能修改入口。
+- CodeMap = “How is it connected?”：CANONICAL AI REPO MAP，路径事实唯一 owner。
+- [Architecture](Developer/Architecture.md)：高层边界、程序集与 deferred debt，不维护第二份路径表。
+- [RuntimeEntryPoints](Developer/RuntimeEntryPoints.md)：正式 Scene 流与动态入口。
+- [DataPipeline](Developer/DataPipeline.md)：数据来源、加载与消费语义。
+- Domain Docs：系统职责、流程和不变量；从 CodeMap 进入。
+- Testing docs：覆盖、Case owner、caller、人工入口与写测试规则。
+
+“接入两份开发文档”指每次检查 FeatureGuide/CodeMap 是否受影响，不是每次强制修改。DOC IMPACT GATE 由 AGENTS 定义。
 
 ## Source of Truth
 
-- 当前 Runtime 实现事实：当前代码 + 正式 Runtime Data。
-- 开发导航：`Assets/ProjectDocs`。
-- 冻结玩法设计：当前正式设计文档。
-- 历史实现：`Archive` / Legacy。
-- Legacy Test Mode：只作为历史 Regression 证据，不能自动代表当前 Gameplay 设计。
+- LOCAL WORKING TREE：尚未 push 的本地事实；dirty 结论标记 LOCAL_DIRTY。
+- GITHUB MAIN：已 push 的远端事实；Sol Remote Gate 以此为准，不能据此否定明确尚未 push 的本地修改。
+- UNITY EDITOR / SERIALIZED ASSET：Scene、Prefab、Inspector、运行行为与人工视觉验收事实；文本扫描不能替代 Unity 验收。
+- PROJECT DOCS：导航/契约索引，不能覆盖真实代码、数据或序列化事实。
 
-## 快速导航
+冲突时 report conflict → inspect source → update stale doc（按授权）；不要让 Runtime 迎合旧文档。
 
-- [Architecture](Developer/Architecture.md)
-- [CodeMap](Developer/CodeMap.md)
-- [RuntimeEntryPoints](Developer/RuntimeEntryPoints.md)
-- [DataPipeline](Developer/DataPipeline.md)
-- [Testing README](Testing/README.md)
+## 状态与历史
+
+- CURRENT：当前开发可依赖的入口、契约或导航。
+- DEPRECATED：仍可能有 compatibility consumer，不作为新功能默认入口；DEPRECATED != SAFE TO DELETE。
+- HISTORICAL：历史、迁移来源或旧设计，不覆盖当前事实。
+- DEFERRED_DEBT 是 CURRENT implementation 的技术债标签，不是 Status，也不等于 Deprecated。
+
+[根 Docs](../../Docs/README.md) 保存历史及明确标记的设计参考，不是默认 Production 导航。[Archive](Archive/README.md) 说明历史资料边界。
+
+## Testing 导航
+
+- [TestArchitecture](Testing/TestArchitecture.md)
+- [TestWritingGuide](Testing/TestWritingGuide.md)
 - [RegressionTestMap](Testing/RegressionTestMap.md)
-- [LegacyModeMigration](Testing/LegacyModeMigration.md)
-
-工程治理仍处于 `TRANSITIONAL`。Batch 2A 已开始 Legacy Test 的物理隔离，Batch 2B 已开始 Buff Production code 的 feature-first 物理归类；其余 Production Script、Test Mode、Scene、Prefab 和数据仍未完成整体迁移。
+- [ManualHarnesses](Testing/ManualHarnesses.md)
+- [LegacyModeMigration](Testing/LegacyModeMigration.md)：CURRENT inventory
+- [LegacyContractTriage](Testing/LegacyContractTriage.md)：HISTORICAL provenance

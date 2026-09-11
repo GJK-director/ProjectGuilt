@@ -1,7 +1,7 @@
-# Legacy Tests
+# Legacy — README
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`3e16a1d9c9eefcdac9c357a3d5cba12095767bec`)
+Status: CURRENT
+Role: TEST LOCATION GUIDE
+Last Verified: 2026-09-11
 
-用于记录尚未转换为正式 Suite 的 Legacy 测试。本批已将 Legacy Runner 与 22 个 Core Test 文件从旧位置物理隔离，但不改变 Mode 入口。
+Legacy 保存现存回归、内嵌测试 runner 和 retained wrappers。Legacy 不自动表示 Gameplay 已废弃。查询 [Legacy inventory](../../ProjectDocs/Testing/LegacyModeMigration.md)，先看 [RegressionTestMap](../../ProjectDocs/Testing/RegressionTestMap.md) 的 Case owner/caller；不以清零为目标。

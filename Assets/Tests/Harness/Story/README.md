@@ -1,7 +1,7 @@
-# Story Harness
+# Harness — Story — README
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: TEST LOCATION GUIDE
+Last Verified: 2026-09-11
 
-未来记录 Story Panel、Content Provider 和 Story-to-Scene transition 的 Harness。当前不修改 Story 代码或 Scene。
+StoryTestHost 已实现；需显式绑定 StorySceneFacade，Start 可选触发，ContextMenu 可触发/关闭。没有 tracked Scene/Prefab 绑定，不能假定打开某个旧 Scene 就能运行。步骤见 [ManualHarnesses](../../../ProjectDocs/Testing/ManualHarnesses.md)。

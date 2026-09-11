@@ -1,37 +1,47 @@
 # Menu And Settings
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`b10297c9be5bc244e6ed08592f32f5ab63f992b4`)
+Status: CURRENT
+Role: DOMAIN CONTRACT
+Last Verified: 2026-09-11
+
+路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
 ## Responsibilities
 
-记录主菜单跳转、Deck preference、Fullscreen、Resolution 设置。
+主菜单流、deck/display preference。
 
-## Does Not Own
+## NOT Responsible
 
-不拥有 Battle Deck Manifest 内容、不拥有 Battle Resolver、不拥有 Story 内部执行。
+manifest 成员定义、结算、Story 内部执行。
 
-## Current Main Files
+## Main Entry
 
-`MainMenuController.cs`、`GameSettingsState.cs`、`Menu.unity`；`BattleGameSettingsIntegrationTests` 位于 `Assets/Tests/Legacy/Core/`。
+MainMenuController.StartNewGame / GameSettingsState。
+
+## Data
+
+PlayerPrefs、Menu 序列化字段。
 
 ## Runtime Flow
 
-Menu 的 `MainMenuController` 加载 `NewGameText`；GameSettings 通过 PlayerPrefs 保存 Deck/Display 选项；BattleScene Bootstrap 读取 Deck preference。
+Menu → NewGameText → BattleScene；Bootstrap 读取已选 deck，否则 Inspector fallback。
 
-## Data Sources
+## Invariants
 
-PlayerPrefs、Menu Scene 序列化字段、Deck Manifest。
+默认值和 Scene 字段一起核对；explicit preset 不等于 startingCardIDs。
 
-## Related Tests
+## Dependencies
 
-Mode133、Menu/Story/Battle Scene 的入口检查。
+SceneManager、Screen、Bootstrap/DeckManifest。
 
-## Known Technical Debt
+## Regression Tests
 
-Settings 读取与 Battle Bootstrap 跨越默认程序集；场景字段和代码默认值需要同时核对。Mode133 仍是 Legacy Mode，不属于 Runtime Settings。
+Mode133 Settings integration；Bootstrap Suite。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
 
-## Migration Status
+## Manual Verification
 
-TRANSITIONAL；未物理迁移。
+菜单设置与正式跳转链；步骤见 [ManualHarnesses](../../Testing/ManualHarnesses.md)。未运行不报告通过。
+
+## Known Debt
+
+不要把历史直达 BattleScene 记录当当前入口。只在相关 feature/regression 需要时讨论，不因文件大小扩 scope。

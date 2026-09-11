@@ -1,43 +1,47 @@
 # Battle UI
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: DOMAIN CONTRACT
+Last Verified: 2026-09-11
+
+路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
 ## Responsibilities
 
-记录 `BattleSimpleUIController`、Card UI、Action Slot UI、Relation UI、Buff UI、Status UI、Roll UI。
+局部卡牌/槽位/关系/状态/详情/Roll UI 与输入绑定。
 
-## Does Not Own
+## NOT Responsible
 
-不拥有正式战斗规则、Resolver、Camera Director 或 Bootstrap Context 所有权。
+结算、Camera、Bootstrap Context 所有权。
 
-## Current Main Files
+## Main Entry
 
-- `BattleSimpleUIController.cs`
-- `BattleCardHandUIView.cs`、`BattleCardUIView.cs`、`BattleCardInteractionCoordinator.cs`
-- `BattleActionSlotUIView.cs`、`BattleSelfActionDropZone.cs`
-- `BattleActionRelationLineController.cs` 及 Relation UI 文件
-- `BattleBuffGroupUIView.cs`、`BattleBuffIconUIView.cs`
-- `BattleCharacterStatusUIView.cs`、`BattleHpUIView.cs`、`BattleGuiltUIView.cs`
-- `BattleActionRollPanelHost.cs`、`BattleActionRollPanelSideView.cs`
+对应 View/Host；跨 Battle flow 才用 BattleSimpleUIController。
+
+## Data
+
+RuntimeState/CardState/Slot/Intent；Prefab/Scene。
 
 ## Runtime Flow
 
-Scene/Prefab UI 引用 → Controller 绑定 RuntimeState → Planning/Intent/Execution View 更新；Self Placement 不由 Relation Line 绘制。
+Scene 绑定 → Runtime View → 输入 Router → Planning；执行结果刷新 UI。
 
-## Data Sources
+## Invariants
 
-Runtime State、CardState、ActionSlot、EnemyIntent、Prefab/Scene YAML。
+View 不自行提交伤害；选择状态与正式安排分开；Data 与 Prefab 配置分别核验。
 
-## Related Tests
+## Dependencies
 
-Modes 60–75、95、98–100、102、104、115、132。
+Planning、Lifecycle、Spawner、Presentation。
 
-## Known Technical Debt
+## Regression Tests
 
-`BattleSimpleUIController.cs` 同时承担初始化、Planning、Turn Cycle、Legacy 兼容和 UI 刷新。
+UI/关键词/关系线/世界跟随 Legacy。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
 
-## Migration Status
+## Manual Verification
 
-TRANSITIONAL；未物理迁移。
+BattleScene、Buff Preview、对应操作验收；步骤见 [ManualHarnesses](../../Testing/ManualHarnesses.md)。未运行不报告通过。
+
+## Known Debt
+
+CURRENT + DEFERRED_DEBT：总 Controller；ForTesting seams/Prefab preview 保留。只在相关 feature/regression 需要时讨论，不因文件大小扩 scope。

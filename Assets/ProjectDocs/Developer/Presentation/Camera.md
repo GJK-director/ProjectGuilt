@@ -1,37 +1,47 @@
 # Camera
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: DOMAIN CONTRACT
+Last Verified: 2026-09-11
+
+路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
 ## Responsibilities
 
-记录 Camera Director、实际 Graybox Camera、输入屏蔽和相关 helper。
+入场、焦点、接敌、恢复和投影/输入支持。
 
-## Does Not Own
+## NOT Responsible
 
-不拥有战斗 Interaction 分类、不拥有卡牌 Resolver、不拥有 UI 数据。
+战斗顺序、伤害、行动安排。
 
-## Current Main Files
+## Main Entry
 
-`BattleCameraDirector.cs`、`GrayboxBattleCameraController.cs`、`CameraInputBlocker.cs`、`GrayboxBillboard.cs`、`GrayboxConstantScreenSize.cs`。
+BattleCameraDirector / GrayboxBattleCameraController。
+
+## Data
+
+Camera 参数、位置与相关表现 Profile。
 
 ## Runtime Flow
 
-Scene Camera Controller 由 `BattleCameraDirector` 驱动；Scene Presenter 和 Turn Transition Coordinator 请求 Camera Grammar。
+sceneLoaded 按需 Director → Presenter/Coordinator 请求 → Camera 更新。
 
-## Data Sources
+## Invariants
 
-Camera Profile、BattleScene 序列化对象、运行时角色位置。
+动态入口不能因无 YAML 引用而删除；视觉调整不改变规则执行顺序。
 
-## Related Tests
+## Dependencies
 
-Modes 74、83–85、94–98、102–104；Presentation Sandbox 另有独立测试入口。
+Presenter、TurnCoordinator、Spawner。
 
-## Known Technical Debt
+## Regression Tests
 
-Camera 参数和 Camera Controller 的 Scene 序列化关系需要同时检查代码与 YAML。
+相关 Presentation Legacy；人工视觉验收。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
 
-## Migration Status
+## Manual Verification
 
-TRANSITIONAL；未物理迁移。
+BattleScene 热键、Sandbox；步骤见 [ManualHarnesses](../../Testing/ManualHarnesses.md)。未运行不报告通过。
+
+## Known Debt
+
+CURRENT + DEFERRED_DEBT：Director；fallback/场景参数共存。只在相关 feature/regression 需要时讨论，不因文件大小扩 scope。

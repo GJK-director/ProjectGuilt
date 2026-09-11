@@ -1,37 +1,47 @@
 # Battle Execution
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: DOMAIN CONTRACT
+Last Verified: 2026-09-11
+
+路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
 ## Responsibilities
 
-记录 ExecutionPlan、ExecutionItem、排序、Runner、Pause/Resume 和 ActionFinished 相关入口。
+计划排序、执行项、暂停/恢复与完成。
 
-## Does Not Own
+## NOT Responsible
 
-不拥有卡牌伤害公式、不拥有 Scene 表现、不拥有最终 Impact 伤害写入。
+最终数值公式、Scene 视觉细节。
 
-## Current Main Files
+## Main Entry
 
-`BattleExecutionPlan.cs`、`BattleExecutionItem.cs`、`BattleExecutionPlanManager.cs`、`BattleExecutionPlanExecutor.cs`、`BattleExecutionRunner.cs`。
+BattleExecutionPlanManager / Executor / Runner。
+
+## Data
+
+ExecutionPlan/Item、ActionSlot、Intent、Context。
 
 ## Runtime Flow
 
-ActionSlot/Intent → `BattleExecutionPlanManager` → ExecutionPlan → `BattleExecutionRunner`/`BattleExecutionPlanExecutor` → Resolver/Presentation。
+Lifecycle → Plan → Runner/Executor → Resolver + Presentation completion。
 
-## Data Sources
+## Invariants
 
-Runtime ActionSlot、Enemy Intent、BattleCardState。
+FirstStrike 改优先级而非拆散 pairing；无效动作完成与实际效果分开；暂停不得重复提交。
 
-## Related Tests
+## Dependencies
 
-Modes 19–22、39–40、45、51、57–59、76–83、86、88–91、96、119、124、129。
+Resolution、Lifecycle、Presentation protocol。
 
-## Known Technical Debt
+## Regression Tests
 
-Execution 与测试文件均在 Core/default Assembly-CSharp；Pausable 与同步路径存在多层兼容入口。
+FirstStrike Suite；RollGate/Pausable/Interaction Legacy。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
 
-## Migration Status
+## Manual Verification
 
-TRANSITIONAL；未物理迁移。
+正式 Harness、SampleScene；步骤见 [ManualHarnesses](../../Testing/ManualHarnesses.md)。未运行不报告通过。
+
+## Known Debt
+
+CURRENT + DEFERRED_DEBT：Executor；同步/暂停/fallback 保留。只在相关 feature/regression 需要时讨论，不因文件大小扩 scope。
