@@ -16,7 +16,7 @@ public static class IntroStorySceneSetup
 {
     private const string IntroScenePath = "Assets/Scenes/NewGameText.unity";
     private const string StoryPanelPrefabPath =
-        "Assets/Scripts/Story/Prefabs/StoryPanel.prefab";
+        "Assets/Prefabs/Story/StoryPanel.prefab";
     private const string ChineseFontPath = "Assets/Fonts/SIMHEI.TTF";
 
     private struct BackgroundEntry
@@ -214,7 +214,9 @@ public static class IntroStorySceneSetup
         SceneLoadingOverlay overlay =
             UnityEngine.Object.FindFirstObjectByType<SceneLoadingOverlay>();
         StorySceneFacade facade =
-            UnityEngine.Object.FindFirstObjectByType<StorySceneFacade>();
+            UnityEngine.Object.FindFirstObjectByType<StorySceneFacade>(
+                FindObjectsInactive.Include
+            );
 
         if (!scene.IsValid() || host == null || overlay == null || facade == null)
         {
@@ -223,12 +225,34 @@ public static class IntroStorySceneSetup
             );
         }
 
+        if (!facade.gameObject.activeSelf || !facade.gameObject.activeInHierarchy)
+        {
+            throw new InvalidOperationException(
+                "序章场景的 StoryPanel 根对象必须保持激活；" +
+                "只允许 StoryPanelView 控制内部表现根的显隐。"
+            );
+        }
+
         GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(
             StoryPanelPrefabPath
         );
-        StoryPanelView view = prefab != null
-            ? prefab.GetComponent<StoryPanelView>()
-            : null;
+
+        if (prefab == null)
+        {
+            throw new InvalidOperationException(
+                "找不到剧情面板预制体：" + StoryPanelPrefabPath
+            );
+        }
+
+        if (!prefab.activeSelf)
+        {
+            throw new InvalidOperationException(
+                "StoryPanel.prefab 根对象必须保持激活。"
+            );
+        }
+
+        StoryPanelView view = prefab.GetComponent<StoryPanelView>();
+
         SerializedObject serializedView = view != null
             ? new SerializedObject(view)
             : null;
@@ -248,12 +272,6 @@ public static class IntroStorySceneSetup
             string backgroundId = binding
                 .FindPropertyRelative("backgroundId")
                 .stringValue;
-            Sprite boundSprite = binding
-                .FindPropertyRelative("sprite")
-                .objectReferenceValue as Sprite;
-            Sprite expectedSprite = AssetDatabase.LoadAssetAtPath<Sprite>(
-                expected.assetPath
-            );
 
             if (backgroundId != expected.id)
             {
@@ -263,20 +281,7 @@ public static class IntroStorySceneSetup
                 );
             }
 
-            if (expectedSprite == null)
-            {
-                throw new InvalidOperationException(
-                    "序章图片未按单张 Sprite 导入：" + expected.assetPath
-                );
-            }
-
-            if (boundSprite != expectedSprite)
-            {
-                throw new InvalidOperationException(
-                    "剧情 CG 引用无效或不是最新素材：" + expected.id +
-                    " -> " + expected.assetPath
-                );
-            }
+            ValidateBackgroundLayers(binding, expected);
         }
 
         Debug.Log(
@@ -284,6 +289,124 @@ public static class IntroStorySceneSetup
             definition.nodes.Count + " 个节点，" +
             bindings.arraySize + " 个 CG/背景绑定，|| 停顿规则正常。"
         );
+    }
+
+    private static void ValidateBackgroundLayers(
+        SerializedProperty binding,
+        BackgroundEntry expected
+    )
+    {
+        SerializedProperty layers = binding.FindPropertyRelative("layers");
+        int expectedLayerCount = GetExpectedLayerCount(expected);
+
+        if (layers == null)
+        {
+            throw new InvalidOperationException(
+                "StoryPanelView 的 BackgroundBinding 缺少 layers 字段。"
+            );
+        }
+
+        if (layers.arraySize != expectedLayerCount)
+        {
+            throw new InvalidOperationException(
+                "剧情 CG " + expected.id +
+                " 的背景层数量错误：应为 " + expectedLayerCount +
+                "，实际为 " + layers.arraySize + "。"
+            );
+        }
+
+        int layerIndex = 0;
+        ValidateBackgroundLayer(
+            layers.GetArrayElementAtIndex(layerIndex++),
+            expected.id,
+            expected.assetPath
+        );
+
+        if (!string.IsNullOrWhiteSpace(expected.overlayAssetPath))
+        {
+            ValidateBackgroundLayer(
+                layers.GetArrayElementAtIndex(layerIndex++),
+                expected.id,
+                expected.overlayAssetPath
+            );
+        }
+
+        if (!string.IsNullOrWhiteSpace(expected.foregroundAssetPath))
+        {
+            ValidateBackgroundLayer(
+                layers.GetArrayElementAtIndex(layerIndex),
+                expected.id,
+                expected.foregroundAssetPath
+            );
+        }
+    }
+
+    private static void ValidateBackgroundLayer(
+        SerializedProperty layer,
+        string backgroundId,
+        string assetPath
+    )
+    {
+        SerializedProperty spriteProperty = layer.FindPropertyRelative("sprite");
+        Sprite boundSprite = spriteProperty != null
+            ? spriteProperty.objectReferenceValue as Sprite
+            : null;
+        Sprite expectedSprite = AssetDatabase.LoadAssetAtPath<Sprite>(assetPath);
+
+        if (expectedSprite == null)
+        {
+            throw new InvalidOperationException(
+                "序章图片未按单张 Sprite 导入：" + assetPath
+            );
+        }
+
+        if (boundSprite != expectedSprite)
+        {
+            throw new InvalidOperationException(
+                "剧情 CG 引用无效或不是最新素材：" + backgroundId +
+                " -> " + assetPath
+            );
+        }
+    }
+
+    private static int GetExpectedLayerCount(BackgroundEntry entry)
+    {
+        int layerCount = 1;
+
+        if (!string.IsNullOrWhiteSpace(entry.overlayAssetPath))
+        {
+            layerCount++;
+        }
+
+        if (!string.IsNullOrWhiteSpace(entry.foregroundAssetPath))
+        {
+            layerCount++;
+        }
+
+        return layerCount;
+    }
+
+    private static void ConfigureBackgroundLayer(
+        SerializedProperty layer,
+        string layerName,
+        Sprite sprite,
+        Vector2 anchorMin,
+        Vector2 anchorMax,
+        Vector2 anchoredPosition,
+        Vector2 sizeDelta
+    )
+    {
+        layer.FindPropertyRelative("layerName").stringValue = layerName;
+        layer.FindPropertyRelative("sprite").objectReferenceValue = sprite;
+        layer.FindPropertyRelative("anchorMin").vector2Value = anchorMin;
+        layer.FindPropertyRelative("anchorMax").vector2Value = anchorMax;
+        layer.FindPropertyRelative("pivot").vector2Value =
+            new Vector2(0.5f, 0.5f);
+        layer.FindPropertyRelative("anchoredPosition").vector2Value =
+            anchoredPosition;
+        layer.FindPropertyRelative("sizeDelta").vector2Value = sizeDelta;
+        layer.FindPropertyRelative("tint").colorValue = Color.white;
+        layer.FindPropertyRelative("preserveAspect").boolValue = true;
     }
 
     private static void ConfigureStoryTextureImports()
@@ -382,48 +505,75 @@ public static class IntroStorySceneSetup
 
                 SerializedProperty element = bindings.GetArrayElementAtIndex(index);
                 element.FindPropertyRelative("backgroundId").stringValue = entry.id;
-                element.FindPropertyRelative("sprite").objectReferenceValue = sprite;
-                SerializedProperty overlaySprite = element.FindPropertyRelative(
-                    "overlaySprite"
-                );
-                overlaySprite.objectReferenceValue = string.IsNullOrWhiteSpace(
-                    entry.overlayAssetPath
-                )
-                    ? null
-                    : AssetDatabase.LoadAssetAtPath<Sprite>(entry.overlayAssetPath);
-                element.FindPropertyRelative("overlayAnchoredPosition").vector2Value =
-                    entry.overlayAnchoredPosition;
-                element.FindPropertyRelative("overlaySize").vector2Value =
-                    entry.overlaySize;
+                SerializedProperty layers = element.FindPropertyRelative("layers");
 
-                if (!string.IsNullOrWhiteSpace(entry.overlayAssetPath) &&
-                    overlaySprite.objectReferenceValue == null)
+                if (layers == null)
                 {
                     throw new InvalidOperationException(
-                        "序章差分图片未按 Sprite 导入：" + entry.overlayAssetPath
+                        "StoryPanelView 的 BackgroundBinding 缺少 layers 字段。"
                     );
                 }
 
-                SerializedProperty foregroundSprite = element.FindPropertyRelative(
-                    "foregroundSprite"
+                int layerCount = GetExpectedLayerCount(entry);
+                layers.arraySize = layerCount;
+                int layerIndex = 0;
+                ConfigureBackgroundLayer(
+                    layers.GetArrayElementAtIndex(layerIndex++),
+                    "Base",
+                    sprite,
+                    Vector2.zero,
+                    Vector2.one,
+                    Vector2.zero,
+                    Vector2.zero
                 );
-                foregroundSprite.objectReferenceValue = string.IsNullOrWhiteSpace(
-                    entry.foregroundAssetPath
-                )
-                    ? null
-                    : AssetDatabase.LoadAssetAtPath<Sprite>(
+
+                if (!string.IsNullOrWhiteSpace(entry.overlayAssetPath))
+                {
+                    Sprite overlaySprite = AssetDatabase.LoadAssetAtPath<Sprite>(
+                        entry.overlayAssetPath
+                    );
+
+                    if (overlaySprite == null)
+                    {
+                        throw new InvalidOperationException(
+                            "序章差分图片未按 Sprite 导入：" +
+                            entry.overlayAssetPath
+                        );
+                    }
+
+                    ConfigureBackgroundLayer(
+                        layers.GetArrayElementAtIndex(layerIndex++),
+                        "Overlay",
+                        overlaySprite,
+                        new Vector2(0.5f, 0.5f),
+                        new Vector2(0.5f, 0.5f),
+                        entry.overlayAnchoredPosition,
+                        entry.overlaySize
+                    );
+                }
+
+                if (!string.IsNullOrWhiteSpace(entry.foregroundAssetPath))
+                {
+                    Sprite foregroundSprite = AssetDatabase.LoadAssetAtPath<Sprite>(
                         entry.foregroundAssetPath
                     );
-                element.FindPropertyRelative("foregroundAnchoredPosition").vector2Value =
-                    entry.foregroundAnchoredPosition;
-                element.FindPropertyRelative("foregroundSize").vector2Value =
-                    entry.foregroundSize;
 
-                if (!string.IsNullOrWhiteSpace(entry.foregroundAssetPath) &&
-                    foregroundSprite.objectReferenceValue == null)
-                {
-                    throw new InvalidOperationException(
-                        "序章前景图片未按 Sprite 导入：" + entry.foregroundAssetPath
+                    if (foregroundSprite == null)
+                    {
+                        throw new InvalidOperationException(
+                            "序章前景图片未按 Sprite 导入：" +
+                            entry.foregroundAssetPath
+                        );
+                    }
+
+                    ConfigureBackgroundLayer(
+                        layers.GetArrayElementAtIndex(layerIndex),
+                        "Foreground",
+                        foregroundSprite,
+                        new Vector2(0.5f, 0.5f),
+                        new Vector2(0.5f, 0.5f),
+                        entry.foregroundAnchoredPosition,
+                        entry.foregroundSize
                     );
                 }
             }
@@ -530,6 +680,7 @@ public static class IntroStorySceneSetup
             storyPanelPrefab,
             scene
         ) as GameObject;
+        storyPanel.SetActive(true);
         storyPanel.name = "StoryPanel_Prologue501";
         Canvas storyCanvas = storyPanel.GetComponent<Canvas>();
 

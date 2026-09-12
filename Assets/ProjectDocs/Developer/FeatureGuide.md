@@ -2,7 +2,7 @@
 
 Status: CURRENT
 Role: HUMAN DEVELOPER FEATURE GUIDE
-Last Verified: 2026-09-11
+Last Verified: 2026-09-12
 
 这是 Project Guilt 面向策划和开发者的任务操作手册。请先按“我想做什么”查找入口；只有需要理解内部代码、排查异常或确认职责边界时，再阅读 [CodeMap](CodeMap.md) 或找 Sol。普通策划不需要先理解 Runtime Owner。
 
@@ -301,7 +301,7 @@ Card runtime 会在 Bootstrap 时重新创建；`BuffDefinitionLoader` 有静态
 |---|---|---|---|
 | Camera | Camera 参数、对应 Profile 或 `BattleScene` | `BattleScene` / Sandbox 观察构图、跟随、震动 | 需要改 Camera 归属或运动规则 |
 | Enemy Intent | `Assets/Resources/Data/Encounters/EncounterDefinitions.json`、`Assets/Resources/Data/Enemies/EnemyDefinitions.json` | `BattleScene` 观察槽位、目标和逐回合意图 | 规则与数据不一致、需要新目标/Intent 类型 |
-| Story | Story 数据、`NewGameText`、配置后的 StoryTestHost | 从菜单进入剧情并推进 | 新剧情系统或缺少正式入口 |
+| Story | 剧情内容改 `Assets/Resources/Story`；字体、字号、UI 素材和背景叠层改 `Assets/Prefabs/Story/StoryPanel.prefab` 的 `StoryPanelView` Inspector | 从菜单进入 `NewGameText`，逐个背景推进并检查叠层/淡入淡出/UI | 新剧情节点、宿主流程或缺少正式入口 |
 | UI | 对应 UI View / Host / Prefab | `BattleScene`、Preview 或对应辅助 Scene | 新交互、跨战斗流程或缺少绑定 |
 | Settings | `Menu`、`GameSettingsState`、对应序列化字段 | Menu → NewGameText → BattleScene → Menu | 新设置持久化或影响 Bootstrap |
 
@@ -309,14 +309,14 @@ Card runtime 会在 Bootstrap 时重新创建；`BuffDefinitionLoader` 有静态
 
 ## DOC IMPACT GATE
 
-CodeMap: NO
-Reason: 当前 Runtime 路径和架构没有变化。
+CodeMap: YES
+Reason: StoryPanel 已移动到统一 Prefab 目录，并新增 Inspector 配置入口说明。
 
 FeatureGuide: YES
-Reason: 本任务就是重写人类操作手册。
+Reason: Story 的字体、素材与背景图层修改入口需要对策划和开发者可见。
 
-Domain Docs: NO
-Reason: 没有修改 Domain 规则。
+Domain Docs: YES
+Reason: Story View 的背景图层顺序与 Inspector 配置契约已更新。
 
-Testing Docs: NO
-Reason: 没有改变测试架构或治理规则。
+Testing Docs: YES
+Reason: Story 人工视觉验收增加多层背景、字体与替换素材检查项。

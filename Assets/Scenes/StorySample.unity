@@ -215,10 +215,6 @@ PrefabInstance:
       propertyPath: m_Name
       value: StoryPanel
       objectReference: {fileID: 0}
-    - target: {fileID: 7757694616845396925, guid: c7446ab8a7031c7478aab103dc59e8c6, type: 3}
-      propertyPath: backgroundImage
-      value: 
-      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []

@@ -2,7 +2,7 @@
 
 Status: CURRENT
 Role: CANONICAL AI REPO MAP
-Last Verified: 2026-09-11
+Last Verified: 2026-09-12
 
 路径事实唯一 owner。按 Domain 定位，不维护全部 helper 数据库；契约看领域文档，数据语义看 [DataPipeline](DataPipeline.md)，具体运行看 [RegressionTestMap](../Testing/RegressionTestMap.md) 和 [ManualHarnesses](../Testing/ManualHarnesses.md)。
 
@@ -43,7 +43,7 @@ Last Verified: 2026-09-11
 
 - [CardsTest](../../Resources/Data/CardsTest.json)、[CharacterDefinitions](../../Resources/Data/Characters/CharacterDefinitions.json)、[EnemyDefinitions](../../Resources/Data/Enemies/EnemyDefinitions.json)、[EncounterDefinitions](../../Resources/Data/Encounters/EncounterDefinitions.json)、[BuffDefinitions](../../Resources/Data/Buffs/BuffDefinitions.json)。
 - [Loaders](../../Scripts/Data/Loaders)：BuffDefinitionLoader 是独立文件；[Definitions](../../Scripts/Data/Definitions)、[Validation](../../Scripts/Data/Validation)。
-- [Story JSON](../../Resources/Story/prologue_501.json)；[StoryPanel](../../Scripts/Story/Prefabs/StoryPanel.prefab)。
+- [Story JSON](../../Resources/Story/prologue_501.json)；[StoryPanel](../../Prefabs/Story/StoryPanel.prefab)（字体/字号、可替换 UI 素材与各 backgroundId 的任意背景图层均在 `StoryPanelView` Inspector 配置）。
 - [Scenes](../../Scenes)：Menu、NewGameText、BattleScene 正式主链；SampleScene 为 Legacy host；Sandbox 为人工入口。BattleTest、StorySample、BattleSimpleUITest_02 不默认视为正式入口；[_Recovery](../../_Recovery) 是恢复资产。
 - [BattleCardUI](../../Art/battle/kapai/BattleCardUI.prefab)、[World Prefabs](../../Prefabs/Battle/Units/World)、[Status Prefabs](../../Prefabs/Battle/Units/UI)。
 - [ActionSlotCardInfoPanel](../../Prefabs/BattleActionSlotCardInfoPanel.prefab)、[SecondaryInfoPanel](../../Prefabs/BattleSecondaryInfoPanel.prefab)、[ActionRollPanel](../../Resources/UI/BattleActionRollPanel.prefab)。

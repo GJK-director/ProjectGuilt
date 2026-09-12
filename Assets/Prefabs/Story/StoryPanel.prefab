@@ -2688,8 +2688,6 @@ MonoBehaviour:
   choicePanel: {fileID: 7988028791157569267}
   endPanel: {fileID: 6652354537678358280}
   backgroundImage: {fileID: 8792853681931800531}
-  backgroundOverlayImage: {fileID: 0}
-  backgroundForegroundImage: {fileID: 0}
   backgroundLabel: {fileID: 5872392989541354846}
   speakerText: {fileID: 7221792050879920228}
   dialogueText: {fileID: 5248015568918513391}
@@ -2697,77 +2695,165 @@ MonoBehaviour:
   statusText: {fileID: 1222391231600156948}
   backgroundBindings:
   - backgroundId: corridor_door_closed
-    sprite: {fileID: 21300000, guid: ef49bddd6d5eb044bb06a8e71767a290, type: 3}
-    overlaySprite: {fileID: 0}
-    overlayAnchoredPosition: {x: 0, y: 0}
-    overlaySize: {x: 0, y: 0}
-    foregroundSprite: {fileID: 0}
-    foregroundAnchoredPosition: {x: 0, y: 0}
-    foregroundSize: {x: 0, y: 0}
+    layers:
+    - layerName: Base
+      sprite: {fileID: 21300000, guid: ef49bddd6d5eb044bb06a8e71767a290, type: 3}
+      anchorMin: {x: 0, y: 0}
+      anchorMax: {x: 1, y: 1}
+      pivot: {x: 0.5, y: 0.5}
+      anchoredPosition: {x: 0, y: 0}
+      sizeDelta: {x: 0, y: 0}
+      tint: {r: 1, g: 1, b: 1, a: 1}
+      preserveAspect: 1
   - backgroundId: corridor_door_open
-    sprite: {fileID: 21300000, guid: bc7eb80a87a56eb43aae686061213fde, type: 3}
-    overlaySprite: {fileID: 0}
-    overlayAnchoredPosition: {x: 0, y: 0}
-    overlaySize: {x: 0, y: 0}
-    foregroundSprite: {fileID: 0}
-    foregroundAnchoredPosition: {x: 0, y: 0}
-    foregroundSize: {x: 0, y: 0}
+    layers:
+    - layerName: Base
+      sprite: {fileID: 21300000, guid: bc7eb80a87a56eb43aae686061213fde, type: 3}
+      anchorMin: {x: 0, y: 0}
+      anchorMax: {x: 1, y: 1}
+      pivot: {x: 0.5, y: 0.5}
+      anchoredPosition: {x: 0, y: 0}
+      sizeDelta: {x: 0, y: 0}
+      tint: {r: 1, g: 1, b: 1, a: 1}
+      preserveAspect: 1
   - backgroundId: phone_off
-    sprite: {fileID: 21300000, guid: d8ff65d46c4641d8886e4f05f680e28f, type: 3}
-    overlaySprite: {fileID: 0}
-    overlayAnchoredPosition: {x: 0, y: 0}
-    overlaySize: {x: 0, y: 0}
-    foregroundSprite: {fileID: 0}
-    foregroundAnchoredPosition: {x: 0, y: 0}
-    foregroundSize: {x: 0, y: 0}
+    layers:
+    - layerName: Base
+      sprite: {fileID: 21300000, guid: d8ff65d46c4641d8886e4f05f680e28f, type: 3}
+      anchorMin: {x: 0, y: 0}
+      anchorMax: {x: 1, y: 1}
+      pivot: {x: 0.5, y: 0.5}
+      anchoredPosition: {x: 0, y: 0}
+      sizeDelta: {x: 0, y: 0}
+      tint: {r: 1, g: 1, b: 1, a: 1}
+      preserveAspect: 1
   - backgroundId: phone_on
-    sprite: {fileID: 21300000, guid: c4848406382c4e48b4bbac57aad0b4cd, type: 3}
-    overlaySprite: {fileID: 0}
-    overlayAnchoredPosition: {x: 0, y: 0}
-    overlaySize: {x: 0, y: 0}
-    foregroundSprite: {fileID: 0}
-    foregroundAnchoredPosition: {x: 0, y: 0}
-    foregroundSize: {x: 0, y: 0}
+    layers:
+    - layerName: Base
+      sprite: {fileID: 21300000, guid: c4848406382c4e48b4bbac57aad0b4cd, type: 3}
+      anchorMin: {x: 0, y: 0}
+      anchorMax: {x: 1, y: 1}
+      pivot: {x: 0.5, y: 0.5}
+      anchoredPosition: {x: 0, y: 0}
+      sizeDelta: {x: 0, y: 0}
+      tint: {r: 1, g: 1, b: 1, a: 1}
+      preserveAspect: 1
   - backgroundId: tv_viewer_wide
-    sprite: {fileID: 21300000, guid: 7e30314e3f1cdf04f8abb58da9e6a298, type: 3}
-    overlaySprite: {fileID: 0}
-    overlayAnchoredPosition: {x: 0, y: 0}
-    overlaySize: {x: 0, y: 0}
-    foregroundSprite: {fileID: 0}
-    foregroundAnchoredPosition: {x: 0, y: 0}
-    foregroundSize: {x: 0, y: 0}
+    layers:
+    - layerName: Base
+      sprite: {fileID: 21300000, guid: 7e30314e3f1cdf04f8abb58da9e6a298, type: 3}
+      anchorMin: {x: 0, y: 0}
+      anchorMax: {x: 1, y: 1}
+      pivot: {x: 0.5, y: 0.5}
+      anchoredPosition: {x: 0, y: 0}
+      sizeDelta: {x: 0, y: 0}
+      tint: {r: 1, g: 1, b: 1, a: 1}
+      preserveAspect: 1
   - backgroundId: tv_snow_screen_latest
-    sprite: {fileID: 21300000, guid: e6a044cadd4d32740936c3fc63f4bf7b, type: 3}
-    overlaySprite: {fileID: 0}
-    overlayAnchoredPosition: {x: 0, y: 0}
-    overlaySize: {x: 0, y: 0}
-    foregroundSprite: {fileID: 0}
-    foregroundAnchoredPosition: {x: 0, y: 0}
-    foregroundSize: {x: 0, y: 0}
+    layers:
+    - layerName: Base
+      sprite: {fileID: 21300000, guid: e6a044cadd4d32740936c3fc63f4bf7b, type: 3}
+      anchorMin: {x: 0, y: 0}
+      anchorMax: {x: 1, y: 1}
+      pivot: {x: 0.5, y: 0.5}
+      anchoredPosition: {x: 0, y: 0}
+      sizeDelta: {x: 0, y: 0}
+      tint: {r: 1, g: 1, b: 1, a: 1}
+      preserveAspect: 1
   - backgroundId: tv_viewer_variant
-    sprite: {fileID: 21300000, guid: 8cffe478001aa634b8345ef2194297c0, type: 3}
-    overlaySprite: {fileID: 0}
-    overlayAnchoredPosition: {x: 0, y: 0}
-    overlaySize: {x: 0, y: 0}
-    foregroundSprite: {fileID: 0}
-    foregroundAnchoredPosition: {x: 0, y: 0}
-    foregroundSize: {x: 0, y: 0}
+    layers:
+    - layerName: Base
+      sprite: {fileID: 21300000, guid: 8cffe478001aa634b8345ef2194297c0, type: 3}
+      anchorMin: {x: 0, y: 0}
+      anchorMax: {x: 1, y: 1}
+      pivot: {x: 0.5, y: 0.5}
+      anchoredPosition: {x: 0, y: 0}
+      sizeDelta: {x: 0, y: 0}
+      tint: {r: 1, g: 1, b: 1, a: 1}
+      preserveAspect: 1
   - backgroundId: tv_pre_turn_closeup
-    sprite: {fileID: 21300000, guid: 3bded3735c859d14f86a98c5e3087fef, type: 3}
-    overlaySprite: {fileID: 0}
-    overlayAnchoredPosition: {x: 0, y: 0}
-    overlaySize: {x: 0, y: 0}
-    foregroundSprite: {fileID: 0}
-    foregroundAnchoredPosition: {x: 0, y: 0}
-    foregroundSize: {x: 0, y: 0}
+    layers:
+    - layerName: Base
+      sprite: {fileID: 21300000, guid: 3bded3735c859d14f86a98c5e3087fef, type: 3}
+      anchorMin: {x: 0, y: 0}
+      anchorMax: {x: 1, y: 1}
+      pivot: {x: 0.5, y: 0.5}
+      anchoredPosition: {x: 0, y: 0}
+      sizeDelta: {x: 0, y: 0}
+      tint: {r: 1, g: 1, b: 1, a: 1}
+      preserveAspect: 1
   - backgroundId: monster_turn_reveal
-    sprite: {fileID: 21300000, guid: ec62bef904184a4aa48dd68cbb4dc81e, type: 3}
-    overlaySprite: {fileID: 0}
-    overlayAnchoredPosition: {x: 0, y: 0}
-    overlaySize: {x: 0, y: 0}
-    foregroundSprite: {fileID: 0}
-    foregroundAnchoredPosition: {x: 0, y: 0}
-    foregroundSize: {x: 0, y: 0}
+    layers:
+    - layerName: Base
+      sprite: {fileID: 21300000, guid: ec62bef904184a4aa48dd68cbb4dc81e, type: 3}
+      anchorMin: {x: 0, y: 0}
+      anchorMax: {x: 1, y: 1}
+      pivot: {x: 0.5, y: 0.5}
+      anchoredPosition: {x: 0, y: 0}
+      sizeDelta: {x: 0, y: 0}
+      tint: {r: 1, g: 1, b: 1, a: 1}
+      preserveAspect: 1
+  typography:
+    font: {fileID: 12800000, guid: f5c870fc329978d4e8e3481567e47211, type: 3}
+    speakerFontSize: 28
+    dialogueFontSize: 27
+    choiceFontSize: 24
+    portraitFontSize: 28
+    controlFontSize: 18
+    historyFontSize: 22
+    endFontSize: 30
+    statusFontSize: 18
+    backgroundLabelFontSize: 18
+  replaceableUiAssets:
+  - slotName: Dialogue Panel
+    target: {fileID: 2816249617419120353}
+    sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+    material: {fileID: 0}
+    color: {r: 0.07058824, g: 0.09019608, b: 0.13333334, a: 0.94}
+    imageType: 1
+    preserveAspect: 0
+  - slotName: Choice Panel
+    target: {fileID: 7595722450877145891}
+    sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+    material: {fileID: 0}
+    color: {r: 0.10980392, g: 0.13725491, b: 0.19215687, a: 0.94}
+    imageType: 1
+    preserveAspect: 0
+  - slotName: History Overlay
+    target: {fileID: 2706129900865585826}
+    sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+    material: {fileID: 0}
+    color: {r: 0.02, g: 0.03, b: 0.05, a: 0.95}
+    imageType: 1
+    preserveAspect: 0
+  - slotName: History Window
+    target: {fileID: 7332273581663299409}
+    sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+    material: {fileID: 0}
+    color: {r: 0.098, g: 0.122, b: 0.169, a: 1}
+    imageType: 1
+    preserveAspect: 0
+  - slotName: End Panel
+    target: {fileID: 5909043258320470086}
+    sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+    material: {fileID: 0}
+    color: {r: 0.047, g: 0.063, b: 0.098, a: 0.97}
+    imageType: 1
+    preserveAspect: 0
+  - slotName: Left Portrait Panel
+    target: {fileID: 776643805130359980}
+    sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+    material: {fileID: 0}
+    color: {r: 0.11372549, g: 0.14901961, b: 0.21176471, a: 0.92}
+    imageType: 1
+    preserveAspect: 0
+  - slotName: Right Portrait Panel
+    target: {fileID: 3944660687942885410}
+    sprite: {fileID: 10905, guid: 0000000000000000f000000000000000, type: 0}
+    material: {fileID: 0}
+    color: {r: 0.11372549, g: 0.14901961, b: 0.21176471, a: 0.92}
+    imageType: 1
+    preserveAspect: 0
   leftPortrait:
     root: {fileID: 8800661179620957476}
     panel: {fileID: 776643805130359980}

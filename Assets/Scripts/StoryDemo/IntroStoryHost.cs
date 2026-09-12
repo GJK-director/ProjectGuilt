@@ -43,6 +43,20 @@ public sealed class IntroStoryHost : MonoBehaviour
             return;
         }
 
+        // StoryPanel 的 Canvas 根必须保持激活；只由 StoryPanelView 控制内部
+        // StoryPresentationRoot 的显隐。防止场景实例误留 inactive override 后黑屏。
+        if (!storyFacade.gameObject.activeSelf)
+        {
+            Debug.LogWarning("检测到 StoryPanel 根对象未激活，已在序章启动时恢复。");
+            storyFacade.gameObject.SetActive(true);
+        }
+
+        if (!storyFacade.gameObject.activeInHierarchy)
+        {
+            Debug.LogError("序章启动失败：StoryPanel 的父级对象未激活。");
+            return;
+        }
+
         storyFacade.RegisterNodeHandler(new PlaySfxNodeHandler(this));
         storyFacade.StoryEnded += HandleStoryEnded;
         storyFacade.StoryError += HandleStoryError;

@@ -42,7 +42,7 @@ Newtonsoft.Json 13.0.2
 
 ## 推荐接入方式：宿主只开关面板
 
-1. 把 `Assets/Scripts/Story/Prefabs/StoryPanel.prefab` 放入宿主场景。
+1. 把 `Assets/Prefabs/Story/StoryPanel.prefab` 放入宿主场景。
 2. 宿主脚本只保存预制体上的 `StorySceneFacade` 引用。
 3. 播放时调用 `OpenStoryPanel(storyId)`。
 4. 需要中断、切场景或主动收回界面时调用 `CloseStoryPanel()`。
@@ -83,6 +83,14 @@ public sealed class HostGameFlow : MonoBehaviour
 ```
 
 `StoryPanel.prefab` 的根 Canvas 保持激活，但真正显示内容的 `StoryPresentationRoot` 初始隐藏。调用 `OpenStoryPanel` 后，Story 会自行读取 JSON、初始化状态并显示面板；调用 `CloseStoryPanel` 后会清理当前会话并隐藏面板。
+
+### StoryPanel Inspector 调试入口
+
+- `Background Assets`：按 `backgroundId` 查找背景；每项 `Layers` 按 Element 顺序从底到顶叠加，可分别配置 Sprite、锚点、位置、尺寸、Tint 和 Preserve Aspect。空 Sprite 层会被跳过。
+- `Programmer Debug - Typography`：统一替换面板内 UGUI 字体，并分别调整说话人、正文、选项、立绘占位、控件、历史、结尾、状态和背景占位字号。
+- `Programmer Debug - Replaceable UI Assets`：集中替换对话框、选项框、历史遮罩/窗口、结尾框和左右立绘框的 Sprite、Material、颜色与 Image 类型。也可以在列表中继续增加其它 Image 槽位。
+
+运行时修改 Typography 或 Replaceable UI Assets 会立即重应用；Background Layers 会在下一次进入对应 `backgroundId` 时刷新。编辑模式保存后，在下一次 Play 时生效。场景应保留 Prefab 连接，不要为这些字段建立重复的实例 override。
 
 宿主项目不应直接持有 `StoryFlowController`、`StoryRuntimeState`、节点执行器或按钮引用。
 
@@ -129,7 +137,7 @@ public sealed class HostGameFlow : MonoBehaviour
 ## 默认目录约定
 
 - 剧情 JSON：`Assets/Resources/Story/{storyId}.json`
-- 内置面板预制体：`Assets/Scripts/Story/Prefabs/StoryPanel.prefab`
+- 内置面板预制体：`Assets/Prefabs/Story/StoryPanel.prefab`
 
 这是默认内容适配器的约定，不是核心逻辑的硬编码依赖。单文件根对象必须同时包含：
 
