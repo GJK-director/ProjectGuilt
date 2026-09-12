@@ -260,6 +260,7 @@ public sealed class BattleExecutionRunner
 
         if (CurrentItem == null)
         {
+            BattleExecutionPlanExecutor.RefreshPlanCompletionFromRunner(plan);
             if (plan != null && plan.isCompleted)
             {
                 return BeginPresentation(

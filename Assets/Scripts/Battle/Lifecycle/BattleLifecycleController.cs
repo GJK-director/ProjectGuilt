@@ -244,12 +244,11 @@ public sealed class BattleLifecycleController
             runtimeState.actionSlots,
             runtimeState.intentQueue
         );
-        if (executionPlan == null || executionPlan.executionItems == null ||
-            executionPlan.executionItems.Count == 0)
+        if (executionPlan == null || executionPlan.executionItems == null)
         {
             runtimeState.ClearExecutionPlan();
             executionPlan = null;
-            failureMessage = "创建执行计划失败：计划为空或没有执行项";
+            failureMessage = "创建执行计划失败：计划或执行项列表为空";
             return false;
         }
 
