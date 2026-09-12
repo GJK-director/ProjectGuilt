@@ -1,37 +1,47 @@
 # Battle Units
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: DOMAIN CONTRACT
+Last Verified: 2026-09-11
+
+路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
 ## Responsibilities
 
-记录角色运行时状态、Definition → Unit、World View 绑定。
+角色状态、Definition→实例、与视图身份衔接。
 
-## Does Not Own
+## NOT Responsible
 
-不拥有卡牌定义来源、不拥有 Presentation 具体时序、不拥有 Scene 入口。
+卡牌定义编辑、动画编排。
 
-## Current Main Files
+## Main Entry
 
-`CharacterData.cs`、`BattleUnitFactory.cs`、`BattleUnitViewSpawner.cs`。
+BattleUnitFactory / CharacterData；视图由 BattleUnitViewSpawner。
+
+## Data
+
+Character/EnemyDefinitions、Cards；Scene Prefab 字段。
 
 ## Runtime Flow
 
-Character/Enemy Definition → `BattleUnitFactory` → `CharacterData`/`BattleCardState` → `BattleUnitViewSpawner` → World/UI View。
+Loader → Factory → CharacterData/CardState → Spawner。
 
-## Data Sources
+## Invariants
 
-CharacterDefinitions、EnemyDefinitions、CardsTest、Prefab key。
+Runtime 实例与 Definition 分离；显式 cardIDs 不修改原定义；prefabKey 不是 Spawner 自动选择器。
 
-## Related Tests
+## Dependencies
 
-Modes 46、56、74、101–103、114、133。
+Cards、Buffs、Data、UI。
 
-## Known Technical Debt
+## Regression Tests
 
-运行时 Unit 与 Unity View 通过 ID、Prefab key 和序列化引用共同绑定；间接绑定需继续保留证据。
+DefaultCard/Binding Legacy；Bootstrap Suite。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
 
-## Migration Status
+## Manual Verification
 
-TRANSITIONAL；未物理迁移。
+角色、状态跟随与实例绑定；步骤见 [ManualHarnesses](../../Testing/ManualHarnesses.md)。未运行不报告通过。
+
+## Known Debt
+
+固定角色兼容引用保留；数据与视觉配置分离。只在相关 feature/regression 需要时讨论，不因文件大小扩 scope。

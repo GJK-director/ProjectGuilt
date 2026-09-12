@@ -1,37 +1,47 @@
 # Battle Lifecycle
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: DOMAIN CONTRACT
+Last Verified: 2026-09-11
+
+路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
 ## Responsibilities
 
-记录 Init、Prepare、PlanReady、Executing、TurnResolved、BattleEnded 的当前入口。
+阶段转换、执行启动、回合边界和终局。
 
-## Does Not Own
+## NOT Responsible
 
-不拥有单张卡牌的完整资源规则，不拥有 Scene Presentation 的视觉完成时机。
+单卡全部资源规则、动画实现。
 
-## Current Main Files
+## Main Entry
 
-`BattleLifecycleController.cs`、`BattleLifecyclePhase.cs`、`BattleTurnProcessor.cs`。
+BattleLifecycleController / BattleTurnProcessor。
+
+## Data
+
+RuntimeState、living participants、plan。
 
 ## Runtime Flow
 
-Bootstrap → Init/Prepare → Planning → ExecutionStart → Execution → TurnEnd/TurnResolved → Next Turn 或 BattleEnded。
+Init → Prepare/PlanReady → Executing → TurnResolved → TurnEnding → TurnEnded → PreparingNextTurn → Prepare；终局走 BattleEnded。
 
-## Data Sources
+## Invariants
 
-`BattleRuntimeState`、ActionSlots、ExecutionPlan、Living Participants。
+进入状态须满足 controller guard；TurnStart/TurnEnd 与卡牌事件各有职责；表现结束与终局判定不能混写。
 
-## Related Tests
+## Dependencies
 
-Modes 2、3、44–46、76–79、81、96、98、103、116、123、124、129。
+Execution、Events、Units。
 
-## Known Technical Debt
+## Regression Tests
 
-Legacy/Debug 初始化与正式 Bootstrap 并存；当前测试仍位于默认程序集。
+LifecycleController/PhaseContract/Timing/EndLock Legacy。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
 
-## Migration Status
+## Manual Verification
 
-TRANSITIONAL；未物理迁移。
+完整回合及终局返回；步骤见 [ManualHarnesses](../../Testing/ManualHarnesses.md)。未运行不报告通过。
+
+## Known Debt
+
+同步和 scene-presented 回合入口并存。只在相关 feature/regression 需要时讨论，不因文件大小扩 scope。

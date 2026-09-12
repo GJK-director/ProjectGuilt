@@ -1,16 +1,9 @@
 # Archive
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: HISTORICAL MATERIAL NAVIGATION
+Last Verified: 2026-09-11
 
-Archive 用于：
-
-- 旧开发文档
-- 废弃实现说明
-- 历史 Test Mode 文档
-- 已退出 Current Source of Truth 的资料
-
-本轮不要移动 `ROOT/Docs`，也不把现有 Docs 内容复制或归档到这里。
-
-未来迁移会在独立 Batch 中执行。本目录当前只是正式归档入口。
+历史资料用于解释迁移来源和旧设计，不作为当前实现事实。
+当前保留在原位置的历史入口见 [根 Docs](../../../Docs/README.md) 和 [LegacyContractTriage](../Testing/LegacyContractTriage.md)。
+CURRENT 导航从 [ProjectDocs](../README.md) 开始。Git 保存旧版本；不要因旧快照与代码不同而反向修改 Runtime。此目录目前没有其他归档正文。

@@ -1,37 +1,47 @@
 # Enemy Intent
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: DOMAIN CONTRACT
+Last Verified: 2026-09-11
+
+路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
 ## Responsibilities
 
-记录 Enemy Intent 定义、目标角色/槽位、Pattern/Cycle 和响应关系。
+定义生成、pattern/cycle、目标槽位与意图模型。
 
-## Does Not Own
+## NOT Responsible
 
-不拥有玩家 UI 选择、不拥有 Resolver 伤害公式、不拥有敌人 AI 决策实现。
+玩家输入、伤害公式、未来 AI 决策。
 
-## Current Main Files
+## Main Entry
 
-`BattleEnemyIntent.cs`、`BattleEnemyIntentManager.cs`、`BattleDefinitionBootstrap.cs`、`EncounterDefinitions.json`。
+BattleDefinitionBootstrap.CreateIntentQueueForTurn。
+
+## Data
+
+EncounterDefinitions、EnemyDefinitions/cardIDs。
 
 ## Runtime Flow
 
-Encounter Definition → `BattleDefinitionBootstrap.CreateIntentQueueForTurn` → Enemy Intent Queue → ActionSlot response/FreeAction → ExecutionPlan。
+Bootstrap provider → IntentQueue → ActionSlots → ExecutionPlan。
 
-## Data Sources
+## Invariants
 
-`ROOT/Assets/Resources/Data/Encounters/EncounterDefinitions.json`。当前 `encounter_test_001` 有 2 项默认 pattern 和 10 项 intent cycle。
+按实际回合选择 cycle；保留 pattern fallback；重复卡条目创建独立 RuntimeState。
 
-## Related Tests
+## Dependencies
 
-Modes 13、32–40、56–61、88–100、103、114、129、131。
+Bootstrap、Definitions、Actions。
 
-## Known Technical Debt
+## Regression Tests
 
-`BattleSimpleUIController` 仍保留无正式 Context 时的 Fixed Compatibility Builder。
+EnemyIntent Suite；Mode103 provider 集成。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
 
-## Migration Status
+## Manual Verification
 
-TRANSITIONAL；未物理迁移。
+逐回合检查 BattleScene 目标；步骤见 [ManualHarnesses](../../Testing/ManualHarnesses.md)。未运行不报告通过。
+
+## Known Debt
+
+固定兼容意图存在于自动回合支持；生成 owner 不在 EnemyIntent 目录。只在相关 feature/regression 需要时讨论，不因文件大小扩 scope。

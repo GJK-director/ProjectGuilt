@@ -1,3 +1,10 @@
+Status: CURRENT
+Role: DESIGN_REFERENCE
+Last Verified: 2026-09-11
+
+> 本文记录设计意图；当前代码事实和实现入口仍以 [Assets/ProjectDocs](../Assets/ProjectDocs/README.md) + Runtime source 为准。
+> V1 contract 与 future / deferred design 分开阅读；future design 不代表 already implemented。
+
 # Battle Presentation Clash Engagement
 
 ## V1 Contract

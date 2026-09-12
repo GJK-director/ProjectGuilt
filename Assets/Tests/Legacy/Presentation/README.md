@@ -1,7 +1,7 @@
-# Legacy Presentation Tests
+# Legacy — Presentation — README
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: TEST LOCATION GUIDE
+Last Verified: 2026-09-11
 
-当前对应 `Assets/Scripts/Presentation` 下的 Interaction、Engagement、Binding 测试和正式 Presentation Harness。这里只建立目录，不改变 Scene/Prefab 引用。
+placeholder：本目录没有 C#。相关现存测试在 Legacy/Core 或 CardLoadTest 内嵌逻辑，人工支持另见 [ManualHarnesses](../../../ProjectDocs/Testing/ManualHarnesses.md)。真实 owner/caller 查 [RegressionTestMap](../../../ProjectDocs/Testing/RegressionTestMap.md)。

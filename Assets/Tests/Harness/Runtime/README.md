@@ -1,7 +1,7 @@
-# Runtime Harness
+# Harness — Runtime — README
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: TEST LOCATION GUIDE
+Last Verified: 2026-09-11
 
-未来记录需要真实 RuntimeState/Lifecycle/Bootstrap 环境的 Harness。当前不创建新 Scene 或测试代码。
+placeholder：本目录没有 C# Harness 实现。现有 Scene/Prefab-bound 人工支持不因目录位置改变用途，运行步骤见 [ManualHarnesses](../../../ProjectDocs/Testing/ManualHarnesses.md)。

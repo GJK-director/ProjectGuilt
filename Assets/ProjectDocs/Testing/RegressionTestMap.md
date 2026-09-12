@@ -1,68 +1,39 @@
 # Regression Test Map
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-10
-Repository Basis: `5db805ea452288e86502df0b3075becb7f8f4024`
+Status: CURRENT
+Role: CURRENT REGRESSION MAP
+Last Verified: 2026-09-11
 
-## Important Legacy Modes
+路径事实见 [CodeMap](../Developer/CodeMap.md#test-and-support-locations)。Legacy 字样描述载体，不自动判定行为过时；下表未列出的回归从 [Legacy inventory](LegacyModeMigration.md) 查询，不能推断没有保护。
 
-| Mode | Current Coverage | Future Domains | Status |
-|---|---|---|---|
-| 103 | Legacy Mode103 → Shared Production Fixture Consumer → Shared synthetic factories → 28 checks retained；Test4 部分委托 EnemyIntent Formal Suite，Test5 完全委托；剩余 Definition/ownership、250% damage、Response/Presentation 回归仍在 Legacy | EnemyIntent、Bootstrap、Resolution | LEGACY_ACTIVE |
-| 86 | `BattleFirstStrikeExecutionPlanBasic` 仍为 active standalone；`FirstStrikeExecutionTests` 覆盖 execution priority/order/pairing，但 JSON traits missing/null/empty compatibility 与 LongRangeShoot non-implication 仍为 Legacy unique coverage | Execution/Cards | PARTIAL_FORMAL_COVERAGE / LEGACY_ACTIVE / JIT_MIGRATION_PENDING |
-| 89 | 无 active enum/standalone dispatch；保留 `BattleExecutionPlanFirstStrikePolicyTests` compatibility wrapper，13 个 Case 由 `FirstStrikeExecutionTests` 提供 | Execution | STANDALONE_RETIRED |
-| 109 | 无 active enum/standalone dispatch；保留 `BattleDeckManifestTests` historical compatibility wrapper，Cards Cases 由 `CardDeckManifestTests` 提供，Execution 经 retained Mode89 wrapper → `FirstStrikeExecutionTests`；Mode114 仍消费 `BattleDeckManifestTests.Run(cards)` | Cards/Decks、Execution | STANDALONE_RETIRED |
-| 114 | 无 active enum/standalone dispatch；保留 `BattleDeckBootstrapPresetTests` historical compatibility wrapper，Cards 由 `CardDeckManifestTests`、Bootstrap 由 `DeckPresetBootstrapTests` 提供；Mode115 仍消费 `BattleDeckBootstrapPresetTests.Run(cards)`，Execution 经 retained Mode109 wrapper → retained Mode89 wrapper → `FirstStrikeExecutionTests` | Cards/Decks、Bootstrap、Execution | STANDALONE_RETIRED |
-| 107 | Anger、Knife、Iai、Double Slash、Heavy、Breath、staged HP 等组合回归 | Cards/Knife、Resolution/MultiImpact | LEGACY_ACTIVE |
-| 113 | Conservation、0 Bullet、Cooldown、能力回归链，并调用部分 Shooting/Ability 回归 | Cards/Shooting、Buffs | LEGACY_ACTIVE |
-| 132 | Card Keyword Presentation、Timing Vocabulary、Tooltip/Description formatting | UI/Cards、Cards/Keywords | LEGACY_ACTIVE |
-| 133 | Settings、Deck preference、Display mapping、Bootstrap preset | Settings、Bootstrap、Cards/Decks | LEGACY_ACTIVE |
+## Domain Coverage and Callers
 
-以上状态只描述当前 Legacy Mode 事实，不表示未来迁移已经完成，也不输出 KEEP/DELETE/MERGE 决策。
+| Domain | Formal Coverage | Legacy Unique Coverage | Current Caller | JIT Migration Note |
+|---|---|---|---|---|
+| EnemyIntent/Bootstrap/Resolution | EnemyIntentTests：5 Case | Mode103 其余 ownership、provider/自动回合、伤害/表现集成 | CardLoadTest Mode103 → FullBattleIntegrationRegressionTests；Test4 部分、Test5 全部委托 | 保留集成边界，不把部分委托写成全迁移 |
+| Cards/Execution FirstStrike | FirstStrikeExecutionTests：13 Case | Mode86 JSON traits missing/null/empty compatibility；LongRangeShoot non-implication | CardLoadTest Mode86；Formal execution 经 retained wrapper 链 | priority/order/pairing 有重叠，unique coverage 仍在 Legacy |
+| Cards/Decks | CardDeckManifestTests：6 Case | Mode115 grouping、reference identity、fallback、runtime deck stability | Mode115 → BattleDeckHandGroupingTests → BattleDeckBootstrapPresetTests | Grouping 不是自动归类为手工 UI；按规则价值迁 |
+| Bootstrap preset | DeckPresetBootstrapTests：11 Case | 其他正式初始化/provider 与 Settings 集成 | retained Mode114 wrapper；Mode103/133 | 不为每个旧 Mode 建新 Suite |
+| Knife/Resolution | 当前无该域完整 Formal owner | Mode107 Anger/Knife/Iai/Double Slash/Heavy/Breath/staged HP 组合 | CardLoadTest Mode107 → BattleAngerAndKnifeCardsBasicTests | 修改对应规则再拆相关契约 |
+| Shooting/Ability/Buffs | 当前无该域完整 Formal owner | Mode113 Conservation、0 Bullet、CD、Ability 及依赖链 | CardLoadTest Mode113 → BattleConservationAbilityTests | 不误把已有 Cards manifest Case 当资源规则覆盖 |
+| UI/Keywords | 无 UI Formal C# owner | Mode132 timing/tooltip/description 格式 | CardLoadTest Mode132 → BattleCardKeywordPresentationTests | 文字契约与视觉验收分开 |
+| Settings | 无 Settings Formal C# owner | Mode133 preference/display/Bootstrap 集成 | CardLoadTest Mode133 → BattleGameSettingsIntegrationTests | 结合 Menu 人工流程 |
+| Lifecycle/Turn/Events | 无对应 Formal C# owner | lifecycle/terminal/CardUsed/Resolved/ActionFinished/Impact | Legacy/Core 及 CardLoadTest 内嵌测试；按 inventory 找 caller | 先查事件顺序与资源提交合约 |
+| Resolution/Interaction | 无完整 Formal owner；FirstStrike 只覆盖其专属契约 | Generic Attack/Guard/Dodge、Clash/Context/Plan | Legacy/Core；CardLoadTest dispatch | 按实际 interaction 选择回归 |
+| Presentation/UI/Camera | 无 Formal C# owner | Protocol/Engagement/Binding/Pausable、关系 UI | Legacy/Core、现有人工入口 | 自动合约不能代替视觉验收 |
+| Story | 无 Formal C# owner | 无已登记 Formal regression；宿主/Editor 校验为当前入口 | StoryTestHost、NewGameText、IntroStorySceneSetup | 先区分 Story 核心与宿主 |
 
-Batch 5A Formal Coverage：
+## Retained Wrapper Chain
 
-- Test4：PARTIAL。Formal coverage includes cycle fixed target definitions, repeat flag, runtime rounds 1..21 and duplicate runtime card-state identity；Automatic Turn Cycle / provider integration remains Legacy。
-- Test5：FORMAL COVERAGE COMPLETE，通过 `EnemyIntentTests.LegacyPatternFallbackCreatesExpectedTwoSlotQueue`。
+Mode115 ACTIVE → BattleDeckHandGroupingTests → BattleDeckBootstrapPresetTests（retained Mode114 wrapper）
+→ BattleDeckManifestTests（retained Mode109 wrapper）
+→ BattleExecutionPlanFirstStrikePolicyTests（retained Mode89 wrapper）
+→ FirstStrikeExecutionTests。
 
-Batch 5B Formal Coverage：
+Mode114 wrapper 同时直接调用 Cards/Bootstrap Formal Cases；Mode109 wrapper 调用 Cards Cases。
+89/109/114 均无 active standalone enum/dispatch，但 wrapper 仍被消费。Formal ownership != standalone retirement != wrapper deletion。
 
-- Cards domain：`CardDeckManifestTests` 提供四个 Formal Case，覆盖 Knife 数值、两套 Manifest 成员与隔离、可用卡牌解析和 Shooting FirstStrike Trait；Mode109 standalone 已退休，`BattleDeckManifestTests` wrapper 继续作为 Mode114 的 compatibility consumer。
-- Execution domain：Mode89 standalone 已退休；`BattleExecutionPlanFirstStrikePolicyTests` wrapper 仍作为 Mode109 的跨域回归依赖。
+## Running and Provenance
 
-Batch 5C Formal Coverage：
-
-- Mode89：FORMAL COVERAGE COMPLETE；standalone enum/dispatch 已退休，13 个 FirstStrike Execution Priority Case 由 `FirstStrikeExecutionTests` 提供，wrapper 仅保留历史兼容 aggregation / logging。
-- Mode109：Cards domain Formal Coverage COMPLETE；standalone entry 已退休，`BattleDeckManifestTests` wrapper 仅为 Mode114 保留；Execution dependency 为 `保留的 Mode89 compatibility wrapper → FirstStrikeExecutionTests Formal coverage`，不再是 Legacy Execution logic。
-
-Batch 5D Formal Coverage：
-
-- Mode114：FORMAL COVERAGE COMPLETE。Cards domain 由 `CardDeckManifestTests` 提供 6 个 Case；Bootstrap domain 由 `DeckPresetBootstrapTests` 提供 11 个 Case。Legacy Mode114 仅保留 aggregation / logging。
-- Mode114 的 `DeckManifest` regression 仍通过 `BattleDeckManifestTests` / retained Mode109 wrapper，继续消费 Cards 与 Mode89/Execution Formal coverage。
-
-Batch 6A Retirement：
-
-- Mode89 的 standalone `BattleTestMode` enum member 与 `CardLoadTest.Start()` dispatch 已移除；Mode89 不再是可从 Inspector 选择的 standalone runner。
-- `BattleExecutionPlanFirstStrikePolicyTests` wrapper、13 个 FirstStrike Case 和 Mode109/Mode114 的兼容调用保留。
-
-Batch 6B Retirement：
-
-- Mode109 的 standalone `BattleTestMode` enum member 与 `CardLoadTest.Start()` dispatch 已移除；Mode109 不再是可从 Inspector 选择的 standalone runner。
-- `BattleDeckManifestTests` wrapper、Cards Formal Suite、retained Mode89 wrapper 和 Mode114 consumer 全部保留。
-
-Batch 6C Retirement：
-
-- Mode114 的 standalone `BattleTestMode` enum member 与 `CardLoadTest.Start()` dispatch 已移除；Mode114 不再是可从 Inspector 选择的 standalone runner。
-- `BattleDeckBootstrapPresetTests` wrapper、Cards Formal Suite、Bootstrap Formal Suite、retained Mode109 wrapper 和 Mode115 consumer 全部保留。
-
-其余 Mode 的当前索引见 `LegacyModeMigration.md`。
-
-## Phase 6 Governance Closure
-
-- Phase6D-A：110 个 active Legacy Mode 已完成 inventory/value audit。
-- Phase6D-B：110 个 Mode 概念性归并为 30 个 Contract Cluster，其中 24 个 automated-oriented、6 个 manual/design-oriented；Map 与 carrier 建议见 `LegacyContractTriage.md`。
-- Phase6E Revised：Mode86 保持 active。其 Formal overlap 仅覆盖 FirstStrike execution priority/order/pairing；JSON trait compatibility 与 LongRangeShoot 不自动产生 FirstStrike 仍未迁移。
-
-采用 `JUST_IN_TIME_TEST_MIGRATION`：未来修改 Production system 前先查本表与 Contract Map，只迁移仍有价值的相关 Contract；不为历史 Mode 一对一创建 Suite，也不以 active Legacy Mode 清零作为当前 Demo 阻塞条件。
-
-**Phase6 is CLOSED FOR CURRENT DEMO GOVERNANCE.** 剩余 Legacy coverage 按需迁移；这不表示所有 Legacy Mode 已退休、所有测试已 Formal 化或所有 Manual Harness 已建立。UI / Camera / Animation / Presentation 继续使用按需 shared harness，不在本批创建。
+SampleScene 运行选中的 Legacy caller；Inspector 选择可能为 LOCAL_DIRTY。Formal Case 不自动出现在 Unity Test Runner。
+人工入口见 [ManualHarnesses](ManualHarnesses.md)。历史 clustering 仅在必要时查看 [LegacyContractTriage](LegacyContractTriage.md)，其中建议不代表现有 Suite。

@@ -1,10 +1,12 @@
 # Legacy Mode Migration Index
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-10
-Repository Basis: `5db805ea452288e86502df0b3075becb7f8f4024`
+Status: CURRENT
+Role: LEGACY INVENTORY
+Last Verified: 2026-09-11
 
-下表是当前 `BattleTestMode` 与历史迁移记录的事实索引。110 个当前 Mode 定义位于 `ROOT/Assets/Tests/Legacy/Runner/CardLoadTest.cs`，由 `CardLoadTest.Start()` 的连续 `if` 分发；Mode89、Mode109 与 Mode114 各保留一条不再属于当前 enum 的历史记录。Mode86 仍是 active standalone Mode，因为它包含尚未由 Formal Suite 覆盖的 FirstStrike unique contract。除 103、107、113、132、133 外，本轮统一标记为 `NOT_ANALYZED_FOR_MIGRATION`；这些重要 Mode 标记为 `MAPPED_FOR_FUTURE_MIGRATION`。
+> Legacy inventory 只描述现存 regression / compatibility 事实，不代表当前 Gameplay Design，也不代表每个 Mode 都必须迁移。
+
+当前覆盖与 caller 以 [RegressionTestMap](RegressionTestMap.md) 和真实测试源码为准；路径见 [CodeMap](../Developer/CodeMap.md)。Inventory Class / Migration Status 是记录字段，不是文档 Status。
 
 ## Inventory Reconciliation
 
@@ -142,12 +144,7 @@ Repository Basis: `5db805ea452288e86502df0b3075becb7f8f4024`
 
 本索引不决定 KEEP、DELETE、MERGE 或 REPLACED。
 
-## Phase 6 Governance Closure
+## JIT Use
 
-Phase6D-A 完成 110 个 active Mode 的 inventory、数值与 dispatch 审计；Phase6D-B 将它们概念性归并为 30 个 Contract Cluster。完整 Cluster Map 与 carrier 建议见 `LegacyContractTriage.md`。
-
-Phase6E Revised 的结论是：Mode86 不能退休。它属于 `ACTIVE_ENUM`、`PARTIAL_FORMAL_COVERAGE`、`JIT_MIGRATION_PENDING`；未来只有在 FirstStrike、JSON trait parsing、LongRangeShoot 或 Execution priority 相关 Production 系统发生修改时，才迁移其两项 unique coverage。
-
-当前采用 `JUST_IN_TIME_TEST_MIGRATION`：Formal Suite 是首选 regression source；Legacy Mode 可以暂时保留；修改 Production 前先查 Contract Map / Regression Map，只迁移当前 Contract 有价值的覆盖，不为历史 Mode 一对一创建 Suite。`active Legacy Mode = 0` 不是当前 Demo 的阻塞条件。
-
-**Phase6 is CLOSED FOR CURRENT DEMO GOVERNANCE.** 这表示 inventory、Formal Suite 架构、Contract triage 与明确重复 standalone Mode 的治理边界已完成，不表示所有 Legacy Mode 已删除、所有 Legacy test 已 Formal 化或所有 Manual Harness 已建立。
+先查 RegressionTestMap，再按本表定位实际 caller；必要时才读 [LegacyContractTriage](LegacyContractTriage.md) 的 HISTORICAL provenance。其 Recommended Carrier 不证明当前 Suite 存在。
+只迁移相关、有价值的 contract；Mode86 unique coverage 仍在 Legacy。standalone 退休不等于 retained wrapper 可删除。

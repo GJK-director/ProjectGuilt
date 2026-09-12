@@ -1,3 +1,9 @@
+Status: HISTORICAL
+Role: HISTORICAL DEVELOPMENT RECORD
+
+> Do not use as current implementation source. Current navigation lives in [Assets/ProjectDocs](../Assets/ProjectDocs/README.md).
+> 以下正文保留历史语境，不覆盖当前代码、数据或 Unity 事实。
+
 # 代码阅读问题记录
 
 这个文档用来记录我在读代码时遇到的问题、疑惑和当前解释。

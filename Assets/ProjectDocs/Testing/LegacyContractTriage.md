@@ -1,8 +1,13 @@
 # Legacy Contract Triage
 
-Status: TRANSITIONAL  
-Last Verified: 2026-09-10  
-Repository Basis: `5db805ea452288e86502df0b3075becb7f8f4024`
+Status: HISTORICAL
+Role: PHASE 6 CONTRACT TRIAGE RECORD
+
+> 该文档用于理解 Phase 6 contract clustering 的来源。Recommended Carrier 是当时治理建议，不是当前实际 Suite 存在事实。
+> 当前测试事实必须查看 [RegressionTestMap](RegressionTestMap.md)、[LegacyModeMigration](LegacyModeMigration.md) 以及真实 Assets/Tests。以下为历史记录，不覆盖当前开发规则。
+
+Historical verification: 2026-09-10
+Historical repository basis: 5db805ea452288e86502df0b3075becb7f8f4024
 
 ## Purpose
 

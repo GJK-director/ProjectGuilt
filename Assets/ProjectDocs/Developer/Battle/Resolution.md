@@ -1,37 +1,47 @@
 # Battle Resolution
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: DOMAIN CONTRACT
+Last Verified: 2026-09-11
+
+路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
 ## Responsibilities
 
-记录 Clash、Roll、ResolutionPlan、BattleImpact、DamageModifier 和伤害结算入口。
+Clash/Roll、ResolutionPlan、Impact、伤害修正。
 
-## Does Not Own
+## NOT Responsible
 
-不拥有卡牌 UI、不拥有 Camera、不替代 CardUsed/CardResolved 的生命周期文档。
+UI、Camera、计划安排。
 
-## Current Main Files
+## Main Entry
 
-`BattleResolver.cs`、`BattleResolutionPlan.cs`、`BattleCalculator.cs`、`BattleClashSession.cs`、`ClashResult.cs`。
+BattleResolver / BattleCalculator / BattleClashSession。
+
+## Data
+
+卡牌公式、roll snapshot、impact/modifier。
 
 ## Runtime Flow
 
-Execution Item → Resolver 建立 Clash/ResolutionPlan → Roll → Impact → EventProcessor 广播 Damage/Hit/AfterDamage/AfterKill。
+Execution → Clash/Plan → Roll → Impact → Events。
 
-## Data Sources
+## Invariants
 
-BattleCardState、BattleExecutionAction、Interaction Context、CardTestData。
+使用有效快照；表现读取结果而不重新随机；事件与资源后果不能重复提交。
 
-## Related Tests
+## Dependencies
 
-Modes 7–13、25–43、80–82、87–93、103、106–113、125–131。
+Cards、Units、Events、InteractionContext。
 
-## Known Technical Debt
+## Regression Tests
 
-Resolver 文件规模较大，并保留部分兼容适配路径；具体旧分支的最终用途需单独审计。
+ClashSession/ResolutionPlan/Generic/FullBattle Legacy。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
 
-## Migration Status
+## Manual Verification
 
-TRANSITIONAL；未物理迁移。
+SampleScene、正式 Harness；步骤见 [ManualHarnesses](../../Testing/ManualHarnesses.md)。未运行不报告通过。
+
+## Known Debt
+
+CURRENT + DEFERRED_DEBT：BattleResolver；兼容分支按 JIT 处理。只在相关 feature/regression 需要时讨论，不因文件大小扩 scope。

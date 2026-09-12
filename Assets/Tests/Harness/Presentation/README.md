@@ -1,7 +1,7 @@
-# Presentation Harness
+# Harness — Presentation — README
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: TEST LOCATION GUIDE
+Last Verified: 2026-09-11
 
-未来记录需要角色 View、Animation、Camera 和 Presentation completion 的 Harness。当前不改变正式表现路径。
+placeholder：本目录没有 C# Harness 实现。现有 Scene/Prefab-bound 人工支持不因目录位置改变用途，运行步骤见 [ManualHarnesses](../../../ProjectDocs/Testing/ManualHarnesses.md)。

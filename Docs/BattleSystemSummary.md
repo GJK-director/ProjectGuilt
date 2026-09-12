@@ -1,3 +1,9 @@
+Status: HISTORICAL
+Role: HISTORICAL DEVELOPMENT RECORD
+
+> Do not use as current implementation source. Current navigation lives in [Assets/ProjectDocs](../Assets/ProjectDocs/README.md).
+> 以下正文保留历史语境，不覆盖当前代码、数据或 Unity 事实。
+
 \# 战斗系统当前进度总结
 
 

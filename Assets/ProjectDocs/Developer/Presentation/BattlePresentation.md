@@ -1,37 +1,47 @@
 # Battle Presentation
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: DOMAIN CONTRACT
+Last Verified: 2026-09-11
+
+路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
 ## Responsibilities
 
-记录正式 Scene Presentation、Interaction Router、Players、Profiles 和 Turn Transition。
+request/completion、路由、Player、Profile、回合表现。
 
-## Does Not Own
+## NOT Responsible
 
-不拥有战斗数值、卡牌资源提交、Enemy Intent 生成或 UI Planning 数据所有权。
+规则随机、伤害计算、资源提交。
 
-## Current Main Files
+## Main Entry
 
-`BattleSceneExecutionPresenter.cs`、`BattlePresentationRouter.cs`、Attack/Defense/Dodge/LongRange/Special Presentation Players、各 Profile、`BattleTurnTransitionPresentationCoordinator.cs`。
+BattleSceneExecutionPresenter / Router / Players。
+
+## Data
+
+Protocol/InteractionContext、Profile assets。
 
 ## Runtime Flow
 
-Execution item → Presentation Protocol → Scene Presenter → Presentation Interaction Context/Router → Player + Camera + Character Controller → completion callback。
+Runner → request → Scene Presenter → Player/Camera/Character → completion。
 
-## Data Sources
+## Invariants
 
-`ROOT/Assets/Settings` 下 Profile assets，以及 BattleScene/Prefab 序列化引用。
+视觉不重排规则提交；完成/取消只走对应协议；动态 Player 也是真实 consumer。
 
-## Related Tests
+## Dependencies
 
-Modes 83、84、95–98、102–104；部分测试使用 GameObject，部分只验证 Contract。
+Execution protocol、Camera、Character、UI。
 
-## Known Technical Debt
+## Regression Tests
 
-正式 Player、Debug Harness、Sandbox 和兼容 Presenter 并存；实际引用需要保持 Unity 序列化证据。
+Protocol/Engagement/Binding/Pausable Legacy。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
 
-## Migration Status
+## Manual Verification
 
-TRANSITIONAL；未物理迁移。
+正式 Harness、Sandbox；步骤见 [ManualHarnesses](../../Testing/ManualHarnesses.md)。未运行不报告通过。
+
+## Known Debt
+
+CURRENT + DEFERRED_DEBT：Scene Presenter；Sandbox Scene-bound。只在相关 feature/regression 需要时讨论，不因文件大小扩 scope。

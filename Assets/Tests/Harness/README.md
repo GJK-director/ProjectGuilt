@@ -1,7 +1,7 @@
-# Test Harnesses
+# Harness — README
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`ce43786241b06f41deb439c0729d151b86c20c27`)
+Status: CURRENT
+Role: TEST LOCATION GUIDE
+Last Verified: 2026-09-11
 
-Harness 用于需要 Unity Scene、UI、Camera、Presentation 或 Story 环境的测试。当前保留 SampleScene、BattlePresentationSandbox 和 BattleScene Formal Harness，未迁移。
+Harness 为需要真实 Unity 环境的验证入口。Story 子域有 StoryTestHost；Presentation/Runtime/UI 子目录为 placeholder。场景绑定支持仍可位于目录外，入口以 [ManualHarnesses](../../ProjectDocs/Testing/ManualHarnesses.md) 为准。

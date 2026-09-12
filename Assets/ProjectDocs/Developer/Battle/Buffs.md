@@ -1,50 +1,47 @@
 # Battle Buffs
 
-Status: TRANSITIONAL
-Last Verified: 2026-09-08
-Repository Basis: 当前本地 HEAD (`3dc4f7132996bdced6ca5a5cbb128925eb1a071e`)
+Status: CURRENT
+Role: DOMAIN CONTRACT
+Last Verified: 2026-09-11
+
+路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
 ## Responsibilities
 
-记录 Buff 定义、运行时 Buff、Pending Buff 和 Buff UI 入口。
+定义、运行态、Pending、过期与 Buff UI。
 
-## Does Not Own
+## NOT Responsible
 
-不拥有全部 Card Effect 规则、不拥有 Presentation 的视觉状态。
+完整卡牌效果、表现视觉状态。
 
-## Current Main Files
+## Main Entry
 
-Runtime：
+CharacterData / BuffData / PendingBuffData；BuffDefinitionLoader 独立文件。
 
-- `Assets/Scripts/Battle/Buffs/Runtime/BuffData.cs`
-- `Assets/Scripts/Battle/Buffs/Runtime/PendingBuffData.cs`
-- `Assets/Scripts/Battle/Buffs/Runtime/BuffApplyTiming.cs`
-- `Assets/Scripts/Battle/Buffs/Runtime/BuffCategory.cs`
-- `Assets/Scripts/Battle/Buffs/Runtime/BuffExpireRule.cs`
+## Data
 
-UI：
-
-- `Assets/Scripts/Battle/Buffs/UI/BattleBuffGroupUIView.cs`
-- `Assets/Scripts/Battle/Buffs/UI/BattleBuffIconUIView.cs`
-
-相关数据与兼容入口仍为 `BuffDefinitions.json`、`CardEffectExecutor.cs`。
+BuffDefinitions、stack/duration/timing。
 
 ## Runtime Flow
 
-Buff JSON 由 `BuffDefinitionLoader` 读取；Factory/Effect Executor 和 `CharacterData` 使用运行时状态；TurnProcessor 处理时机。
+Loader → Factory/Effects → CharacterData → Turn/Events → UI。
 
-## Data Sources
+## Invariants
 
-`ROOT/Assets/Resources/Data/Buffs/BuffDefinitions.json`，当前 16 个定义。
+延迟生效与当前状态分开；回合开始先处理 Pending，再投速度；不得重复提交资源效果。
 
-## Related Tests
+## Dependencies
 
-Modes 47–50、70–72、105–113、126–131。
+Turn、Events、Effects。
 
-## Known Technical Debt
+## Regression Tests
 
-`BuffDefinitionLoader` 位于 `CardEffectExecutor.cs`；Debug Preview 组件仍位于 UI Prefab。
+Buff/Conservation/资源 Legacy；Buffs Suite 为 placeholder。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
 
-## Migration Status
+## Manual Verification
 
-TRANSITIONAL；Batch 2B 已完成上述 7 个 Buff Runtime/UI 文件的 feature-first 物理归类，未改变代码内容、namespace 或运行时行为。整体工程仍未完成最终模块化迁移。
+Buff Preview、BattleScene；步骤见 [ManualHarnesses](../../Testing/ManualHarnesses.md)。未运行不报告通过。
+
+## Known Debt
+
+旧 timing 与事件链并存，Preview 绑定 Prefab。只在相关 feature/regression 需要时讨论，不因文件大小扩 scope。
