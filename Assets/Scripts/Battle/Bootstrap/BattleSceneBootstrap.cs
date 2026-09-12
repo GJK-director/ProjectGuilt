@@ -28,8 +28,9 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
         BattleDeckPreset inspectorFallback
     )
     {
-        return GameSettingsState.HasSelectedDeckPreference
-            ? GameSettingsState.SelectedDeck
+        BattleDeckPreset pendingDeck;
+        return GameSettingsState.TryConsumePendingBattleDeck(out pendingDeck)
+            ? pendingDeck
             : inspectorFallback;
     }
 

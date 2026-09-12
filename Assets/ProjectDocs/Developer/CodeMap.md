@@ -31,7 +31,7 @@ Last Verified: 2026-09-11
 | Camera | [Camera](../../Scripts/Camera) | BattleCameraDirector、GrayboxBattleCameraController | framing/motion 参数、角色位置 | Presenter/TurnCoordinator | Camera、Spawner | BattleScene camera | 相关 Presentation Legacy | 热键/Sandbox | CURRENT / 高；DEFERRED_DEBT |
 | Story | [Story](../../Scripts/Story) | StorySceneFacade → FlowController/NodeExecutor | Resources/Story/prologue_501.json | IntroStoryHost/StoryTestHost | ContentProvider、StoryView | NewGameText、StoryPanel | 无 Formal Story Suite；Editor validate | StoryTestHost/NewGameText | CURRENT / 中高；独立 asmdef |
 | StoryDemo | [StoryDemo](../../Scripts/StoryDemo) | IntroStoryHost、SceneLoadingOverlay | storyId、battleSceneName、宿主 SFX | NewGameText | Story API、SceneManager | NewGameText | 剧情集成人工验证 | NewGameText | CURRENT / 中；生成音效占位 |
-| Settings | [Settings](../../Scripts/Settings) | GameSettingsState；UI/MainMenu/MainMenuController | PlayerPrefs、deck/display preset | Menu/Bootstrap | Screen、DeckManifest | Menu | GameSettingsIntegration Legacy / Mode133 | Menu 主链 | CURRENT / 中 |
+| Settings | [Settings](../../Scripts/Settings) | GameSettingsState；UI/MainMenu/MainMenuController | PlayerPrefs preference、one-shot pending/session deck、Inspector fallback | Menu/Bootstrap | Screen、DeckManifest | Menu | GameSettingsIntegration Legacy / Mode133 | Menu 主链 | CURRENT / 中 |
 
 ## Domain Contracts
 

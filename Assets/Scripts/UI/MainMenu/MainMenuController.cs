@@ -64,6 +64,8 @@ public sealed class MainMenuController : MonoBehaviour
             return;
         }
 
+        GameSettingsState.SetPendingBattleDeck(GameSettingsState.SelectedDeck);
+
         isLoadingNewGame = true;
 
         if (newGameButton != null)
@@ -120,6 +122,7 @@ public sealed class MainMenuController : MonoBehaviour
         if (loadOperation == null)
         {
             Debug.LogError("开始新游戏失败：SceneManager.LoadSceneAsync 返回空，场景名称：" + newGameSceneName);
+            GameSettingsState.ClearPendingBattleDeck();
             isLoadingNewGame = false;
 
             if (newGameButton != null)
