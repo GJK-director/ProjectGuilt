@@ -306,11 +306,11 @@ public static class IntroStorySceneSetup
             );
         }
 
-        if (layers.arraySize != expectedLayerCount)
+        if (layers.arraySize < expectedLayerCount)
         {
             throw new InvalidOperationException(
                 "剧情 CG " + expected.id +
-                " 的背景层数量错误：应为 " + expectedLayerCount +
+                " 的背景层数量不足：至少需要 " + expectedLayerCount +
                 "，实际为 " + layers.arraySize + "。"
             );
         }
