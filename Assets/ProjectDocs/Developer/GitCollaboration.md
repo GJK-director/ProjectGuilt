@@ -11,7 +11,7 @@ Role: HUMAN GIT COLLABORATION GUIDE
 
 `main` 是公共稳定版本。新任务默认不要直接在 `main` 上开发，而是从最新 `main` 创建对应功能分支。
 
-1. 先确认自己在哪个分支，并获取远端最新状态。
+1. 先在 GitHub Desktop 确认 Current Branch，并 Fetch origin 获取最新远端状态。
 2. 从 `main` 创建本次任务的功能分支：战斗用 `battle/*`，剧情用 `story/*`，文档用 `docs/*`。
 3. 在自己的分支开发，并在 Unity Editor 中完成需要的刷新、编译和人工验收。
 4. 查看 Changes 列表，逐个确认每个文件为什么变化。
@@ -29,6 +29,54 @@ Role: HUMAN GIT COLLABORATION GUIDE
 - `battle/*`：战斗任务。
 - `story/*`：剧情任务。
 - `docs/*`：文档任务。
+
+## 日常模式与异常模式
+
+### 日常模式：绝大多数开发都走这里
+
+正常情况下，开发者不需要每次上传前打开终端执行一系列 Git 命令。日常工作主要通过 GitHub Desktop：
+
+1. Fetch origin。
+2. 确认 Current Branch。
+3. 从最新 `main` 创建功能分支。
+4. 开发与 Unity 验收。
+5. 查看 Changes。
+6. 逐项确认并勾选本任务文件。
+7. Commit。
+8. Push origin。
+9. 告诉 Sol 已 Push 功能分支。
+10. Sol 进行 Remote Review。
+11. Review PASS 后再 Merge `main`。
+12. Push `main`。
+13. Sol 进行 Final Remote Gate。
+
+当 GitHub Desktop 的 Changes、Branch、Fetch 状态清晰，且没有冲突、diverged 或可疑 dirty 时，不要求开发者额外打开终端重复验证。
+
+### 异常模式：这时才打开终端
+
+出现以下情况时，停止普通流程：
+
+- Push 被拒绝。
+- ahead / behind 状态无法理解。
+- 本地与远端 diverged。
+- Merge / Rebase conflict。
+- 需要进行 stash 相关操作。
+- Font / Scene / Prefab 等 dirty 来源不明。
+- 不确定某个文件是否已经进入 Commit。
+- GitHub Desktop 提示无法安全切换分支。
+- 需要 Reset / Rebase / Force Push。
+- Sol 明确要求进一步诊断。
+
+这时按下面的顺序处理：
+
+STOP
+→ 不凭感觉点按钮
+→ 把状态发给 Sol
+→ 再按具体命令诊断
+
+终端是诊断工具，不是正常开发的必经界面。
+
+对人类开发者，正常的 GitHub Desktop 日常操作可以简化。对 AI / Local Executor，仍然必须按 `AGENTS.md` 执行 branch、HEAD、working tree 等 Source Gate 检查。
 
 ## 核心概念：在本项目中它们做什么
 
