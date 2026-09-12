@@ -76,9 +76,16 @@ public static class BattleExecutionPlanExecutor
         Debug.Log("===== BattleExecutionPlan 正式执行开始 =====");
         Debug.Log("提示：RespondedEnemyIntent / UnrespondedEnemyIntent / FreeAction 已交给 BattleResolver 正式入口处理");
 
-        if (plan == null || plan.executionItems == null || plan.executionItems.Count == 0)
+        if (plan == null || plan.executionItems == null)
         {
             Debug.Log("当前 BattleExecutionPlan 没有可执行项");
+            return;
+        }
+
+        if (plan.executionItems.Count == 0)
+        {
+            RefreshPlanCompletion(plan);
+            Debug.Log("BattleExecutionPlan 空计划已完成");
             return;
         }
 
@@ -104,11 +111,16 @@ public static class BattleExecutionPlanExecutor
         BattleLifecycleController lifecycleController
     )
     {
-        if (plan == null || plan.executionItems == null ||
-            plan.executionItems.Count == 0)
+        if (plan == null || plan.executionItems == null)
         {
             Debug.Log("当前 BattleExecutionPlan 没有可执行项");
             return false;
+        }
+
+        if (plan.executionItems.Count == 0)
+        {
+            RefreshPlanCompletion(plan);
+            return true;
         }
 
         if (plan.isCompleted)

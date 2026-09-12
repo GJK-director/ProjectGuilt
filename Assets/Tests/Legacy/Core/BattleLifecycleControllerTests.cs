@@ -16,7 +16,7 @@ public static class BattleLifecycleControllerTests
 
     public static bool Run()
     {
-        bool[] results = new bool[15];
+        bool[] results = new bool[17];
         results[0] = VerifyNullRuntimeSafety();
         results[1] = VerifyInitialization();
         results[2] = VerifyManualPlanCreation();
@@ -32,6 +32,8 @@ public static class BattleLifecycleControllerTests
         results[12] = VerifyVictoryAndDefeat();
         results[13] = VerifyAutomaticFullTurnCycle();
         results[14] = VerifyManualAndAutomaticFinalStateMatch();
+        results[15] = VerifySynchronousNoOpTurn();
+        results[16] = VerifyPausableNoOpTurn();
 
         string[] names =
         {
@@ -49,7 +51,9 @@ public static class BattleLifecycleControllerTests
             "BattleEnded后拒绝所有生命周期操作",
             "Victory和Defeat均通过Controller进入BattleEnded",
             "自动完整回合从回合1进入回合2",
-            "手动按钮路径与自动路径最终状态一致"
+            "手动按钮路径与自动路径最终状态一致",
+            "同步零执行项空回合正常完成",
+            "Pausable零执行项空回合正常完成"
         };
 
         bool allPassed = true;
@@ -61,7 +65,7 @@ public static class BattleLifecycleControllerTests
             );
             allPassed &= results[index];
         }
-        Debug.Log("模式77 15项聚合结果：" + allPassed);
+        Debug.Log("模式77 17项聚合结果：" + allPassed);
         return allPassed;
     }
 
@@ -415,6 +419,66 @@ public static class BattleLifecycleControllerTests
             automatic.runtimeState.currentExecutionPlan == null;
     }
 
+    private static bool VerifySynchronousNoOpTurn()
+    {
+        TestContext context = CreateNoOpContext("lifecycle77_16_sync");
+        BattleExecutionPlan plan;
+        string failureMessage;
+        if (!context.controller.TryCreateExecutionPlan(
+                false,
+                out plan,
+                out failureMessage
+            ) || plan == null || plan.executionItems == null ||
+            plan.executionItems.Count != 0 || plan.isCompleted ||
+            context.runtimeState.actionSlots == null ||
+            context.runtimeState.actionSlots.Count != 4 ||
+            !object.ReferenceEquals(
+                context.runtimeState.currentExecutionPlan,
+                plan
+            ) || context.runtimeState.LifecyclePhase !=
+                BattleLifecyclePhase.Prepare)
+        {
+            return false;
+        }
+
+        bool executed = context.controller.TryExecuteCurrentPlan(
+            out failureMessage
+        );
+        return executed && plan.isCompleted &&
+            context.runtimeState.LifecyclePhase ==
+                BattleLifecyclePhase.TurnResolved;
+    }
+
+    private static bool VerifyPausableNoOpTurn()
+    {
+        TestContext context = CreateNoOpContext("lifecycle77_17_pausable");
+        BattleExecutionPlan plan;
+        string failureMessage;
+        if (!context.controller.TryCreateExecutionPlan(
+                false,
+                out plan,
+                out failureMessage
+            ) || plan == null || plan.executionItems == null ||
+            plan.executionItems.Count != 0 || plan.isCompleted ||
+            context.runtimeState.actionSlots == null ||
+            context.runtimeState.actionSlots.Count != 4 ||
+            !context.controller.TryBeginPausableExecution(
+                new BattleRollGateSettings(BattleRollMode.Auto, 0f, 0f),
+                out failureMessage
+            ))
+        {
+            return false;
+        }
+
+        bool advanced = context.controller.AdvancePausableExecution(
+            0f,
+            out failureMessage
+        );
+        return advanced && plan.isCompleted &&
+            context.runtimeState.LifecyclePhase ==
+                BattleLifecyclePhase.TurnResolved;
+    }
+
     private static TestContext CreateEndedTurnContext(string prefix)
     {
         TestContext context = CreateContext(true, prefix);
@@ -553,6 +617,70 @@ public static class BattleLifecycleControllerTests
         return context;
     }
 
+    private static TestContext CreateNoOpContext(string prefix)
+    {
+        TestContext context = new TestContext
+        {
+            allyA = new CharacterData(prefix + "_A", 30, 10, 10),
+            allyB = new CharacterData(prefix + "_B", 30, 8, 8),
+            enemy = new CharacterData(prefix + "_Enemy", 100, 5, 5)
+        };
+        BattleCardState defenseCard = BattleCardManager.CreateBattleCard(
+            context.enemy,
+            CreateDefensiveData(prefix + "_defense", CardType.Defense),
+            prefix + "_defense_instance"
+        );
+        BattleCardState dodgeCard = BattleCardManager.CreateBattleCard(
+            context.enemy,
+            CreateDefensiveData(prefix + "_dodge", CardType.Dodge),
+            prefix + "_dodge_instance"
+        );
+        context.enemyCard = defenseCard;
+        context.runtimeState = new BattleRuntimeState();
+        context.runtimeState.SetCharacters(
+            context.allyA,
+            context.allyB,
+            context.enemy
+        );
+        List<BattleActionSlot> slots =
+            BattleActionSlotManager.CreateLivingPartyActionSlots(
+                context.allyA,
+                context.allyB,
+                2
+            );
+        context.runtimeState.SetActionSlots(
+            slots
+        );
+        context.runtimeState.SetIntentQueue(
+            BattleEnemyIntentManager.CreateIntentQueue(
+                new BattleEnemyIntent(
+                    prefix + "_defense_intent",
+                    context.enemy,
+                    defenseCard,
+                    context.allyA,
+                    1,
+                    1,
+                    1
+                ),
+                new BattleEnemyIntent(
+                    prefix + "_dodge_intent",
+                    context.enemy,
+                    dodgeCard,
+                    context.allyB,
+                    1,
+                    2,
+                    1
+                )
+            )
+        );
+        context.controller = new BattleLifecycleController(
+            context.runtimeState
+        );
+        string failureMessage;
+        context.controller.TryInitializeToPrepare(out failureMessage);
+        return context;
+    }
+
     private static CardTestData CreateAttackData(string cardID)
     {
         return new CardTestData
@@ -565,6 +693,23 @@ public static class BattleLifecycleControllerTests
             maxPoint = 1,
             cooldown = 0,
             damageFormula = "PointAsDamage"
+        };
+    }
+
+    private static CardTestData CreateDefensiveData(
+        string cardID,
+        string cardType
+    )
+    {
+        return new CardTestData
+        {
+            cardID = cardID,
+            cardName = cardID,
+            cardType = cardType,
+            isClashable = false,
+            minPoint = 1,
+            maxPoint = 1,
+            cooldown = 0
         };
     }
 }
