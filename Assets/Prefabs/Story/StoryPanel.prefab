@@ -139,7 +139,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!224 &2789845377966573734
 RectTransform:
   m_ObjectHideFlags: 0
@@ -2698,22 +2698,76 @@ MonoBehaviour:
   backgroundBindings:
   - backgroundId: corridor_door_closed
     sprite: {fileID: 21300000, guid: ef49bddd6d5eb044bb06a8e71767a290, type: 3}
+    overlaySprite: {fileID: 0}
+    overlayAnchoredPosition: {x: 0, y: 0}
+    overlaySize: {x: 0, y: 0}
+    foregroundSprite: {fileID: 0}
+    foregroundAnchoredPosition: {x: 0, y: 0}
+    foregroundSize: {x: 0, y: 0}
   - backgroundId: corridor_door_open
     sprite: {fileID: 21300000, guid: bc7eb80a87a56eb43aae686061213fde, type: 3}
+    overlaySprite: {fileID: 0}
+    overlayAnchoredPosition: {x: 0, y: 0}
+    overlaySize: {x: 0, y: 0}
+    foregroundSprite: {fileID: 0}
+    foregroundAnchoredPosition: {x: 0, y: 0}
+    foregroundSize: {x: 0, y: 0}
   - backgroundId: phone_off
     sprite: {fileID: 21300000, guid: d8ff65d46c4641d8886e4f05f680e28f, type: 3}
+    overlaySprite: {fileID: 0}
+    overlayAnchoredPosition: {x: 0, y: 0}
+    overlaySize: {x: 0, y: 0}
+    foregroundSprite: {fileID: 0}
+    foregroundAnchoredPosition: {x: 0, y: 0}
+    foregroundSize: {x: 0, y: 0}
   - backgroundId: phone_on
     sprite: {fileID: 21300000, guid: c4848406382c4e48b4bbac57aad0b4cd, type: 3}
+    overlaySprite: {fileID: 0}
+    overlayAnchoredPosition: {x: 0, y: 0}
+    overlaySize: {x: 0, y: 0}
+    foregroundSprite: {fileID: 0}
+    foregroundAnchoredPosition: {x: 0, y: 0}
+    foregroundSize: {x: 0, y: 0}
   - backgroundId: tv_viewer_wide
     sprite: {fileID: 21300000, guid: 7e30314e3f1cdf04f8abb58da9e6a298, type: 3}
+    overlaySprite: {fileID: 0}
+    overlayAnchoredPosition: {x: 0, y: 0}
+    overlaySize: {x: 0, y: 0}
+    foregroundSprite: {fileID: 0}
+    foregroundAnchoredPosition: {x: 0, y: 0}
+    foregroundSize: {x: 0, y: 0}
   - backgroundId: tv_snow_screen_latest
     sprite: {fileID: 21300000, guid: e6a044cadd4d32740936c3fc63f4bf7b, type: 3}
+    overlaySprite: {fileID: 0}
+    overlayAnchoredPosition: {x: 0, y: 0}
+    overlaySize: {x: 0, y: 0}
+    foregroundSprite: {fileID: 0}
+    foregroundAnchoredPosition: {x: 0, y: 0}
+    foregroundSize: {x: 0, y: 0}
   - backgroundId: tv_viewer_variant
     sprite: {fileID: 21300000, guid: 8cffe478001aa634b8345ef2194297c0, type: 3}
+    overlaySprite: {fileID: 0}
+    overlayAnchoredPosition: {x: 0, y: 0}
+    overlaySize: {x: 0, y: 0}
+    foregroundSprite: {fileID: 0}
+    foregroundAnchoredPosition: {x: 0, y: 0}
+    foregroundSize: {x: 0, y: 0}
   - backgroundId: tv_pre_turn_closeup
     sprite: {fileID: 21300000, guid: 3bded3735c859d14f86a98c5e3087fef, type: 3}
+    overlaySprite: {fileID: 0}
+    overlayAnchoredPosition: {x: 0, y: 0}
+    overlaySize: {x: 0, y: 0}
+    foregroundSprite: {fileID: 0}
+    foregroundAnchoredPosition: {x: 0, y: 0}
+    foregroundSize: {x: 0, y: 0}
   - backgroundId: monster_turn_reveal
     sprite: {fileID: 21300000, guid: ec62bef904184a4aa48dd68cbb4dc81e, type: 3}
+    overlaySprite: {fileID: 0}
+    overlayAnchoredPosition: {x: 0, y: 0}
+    overlaySize: {x: 0, y: 0}
+    foregroundSprite: {fileID: 0}
+    foregroundAnchoredPosition: {x: 0, y: 0}
+    foregroundSize: {x: 0, y: 0}
   leftPortrait:
     root: {fileID: 8800661179620957476}
     panel: {fileID: 776643805130359980}
