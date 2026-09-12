@@ -85,6 +85,51 @@ public static class BattleGlobalKeywordLibrary
 
 public static class BattleSharedBuffTooltipResolver
 {
+    sealed class SharedBuffKeywordLink
+    {
+        public readonly string buffID;
+        public readonly string keywordID;
+
+        public SharedBuffKeywordLink(string buffID, string keywordID)
+        {
+            this.buffID = buffID;
+            this.keywordID = keywordID;
+        }
+    }
+
+    static readonly SharedBuffKeywordLink[] SharedLinks =
+    {
+        new SharedBuffKeywordLink(BattleResourceID.Bullet, "bullet"),
+        new SharedBuffKeywordLink(BattleResourceID.Anger, "anger"),
+        new SharedBuffKeywordLink(BattleResourceID.Modification, "modification"),
+        new SharedBuffKeywordLink(BattleResourceID.Conservation, "conservation")
+    };
+
+    public static bool TryResolveDisplayNameForBuff(
+        string buffID,
+        out string displayName
+    )
+    {
+        displayName = null;
+        string keywordID;
+        if (!TryGetKeywordID(buffID, out keywordID))
+        {
+            return false;
+        }
+
+        CardKeywordData keyword;
+        if (!BattleGlobalKeywordLibrary.TryGetGlobalKeyword(
+                keywordID, out keyword) ||
+            keyword == null ||
+            string.IsNullOrEmpty(keyword.displayName))
+        {
+            return false;
+        }
+
+        displayName = keyword.displayName;
+        return true;
+    }
+
     public static bool TryResolveBodyForKeyword(
         string keywordID,
         CharacterData owner,
@@ -138,10 +183,8 @@ public static class BattleSharedBuffTooltipResolver
 
     public static bool IsSharedBuffID(string buffID)
     {
-        return buffID == BattleResourceID.Bullet ||
-            buffID == BattleResourceID.Anger ||
-            buffID == BattleResourceID.Modification ||
-            buffID == BattleResourceID.Conservation;
+        string keywordID;
+        return TryGetKeywordID(buffID, out keywordID);
     }
 
     public static bool IsSharedKeywordID(string keywordID)
@@ -153,11 +196,29 @@ public static class BattleSharedBuffTooltipResolver
     static bool TryGetBuffID(string keywordID, out string buffID)
     {
         buffID = null;
-        if (keywordID == "bullet") buffID = BattleResourceID.Bullet;
-        else if (keywordID == "anger") buffID = BattleResourceID.Anger;
-        else if (keywordID == "modification") buffID = BattleResourceID.Modification;
-        else if (keywordID == "conservation") buffID = BattleResourceID.Conservation;
-        return buffID != null;
+        foreach (SharedBuffKeywordLink link in SharedLinks)
+        {
+            if (link != null && link.keywordID == keywordID)
+            {
+                buffID = link.buffID;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static bool TryGetKeywordID(string buffID, out string keywordID)
+    {
+        keywordID = null;
+        foreach (SharedBuffKeywordLink link in SharedLinks)
+        {
+            if (link != null && link.buffID == buffID)
+            {
+                keywordID = link.keywordID;
+                return true;
+            }
+        }
+        return false;
     }
 }
 

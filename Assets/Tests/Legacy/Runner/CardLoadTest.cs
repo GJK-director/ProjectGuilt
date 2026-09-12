@@ -30774,6 +30774,7 @@ public static class BattleCardKeywordPresentationTests
         bool descriptionOnly = VerifyDescriptionOnlyPresentation();
         bool pureRead = VerifyTooltipResolverPureRead();
         bool nonBuffGlobal = VerifyNonBuffGlobalTooltip();
+        bool sharedTitles = VerifySharedBuffDisplayNames();
 
         Debug.Log("===== 以下是测试结果 =====");
         Debug.Log("===== Mode132 BattleCardKeywordPresentationBasic =====");
@@ -30796,9 +30797,11 @@ public static class BattleCardKeywordPresentationTests
         Check("Description formatting does not mutate gameplay metadata", descriptionOnly);
         Check("Tooltip resolution is pure read", pureRead);
         Check("Non-Buff global keyword remains unchanged", nonBuffGlobal);
+        Check("Shared Buff display names resolve from global keyword library", sharedTitles);
         bool passed = timing && global && productionGlobalVocabulary && vocabulary && bullet && anger && conservation &&
             modification && localOverride && stableLinks && allIn && visibleMultipliers &&
-            longest && repeated && adjacent && missing && descriptionOnly && pureRead && nonBuffGlobal;
+            longest && repeated && adjacent && missing && descriptionOnly && pureRead && nonBuffGlobal &&
+            sharedTitles;
         Debug.Log("Passed: " + passed);
         return passed;
     }
@@ -30929,6 +30932,27 @@ public static class BattleCardKeywordPresentationTests
             binding.kind == BattleCardDescriptionTokenKind.GlobalKeyword &&
             BattleCardTooltipResolver.TryResolve(binding, null, out content) &&
             content.body == keyword.tooltipText;
+    }
+
+    static bool VerifySharedBuffDisplayNames()
+    {
+        return VerifySharedBuffDisplayName(BattleResourceID.Bullet, "bullet") &&
+            VerifySharedBuffDisplayName(BattleResourceID.Anger, "anger") &&
+            VerifySharedBuffDisplayName(BattleResourceID.Modification, "modification") &&
+            VerifySharedBuffDisplayName(BattleResourceID.Conservation, "conservation");
+    }
+
+    static bool VerifySharedBuffDisplayName(string buffID, string keywordID)
+    {
+        CardKeywordData keyword;
+        string displayName;
+        return BattleSharedBuffTooltipResolver.IsSharedBuffID(buffID) &&
+            BattleGlobalKeywordLibrary.TryGetGlobalKeyword(
+                keywordID, out keyword) &&
+            keyword != null &&
+            BattleSharedBuffTooltipResolver.TryResolveDisplayNameForBuff(
+                buffID, out displayName) &&
+            displayName == keyword.displayName;
     }
 
     static bool VerifyLocalOverride()

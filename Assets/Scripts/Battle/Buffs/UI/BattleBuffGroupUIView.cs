@@ -610,9 +610,15 @@ public class BattleBuffGroupUIView : MonoBehaviour
             return null;
         }
 
-        string title = !string.IsNullOrEmpty(entry.displayName)
-            ? entry.displayName
-            : entry.buffID;
+        string sharedDisplayName;
+        string title = BattleSharedBuffTooltipResolver.TryResolveDisplayNameForBuff(
+            entry.buffID,
+            out sharedDisplayName
+        )
+            ? sharedDisplayName
+            : !string.IsNullOrEmpty(entry.displayName)
+                ? entry.displayName
+                : entry.buffID;
         string sharedBody;
         string body = BattleSharedBuffTooltipResolver.TryResolveBodyForBuff(
             entry.buffID,
