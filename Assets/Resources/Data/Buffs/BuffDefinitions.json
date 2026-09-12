@@ -81,7 +81,7 @@
     "defaultCheckTiming": "None",
     "defaultExpireRule": "Permanent",
     "consumeRule": "None",
-    "description": "子弹是一种常驻战斗资源；卡牌可以按规则检查、加成或消耗其层数。"
+    "description": "射击攻击使用的资源。\n部分射击会在 CardUsed 时消耗子弹。"
   },
   {
     "buffID": "Anger",
@@ -93,7 +93,7 @@
     "defaultCheckTiming": "None",
     "defaultExpireRule": "Permanent",
     "consumeRule": "None",
-    "description": "愤怒是一种常驻战斗状态资源，具体阶段效果由对应战斗规则处理。"
+    "description": "每当使敌人发生 1 次实际生命损失，获得 1 怒。最多 5\n每层怒使自身受到的伤害 +10%。\n单个伤害段的实际伤害 ≥ (7 - 当前怒层数) 时，失去 1 怒\n3 怒攻击牌最大点数 +1\n4 更改为怒攻击牌点数+1\n5 怒保留 4 怒点数强化；造成伤害 ×1.2。"
   },
   {
     "buffID": "Modification",
@@ -105,7 +105,7 @@
     "defaultCheckTiming": "None",
     "defaultExpireRule": "Permanent",
     "consumeRule": "None",
-    "description": "改装是一种常驻战斗状态资源，具体阶段效果由对应战斗规则处理。"
+    "description": "将子弹最大值更改为4。\n所有有子弹词条的攻击卡牌点数 +2"
   },
   {
     "buffID": "Conservation",
@@ -117,7 +117,7 @@
     "defaultCheckTiming": "None",
     "defaultExpireRule": "Permanent",
     "consumeRule": "None",
-    "description": "节约是一种常驻战斗状态资源，具体阶段效果由对应战斗规则处理。"
+    "description": "根据剩下的子弹量提升下一张带有子弹词条的射击卡的点数。点数增加为6-X（当前子弹数）\n回合结束时，根据剩余子弹损失最大生命值：0/1/2/3/4/5+ 发分别损失 30%/18%/12%/8%/5%/0%。"
   },
   {
     "buffID": "GuardUp",

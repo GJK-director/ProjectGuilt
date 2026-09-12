@@ -610,12 +610,25 @@ public class BattleBuffGroupUIView : MonoBehaviour
             return null;
         }
 
-        string title = !string.IsNullOrEmpty(entry.displayName)
-            ? entry.displayName
-            : entry.buffID;
-        string body = !string.IsNullOrEmpty(entry.description)
-            ? entry.description
-            : "该状态暂时没有补充说明。";
+        string sharedDisplayName;
+        string title = BattleSharedBuffTooltipResolver.TryResolveDisplayNameForBuff(
+            entry.buffID,
+            out sharedDisplayName
+        )
+            ? sharedDisplayName
+            : !string.IsNullOrEmpty(entry.displayName)
+                ? entry.displayName
+                : entry.buffID;
+        string sharedBody;
+        string body = BattleSharedBuffTooltipResolver.TryResolveBodyForBuff(
+            entry.buffID,
+            boundCharacter,
+            out sharedBody
+        )
+            ? sharedBody
+            : !string.IsNullOrEmpty(entry.description)
+                ? entry.description
+                : "该状态暂时没有补充说明。";
         string durationText =
             entry.duration < 0 ||
             string.Equals(

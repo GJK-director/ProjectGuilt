@@ -21,6 +21,7 @@ public static class BattleGameSettingsIntegrationTests
             PlayerPrefs.DeleteKey(GameSettingsState.FullscreenPreferenceKey);
             PlayerPrefs.DeleteKey(GameSettingsState.ResolutionPreferenceKey);
             PlayerPrefs.Save();
+            GameSettingsState.ClearPendingBattleDeck();
 
             bool defaultKnife = !GameSettingsState.HasSelectedDeckPreference &&
                 GameSettingsState.SelectedDeck == BattleDeckPreset.Knife &&
@@ -29,31 +30,59 @@ public static class BattleGameSettingsIntegrationTests
                 ) == BattleDeckPreset.Knife;
 
             GameSettingsState.SetSelectedDeck(BattleDeckPreset.Shooting);
-            BattleDeckPreset shootingPreset =
-                BattleSceneBootstrap.ResolvePlayerDeckPreset(
-                    BattleDeckPreset.Knife
-                );
             bool shootingPersists = GameSettingsState.HasSelectedDeckPreference &&
                 GameSettingsState.SelectedDeck == BattleDeckPreset.Shooting &&
-                shootingPreset == BattleDeckPreset.Shooting;
-            bool shootingBootstrap = VerifyBootstrapDeck(shootingPreset);
+                BattleSceneBootstrap.ResolvePlayerDeckPreset(
+                    BattleDeckPreset.Knife
+                ) == BattleDeckPreset.Knife;
+            bool shootingBootstrap = VerifyBootstrapDeck(BattleDeckPreset.Shooting);
 
-            GameSettingsState.SetSelectedDeck(BattleDeckPreset.Knife);
-            bool knifePersists = GameSettingsState.SelectedDeck ==
-                BattleDeckPreset.Knife &&
+            GameSettingsState.SetPendingBattleDeck(BattleDeckPreset.Shooting);
+            bool pendingShootingOverridesOnce =
+                BattleSceneBootstrap.ResolvePlayerDeckPreset(
+                    BattleDeckPreset.Knife
+                ) == BattleDeckPreset.Shooting;
+            bool pendingConsumed = !GameSettingsState.HasPendingBattleDeck;
+            bool secondResolutionFallsBack =
+                BattleSceneBootstrap.ResolvePlayerDeckPreset(
+                    BattleDeckPreset.Knife
+                ) == BattleDeckPreset.Knife;
+            bool persistentSelectionUnchanged =
+                GameSettingsState.SelectedDeck == BattleDeckPreset.Shooting;
+
+            GameSettingsState.SetPendingBattleDeck(BattleDeckPreset.Knife);
+            bool pendingKnifeOverridesOnce =
                 BattleSceneBootstrap.ResolvePlayerDeckPreset(
                     BattleDeckPreset.Shooting
                 ) == BattleDeckPreset.Knife;
+            bool pendingKnifeConsumed = !GameSettingsState.HasPendingBattleDeck;
+
+            GameSettingsState.SetSelectedDeck(BattleDeckPreset.Knife);
+            bool knifePreferenceDoesNotOverrideInspector = GameSettingsState.SelectedDeck ==
+                BattleDeckPreset.Knife &&
+                BattleSceneBootstrap.ResolvePlayerDeckPreset(
+                    BattleDeckPreset.Shooting
+                ) == BattleDeckPreset.Shooting;
 
             bool displayMapping = VerifyDisplayMapping();
             bool passed = defaultKnife && shootingPersists && shootingBootstrap &&
-                knifePersists && displayMapping;
+                pendingShootingOverridesOnce && pendingConsumed &&
+                secondResolutionFallsBack && persistentSelectionUnchanged &&
+                pendingKnifeOverridesOnce && pendingKnifeConsumed &&
+                knifePreferenceDoesNotOverrideInspector && displayMapping;
 
+            Debug.Log("===== 以下是测试结果 =====");
             Debug.Log("===== Mode133 BattleGameSettingsIntegration =====");
             Debug.Log("默认Knife且无偏好：" + defaultKnife);
-            Debug.Log("Shooting偏好持久化：" + shootingPersists);
+            Debug.Log("持久化Shooting不覆盖Inspector：" + shootingPersists);
             Debug.Log("Shooting实际Bootstrap：" + shootingBootstrap);
-            Debug.Log("切回Knife：" + knifePersists);
+            Debug.Log("Pending Shooting一次覆盖：" + pendingShootingOverridesOnce);
+            Debug.Log("Pending已消费：" + pendingConsumed);
+            Debug.Log("第二次回退Inspector：" + secondResolutionFallsBack);
+            Debug.Log("持久化选择保持不变：" + persistentSelectionUnchanged);
+            Debug.Log("Pending Knife一次覆盖：" + pendingKnifeOverridesOnce);
+            Debug.Log("Pending Knife已消费：" + pendingKnifeConsumed);
+            Debug.Log("持久化Knife不覆盖Inspector：" + knifePreferenceDoesNotOverrideInspector);
             Debug.Log("显示设置映射：" + displayMapping);
             Debug.Log("Passed: " + passed);
             return passed;
@@ -63,6 +92,7 @@ public static class BattleGameSettingsIntegrationTests
             Restore(GameSettingsState.SelectedDeckPreferenceKey, deck);
             Restore(GameSettingsState.FullscreenPreferenceKey, fullscreen);
             Restore(GameSettingsState.ResolutionPreferenceKey, resolution);
+            GameSettingsState.ClearPendingBattleDeck();
             PlayerPrefs.Save();
         }
     }
@@ -144,4 +174,3 @@ public static class BattleGameSettingsIntegrationTests
         }
     }
 }
-

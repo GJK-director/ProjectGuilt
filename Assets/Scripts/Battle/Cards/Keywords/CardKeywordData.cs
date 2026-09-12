@@ -49,10 +49,10 @@ public static class BattleGlobalKeywordLibrary
 {
     static readonly CardKeywordData[] globalKeywords =
     {
-        Keyword("bullet", "子弹", "射击攻击使用的资源。"),
-        Keyword("anger", "怒", "每当使敌人发生 1 次实际生命损失，获得 1 怒。最多 5\n每层怒使自身受到的伤害 +10%。\n单个伤害段的实际伤害 ≥ (7 - 当前怒层数) 时，失去 1 怒\n3 怒攻击牌最大点数 +1\n4 更改为怒攻击牌点数+1\n5 怒保留 4 怒点数强化；造成伤害 ×1.2。"),
-        Keyword("conservation", "节约", "根据剩下的子弹量提升下一张带有子弹词条的射击卡的点数。点数增加为6-X（当前子弹数）\n回合结束时，根据剩余子弹损失最大生命值：0/1/2/3/4/5+ 发分别损失 30%/18%/12%/8%/5%/0%。"),
-        Keyword("modification", "改装", "将子弹最大值更改为4。\n所有有子弹词条的攻击卡牌点数 +2"),
+        Keyword("bullet", "子弹", ""),
+        Keyword("anger", "怒", ""),
+        Keyword("conservation", "节约", ""),
+        Keyword("modification", "改装", ""),
         Keyword("first_strike", "先攻", "回合开始时最先行动。\n一个回合只能使用一张先攻卡。")
     };
     public static IReadOnlyList<CardKeywordData> GlobalKeywords => globalKeywords;
@@ -83,6 +83,145 @@ public static class BattleGlobalKeywordLibrary
     }
 }
 
+public static class BattleSharedBuffTooltipResolver
+{
+    sealed class SharedBuffKeywordLink
+    {
+        public readonly string buffID;
+        public readonly string keywordID;
+
+        public SharedBuffKeywordLink(string buffID, string keywordID)
+        {
+            this.buffID = buffID;
+            this.keywordID = keywordID;
+        }
+    }
+
+    static readonly SharedBuffKeywordLink[] SharedLinks =
+    {
+        new SharedBuffKeywordLink(BattleResourceID.Bullet, "bullet"),
+        new SharedBuffKeywordLink(BattleResourceID.Anger, "anger"),
+        new SharedBuffKeywordLink(BattleResourceID.Modification, "modification"),
+        new SharedBuffKeywordLink(BattleResourceID.Conservation, "conservation")
+    };
+
+    public static bool TryResolveDisplayNameForBuff(
+        string buffID,
+        out string displayName
+    )
+    {
+        displayName = null;
+        string keywordID;
+        if (!TryGetKeywordID(buffID, out keywordID))
+        {
+            return false;
+        }
+
+        CardKeywordData keyword;
+        if (!BattleGlobalKeywordLibrary.TryGetGlobalKeyword(
+                keywordID, out keyword) ||
+            keyword == null ||
+            string.IsNullOrEmpty(keyword.displayName))
+        {
+            return false;
+        }
+
+        displayName = keyword.displayName;
+        return true;
+    }
+
+    public static bool TryResolveBodyForKeyword(
+        string keywordID,
+        CharacterData owner,
+        out string body
+    )
+    {
+        body = null;
+        string buffID;
+        if (!TryGetBuffID(keywordID, out buffID))
+        {
+            return false;
+        }
+
+        return TryResolveBodyForBuff(buffID, owner, out body);
+    }
+
+    public static bool TryResolveBodyForBuff(
+        string buffID,
+        CharacterData owner,
+        out string body
+    )
+    {
+        body = null;
+        if (!IsSharedBuffID(buffID))
+        {
+            return false;
+        }
+
+        BuffDefinitionData definition;
+        if (!BuffDefinitionLoader.TryGetDefinition(buffID, out definition) ||
+            definition == null ||
+            string.IsNullOrWhiteSpace(definition.description))
+        {
+            return false;
+        }
+
+        body = definition.description;
+        if (buffID == BattleResourceID.Bullet)
+        {
+            string capacityText = "\n当前弹仓容量：" +
+                BattleBulletRules.GetMagazineCapacity(owner) +
+                "。";
+            int firstLineBreak = body.IndexOf('\n');
+            body = firstLineBreak >= 0
+                ? body.Insert(firstLineBreak, capacityText)
+                : body + capacityText;
+        }
+
+        return true;
+    }
+
+    public static bool IsSharedBuffID(string buffID)
+    {
+        string keywordID;
+        return TryGetKeywordID(buffID, out keywordID);
+    }
+
+    public static bool IsSharedKeywordID(string keywordID)
+    {
+        string buffID;
+        return TryGetBuffID(keywordID, out buffID);
+    }
+
+    static bool TryGetBuffID(string keywordID, out string buffID)
+    {
+        buffID = null;
+        foreach (SharedBuffKeywordLink link in SharedLinks)
+        {
+            if (link != null && link.keywordID == keywordID)
+            {
+                buffID = link.buffID;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static bool TryGetKeywordID(string buffID, out string keywordID)
+    {
+        keywordID = null;
+        foreach (SharedBuffKeywordLink link in SharedLinks)
+        {
+            if (link != null && link.buffID == buffID)
+            {
+                keywordID = link.keywordID;
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
 public static class BattleCardTooltipResolver
 {
     public static bool TryResolve(BattleCardKeywordBinding binding, CharacterData owner,
@@ -91,10 +230,14 @@ public static class BattleCardTooltipResolver
         content = null;
         if (binding == null || string.IsNullOrEmpty(binding.displayName)) return false;
         string body = binding.tooltipText;
-        if (binding.kind == BattleCardDescriptionTokenKind.GlobalKeyword && binding.keywordID == "bullet")
+        if (binding.kind == BattleCardDescriptionTokenKind.GlobalKeyword &&
+            BattleSharedBuffTooltipResolver.IsSharedKeywordID(binding.keywordID))
         {
-            int capacity = BattleBulletRules.GetMagazineCapacity(owner);
-            body = "射击攻击使用的资源。\n当前弹仓容量：" + capacity + "。\n部分射击会在 CardUsed 时消耗子弹。";
+            if (!BattleSharedBuffTooltipResolver.TryResolveBodyForKeyword(
+                    binding.keywordID, owner, out body))
+            {
+                return false;
+            }
         }
         if (string.IsNullOrWhiteSpace(body)) return false;
         content = new BattleSecondaryInfoContent(binding.displayName, body,

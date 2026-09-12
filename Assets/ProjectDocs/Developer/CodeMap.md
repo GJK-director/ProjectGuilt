@@ -31,7 +31,7 @@ Last Verified: 2026-09-12
 | Camera | [Camera](../../Scripts/Camera) | BattleCameraDirector、GrayboxBattleCameraController | framing/motion 参数、角色位置 | Presenter/TurnCoordinator | Camera、Spawner | BattleScene camera | 相关 Presentation Legacy | 热键/Sandbox | CURRENT / 高；DEFERRED_DEBT |
 | Story | [Story](../../Scripts/Story) | StorySceneFacade → FlowController/NodeExecutor | Resources/Story/prologue_501.json | IntroStoryHost/StoryTestHost | ContentProvider、StoryView | NewGameText、StoryPanel | 无 Formal Story Suite；Editor validate | StoryTestHost/NewGameText | CURRENT / 中高；独立 asmdef |
 | StoryDemo | [StoryDemo](../../Scripts/StoryDemo) | IntroStoryHost、SceneLoadingOverlay | storyId、battleSceneName、宿主 SFX | NewGameText | Story API、SceneManager | NewGameText | 剧情集成人工验证 | NewGameText | CURRENT / 中；生成音效占位 |
-| Settings | [Settings](../../Scripts/Settings) | GameSettingsState；UI/MainMenu/MainMenuController | PlayerPrefs、deck/display preset | Menu/Bootstrap | Screen、DeckManifest | Menu | GameSettingsIntegration Legacy / Mode133 | Menu 主链 | CURRENT / 中 |
+| Settings | [Settings](../../Scripts/Settings) | GameSettingsState；UI/MainMenu/MainMenuController | PlayerPrefs preference、one-shot pending/session deck、Inspector fallback | Menu/Bootstrap | Screen、DeckManifest | Menu | GameSettingsIntegration Legacy / Mode133 | Menu 主链 | CURRENT / 中 |
 
 ## Domain Contracts
 
@@ -65,7 +65,7 @@ Last Verified: 2026-09-12
 - [BattleCameraDirector](../../Scripts/Camera/BattleCameraDirector.cs)：BeforeSceneLoad 注册 sceneLoaded；有 BattleSimpleUIController 的 Scene 中按需创建 Director。
 - [BattleEndPanelController](../../Scripts/UI/Battle/BattleEndPanelController.cs)：Bootstrap 调用 Bind，按需创建终局 UI。
 - [Scene Presenter](../../Scripts/Presentation/BattleSceneExecutionPresenter.cs)：按需 AddComponent LongRangeShootVsAttack / SpecialLongRangeDuel Player。
-- [WorldFollowProjectionDiagnostic](../../Scripts/UI/Debug/BattleWorldFollowProjectionDiagnostic.cs)：由 [Spawner](../../Scripts/UI/BattleUnits/BattleUnitViewSpawner.cs) 添加/绑定。
+- [BattleWorldFollowProjectionDiagnostic](../../Scripts/UI/Debug/BattleWorldFollowProjectionDiagnostic.cs)：保留的手工诊断工具；[BattleUnitViewSpawner](../../Scripts/UI/BattleUnits/BattleUnitViewSpawner.cs) 正式 Runtime 不再自动添加/绑定它，需要投影诊断时才人工挂载/使用。
 - Roll Panel 通过 Resources 路径实例化。没有 Scene m_Script 引用不等于没有 Runtime consumer。
 
 ## Unity Serialization / Assembly Risk

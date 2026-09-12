@@ -18,6 +18,9 @@ public static class GameSettingsState
     internal const string ResolutionPreferenceKey =
         "ProjectGuilt.ResolutionPreset";
 
+    static bool hasPendingBattleDeck;
+    static BattleDeckPreset pendingBattleDeck;
+
     public static bool HasSelectedDeckPreference
     {
         get { return PlayerPrefs.HasKey(SelectedDeckPreferenceKey); }
@@ -58,6 +61,42 @@ public static class GameSettingsState
     {
         PlayerPrefs.SetInt(SelectedDeckPreferenceKey, (int)preset);
         PlayerPrefs.Save();
+    }
+
+    public static bool HasPendingBattleDeck
+    {
+        get { return hasPendingBattleDeck; }
+    }
+
+    public static void SetPendingBattleDeck(BattleDeckPreset preset)
+    {
+        pendingBattleDeck = preset;
+        hasPendingBattleDeck = true;
+    }
+
+    public static bool TryConsumePendingBattleDeck(out BattleDeckPreset preset)
+    {
+        if (!hasPendingBattleDeck)
+        {
+            preset = BattleDeckPreset.Knife;
+            return false;
+        }
+
+        preset = pendingBattleDeck;
+        ClearPendingBattleDeck();
+        return true;
+    }
+
+    internal static void ClearPendingBattleDeck()
+    {
+        hasPendingBattleDeck = false;
+        pendingBattleDeck = BattleDeckPreset.Knife;
+    }
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    static void ResetSessionState()
+    {
+        ClearPendingBattleDeck();
     }
 
     public static void SetFullscreen(bool isFullscreen)

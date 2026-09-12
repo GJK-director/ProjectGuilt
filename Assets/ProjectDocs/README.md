@@ -2,7 +2,7 @@
 
 Status: CURRENT
 Role: DOCUMENTATION ROOT NAVIGATION
-Last Verified: 2026-09-11
+Last Verified: 2026-09-12
 
 ## 阅读链
 
@@ -14,6 +14,7 @@ Last Verified: 2026-09-11
 
 - FeatureGuide = “What do I edit?”：人类开发者的功能修改入口。
 - CodeMap = “How is it connected?”：CANONICAL AI REPO MAP，路径事实唯一 owner。
+- [GitCollaboration](Developer/GitCollaboration.md) = 人类开发者的 Git / GitHub Desktop 协作、分支、提交、合并与 Unity 仓库安全指南。
 - [Architecture](Developer/Architecture.md)：高层边界、程序集与 deferred debt，不维护第二份路径表。
 - [RuntimeEntryPoints](Developer/RuntimeEntryPoints.md)：正式 Scene 流与动态入口。
 - [DataPipeline](Developer/DataPipeline.md)：数据来源、加载与消费语义。

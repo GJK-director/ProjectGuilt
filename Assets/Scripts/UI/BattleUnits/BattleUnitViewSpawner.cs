@@ -494,18 +494,6 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
             presentationController,
             camp
         );
-        if (camp == BattleUnitCamp.Ally && worldName == "Ally_01")
-        {
-            // 临时诊断仅观察第一名友方的锚点与可见脚底投影差异。
-            BattleWorldFollowProjectionDiagnostic diagnostic =
-                worldRoot.AddComponent<
-                    BattleWorldFollowProjectionDiagnostic>();
-            diagnostic.Bind(
-                worldCamera,
-                worldVisual.footAnchor,
-                worldVisual.renderer
-            );
-        }
         GameObject statusRoot = Instantiate(
             statusPrefab,
             worldFollowUIRoot,
