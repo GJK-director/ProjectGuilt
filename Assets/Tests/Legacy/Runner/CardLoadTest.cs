@@ -30758,9 +30758,11 @@ public static class BattleCardKeywordPresentationTests
         bool productionGlobalVocabulary = VerifyProductionGlobalVocabulary();
         bool vocabulary = VerifyTimingVocabulary();
         bool bullet = VerifyBulletDynamicCapacity();
-        bool anger = VerifyGlobalTooltip("怒", "global:anger", "怒层数");
-        bool conservation = VerifyGlobalTooltip("节约", "global:conservation", "下一张符合条件的射击");
-        bool modification = VerifyGlobalTooltip("改装", "global:modification", "弹仓容量");
+        bool anger = VerifyGlobalTooltip("怒", "global:anger", BattleResourceID.Anger);
+        bool conservation = VerifyGlobalTooltip(
+            "节约", "global:conservation", BattleResourceID.Conservation);
+        bool modification = VerifyGlobalTooltip(
+            "改装", "global:modification", BattleResourceID.Modification);
         bool localOverride = VerifyLocalOverride();
         bool stableLinks = VerifyStableLocalLinkIDs();
         bool allIn = VerifyAllInTooltip(cards);
@@ -30771,7 +30773,9 @@ public static class BattleCardKeywordPresentationTests
         bool missing = VerifyMissingKeywordFallback();
         bool descriptionOnly = VerifyDescriptionOnlyPresentation();
         bool pureRead = VerifyTooltipResolverPureRead();
+        bool nonBuffGlobal = VerifyNonBuffGlobalTooltip();
 
+        Debug.Log("===== 以下是测试结果 =====");
         Debug.Log("===== Mode132 BattleCardKeywordPresentationBasic =====");
         Check("Timing uses gray-blue presentation", timing);
         Check("Global keyword uses gold TMP link", global);
@@ -30791,9 +30795,10 @@ public static class BattleCardKeywordPresentationTests
         Check("Missing keyword data falls back safely", missing);
         Check("Description formatting does not mutate gameplay metadata", descriptionOnly);
         Check("Tooltip resolution is pure read", pureRead);
+        Check("Non-Buff global keyword remains unchanged", nonBuffGlobal);
         bool passed = timing && global && productionGlobalVocabulary && vocabulary && bullet && anger && conservation &&
             modification && localOverride && stableLinks && allIn && visibleMultipliers &&
-            longest && repeated && adjacent && missing && descriptionOnly && pureRead;
+            longest && repeated && adjacent && missing && descriptionOnly && pureRead && nonBuffGlobal;
         Debug.Log("Passed: " + passed);
         return passed;
     }
@@ -30820,11 +30825,12 @@ public static class BattleCardKeywordPresentationTests
 
     static bool VerifyProductionGlobalVocabulary()
     {
-        return BattleGlobalKeywordLibrary.GlobalKeywords.Count == 4 &&
+        return BattleGlobalKeywordLibrary.GlobalKeywords.Count == 5 &&
             BattleGlobalKeywordLibrary.TryGetGlobalKeyword("bullet", out _) &&
             BattleGlobalKeywordLibrary.TryGetGlobalKeyword("anger", out _) &&
             BattleGlobalKeywordLibrary.TryGetGlobalKeyword("conservation", out _) &&
             BattleGlobalKeywordLibrary.TryGetGlobalKeyword("modification", out _) &&
+            BattleGlobalKeywordLibrary.TryGetGlobalKeyword("first_strike", out _) &&
             !BattleGlobalKeywordLibrary.TryGetGlobalKeyword("global_multiplier", out _);
     }
 
@@ -30853,24 +30859,76 @@ public static class BattleCardKeywordPresentationTests
     {
         CharacterData owner = BattleTimingMigrationFixture.Unit("mode132_bullet");
         BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format("子弹", null);
+        BuffDefinitionData definition;
+        if (!BuffDefinitionLoader.TryGetDefinition(
+                BattleResourceID.Bullet,
+                out definition) || definition == null)
+        {
+            return false;
+        }
         if (!result.TryGetBinding("global:bullet", out BattleCardKeywordBinding binding) ||
             !BattleCardTooltipResolver.TryResolve(binding, owner,
-                out BattleSecondaryInfoContent before) || !before.body.Contains("6"))
+                out BattleSecondaryInfoContent before) ||
+            !before.body.Contains("当前弹仓容量：6。"))
+        {
+            return false;
+        }
+        string beforeStaticBody = before.body.Replace(
+            "\n当前弹仓容量：6。",
+            ""
+        );
+        if (beforeStaticBody != definition.description)
         {
             return false;
         }
         BattleModificationRules.Activate(owner);
-        return BattleCardTooltipResolver.TryResolve(binding, owner,
-            out BattleSecondaryInfoContent after) && after.body.Contains("4") &&
-            !after.body.Contains("容量：6");
+        if (!BattleCardTooltipResolver.TryResolve(binding, owner,
+                out BattleSecondaryInfoContent after) ||
+            !after.body.Contains("当前弹仓容量：4。") ||
+            after.body.Contains("当前弹仓容量：6。"))
+        {
+            return false;
+        }
+        string afterStaticBody = after.body.Replace(
+            "\n当前弹仓容量：4。",
+            ""
+        );
+        return afterStaticBody == definition.description;
     }
 
-    static bool VerifyGlobalTooltip(string text, string linkID, string requiredBody)
+    static bool VerifyGlobalTooltip(string text, string linkID, string buffID)
     {
         BattleCardDescriptionFormatResult result = BattleCardDescriptionFormatter.Format(text, null);
+        BuffDefinitionData definition;
+        string sharedBody;
         return result.TryGetBinding(linkID, out BattleCardKeywordBinding binding) &&
+            BuffDefinitionLoader.TryGetDefinition(buffID, out definition) &&
+            definition != null &&
+            BattleSharedBuffTooltipResolver.TryResolveBodyForBuff(
+                buffID, null, out sharedBody) &&
+            sharedBody == definition.description &&
             BattleCardTooltipResolver.TryResolve(binding, null,
-                out BattleSecondaryInfoContent content) && content.body.Contains(requiredBody);
+                out BattleSecondaryInfoContent content) &&
+            content.body == definition.description;
+    }
+
+    static bool VerifyNonBuffGlobalTooltip()
+    {
+        CardKeywordData keyword;
+        if (!BattleGlobalKeywordLibrary.TryGetGlobalKeyword(
+                "first_strike", out keyword))
+        {
+            return false;
+        }
+
+        BattleCardDescriptionFormatResult result =
+            BattleCardDescriptionFormatter.Format("先攻", null);
+        BattleCardKeywordBinding binding;
+        BattleSecondaryInfoContent content;
+        return result.TryGetBinding("global:first_strike", out binding) &&
+            binding.kind == BattleCardDescriptionTokenKind.GlobalKeyword &&
+            BattleCardTooltipResolver.TryResolve(binding, null, out content) &&
+            content.body == keyword.tooltipText;
     }
 
     static bool VerifyLocalOverride()
