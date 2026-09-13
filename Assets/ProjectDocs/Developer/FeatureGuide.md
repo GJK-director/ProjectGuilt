@@ -18,6 +18,7 @@ Last Verified: 2026-09-11
 | 修改牌组 | [修改牌组](#9-修改牌组) |
 | 修改卡牌视觉 | [卡牌图片 / 卡面视觉](#5-卡牌图片--卡面视觉) |
 | 修改镜头 | [Camera](#14-其他非卡牌功能) |
+| 调整角色自身目标判定框 | [自身目标判定框](#141-我要调整角色自身目标判定框) |
 | 修改敌人行动 | [Enemy Intent](#14-其他非卡牌功能) |
 | 修改剧情 | [Story](#14-其他非卡牌功能) |
 | 修改设置/UI | [UI / Settings](#14-其他非卡牌功能) |
@@ -304,6 +305,16 @@ Card runtime 会在 Bootstrap 时重新创建；`BuffDefinitionLoader` 有静态
 | Story | Story 数据、`NewGameText`、配置后的 StoryTestHost | 从菜单进入剧情并推进 | 新剧情系统或缺少正式入口 |
 | UI | 对应 UI View / Host / Prefab | `BattleScene`、Preview 或对应辅助 Scene | 新交互、跨战斗流程或缺少绑定 |
 | Settings | `Menu`、`GameSettingsState`、对应序列化字段 | Menu → NewGameText → BattleScene → Menu | 新设置持久化或影响 Bootstrap |
+
+### 14.1 我要调整角色自身目标判定框
+
+位置：`BattleCharacterStatusWorldFollower` 的 `Center Offset`。它负责调整 `SelfActionDropZone` 相对于角色的默认位置；不要通过运行时 `SelfActionDropZone` RectTransform 的 Pos X / Pos Y 配置正式默认位置。
+
+大小：调整 `SelfActionDropZone` 的 RectTransform `Width / Height`，用于改变判定范围。保持基础 Scale 为 `1,1,1`，不要用 Scale 代替正式范围调节。
+
+可视调试：临时提高 `SelfActionDropZone → Image` 的 Alpha，在 `BattleScene` 中观察判定范围；调整完成后将 Alpha 调回透明。`Raycast Target` 必须保持开启。
+
+运行时位置由 `Center World Anchor → Camera → Canvas` 投影持续刷新；Prefab 编辑状态下 World Camera、Target Canvas 和 World Anchors 显示为 None 可以是正常的，不要手动绑定运行时 Scene 对象。
 
 内部路径、调用者和依赖统一查 [CodeMap](CodeMap.md)，不要在本手册重复架构说明。
 

@@ -459,6 +459,7 @@ MonoBehaviour:
   hpView: {fileID: 8975166638759456870}
   buffGroupView: {fileID: 170983492040664059}
   selfActionDropZone: {fileID: 4534459108892920379}
+  characterTargetHitbox: {fileID: 0}
   isEnemy: 0
 --- !u!114 &8445725501579957474
 MonoBehaviour:
@@ -482,7 +483,7 @@ MonoBehaviour:
   selfActionDropZone: {fileID: 4541997728581863328}
   headOffset: {x: 0, y: 0}
   footOffset: {x: 0, y: 0}
-  centerOffset: {x: 0, y: 0}
+  centerOffset: {x: 25, y: 110}
   followEveryLateUpdate: 1
   hideWhenBehindCamera: 1
   visibilityCanvasGroup: {fileID: 0}
@@ -1708,14 +1709,14 @@ RectTransform:
   m_GameObject: {fileID: 7588597512082983871}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_LocalScale: {x: 1.7, y: 1.25, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 7009732034161603873}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: -349.00928, y: 31.23259}
+  m_AnchoredPosition: {x: -225, y: 152}
   m_SizeDelta: {x: 146.4147, y: 348.312}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!222 &8579542584300177064
@@ -1740,7 +1741,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
   m_Material: {fileID: 0}
   m_Color: {r: 1, g: 1, b: 1, a: 0}
-  m_RaycastTarget: 0
+  m_RaycastTarget: 1
   m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
   m_Maskable: 1
   m_OnCullStateChanged:
@@ -1768,6 +1769,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: eebed56430835a54cb25ab62230b3eb9, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BattleSelfActionDropZone
+  targetGraphic: {fileID: 6101893700521785103}
 --- !u!1 &8506634473535357391
 GameObject:
   m_ObjectHideFlags: 0

@@ -34,6 +34,12 @@ Scene 绑定 → Runtime View → 输入 Router → Planning；执行结果刷�
 
 新增命中区需要在 Ally Status UI 上人工放置透明 Graphic，设置其 RectTransform 后绑定 `BattleCharacterStatusUIView.characterTargetHitbox`；新增轮廓需要在 Ally World Prefab 实例上人工添加并配置 `BattleCharacterTargetOutline`。缺少这些可选引用不会阻止 Runtime 生成。
 
+## SelfActionDropZone Contract
+
+`SelfActionDropZone` 是 Ally Status UI 的自身目标判定区域。它由 `BattleCharacterStatusWorldFollower` 负责世界跟随，使用角色的 `Center World Anchor` 投影到 Canvas；`Center Offset` 是人工布局偏移，`SelfActionDropZone` RectTransform 的 Width/Height 是人工判定范围。运行时投影持续写入位置，不能把运行时 Pos X/Pos Y 当作正式默认布局入口。
+
+`Ability`、`Defense`、`Dodge` 可以进行 Self placement；`Attack` 禁止 Self。正式 Self placement 写入 `BattleActionPlacementType.Self`，不生成正式 Action Relation Line。
+
 ## Invariants
 
 View 不自行提交伤害；选择状态与正式安排分开；Data 与 Prefab 配置分别核验。
