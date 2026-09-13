@@ -173,6 +173,15 @@ public static class BattleActionSlotManager
             return false;
         }
 
+        if (IsAbilityCard(cardState))
+        {
+            result = CreateAssignmentFailure(
+                "安排到敌人意图失败：Ability 不能作为精确响应",
+                CardEligibilityFailureReason.UnsupportedCondition
+            );
+            return false;
+        }
+
         if (!IsAllowedForEnemyPlacement(cardState))
         {
             result = CreateAssignmentFailure(
@@ -270,7 +279,7 @@ public static class BattleActionSlotManager
         if (!IsAllowedForEnemyPlacement(cardState))
         {
             result = CreateAssignmentFailure(
-                "安排到指定敌人失败：只允许 Attack、Defense 或 Dodge",
+                "安排到指定敌人失败：只允许 Attack、Defense、Dodge 或 Ability",
                 CardEligibilityFailureReason.UnsupportedCondition
             );
             return false;
@@ -1604,7 +1613,7 @@ public static class BattleActionSlotManager
 
     static bool IsAllowedForEnemyPlacement(BattleCardState cardState)
     {
-        if (cardState == null || cardState.cardData == null || IsAbilityCard(cardState))
+        if (cardState == null || cardState.cardData == null)
         {
             return false;
         }
@@ -1612,7 +1621,8 @@ public static class BattleActionSlotManager
         string cardType = cardState.cardData.cardType;
         return cardType == CardType.Attack ||
             cardType == CardType.Defense ||
-            cardType == CardType.Dodge;
+            cardType == CardType.Dodge ||
+            IsAbilityCard(cardState);
     }
 
     static bool IsAllowedForSelfPlacement(BattleCardState cardState)

@@ -16,7 +16,7 @@ Last Verified: 2026-09-11
 | Bootstrap preset | DeckPresetBootstrapTests：11 Case | 其他正式初始化/provider 与 Settings 集成 | retained Mode114 wrapper；Mode103/133 | 不为每个旧 Mode 建新 Suite |
 | Knife/Resolution | 当前无该域完整 Formal owner | Mode107 Anger/Knife/Iai/Double Slash/Heavy/Breath/staged HP 组合 | CardLoadTest Mode107 → BattleAngerAndKnifeCardsBasicTests | 修改对应规则再拆相关契约 |
 | Shooting/Ability/Buffs | 当前无该域完整 Formal owner | Mode113 Conservation、0 Bullet、CD、Ability 及依赖链 | CardLoadTest Mode113 → BattleConservationAbilityTests | 不误把已有 Cards manifest Case 当资源规则覆盖 |
-| UI/Keywords | 无 UI Formal C# owner | Mode132 timing/tooltip/description 格式 | CardLoadTest Mode132 → BattleCardKeywordPresentationTests | 文字契约与视觉验收分开 |
+| UI/Keywords/Targeting | 无 UI Formal C# owner | Mode67 target surfaces/placement、Mode73 hitbox preview、Mode75 targeting lifecycle、Mode132 timing/tooltip/description 格式 | CardLoadTest Mode67；BattleActionRelationMode73Tests / Mode75；CardLoadTest Mode132 → BattleCardKeywordPresentationTests | 点击安排、关系预览、表面生命周期与文字契约分开；视觉仍需人工验收 |
 | Settings | 无 Settings Formal C# owner | Mode133 preference/display/Bootstrap 集成 | CardLoadTest Mode133 → BattleGameSettingsIntegrationTests | 结合 Menu 人工流程 |
 | Lifecycle/Turn/Events | 无对应 Formal C# owner | lifecycle/terminal/CardUsed/Resolved/ActionFinished/Impact | Legacy/Core 及 CardLoadTest 内嵌测试；按 inventory 找 caller | 先查事件顺序与资源提交合约 |
 | Resolution/Interaction | 无完整 Formal owner；FirstStrike 只覆盖其专属契约 | Generic Attack/Guard/Dodge、Clash/Context/Plan | Legacy/Core；CardLoadTest dispatch | 按实际 interaction 选择回归 |

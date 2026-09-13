@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 public static class BattleActionRelationMode73Tests
@@ -150,6 +152,7 @@ public static class BattleActionRelationMode73Tests
         bool[] results = new bool[74];
         bool inputCompatibilityPassed = false;
         bool visualSafetyPassed = false;
+        bool characterTargetPreviewPassed = false;
         QueryFixture baseFixture = CreateQueryFixture();
         RunQueryTests(results, baseFixture);
 
@@ -159,6 +162,8 @@ public static class BattleActionRelationMode73Tests
             RunControllerTests(results, baseFixture, display);
             RunCurveAndClashTests(results, display);
             RunLayerLaneAndPreviewTests(results, baseFixture, display);
+            characterTargetPreviewPassed =
+                RunCharacterTargetPreviewTests(display);
             visualSafetyPassed = RunRaycastAndSharedClashTests(
                 display,
                 baseFixture
@@ -182,7 +187,74 @@ public static class BattleActionRelationMode73Tests
         }
         Debug.Log("===== BattleActionRelationLineBasic 模式73核心测试结束 =====");
         return allPassed && inputCompatibilityPassed &&
-            visualSafetyPassed;
+            visualSafetyPassed && characterTargetPreviewPassed;
+    }
+
+    private static bool RunCharacterTargetPreviewTests(DisplayFixture display)
+    {
+        GameObject targetObject = new GameObject(
+            "Mode73CharacterTargetPreview",
+            typeof(RectTransform)
+        );
+        RectTransform target = targetObject.GetComponent<RectTransform>();
+        target.SetParent(display.canvas.transform, false);
+        target.sizeDelta = new Vector2(120f, 80f);
+        target.anchoredPosition = new Vector2(180f, 90f);
+
+        try
+        {
+            display.controller.EndCardTargetingPreview();
+            bool began = display.controller.BeginCardTargetingPreview(
+                "AllyA:1"
+            );
+            display.controller.UpdateCardTargetingPointer(
+                new Vector2(620f, 410f)
+            );
+            display.controller.SetPreviewTargetOverride(target);
+
+            Vector2 expectedTopCenter;
+            bool converted =
+                BattleActionRelationLineController
+                    .TryConvertRectTopCenterToLayerLocal(
+                        target,
+                        display.lineLayer,
+                        display.canvas,
+                        null,
+                        out expectedTopCenter
+                    );
+            bool entered = began && converted &&
+                object.ReferenceEquals(
+                    display.controller.PreviewTargetRectOverride,
+                    target
+                ) &&
+                Approximately(
+                    display.previewCurve.ArrowTip,
+                    expectedTopCenter
+                );
+
+            display.controller.ClearPreviewTargetOverride();
+            display.controller.UpdateCardTargetingPointer(
+                new Vector2(620f, 410f)
+            );
+            Vector2 expectedPointer;
+            RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                display.lineLayer,
+                new Vector2(620f, 410f),
+                null,
+                out expectedPointer
+            );
+            bool exited = display.controller.PreviewTargetRectOverride ==
+                null && Approximately(
+                    display.previewCurve.ArrowTip,
+                    expectedPointer
+                );
+            return entered && exited;
+        }
+        finally
+        {
+            display.controller.EndCardTargetingPreview();
+            UnityEngine.Object.Destroy(targetObject);
+        }
     }
 
     private static bool RunRaycastAndSharedClashTests(
@@ -1669,6 +1741,8 @@ public static class BattleActionRelationInteractionMode75Tests
         RunCurveOwnershipRegressionTests(results);
         bool previewLifecyclePassed = RunPreviewLifecycleRegressionTests();
         bool curveTransitionPassed = RunCurveTransitionRegressionTests();
+        bool characterTargetSurfacePassed =
+            RunCharacterTargetSurfaceRegressionTests();
 
         bool allPassed = true;
         for (int index = 0; index < results.Length; index++)
@@ -1681,8 +1755,127 @@ public static class BattleActionRelationInteractionMode75Tests
         }
         allPassed &= previewLifecyclePassed;
         allPassed &= curveTransitionPassed;
+        Debug.Log(
+            "模式75 Character Target Surface contract：" +
+            characterTargetSurfacePassed
+        );
+        allPassed &= characterTargetSurfacePassed;
         Debug.Log("模式75 " + Names.Length + "项聚合结果：" + allPassed);
         return allPassed;
+    }
+
+    private static bool RunCharacterTargetSurfaceRegressionTests()
+    {
+        CharacterData character = new CharacterData(
+            "mode75_target_character",
+            30,
+            5,
+            5
+        );
+        GameObject hitboxObject = new GameObject(
+            "Mode75CharacterTargetHitbox",
+            typeof(RectTransform),
+            typeof(Image),
+            typeof(BattleCharacterTargetHitbox)
+        );
+        BattleCharacterTargetHitbox hitbox =
+            hitboxObject.GetComponent<BattleCharacterTargetHitbox>();
+        Image hitboxGraphic = hitboxObject.GetComponent<Image>();
+        int clickCount = 0;
+        int enterCount = 0;
+        int exitCount = 0;
+        hitbox.Bind(
+            character,
+            target => clickCount++,
+            target => enterCount++,
+            target => exitCount++
+        );
+        PointerEventData pointer = new PointerEventData(null)
+        {
+            button = PointerEventData.InputButton.Left
+        };
+        hitbox.OnPointerClick(pointer);
+        hitbox.OnPointerEnter(pointer);
+        hitbox.OnPointerExit(pointer);
+        bool inactiveIsQuiet = clickCount == 0 &&
+            enterCount == 0 &&
+            exitCount == 0 &&
+            !hitbox.TargetingActive &&
+            !hitboxGraphic.raycastTarget;
+
+        hitbox.SetTargetingActive(true);
+        hitbox.OnPointerClick(pointer);
+        hitbox.OnPointerEnter(pointer);
+        hitbox.OnPointerExit(pointer);
+        bool activeRoutesInput = hitbox.TargetingActive &&
+            hitboxGraphic.raycastTarget &&
+            clickCount == 1 &&
+            enterCount == 1 &&
+            exitCount == 1;
+        hitbox.SetTargetingActive(false);
+        bool deactivationStopsInput = !hitbox.TargetingActive &&
+            !hitboxGraphic.raycastTarget;
+
+        GameObject outlineRoot = new GameObject(
+            "Mode75CharacterTargetOutline"
+        );
+        GameObject sourceObject = new GameObject(
+            "Mode75OutlineSource"
+        );
+        sourceObject.transform.SetParent(outlineRoot.transform, false);
+        SpriteRenderer source = sourceObject.AddComponent<SpriteRenderer>();
+        source.sprite = CreateTestSprite();
+        BattleCharacterPresentationController presentation =
+            outlineRoot.AddComponent<BattleCharacterPresentationController>();
+        SetPrivateField(presentation, "characterSprite", source);
+        GameObject outlineObject = new GameObject("Mode75OutlineVisual");
+        outlineObject.transform.SetParent(outlineRoot.transform, false);
+        SpriteRenderer outlineRenderer =
+            outlineObject.AddComponent<SpriteRenderer>();
+        BattleCharacterTargetOutline outline =
+            outlineRoot.AddComponent<BattleCharacterTargetOutline>();
+        SetPrivateField(outline, "sourceSpriteRenderer", source);
+        SetPrivateField(outline, "outlineSpriteRenderer", outlineRenderer);
+        outline.SetVisible(true);
+        bool outlineCanBeShown = outline.IsVisible &&
+            outlineRenderer.sprite == source.sprite;
+        outline.SetVisible(false);
+        bool outlineIgnoresHover = !outline.IsVisible;
+
+        UnityEngine.Object.DestroyImmediate(hitboxObject);
+        UnityEngine.Object.DestroyImmediate(outlineRoot);
+        return inactiveIsQuiet &&
+            activeRoutesInput &&
+            deactivationStopsInput &&
+            outlineCanBeShown &&
+            outlineIgnoresHover;
+    }
+
+    private static Sprite CreateTestSprite()
+    {
+        Texture2D texture = new Texture2D(2, 2);
+        return Sprite.Create(
+            texture,
+            new Rect(0f, 0f, 2f, 2f),
+            new Vector2(0.5f, 0.5f)
+        );
+    }
+
+    private static void SetPrivateField(
+        object target,
+        string fieldName,
+        object value
+    )
+    {
+        FieldInfo field = target.GetType().GetField(
+            fieldName,
+            BindingFlags.Instance | BindingFlags.NonPublic
+        );
+        if (field == null)
+        {
+            throw new MissingFieldException(target.GetType().Name, fieldName);
+        }
+        field.SetValue(target, value);
     }
 
     private static bool RunCurveTransitionRegressionTests()

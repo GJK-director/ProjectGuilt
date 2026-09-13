@@ -17324,6 +17324,7 @@ public class CardLoadTest : MonoBehaviour
 
     bool RunBattleCardClickInteractionIntegrationTestSequence()
     {
+        Debug.Log("===== 以下是测试结果 =====");
         Debug.Log(
             "===== BattleCardClickInteractionIntegration 聚合测试开始 ====="
         );
@@ -17438,11 +17439,138 @@ public class CardLoadTest : MonoBehaviour
             false
         );
 
+        BattleEndedTestContext characterAbilityContext =
+            CreateBattleEndedTestContext(
+                "click67_character_ability",
+                30,
+                30,
+                50,
+                10,
+                8,
+                5
+            );
+        bool test6 = RunMode67CharacterTargetClickSubTest(
+            characterAbilityContext,
+            CreateBattleEndedAbilityCard(
+                characterAbilityContext.allyA,
+                "click67_character_ability_card",
+                "Click67CharacterAbility"
+            ),
+            characterAbilityContext.allyA,
+            true
+        );
+        BattleEndedTestContext characterAttackContext =
+            CreateBattleEndedTestContext(
+                "click67_character_attack",
+                30,
+                30,
+                50,
+                10,
+                8,
+                5
+            );
+        bool test7 = RunMode67CharacterTargetClickSubTest(
+            characterAttackContext,
+            CreateFixedAttackCardForCharacter(
+                characterAttackContext.allyA,
+                "click67_character_attack_card",
+                5
+            ),
+            characterAttackContext.allyA,
+            false
+        );
+        BattleEndedTestContext characterDefenseContext =
+            CreateBattleEndedTestContext(
+                "click67_character_defense",
+                30,
+                30,
+                50,
+                10,
+                8,
+                5
+            );
+        bool test8 = RunMode67CharacterTargetClickSubTest(
+            characterDefenseContext,
+            CreateTestDefenseCardForCharacter(
+                characterDefenseContext.allyA,
+                "click67_character_defense_card",
+                4,
+                1
+            ),
+            characterDefenseContext.allyA,
+            false
+        );
+        BattleEndedTestContext characterDodgeContext =
+            CreateBattleEndedTestContext(
+                "click67_character_dodge",
+                30,
+                30,
+                50,
+                10,
+                8,
+                5
+            );
+        bool test9 = RunMode67CharacterTargetClickSubTest(
+            characterDodgeContext,
+            CreateFixedDodgeCardForCharacter(
+                characterDodgeContext.allyA,
+                "click67_character_dodge_card",
+                4,
+                1
+            ),
+            characterDodgeContext.allyA,
+            false
+        );
+        BattleEndedTestContext otherAllyContext =
+            CreateBattleEndedTestContext(
+                "click67_other_ally",
+                30,
+                30,
+                50,
+                10,
+                8,
+                5
+            );
+        bool test10 = RunMode67CharacterTargetClickSubTest(
+            otherAllyContext,
+            CreateBattleEndedAbilityCard(
+                otherAllyContext.allyA,
+                "click67_other_ally_ability_card",
+                "Click67OtherAllyAbility"
+            ),
+            otherAllyContext.allyB,
+            false
+        );
+        BattleEndedTestContext enemyAbilityContext =
+            CreateBattleEndedTestContext(
+                "click67_enemy_ability",
+                30,
+                30,
+                50,
+                10,
+                8,
+                5
+            );
+        bool test11 = RunMode67EnemyAbilitySlotClickSubTest(
+            enemyAbilityContext,
+            CreateBattleEndedAbilityCard(
+                enemyAbilityContext.allyA,
+                "click67_enemy_ability_card",
+                "Click67EnemyAbility"
+            )
+        );
+
         Debug.Log("模式67 测试1 未选卡点击自身目标不安排：" + test1);
         Debug.Log("模式67 测试2 Ability点击自身目标成功：" + test2);
         Debug.Log("模式67 测试3 Defense点击自身目标成功：" + test3);
         Debug.Log("模式67 测试4 Dodge点击自身目标成功：" + test4);
         Debug.Log("模式67 测试5 Attack点击自身目标失败并保留选择：" + test5);
+        Debug.Log("模式67 测试6 Ability点击角色命中区成功：" + test6);
+        Debug.Log("模式67 测试7 Attack点击角色命中区失败：" + test7);
+        Debug.Log("模式67 测试8 Defense点击角色命中区失败：" + test8);
+        Debug.Log("模式67 测试9 Dodge点击角色命中区失败：" + test9);
+        Debug.Log("模式67 测试10 Ability点击另一友方角色失败：" + test10);
+        Debug.Log("模式67 测试11 Ability点击敌方槽位按自由行动成功：" + test11);
         Debug.Log(
             "===== BattleCardClickInteractionIntegration 聚合测试结束 ====="
         );
@@ -17450,7 +17578,259 @@ public class CardLoadTest : MonoBehaviour
             test2 &&
             test3 &&
             test4 &&
-            test5;
+            test5 &&
+            test6 &&
+            test7 &&
+            test8 &&
+            test9 &&
+            test10 &&
+            test11;
+    }
+
+    bool RunMode67CharacterTargetClickSubTest(
+        BattleEndedTestContext context,
+        BattleCardState cardState,
+        CharacterData targetCharacter,
+        bool expectSuccess
+    )
+    {
+        List<BattleActionSlot> slots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                context.allyA,
+                context.allyB,
+                2
+            );
+        context.runtimeState.SetActionSlots(slots);
+        context.runtimeState.SetIntentQueue(
+            new List<BattleEnemyIntent>()
+        );
+        SetTestLifecyclePhase(
+            context.runtimeState,
+            BattleLifecyclePhase.Prepare
+        );
+
+        BattleCardSelectionController selectionController =
+            new BattleCardSelectionController();
+        BattleCardInteractionCoordinator coordinator =
+            new BattleCardInteractionCoordinator(selectionController);
+
+        GameObject sourceObject = new GameObject(
+            "Click67CharacterSource",
+            typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView sourceView =
+            sourceObject.GetComponent<BattleActionSlotUIView>();
+        sourceView.BindInteraction(
+            context.allyA,
+            0,
+            false,
+            clickedSlot => coordinator.SelectSourceSlot(clickedSlot)
+        );
+
+        GameObject targetObject = new GameObject(
+            "Click67CharacterTarget",
+            typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
+            typeof(BattleCharacterTargetHitbox)
+        );
+        BattleCharacterTargetHitbox targetView =
+            targetObject.GetComponent<BattleCharacterTargetHitbox>();
+        BattleCardInteractionOutcome outcome = null;
+        targetView.Bind(
+            targetCharacter,
+            clickedTarget =>
+            {
+                outcome = coordinator.ClickCharacterTarget(
+                    context.runtimeState,
+                    clickedTarget
+                );
+            },
+            null,
+            null
+        );
+        targetView.SetTargetingActive(true);
+
+        BattleCardUIView cardView = CreatePrimaryPreviewCardView(
+            "Click67CharacterCard",
+            context.allyA,
+            context.allyA,
+            cardState
+        );
+        cardView.BindCard(
+            context.allyA,
+            cardState,
+            BattleCardUIPreviewBuilder.Build(
+                context.allyA,
+                context.allyA,
+                cardState
+            ),
+            selectionController
+        );
+
+        PointerEventData leftClick = new PointerEventData(null)
+        {
+            button = PointerEventData.InputButton.Left
+        };
+        sourceView.OnPointerClick(leftClick);
+        cardView.OnPointerClick(leftClick);
+        targetView.OnPointerClick(leftClick);
+
+        BattleActionSlot assignedSlot =
+            BattleActionSlotManager.GetSlot(
+                slots,
+                context.allyA,
+                1
+            );
+        bool passed;
+        if (expectSuccess)
+        {
+            passed = outcome != null &&
+                outcome.hadSelectedCard &&
+                outcome.isSuccess &&
+                outcome.assignmentResult != null &&
+                outcome.assignmentResult.placementType ==
+                    BattleActionPlacementType.Self &&
+                assignedSlot != null &&
+                object.ReferenceEquals(assignedSlot.cardState, cardState) &&
+                !selectionController.HasSelection;
+        }
+        else
+        {
+            passed = outcome != null &&
+                outcome.hadSelectedCard &&
+                !outcome.isSuccess &&
+                assignedSlot != null &&
+                assignedSlot.IsEmpty() &&
+                selectionController.HasSelection &&
+                object.ReferenceEquals(
+                    coordinator.SelectedActionSlotView,
+                    sourceView
+                );
+        }
+
+        Destroy(cardView.gameObject);
+        Destroy(sourceObject);
+        Destroy(targetObject);
+        return passed;
+    }
+
+    bool RunMode67EnemyAbilitySlotClickSubTest(
+        BattleEndedTestContext context,
+        BattleCardState cardState
+    )
+    {
+        List<BattleActionSlot> slots =
+            BattleActionSlotManager.CreatePartyActionSlots(
+                context.allyA,
+                context.allyB,
+                2
+            );
+        context.runtimeState.SetActionSlots(slots);
+        BattleCardState enemyCard =
+            CreateFixedEnemyAttackCardForDodgeTest(
+                context.enemy,
+                "click67_enemy_ability_intent_card",
+                5,
+                0
+            );
+        BattleEnemyIntent intent = new BattleEnemyIntent(
+            "click67_enemy_ability_intent",
+            context.enemy,
+            enemyCard,
+            context.allyA,
+            1
+        );
+        context.runtimeState.SetIntentQueue(
+            new List<BattleEnemyIntent> { intent }
+        );
+        SetTestLifecyclePhase(
+            context.runtimeState,
+            BattleLifecyclePhase.Prepare
+        );
+
+        BattleCardSelectionController selectionController =
+            new BattleCardSelectionController();
+        BattleCardInteractionCoordinator coordinator =
+            new BattleCardInteractionCoordinator(selectionController);
+        GameObject sourceObject = new GameObject(
+            "Click67EnemyAbilitySource",
+            typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView sourceView =
+            sourceObject.GetComponent<BattleActionSlotUIView>();
+        sourceView.BindInteraction(
+            context.allyA,
+            0,
+            false,
+            clickedSlot => coordinator.SelectSourceSlot(clickedSlot)
+        );
+        GameObject targetObject = new GameObject(
+            "Click67EnemyAbilityTarget",
+            typeof(RectTransform),
+            typeof(UnityEngine.UI.Image),
+            typeof(BattleActionSlotUIView)
+        );
+        BattleActionSlotUIView targetView =
+            targetObject.GetComponent<BattleActionSlotUIView>();
+        targetView.BindInteraction(
+            context.enemy,
+            1,
+            true,
+            null
+        );
+        targetView.SetBoundEnemyIntent(intent);
+        BattleCardUIView cardView = CreatePrimaryPreviewCardView(
+            "Click67EnemyAbilityCard",
+            context.allyA,
+            context.enemy,
+            cardState
+        );
+        cardView.BindCard(
+            context.allyA,
+            cardState,
+            BattleCardUIPreviewBuilder.Build(
+                context.allyA,
+                context.enemy,
+                cardState
+            ),
+            selectionController
+        );
+        PointerEventData leftClick = new PointerEventData(null)
+        {
+            button = PointerEventData.InputButton.Left
+        };
+        sourceView.OnPointerClick(leftClick);
+        cardView.OnPointerClick(leftClick);
+        BattleCardInteractionOutcome outcome = coordinator.ClickEnemySlot(
+            context.runtimeState,
+            targetView
+        );
+        BattleActionSlot assignedSlot =
+            BattleActionSlotManager.GetSlot(
+                slots,
+                context.allyA,
+                1
+            );
+        bool passed = outcome != null &&
+            outcome.hadSelectedCard &&
+            outcome.isSuccess &&
+            outcome.assignmentResult != null &&
+            outcome.assignmentResult.placementType ==
+                BattleActionPlacementType.SpecificEnemy &&
+            assignedSlot != null &&
+            assignedSlot.slotType == BattleActionSlotType.FreeAction &&
+            object.ReferenceEquals(assignedSlot.target, context.enemy) &&
+            assignedSlot.enemyIntent == null &&
+            assignedSlot.requestedTargetSlotIndex == 2 &&
+            !selectionController.HasSelection;
+        Destroy(cardView.gameObject);
+        Destroy(sourceObject);
+        Destroy(targetObject);
+        return passed;
     }
 
     bool RunMode67SelfTargetClickSubTest(

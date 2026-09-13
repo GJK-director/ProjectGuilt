@@ -10,12 +10,17 @@ public class BattleCharacterStatusUIView : MonoBehaviour
     [SerializeField] private BattleHpUIView hpView;
     [SerializeField] private BattleBuffGroupUIView buffGroupView;
     [SerializeField] private BattleSelfActionDropZone selfActionDropZone;
+    [SerializeField]
+    private BattleCharacterTargetHitbox characterTargetHitbox;
     [SerializeField] private bool isEnemy;
 
     private CharacterData boundCharacter;
     private Action<BattleActionSlotUIView> slotLeftClickHandler;
     private Action<BattleActionSlotUIView> slotRightClickHandler;
     private Action<BattleSelfActionDropZone> selfTargetClickHandler;
+    private Action<BattleCharacterTargetHitbox> characterTargetClickHandler;
+    private Action<BattleCharacterTargetHitbox> characterTargetEnterHandler;
+    private Action<BattleCharacterTargetHitbox> characterTargetExitHandler;
     private GameObject headStatusGroup;
     private bool warnedMissingHeadStatusGroup;
 
@@ -61,6 +66,30 @@ public class BattleCharacterStatusUIView : MonoBehaviour
         RefreshSelfTargetBinding();
     }
 
+    public void SetCharacterTargetHandlers(
+        Action<BattleCharacterTargetHitbox> onClicked,
+        Action<BattleCharacterTargetHitbox> onEntered,
+        Action<BattleCharacterTargetHitbox> onExited
+    )
+    {
+        characterTargetClickHandler = onClicked;
+        characterTargetEnterHandler = onEntered;
+        characterTargetExitHandler = onExited;
+        RefreshCharacterTargetBinding();
+    }
+
+    public void SetCharacterTargetingActive(bool active)
+    {
+        if (characterTargetHitbox == null)
+        {
+            return;
+        }
+
+        characterTargetHitbox.SetTargetingActive(
+            !isEnemy && active && boundCharacter != null
+        );
+    }
+
     public void ClearBoundEnemyIntents()
     {
         if (slot01View != null)
@@ -99,6 +128,9 @@ public class BattleCharacterStatusUIView : MonoBehaviour
 
     public bool IsEnemyView => isEnemy;
 
+    public BattleCharacterTargetHitbox CharacterTargetHitbox =>
+        characterTargetHitbox;
+
     public void BeginStagedHpTransition(int startHp, int maxHp, int stageCount)
     {
         hpView?.BeginStagedHpTransition(startHp, maxHp, stageCount);
@@ -115,6 +147,13 @@ public class BattleCharacterStatusUIView : MonoBehaviour
 
     private void RefreshSelfTargetBinding()
     {
+        if (characterTargetHitbox != null)
+        {
+            selfActionDropZone?.SetInteractionEnabled(false);
+            return;
+        }
+
+        selfActionDropZone?.SetInteractionEnabled(true);
         if (selfActionDropZone != null)
         {
             selfActionDropZone.Bind(
@@ -128,6 +167,7 @@ public class BattleCharacterStatusUIView : MonoBehaviour
     {
         RefreshSlotInteractionBindings();
         RefreshSelfTargetBinding();
+        RefreshCharacterTargetBinding();
     }
 
     public void SetCharacter(CharacterData characterData)
@@ -258,6 +298,22 @@ public class BattleCharacterStatusUIView : MonoBehaviour
                 isEnemy ? null : slotRightClickHandler
             );
         }
+    }
+
+    private void RefreshCharacterTargetBinding()
+    {
+        if (characterTargetHitbox == null)
+        {
+            return;
+        }
+
+        characterTargetHitbox.Bind(
+            isEnemy ? null : boundCharacter,
+            isEnemy ? null : characterTargetClickHandler,
+            isEnemy ? null : characterTargetEnterHandler,
+            isEnemy ? null : characterTargetExitHandler
+        );
+        characterTargetHitbox.SetTargetingActive(false);
     }
 
     private GameObject ResolveHeadStatusGroup()

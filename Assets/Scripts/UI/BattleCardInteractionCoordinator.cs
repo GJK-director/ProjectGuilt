@@ -182,6 +182,48 @@ public sealed class BattleCardInteractionCoordinator
         return outcome;
     }
 
+    public BattleCardInteractionOutcome ClickCharacterTarget(
+        BattleRuntimeState runtimeState,
+        BattleCharacterTargetHitbox targetView
+    )
+    {
+        BattleCardUIView selectedCardView =
+            cardSelectionController != null
+                ? cardSelectionController.SelectedCardView
+                : null;
+        BattleCardInteractionOutcome outcome =
+            CreateOutcome(selectedCardView);
+
+        if (selectedCardView == null ||
+            targetView == null ||
+            !IsCardTargetingActive ||
+            !object.ReferenceEquals(
+                targetView.BoundCharacter,
+                selectedCharacter
+            ) ||
+            !object.ReferenceEquals(
+                selectedCardView.BoundOwner,
+                selectedCharacter
+            ) ||
+            !IsAbilityCard(selectedCardView.BoundCardState))
+        {
+            return outcome;
+        }
+
+        outcome.isSuccess = BattleCardAssignmentRouter.TryAssignToSelf(
+            runtimeState,
+            selectedCharacter,
+            SelectedFormalSlotIndex,
+            selectedCardView.BoundOwner,
+            selectedCardView.BoundCardState,
+            targetView.BoundCharacter,
+            out outcome.assignmentResult
+        );
+
+        CompleteSuccessfulAssignment(outcome);
+        return outcome;
+    }
+
     public bool ToggleCardMode(bool showingSinCards)
     {
         cardSelectionController?.ClearSelection();
@@ -241,6 +283,15 @@ public sealed class BattleCardInteractionCoordinator
             cardState.cardData != null &&
             (cardState.cardData.cardType == CardType.Defense ||
              cardState.cardData.cardType == CardType.Dodge ||
-             cardState.cardData.cardType == CardType.Ability);
+             cardState.cardData.cardType == CardType.Ability ||
+             cardState.IsAbilitySinCard());
+    }
+
+    private static bool IsAbilityCard(BattleCardState cardState)
+    {
+        return cardState != null &&
+            cardState.cardData != null &&
+            (cardState.cardData.cardType == CardType.Ability ||
+             cardState.IsAbilitySinCard());
     }
 }

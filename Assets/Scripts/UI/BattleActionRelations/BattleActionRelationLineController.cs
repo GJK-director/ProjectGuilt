@@ -78,6 +78,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     private string selectedSlotID;
     private string previewSourceSlotID;
     private string previewTargetSlotID;
+    private RectTransform previewTargetRectOverride;
     private bool revealAllHeld;
     private bool previewActive;
     private Vector2 previewPointerScreenPosition;
@@ -95,6 +96,8 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
     public bool PreviewActive => previewActive;
     public string PreviewSourceSlotID => previewSourceSlotID;
     public string PreviewTargetSlotID => previewTargetSlotID;
+    public RectTransform PreviewTargetRectOverride =>
+        previewTargetRectOverride;
     public int RelationViewPoolCount => relationViewPool.Count;
     public IReadOnlyList<BattleActionRelationDescriptor> CachedRelations =>
         cachedRelations;
@@ -1049,11 +1052,7 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
                 targetCanvas,
                 uiCamera,
                 out start) ||
-            !RectTransformUtility.ScreenPointToLocalPointInRectangle(
-                lineLayer,
-                screenPosition,
-                GetEventCamera(targetCanvas, uiCamera),
-                out end))
+            !TryResolvePreviewEnd(screenPosition, out end))
         {
             previewCurve.Clear();
             return;
@@ -1085,10 +1084,49 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         previewActive = false;
         previewSourceSlotID = string.Empty;
         previewTargetSlotID = string.Empty;
+        previewTargetRectOverride = null;
         if (previewCurve != null)
         {
             previewCurve.Clear();
         }
+    }
+
+    public void SetPreviewTargetOverride(RectTransform target)
+    {
+        previewTargetRectOverride = target;
+        if (previewActive)
+        {
+            UpdateCardTargetingPointer(previewPointerScreenPosition);
+        }
+    }
+
+    public void ClearPreviewTargetOverride()
+    {
+        SetPreviewTargetOverride(null);
+    }
+
+    private bool TryResolvePreviewEnd(
+        Vector2 pointerScreenPosition,
+        out Vector2 localPoint
+    )
+    {
+        if (previewTargetRectOverride != null)
+        {
+            return TryConvertRectTopCenterToLayerLocal(
+                previewTargetRectOverride,
+                lineLayer,
+                targetCanvas,
+                uiCamera,
+                out localPoint
+            );
+        }
+
+        return RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            lineLayer,
+            pointerScreenPosition,
+            GetEventCamera(targetCanvas, uiCamera),
+            out localPoint
+        );
     }
 
     public void SetCardTargetingDiagnosticState(
@@ -1289,6 +1327,36 @@ public sealed class BattleActionRelationLineController : MonoBehaviour
         Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(
             eventCamera,
             sourceAnchor.TransformPoint(sourceAnchor.rect.center)
+        );
+        return RectTransformUtility.ScreenPointToLocalPointInRectangle(
+            targetLineLayer,
+            screenPoint,
+            eventCamera,
+            out localPoint
+        );
+    }
+
+    public static bool TryConvertRectTopCenterToLayerLocal(
+        RectTransform target,
+        RectTransform targetLineLayer,
+        Canvas canvas,
+        Camera camera,
+        out Vector2 localPoint
+    )
+    {
+        localPoint = Vector2.zero;
+        if (target == null || targetLineLayer == null)
+        {
+            return false;
+        }
+
+        Vector3[] corners = new Vector3[4];
+        target.GetWorldCorners(corners);
+        Vector3 topCenter = (corners[1] + corners[2]) * 0.5f;
+        Camera eventCamera = GetEventCamera(canvas, camera);
+        Vector2 screenPoint = RectTransformUtility.WorldToScreenPoint(
+            eventCamera,
+            topCenter
         );
         return RectTransformUtility.ScreenPointToLocalPointInRectangle(
             targetLineLayer,

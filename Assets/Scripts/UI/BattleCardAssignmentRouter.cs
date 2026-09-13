@@ -52,7 +52,7 @@ public static class BattleCardAssignmentRouter
             return false;
         }
 
-        if (boundEnemyIntent != null)
+        if (boundEnemyIntent != null && !IsAbilityCard(cardState))
         {
             return BattleActionSlotManager.TryAssignToEnemyIntent(
                 runtimeState,
@@ -73,6 +73,14 @@ public static class BattleCardAssignmentRouter
             targetEnemySlotIndex,
             out result
         );
+    }
+
+    private static bool IsAbilityCard(BattleCardState cardState)
+    {
+        return cardState != null &&
+            cardState.cardData != null &&
+            (cardState.cardData.cardType == CardType.Ability ||
+             cardState.IsAbilitySinCard());
     }
 
     public static bool TryAssignToSelf(

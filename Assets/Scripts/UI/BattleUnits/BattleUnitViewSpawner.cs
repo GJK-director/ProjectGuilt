@@ -227,8 +227,11 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
                 handle.StatusView.SetAllySlotInteractionHandlers(null, null);
                 handle.StatusView.SetEnemySlotClickHandler(null);
                 handle.StatusView.SetSelfTargetClickHandler(null);
+                handle.StatusView.SetCharacterTargetHandlers(null, null, null);
                 handle.StatusView.Clear();
             }
+
+            handle.TargetOutline?.SetVisible(false);
 
             handle.WorldFollower?.ClearWorldAnchors();
         }
@@ -471,6 +474,8 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
 
         BattleCharacterPresentationController presentationController =
             worldRoot.GetComponent<BattleCharacterPresentationController>();
+        BattleCharacterTargetOutline targetOutline =
+            worldRoot.GetComponent<BattleCharacterTargetOutline>();
         BattleCharacterPresentationRequirements presentationRequirements;
         if (!BattleCharacterPresentationBindingValidator.TryValidate(
                 runtimeUnit,
@@ -571,6 +576,7 @@ public sealed class BattleUnitViewSpawner : MonoBehaviour
             worldRoot,
             worldVisual.renderer,
             presentationController,
+            targetOutline,
             worldVisual.headAnchor,
             worldVisual.footAnchor,
             worldVisual.centerAnchor,

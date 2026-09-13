@@ -57,6 +57,7 @@ Last Verified: 2026-09-11
 - [Legacy/Core](../../Tests/Legacy/Core)：standalone regression 与 retained wrappers；[Legacy/Runner/CardLoadTest](../../Tests/Legacy/Runner/CardLoadTest.cs) 还包含内嵌测试。不可仅扫描 Core 判断全部覆盖。
 - [StoryTestHost](../../Tests/Harness/Story/StoryTestHost.cs)：需显式宿主绑定，无 tracked Scene/Prefab 绑定。
 - [Debug](../../Scripts/Debug)：BattleFormalPresentationTestHarness、BattleSceneDevelopmentHotkeys、BattleDebugSettings。
+- [BattleCharacterTargetHitbox](../../Scripts/UI/BattleCharacterTargetHitbox.cs) 与 [BattleCharacterTargetOutline](../../Scripts/Presentation/BattleCharacterTargetOutline.cs)：可选的角色目标命中区与目标轮廓；Status UI / Spawner 通过 Handle 接线，缺少引用时安全跳过。
 - [SandboxController](../../Scripts/Presentation/BattlePresentationSandboxController.cs) 与 [BuffGroupDebugPreview](../../Scripts/UI/BattleBuffGroupDebugPreview.cs) 分别保留 Scene/Prefab 绑定。
 - Suite/Harness 空目录不等于已有实现；当前数量与 caller 事实由 [Testing README](../Testing/README.md) / RegressionTestMap 维护。
 

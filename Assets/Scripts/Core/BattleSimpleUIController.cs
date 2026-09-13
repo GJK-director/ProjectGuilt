@@ -1397,6 +1397,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
     private void ClearRuntimeStatusViewReferences()
     {
+        DisableAllCharacterTargetSurfaces();
         ally01StatusView = null;
         ally02StatusView = null;
         enemy01StatusView = null;
@@ -2284,6 +2285,7 @@ public class BattleSimpleUIController : MonoBehaviour
     internal void ClearPlanningSelectionAndHideCards()
     {
         cardInteractionCoordinator?.ClearAllSelections();
+        DisableAllCharacterTargetSurfaces();
         ClearSelectedActionState();
         testCardHandView?.ClearCards();
         testCardView?.SetEmpty();
@@ -3186,6 +3188,11 @@ public class BattleSimpleUIController : MonoBehaviour
             ally01StatusView.SetSelfTargetClickHandler(
                 OnSelfActionTargetClicked
             );
+            ally01StatusView.SetCharacterTargetHandlers(
+                OnCharacterTargetClicked,
+                OnCharacterTargetEntered,
+                OnCharacterTargetExited
+            );
         }
 
         if (ally02StatusView != null)
@@ -3196,6 +3203,11 @@ public class BattleSimpleUIController : MonoBehaviour
             );
             ally02StatusView.SetSelfTargetClickHandler(
                 OnSelfActionTargetClicked
+            );
+            ally02StatusView.SetCharacterTargetHandlers(
+                OnCharacterTargetClicked,
+                OnCharacterTargetEntered,
+                OnCharacterTargetExited
             );
         }
 
@@ -3426,6 +3438,7 @@ public class BattleSimpleUIController : MonoBehaviour
         if (!CanEditActionSlots())
         {
             actionRelationLineController?.EndCardTargetingPreview();
+            DisableAllCharacterTargetSurfaces();
             return;
         }
         RefreshCardTargetingPreview();
@@ -3435,14 +3448,17 @@ public class BattleSimpleUIController : MonoBehaviour
         BattleActionSlotUIView selectedSlotView
     )
     {
+        actionRelationLineController?.ClearPreviewTargetOverride();
         if (actionRelationLineController == null)
         {
+            RefreshCharacterTargetingSurfaces();
             return;
         }
 
         if (!CanEditActionSlots())
         {
             actionRelationLineController.ClearSelectedSlot();
+            DisableAllCharacterTargetSurfaces();
             return;
         }
 
@@ -3454,6 +3470,8 @@ public class BattleSimpleUIController : MonoBehaviour
         {
             actionRelationLineController.SetSelectedSlot(selectedSlotView);
         }
+
+        RefreshCharacterTargetingSurfaces();
     }
 
     private bool IsSelectedSelfPlaceableCard()
@@ -3466,11 +3484,88 @@ public class BattleSimpleUIController : MonoBehaviour
             cardState.cardData != null &&
             (cardState.cardData.cardType == CardType.Defense ||
              cardState.cardData.cardType == CardType.Dodge ||
-             cardState.cardData.cardType == CardType.Ability);
+             cardState.cardData.cardType == CardType.Ability ||
+             cardState.IsAbilitySinCard());
+    }
+
+    private bool IsValidCharacterTargetingSession()
+    {
+        BattleActionSlotUIView sourceSlot =
+            cardInteractionCoordinator != null
+                ? cardInteractionCoordinator.SelectedActionSlotView
+                : null;
+        BattleCardUIView selectedCardView =
+            cardInteractionCoordinator != null
+                ? cardInteractionCoordinator.SelectedCardView
+                : null;
+        if (!IsValidCardTargetingSession(sourceSlot, selectedCardView))
+        {
+            return false;
+        }
+
+        BattleCardState cardState = selectedCardView.BoundCardState;
+        return cardState.cardData != null &&
+            (cardState.cardData.cardType == CardType.Ability ||
+             cardState.IsAbilitySinCard()) &&
+            object.ReferenceEquals(
+                sourceSlot.BoundCharacter,
+                cardInteractionCoordinator.SelectedCharacter
+            );
+    }
+
+    private void RefreshCharacterTargetingSurfaces()
+    {
+        DisableAllCharacterTargetSurfaces();
+        if (!IsValidCharacterTargetingSession())
+        {
+            return;
+        }
+
+        CharacterData sourceCharacter =
+            cardInteractionCoordinator.SelectedCharacter;
+        BattleCharacterStatusUIView statusView =
+            GetAllyStatusView(sourceCharacter);
+        if (statusView != null)
+        {
+            statusView.SetCharacterTargetingActive(true);
+        }
+
+        BattleUnitViewHandle handle = unitViewSpawner != null
+            ? unitViewSpawner.GetHandle(sourceCharacter)
+            : null;
+        handle?.TargetOutline?.SetVisible(true);
+    }
+
+    private void DisableAllCharacterTargetSurfaces()
+    {
+        BattleCharacterStatusUIView[] statusViews =
+        {
+            ally01StatusView,
+            ally02StatusView,
+            enemy01StatusView,
+            enemy02StatusView
+        };
+        for (int index = 0; index < statusViews.Length; index++)
+        {
+            statusViews[index]?.SetCharacterTargetingActive(false);
+        }
+
+        if (unitViewSpawner == null)
+        {
+            return;
+        }
+
+        IReadOnlyList<BattleUnitViewHandle> handles =
+            unitViewSpawner.GeneratedHandles;
+        for (int index = 0; index < handles.Count; index++)
+        {
+            handles[index]?.TargetOutline?.SetVisible(false);
+        }
     }
 
     private void RefreshCardTargetingPreview()
     {
+        RefreshCharacterTargetingSurfaces();
         if (actionRelationLineController == null)
         {
             return;
@@ -3636,6 +3731,78 @@ public class BattleSimpleUIController : MonoBehaviour
 
         CompleteSuccessfulCardAssignment();
         RefreshView();
+    }
+
+    private void OnCharacterTargetClicked(
+        BattleCharacterTargetHitbox targetView
+    )
+    {
+        if (!CanEditActionSlots())
+        {
+            return;
+        }
+
+        BattleCardInteractionOutcome outcome =
+            cardInteractionCoordinator.ClickCharacterTarget(
+                runtimeState,
+                targetView
+            );
+        if (!outcome.hadSelectedCard)
+        {
+            return;
+        }
+
+        lastLog = outcome.assignmentResult != null
+            ? outcome.assignmentResult.message
+            : outcome.isSuccess
+                ? "卡牌点击安排成功"
+                : "卡牌点击安排失败";
+
+        if (!outcome.isSuccess)
+        {
+            SetText(logText, lastLog);
+            return;
+        }
+
+        CompleteSuccessfulCardAssignment();
+        RefreshView();
+    }
+
+    private void OnCharacterTargetEntered(
+        BattleCharacterTargetHitbox targetView
+    )
+    {
+        if (targetView == null ||
+            !IsValidCharacterTargetingSession() ||
+            !object.ReferenceEquals(
+                targetView.BoundCharacter,
+                cardInteractionCoordinator.SelectedCharacter
+            ))
+        {
+            return;
+        }
+
+        actionRelationLineController?.SetPreviewTargetOverride(
+            targetView.TargetRectTransform
+        );
+    }
+
+    private void OnCharacterTargetExited(
+        BattleCharacterTargetHitbox targetView
+    )
+    {
+        if (actionRelationLineController == null || targetView == null)
+        {
+            return;
+        }
+
+        if (object.ReferenceEquals(
+                actionRelationLineController.PreviewTargetRectOverride,
+                targetView.TargetRectTransform
+            ))
+        {
+            actionRelationLineController.ClearPreviewTargetOverride();
+        }
     }
 
     void RefreshTestCardView()
