@@ -70,6 +70,20 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
             return false;
         }
 
+        BattleAutoClashController autoClashController =
+            GetComponent<BattleAutoClashController>();
+        if (autoClashController != null)
+        {
+            battleUIController.ConfigureAutoClash(
+                autoClashController.EnableAutoClash,
+                autoClashController.AutoClashDelay
+            );
+        }
+        else
+        {
+            battleUIController.ConfigureAutoClash(false, 0.1f);
+        }
+
         if (useDebugTestInitialization)
         {
             Debug.LogWarning(

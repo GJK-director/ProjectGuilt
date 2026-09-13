@@ -22,7 +22,7 @@ Last Verified: 2026-09-11
 | EnemyIntent | [Battle/EnemyIntent](../../Scripts/Battle/EnemyIntent) | BattleDefinitionBootstrap.CreateIntentQueueForTurn | Encounter pattern/cycle、Enemy cardIDs | Scene Bootstrap provider | Definitions、ActionSlot | BattleScene | EnemyIntent Suite；Mode103 | SampleScene/BattleScene | CURRENT / 中高；生成在 Bootstrap |
 | Targeting / Interaction | [Battle/Targeting](../../Scripts/Battle/Targeting) | BattleTargeting；BattleInteractionClassifier（Battle/Interactions） | speed、target、effective context | Planning/Executor/Presenter | Slot、Intent、Unit | 关系 UI（间接） | Classifier/EffectiveInteraction Legacy | BattleScene | CURRENT / 高 |
 | Units | [Battle/Units](../../Scripts/Battle/Units) | BattleUnitFactory、CharacterData | Character/EnemyDefinitions | Bootstrap、规则、UI | CardManager、Definitions | World/Status Prefab 经 Spawner | DefaultCard/Binding Legacy；Bootstrap Suite | BattleScene | CURRENT / 高 |
-| Bootstrap | [Battle/Bootstrap](../../Scripts/Battle/Bootstrap) | BattleSceneBootstrap.Start → InitializeBattleScene | encounterID、preset、single-unit | BattleScene | Loaders/Factory/UI/Settings/Harness | BattleScene | Bootstrap Suite；Mode103 | 正式 Harness | CURRENT / 高；DEFERRED_DEBT |
+| Bootstrap | [Battle/Bootstrap](../../Scripts/Battle/Bootstrap) | BattleSceneBootstrap.Start → InitializeBattleScene | encounterID、preset、single-unit、AutoClash配置 | BattleScene | Loaders/Factory/UI/Settings/Harness | BattleScene | Bootstrap Suite；Mode103 | 正式 Harness | CURRENT / 高；DEFERRED_DEBT |
 | Guilt | [Battle/Guilt](../../Scripts/Battle/Guilt) | GuiltManager.AddGuilt/GetCurrentGuilt | guiltGain、共享 RuntimeState | 卡牌使用/角色/UI | RuntimeState | Guilt UI | 罪卡/资源 Legacy | BattleScene | CURRENT / 中高；角色兼容值 |
 | Events | [Battle/Events](../../Scripts/Battle/Events) | BattleEventProcessor.ProcessEvent | BattleTiming、EventContext | Turn/Resolver | CardManager、Pending/Conservation、Effects | 无直接资产 | CardUsed/Resolved/Impact/Timing Legacy | SampleScene | CURRENT / 高；legacy vocabulary |
 | Data | [Data](../../Scripts/Data) | Card/Character/Enemy/Encounter/Buff Loader | Resources/Data JSON | Bootstrap/Factory/Effects/Tests | Resources、JSON、Definitions/Validation | Resources 数据 | Cards/Bootstrap/EnemyIntent Suite；数据 Legacy | SampleScene/BattleScene | CURRENT / 中高 |
@@ -66,6 +66,7 @@ Last Verified: 2026-09-11
 - [BattleCameraDirector](../../Scripts/Camera/BattleCameraDirector.cs)：BeforeSceneLoad 注册 sceneLoaded；有 BattleSimpleUIController 的 Scene 中按需创建 Director。
 - [BattleEndPanelController](../../Scripts/UI/Battle/BattleEndPanelController.cs)：Bootstrap 调用 Bind，按需创建终局 UI。
 - [Scene Presenter](../../Scripts/Presentation/BattleSceneExecutionPresenter.cs)：按需 AddComponent LongRangeShootVsAttack / SpecialLongRangeDuel Player。
+- [BattleAutoClashController](../../Scripts/Battle/Bootstrap/BattleAutoClashController.cs)：BattleSceneBootstrap 同 GameObject 上的可选 Scene Inspector 配置；只提供 Auto Clash 设置，不负责 Update、Coroutine 或计时。
 - [BattleWorldFollowProjectionDiagnostic](../../Scripts/UI/Debug/BattleWorldFollowProjectionDiagnostic.cs)：保留的手工诊断工具；[BattleUnitViewSpawner](../../Scripts/UI/BattleUnits/BattleUnitViewSpawner.cs) 正式 Runtime 不再自动添加/绑定它，需要投影诊断时才人工挂载/使用。
 - Roll Panel 通过 Resources 路径实例化。没有 Scene m_Script 引用不等于没有 Runtime consumer。
 

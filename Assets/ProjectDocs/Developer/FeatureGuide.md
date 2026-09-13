@@ -22,6 +22,7 @@ Last Verified: 2026-09-11
 | 修改敌人行动 | [Enemy Intent](#14-其他非卡牌功能) |
 | 修改剧情 | [Story](#14-其他非卡牌功能) |
 | 修改设置/UI | [UI / Settings](#14-其他非卡牌功能) |
+| 开启/调整自动拼点 | [自动拼点](#142-我要开启或调整自动拼点) |
 | 修改后进行验证 | [最快验证方法](#10-最快验证方法) |
 
 ## 1. 卡牌制作
@@ -317,6 +318,19 @@ Card runtime 会在 Bootstrap 时重新创建；`BuffDefinitionLoader` 有静态
 运行时位置由 `Center World Anchor → Camera → Canvas` 投影持续刷新；Prefab 编辑状态下 World Camera、Target Canvas 和 World Anchors 显示为 None 可以是正常的，不要手动绑定运行时 Scene 对象。
 
 内部路径、调用者和依赖统一查 [CodeMap](CodeMap.md)，不要在本手册重复架构说明。
+
+### 14.2 我要开启或调整自动拼点
+
+在 `BattleScene` 中选中 `BattleSceneBootstrap` GameObject，手动添加 `BattleAutoClashController`。
+
+配置：
+
+- `Enable Auto Clash`：关闭时保留手动拼点；开启时，执行阶段自动拼点。
+- `Auto Clash Delay`：进入正式 Roll Gate 后的等待时间，最小为 `0`。常用值为 `0`、`0.1`、`1`。
+
+Planning 阶段的 Space 永远保留，仍由玩家按下以开始正式执行。Auto ON 时，执行阶段原本用于手动 Roll 的 Space 不再触发拼点。
+
+自动模式是切换 Runner 的 `RollMode`，由现有 Auto Roll Gate 自动推进，不是模拟自动按空格。Auto Clash 覆盖正式 Runner 原本负责的 Roll Gate 范围，包括 Clash、unilateral roll、Defense 和 Dodge。
 
 ## DOC IMPACT GATE
 

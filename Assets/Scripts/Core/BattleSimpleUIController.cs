@@ -88,6 +88,8 @@ public class BattleSimpleUIController : MonoBehaviour
     private BattleRuntimeState runtimeState;
     private BattleLifecycleController lifecycleController;
     private BattleNextTurnIntentQueueProvider nextTurnIntentQueueProvider;
+    private bool autoClashEnabled;
+    private float autoClashDelay = 0.1f;
 
     private CharacterData ally01;
     private CharacterData ally02;
@@ -168,6 +170,12 @@ public class BattleSimpleUIController : MonoBehaviour
         testCardHandView != null
             ? testCardHandView.SpawnedCardViews.Count
             : 0;
+
+    public void ConfigureAutoClash(bool enabled, float delay)
+    {
+        autoClashEnabled = enabled;
+        autoClashDelay = Mathf.Max(0f, delay);
+    }
 
     void Awake()
     {
@@ -2423,9 +2431,9 @@ public class BattleSimpleUIController : MonoBehaviour
         BattleExecutionPlanManager.PrintExecutionPlan(executionPlan);
 
         BattleRollGateSettings settings = new BattleRollGateSettings(
-            BattleRollMode.Manual,
+            autoClashEnabled ? BattleRollMode.Auto : BattleRollMode.Manual,
             0f,
-            0f
+            autoClashEnabled ? autoClashDelay : 0f
         );
         if (!lifecycleController.TryBeginPausableExecution(
                 settings,

@@ -26,6 +26,14 @@ RuntimeState/CardState/Slot/Intent；Prefab/Scene。
 
 Scene 绑定 → Runtime View → 输入 Router → Planning；执行结果刷新 UI。
 
+## Auto Clash Input Boundary
+
+Planning Space 与 Execution Roll Space 由 `BattleSimpleUIController.HandleBattleSpaceInput()` 读取，但按当前是否处于 `isScenePresentedTurnCycleRunning` 分流。
+
+Planning 阶段仍由 Space 调用 `TryStartCompleteTurnCycle()`。Auto ON 不会自动开始 Planning。
+
+执行阶段只有 Runner 的 `IsWaitingForInput` 为 true 时才会调用 `BattleLifecycleController.TryRequestManualRoll()`。Auto Runner 不处于 `WaitingForRoll` 输入状态，因此 Execution Manual Roll Space 不会进入该方法；计时和自动继续由 `BattleExecutionRunner` 负责。
+
 ## Targeting Contract
 
 规划期从已选 `SelectedSourceSlot` 出发：Attack 只能指向 `EnemyActionSlot`；Defense/Dodge 可以确认自身槽位或 `EnemyActionSlot`；Ability 可以确认自身角色命中区或 `EnemyActionSlot`。正式自身放置仍写入 `BattleActionPlacementType.Self`，不生成行动关系线。

@@ -26,6 +26,18 @@ ExecutionPlan/Item、ActionSlot、Intent、Context。
 
 Lifecycle → Plan → Runner/Executor → Resolver + Presentation completion。
 
+## Auto Clash Contract
+
+正式 BattleScene 的 Auto Clash 配置 owner 是 `BattleAutoClashController`，挂在 `BattleSceneBootstrap` GameObject 上；它只负责 Inspector 配置，不负责 Update、Coroutine、计时或模拟输入。
+
+`BattleRollMode.Manual` 保留 `WaitingForRoll → Space → TryRequestManualRoll → RollOneAttempt`。`BattleRollMode.Auto` 使用现有 `AutoRollDelay`，由 `BattleExecutionRunner.Advance(deltaTime)` 推进到 `RollOneAttempt`。
+
+Auto Clash Delay 从“正式 Runner 已进入原本允许玩家按 Space Roll 的 Roll Gate”开始。每个新 Gate、Tie 后的下一次 Roll、以及下一 ExecutionItem 都重新等待配置的 Delay；`0` 表示下一次 Runner Advance 时自动 Roll。
+
+Planning Space 不受影响。Auto ON 时，Execution Manual Roll Space 不再进入 `TryRequestManualRoll`。Runner 是 Auto Roll Gate 的唯一 Runtime owner，不存在第二套 Auto Timer。Auto 模式沿用正式 Runner 原本覆盖的 Clash、unilateral roll、Defense 和 Dodge 范围。
+
+Auto Clash v0.1：`USER UNITY MANUAL VERIFIED`。
+
 ## Invariants
 
 FirstStrike 改优先级而非拆散 pairing；无效动作完成与实际效果分开；暂停不得重复提交。
