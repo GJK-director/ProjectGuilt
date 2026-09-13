@@ -62,7 +62,8 @@ public sealed class BattleCharacterTargetHitbox : MonoBehaviour,
 
     public void OnPointerClick(PointerEventData eventData)
     {
-        if (!CanInteract(eventData))
+        if (!CanInteract(eventData) ||
+            eventData.button != PointerEventData.InputButton.Left)
         {
             return;
         }

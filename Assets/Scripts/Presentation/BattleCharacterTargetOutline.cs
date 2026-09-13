@@ -14,6 +14,7 @@ public sealed class BattleCharacterTargetOutline : MonoBehaviour
     private Vector3 outlineBaseScale = Vector3.one;
     private bool baseScaleCached;
     private bool isVisible;
+    private bool warnedMissingOutlineRenderer;
 
     public bool IsVisible => isVisible &&
         outlineSpriteRenderer != null &&
@@ -52,6 +53,20 @@ public sealed class BattleCharacterTargetOutline : MonoBehaviour
         }
 
         CacheReferences();
+        if (outlineSpriteRenderer == null)
+        {
+            if (!warnedMissingOutlineRenderer)
+            {
+                warnedMissingOutlineRenderer = true;
+                Debug.LogWarning(
+                    "BattleCharacterTargetOutline 缺少显式 Outline SpriteRenderer，已安全关闭轮廓。",
+                    this
+                );
+            }
+            isVisible = false;
+            return;
+        }
+
         if (!CanRenderOutline())
         {
             isVisible = false;
@@ -71,21 +86,6 @@ public sealed class BattleCharacterTargetOutline : MonoBehaviour
             sourceSpriteRenderer = presentation != null
                 ? presentation.CharacterSpriteRenderer
                 : null;
-        }
-
-        if (outlineSpriteRenderer == null)
-        {
-            SpriteRenderer[] renderers =
-                GetComponentsInChildren<SpriteRenderer>(true);
-            for (int index = 0; index < renderers.Length; index++)
-            {
-                if (renderers[index] != null &&
-                    renderers[index] != sourceSpriteRenderer)
-                {
-                    outlineSpriteRenderer = renderers[index];
-                    break;
-                }
-            }
         }
 
         if (outlineSpriteRenderer != null && !baseScaleCached)

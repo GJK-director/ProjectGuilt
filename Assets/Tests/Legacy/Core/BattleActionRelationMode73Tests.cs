@@ -148,6 +148,7 @@ public static class BattleActionRelationMode73Tests
 
     public static bool Run()
     {
+        Debug.Log("===== 以下是测试结果 =====");
         Debug.Log("===== BattleActionRelationLineBasic 模式73开始 =====");
         bool[] results = new bool[74];
         bool inputCompatibilityPassed = false;
@@ -1732,6 +1733,7 @@ public static class BattleActionRelationInteractionMode75Tests
 
     public static bool Run()
     {
+        Debug.Log("===== 以下是测试结果 =====");
         bool[] results = new bool[Names.Length];
         RunDestroySafety(results);
         RunAssignments(results);
@@ -1804,6 +1806,12 @@ public static class BattleActionRelationInteractionMode75Tests
             !hitboxGraphic.raycastTarget;
 
         hitbox.SetTargetingActive(true);
+        PointerEventData rightClick = new PointerEventData(null)
+        {
+            button = PointerEventData.InputButton.Right
+        };
+        hitbox.OnPointerClick(rightClick);
+        bool rightClickIgnored = clickCount == 0;
         hitbox.OnPointerClick(pointer);
         hitbox.OnPointerEnter(pointer);
         hitbox.OnPointerExit(pointer);
@@ -1842,9 +1850,15 @@ public static class BattleActionRelationInteractionMode75Tests
         outline.SetVisible(false);
         bool outlineIgnoresHover = !outline.IsVisible;
 
+        Debug.Log(
+            "模式75 Character Target Hitbox 右键不触发Click：" +
+            rightClickIgnored
+        );
+
         UnityEngine.Object.DestroyImmediate(hitboxObject);
         UnityEngine.Object.DestroyImmediate(outlineRoot);
         return inactiveIsQuiet &&
+            rightClickIgnored &&
             activeRoutesInput &&
             deactivationStopsInput &&
             outlineCanBeShown &&
