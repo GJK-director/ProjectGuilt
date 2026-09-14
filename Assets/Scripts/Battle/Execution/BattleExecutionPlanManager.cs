@@ -138,7 +138,18 @@ public static class BattleExecutionPlanManager
                 BattleExecutionItemType itemType = responseSlot != null
                     ? BattleExecutionItemType.RespondedEnemyIntent
                     : BattleExecutionItemType.UnrespondedEnemyIntent;
-                CharacterData orderingActor = responseSlot != null ? responseSlot.actor : intent.enemy;
+                int responseActorSpeed = responseSlot != null
+                    ? GetSpeed(responseSlot.actor)
+                    : int.MinValue;
+                int enemySpeed = GetSpeed(intent.enemy);
+                bool responseActorDrivesOrdering = responseSlot != null &&
+                    responseActorSpeed > enemySpeed;
+                CharacterData orderingActor = responseActorDrivesOrdering
+                    ? responseSlot.actor
+                    : intent.enemy;
+                int orderingSlot = responseActorDrivesOrdering
+                    ? responseSlot.slotIndex
+                    : intent.enemySlotIndex;
                 BattleExecutionItem item = new BattleExecutionItem(
                     stableOrder,
                     itemType,
@@ -152,15 +163,20 @@ public static class BattleExecutionPlanManager
 
                 PopulateSortMetadata(
                     item,
+                    orderingActor,
                     responseSlot != null
-                        ? System.Math.Max(GetSpeed(responseSlot.actor), GetSpeed(intent.enemy))
-                        : GetSpeed(intent.enemy),
-                    responseSlot != null ? 0 : 1,
-                    responseSlot != null ? responseSlot.slotIndex : intent.enemySlotIndex,
+                        ? System.Math.Max(responseActorSpeed, enemySpeed)
+                        : enemySpeed,
+                    responseSlot != null && responseActorSpeed == enemySpeed
+                        ? 0
+                        : 1,
+                    orderingSlot,
                     GetBattlePositionIndex(runtimeState, fallbackBattleOrder, orderingActor),
-                    stableOrder
+                    stableOrder,
+                    responseSlot != null ? responseSlot.assignmentSequence : 0
                 );
                 item.priorityTier = GetPriorityTier(item);
+                PopulateFirstStrikeSourceMetadata(item);
                 candidates.Add(item);
                 stableOrder++;
             }
@@ -187,13 +203,16 @@ public static class BattleExecutionPlanManager
                 PopulatePlannedInteractionType(item);
                 PopulateSortMetadata(
                     item,
+                    slot.actor,
                     GetSpeed(slot.actor),
                     1,
                     slot.slotIndex,
                     GetBattlePositionIndex(runtimeState, fallbackBattleOrder, slot.actor),
-                    stableOrder
+                    stableOrder,
+                    slot.assignmentSequence
                 );
                 item.priorityTier = GetPriorityTier(item);
+                PopulateFirstStrikeSourceMetadata(item);
                 candidates.Add(item);
                 stableOrder++;
             }
@@ -580,18 +599,41 @@ public static class BattleExecutionPlanManager
 
     static void PopulateSortMetadata(
         BattleExecutionItem item,
+        CharacterData orderingActor,
         int effectiveSpeed,
         int responsePriority,
         int actionSlotOrder,
         int actorPositionOrder,
-        int stableOrder
+        int stableOrder,
+        long actionAssignmentSequence
     )
     {
+        item.orderingActor = orderingActor;
         item.effectiveSpeed = effectiveSpeed;
         item.responsePriority = responsePriority;
         item.actionSlotOrder = actionSlotOrder;
         item.actorPositionOrder = actorPositionOrder;
         item.stableOrder = stableOrder;
+        item.actionAssignmentSequence = actionAssignmentSequence;
+    }
+
+    static void PopulateFirstStrikeSourceMetadata(BattleExecutionItem item)
+    {
+        if (item == null)
+        {
+            return;
+        }
+
+        item.firstStrikeSourceSequence = 0;
+
+        BattleCardState actionCard = item.actionSlot != null
+            ? item.actionSlot.cardState
+            : null;
+        if (actionCard != null && actionCard.HasTrait(BattleCardTrait.FirstStrike))
+        {
+            item.firstStrikeSourceSequence = item.actionSlot.assignmentSequence;
+        }
+
     }
 
     // 只记录计划生成时已经确定的双方卡牌，不参与运行时 Guard / Dodge 的替换选择。
@@ -640,16 +682,16 @@ public static class BattleExecutionPlanManager
             return result;
         }
 
-        if (left.priorityTier == BattleExecutionPriorityTier.AbilityPhase &&
-            right.priorityTier == BattleExecutionPriorityTier.AbilityPhase)
+        if (left.priorityTier == BattleExecutionPriorityTier.FirstStrike &&
+            right.priorityTier == BattleExecutionPriorityTier.FirstStrike)
         {
-            result = left.actionSlotOrder.CompareTo(right.actionSlotOrder);
+            result = right.firstStrikeSourceSequence.CompareTo(
+                left.firstStrikeSourceSequence
+            );
             if (result != 0)
             {
                 return result;
             }
-
-            return left.stableOrder.CompareTo(right.stableOrder);
         }
 
         result = right.effectiveSpeed.CompareTo(left.effectiveSpeed);
@@ -662,6 +704,17 @@ public static class BattleExecutionPlanManager
         if (result != 0)
         {
             return result;
+        }
+
+        if (left.responsePriority == 0 && right.responsePriority == 0)
+        {
+            result = right.actionAssignmentSequence.CompareTo(
+                left.actionAssignmentSequence
+            );
+            if (result != 0)
+            {
+                return result;
+            }
         }
 
         result = left.actionSlotOrder.CompareTo(right.actionSlotOrder);
@@ -681,24 +734,9 @@ public static class BattleExecutionPlanManager
 
     static BattleExecutionPriorityTier GetPriorityTier(BattleExecutionItem item)
     {
-        if (IsAbilityPhaseItem(item))
-        {
-            return BattleExecutionPriorityTier.AbilityPhase;
-        }
-
         return ItemHasTrait(item, BattleCardTrait.FirstStrike)
             ? BattleExecutionPriorityTier.FirstStrike
             : BattleExecutionPriorityTier.Normal;
-    }
-
-    static bool IsAbilityPhaseItem(BattleExecutionItem item)
-    {
-        return item != null &&
-            item.executionType == BattleExecutionItemType.FreeAction &&
-            item.actionSlot != null &&
-            item.actionSlot.cardState != null &&
-            item.actionSlot.cardState.cardData != null &&
-            item.actionSlot.cardState.cardData.cardType == CardType.Ability;
     }
 
     // Responded Item 的双方卡牌共同决定整个已配对 Item 的先攻层级，不拆开原有 pairing。
@@ -990,6 +1028,46 @@ public static class BattleGuardSelectionManager
         BattleActionSlot freeActionSlot
     )
     {
+        CardTestData selectedCardData = freeActionSlot != null &&
+            freeActionSlot.cardState != null
+                ? freeActionSlot.cardState.cardData
+                : null;
+        Debug.Log(
+            "[ReactiveGuardDiag] SELECT BEGIN\n" +
+            "actor=" + (freeActionSlot != null && freeActionSlot.actor != null
+                ? freeActionSlot.actor.characterName
+                : "NONE") + "\n" +
+            "actorSpeed=" + (freeActionSlot != null && freeActionSlot.actor != null
+                ? freeActionSlot.actor.GetCurrentSpeed().ToString()
+                : "NONE") + "\n" +
+            "slotIndex=" + (freeActionSlot != null
+                ? freeActionSlot.slotIndex.ToString()
+                : "NONE") + "\n" +
+            "cardID=" + (selectedCardData != null
+                ? selectedCardData.cardID
+                : "NONE") + "\n" +
+            "cardName=" + (selectedCardData != null
+                ? selectedCardData.cardName
+                : "NONE") + "\n" +
+            "cardType=" + (selectedCardData != null
+                ? selectedCardData.cardType
+                : "NONE") + "\n" +
+            "FirstStrike=" + (freeActionSlot != null &&
+                freeActionSlot.cardState != null &&
+                freeActionSlot.cardState.HasTrait(BattleCardTrait.FirstStrike)) + "\n" +
+            "slotType=" + (freeActionSlot != null
+                ? freeActionSlot.slotType.ToString()
+                : "NONE") + "\n" +
+            "placementType=" + (freeActionSlot != null
+                ? freeActionSlot.placementType.ToString()
+                : "NONE") + "\n" +
+            "target=" + (freeActionSlot != null && freeActionSlot.target != null
+                ? freeActionSlot.target.characterName
+                : "NONE") + "\n" +
+            "intentsCount=" + (intents != null
+                ? intents.Count.ToString()
+                : "0")
+        );
         if (intents == null || freeActionSlot == null ||
             freeActionSlot.slotType != BattleActionSlotType.FreeAction ||
             freeActionSlot.actor == null || freeActionSlot.actor.IsDead() ||
@@ -997,6 +1075,7 @@ public static class BattleGuardSelectionManager
             freeActionSlot.cardState == null || freeActionSlot.cardState.cardData == null ||
             freeActionSlot.cardState.cardData.cardType != CardType.Attack)
         {
+            Debug.Log("[ReactiveGuardDiag] SELECT RESULT selected=NONE");
             return null;
         }
 
@@ -1015,6 +1094,24 @@ public static class BattleGuardSelectionManager
                 selected = intent;
             }
         }
+        if (selected == null)
+        {
+            Debug.Log("[ReactiveGuardDiag] SELECT RESULT selected=NONE");
+        }
+        else
+        {
+            Debug.Log(
+                "[ReactiveGuardDiag] SELECT RESULT " +
+                "intentOrder=" + selected.intentOrder +
+                " enemySlotIndex=" + selected.enemySlotIndex +
+                " enemy=" + (selected.enemy != null
+                    ? selected.enemy.characterName
+                    : "NONE") +
+                " cardID=" + selected.enemyCardState.cardData.cardID +
+                " cardType=" + selected.enemyCardState.cardData.cardType +
+                " cardName=" + selected.enemyCardState.cardData.cardName
+            );
+        }
         return selected;
     }
 
@@ -1023,6 +1120,43 @@ public static class BattleGuardSelectionManager
         BattleActionSlot freeActionSlot
     )
     {
+        CardEligibilityResult eligibility = null;
+        if (intent != null && intent.enemyCardState != null &&
+            intent.enemyCardState.cardData != null &&
+            (intent.enemyCardState.cardData.cardType == CardType.Defense ||
+             intent.enemyCardState.cardData.cardType == CardType.Dodge))
+        {
+            eligibility = BattleCardManager.EvaluateCardEligibility(
+                intent.enemy,
+                freeActionSlot != null ? freeActionSlot.actor : null,
+                intent.enemyCardState
+            );
+            Debug.Log(
+                "[ReactiveGuardDiag] CANDIDATE\n" +
+                "intentOrder=" + intent.intentOrder + "\n" +
+                "enemySlotIndex=" + intent.enemySlotIndex + "\n" +
+                "enemy=" + (intent.enemy != null
+                    ? intent.enemy.characterName
+                    : "NONE") + "\n" +
+                "cardID=" + intent.enemyCardState.cardData.cardID + "\n" +
+                "cardName=" + intent.enemyCardState.cardData.cardName + "\n" +
+                "cardType=" + intent.enemyCardState.cardData.cardType + "\n" +
+                "isResponded=" + intent.isResponded + "\n" +
+                "isConsumedAsReactiveGuard=" + intent.isConsumedAsReactiveGuard + "\n" +
+                "enemyIsDead=" + (intent.enemy != null && intent.enemy.IsDead()) + "\n" +
+                "freeActionTargetIsNull=" + (freeActionSlot == null ||
+                    freeActionSlot.target == null) + "\n" +
+                "enemyTargetReferenceEquals=" + (freeActionSlot != null &&
+                    object.ReferenceEquals(intent.enemy, freeActionSlot.target)) + "\n" +
+                "eligibility.isEligible=" + (eligibility != null && eligibility.isEligible) + "\n" +
+                "eligibility.failureReason=" + (eligibility != null
+                    ? eligibility.failureReason.ToString()
+                    : "NONE") + "\n" +
+                "eligibility.failureMessage=" + (eligibility != null
+                    ? eligibility.failureMessage
+                    : "NONE")
+            );
+        }
         if (intent == null || intent.enemy == null || intent.enemy.IsDead() ||
             intent.isResponded || intent.isConsumedAsReactiveGuard ||
             !object.ReferenceEquals(intent.enemy, freeActionSlot.target) ||
@@ -1037,11 +1171,6 @@ public static class BattleGuardSelectionManager
             return false;
         }
 
-        CardEligibilityResult eligibility = BattleCardManager.EvaluateCardEligibility(
-            intent.enemy,
-            freeActionSlot.actor,
-            intent.enemyCardState
-        );
         return eligibility != null && eligibility.isEligible;
     }
 

@@ -242,7 +242,8 @@ public sealed class BattleLifecycleController
 
         executionPlan = BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
             runtimeState.actionSlots,
-            runtimeState.intentQueue
+            runtimeState.intentQueue,
+            runtimeState
         );
         if (executionPlan == null || executionPlan.executionItems == null)
         {

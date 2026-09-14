@@ -29744,7 +29744,7 @@ public class CardLoadTest : MonoBehaviour
     }
 }
 
-// 脚本中文说明：验证 Ability Phase 的执行计划排序与现有 FreeAction Resolver 生命周期。
+// 脚本中文说明：验证 Ability 的普通执行排序与现有 FreeAction Resolver 生命周期。
 public static class BattleAbilityPhaseBasicTests
 {
     public static bool Run()
@@ -29761,8 +29761,8 @@ public static class BattleAbilityPhaseBasicTests
 
         string[] names =
         {
-            "Ability > FirstStrike > Normal",
-            "Ability忽略Speed",
+            "FirstStrike > Normal > Ability",
+            "Ability follows Normal speed",
             "多Ability槽位顺序",
             "Ability无需FirstStrike",
             "现有FirstStrike回归",
@@ -29794,12 +29794,12 @@ public static class BattleAbilityPhaseBasicTests
             context.actor, 1, CreateAttack(context.actor, "mode110_normal_order", false), context.enemy);
         BattleExecutionPlan plan = CreatePlan(ability, firstStrike, normal);
         return plan.executionItems.Count == 3 &&
-            plan.executionItems[0].priorityTier == BattleExecutionPriorityTier.AbilityPhase &&
-            object.ReferenceEquals(plan.executionItems[0].actionSlot, ability) &&
-            plan.executionItems[1].priorityTier == BattleExecutionPriorityTier.FirstStrike &&
-            object.ReferenceEquals(plan.executionItems[1].actionSlot, firstStrike) &&
+            plan.executionItems[0].priorityTier == BattleExecutionPriorityTier.FirstStrike &&
+            object.ReferenceEquals(plan.executionItems[0].actionSlot, firstStrike) &&
+            plan.executionItems[1].priorityTier == BattleExecutionPriorityTier.Normal &&
+            object.ReferenceEquals(plan.executionItems[1].actionSlot, normal) &&
             plan.executionItems[2].priorityTier == BattleExecutionPriorityTier.Normal &&
-            object.ReferenceEquals(plan.executionItems[2].actionSlot, normal);
+            object.ReferenceEquals(plan.executionItems[2].actionSlot, ability);
     }
 
     static bool VerifyAbilityIgnoresSpeed()
@@ -29811,7 +29811,10 @@ public static class BattleAbilityPhaseBasicTests
             context.enemy, 2, CreateAttack(context.enemy, "mode110_fast_normal", false), context.actor);
         BattleExecutionPlan plan = CreatePlan(ability, normal);
         return plan.executionItems.Count == 2 &&
-            object.ReferenceEquals(plan.executionItems[0].actionSlot, ability);
+            object.ReferenceEquals(plan.executionItems[0].actionSlot, normal) &&
+            plan.executionItems[0].priorityTier == BattleExecutionPriorityTier.Normal &&
+            object.ReferenceEquals(plan.executionItems[1].actionSlot, ability) &&
+            plan.executionItems[1].priorityTier == BattleExecutionPriorityTier.Normal;
     }
 
     static bool VerifyAbilitySlotOrder()
@@ -29834,7 +29837,7 @@ public static class BattleAbilityPhaseBasicTests
             context.actor, 1, CreateAbility(context.actor, "mode110_ability_trait"), context.actor);
         BattleExecutionPlan plan = CreatePlan(slot);
         return !slot.cardState.HasTrait(BattleCardTrait.FirstStrike) &&
-            plan.executionItems[0].priorityTier == BattleExecutionPriorityTier.AbilityPhase;
+            plan.executionItems[0].priorityTier == BattleExecutionPriorityTier.Normal;
     }
 
     static bool VerifyAbilityUsesExistingResolver()
