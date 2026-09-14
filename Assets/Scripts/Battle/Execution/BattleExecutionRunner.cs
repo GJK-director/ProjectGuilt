@@ -103,6 +103,8 @@ public sealed class BattleExecutionRunner
     public BattleExecutionRunnerPhase Phase { get; private set; }
     public float ClashReadyPauseRemaining { get; private set; }
     public float AutoRollDelayRemaining { get; private set; }
+    BattleImpact delayedImpact;
+    float impactDelayRemaining;
     public bool IsWaitingForInput
     {
         get
@@ -166,7 +168,7 @@ public sealed class BattleExecutionRunner
 
         if (Phase == BattleExecutionRunnerPhase.ResolutionPending)
         {
-            return AdvanceResolutionPending(out failureMessage);
+            return AdvanceResolutionPending(safeDeltaTime, out failureMessage);
         }
 
         if (Phase == BattleExecutionRunnerPhase.ItemCompleted)
@@ -180,6 +182,8 @@ public sealed class BattleExecutionRunner
             CurrentPhaseRequirements = null;
             CurrentGuardSelectionType = BattleGuardSelectionType.None;
             CurrentItemCompleted = false;
+            delayedImpact = null;
+            impactDelayRemaining = 0f;
             return BeginNextItem(out failureMessage);
         }
 
@@ -606,7 +610,7 @@ public sealed class BattleExecutionRunner
 
         if (Phase == BattleExecutionRunnerPhase.ResolutionPending)
         {
-            return AdvanceResolutionPending(out failureMessage);
+            return AdvanceResolutionPending(0f, out failureMessage);
         }
 
         if (Phase == BattleExecutionRunnerPhase.WaitingForPresentation &&
@@ -802,7 +806,10 @@ public sealed class BattleExecutionRunner
         return Fail("表现推进失败：Continuation无效", out failureMessage);
     }
 
-    bool AdvanceResolutionPending(out string failureMessage)
+    bool AdvanceResolutionPending(
+        float deltaTime,
+        out string failureMessage
+    )
     {
         failureMessage = string.Empty;
         if (CurrentResolutionPlan == null)
@@ -813,6 +820,26 @@ public sealed class BattleExecutionRunner
         BattleImpact impact = CurrentResolutionPlan.GetNextPendingImpact();
         if (impact != null)
         {
+            if (impact.damageImpactDelaySeconds > TimerEpsilon)
+            {
+                if (!object.ReferenceEquals(delayedImpact, impact))
+                {
+                    delayedImpact = impact;
+                    impactDelayRemaining = impact.damageImpactDelaySeconds;
+                }
+
+                impactDelayRemaining = Mathf.Max(
+                    0f,
+                    impactDelayRemaining - Mathf.Max(0f, deltaTime)
+                );
+                if (impactDelayRemaining > TimerEpsilon)
+                {
+                    return true;
+                }
+            }
+
+            delayedImpact = null;
+            impactDelayRemaining = 0f;
             if (CurrentResolutionPlan.planKind ==
                 BattleResolutionPlanKind.FreeActionAttack)
             {
@@ -830,6 +857,8 @@ public sealed class BattleExecutionRunner
         }
 
         // 0-impact结果不伪造Impact；独立推进一次Activation与CompleteResolution。
+        delayedImpact = null;
+        impactDelayRemaining = 0f;
         return CommitOneResolutionStep(out failureMessage);
     }
 
@@ -984,6 +1013,11 @@ public sealed class BattleExecutionRunner
         if (!CurrentItemCompleted)
         {
             return Fail("Pausable执行失败：当前Item尚未完成", out failureMessage);
+        }
+
+        if (!BattleResolver.CommitDefeatCheckpoint(CurrentResolutionPlan))
+        {
+            return Fail("Pausable执行失败：Defeat Checkpoint未能完成", out failureMessage);
         }
 
         BattleExecutionPlanExecutor.CommitActionFinishedOnce(CurrentItem);

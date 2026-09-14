@@ -132,6 +132,8 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         specialLongRangeDuelPresentationProfile;
     [SerializeField]
     private BattleCameraDirector battleCameraDirector;
+    [SerializeField]
+    private BattleDamageNumberPresenter damageNumberPresenter;
     [SerializeField] private bool verboseLogging = false;
 
     private ActionPresentationContext activeContext;
@@ -154,6 +156,10 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ValidateAttackVsDodgePresentationPlayer();
         ResolveLongRangeShootVsAttackPresentationPlayer();
         ResolveSpecialLongRangeDuelPresentationPlayer();
+        if (damageNumberPresenter == null)
+        {
+            damageNumberPresenter = GetComponent<BattleDamageNumberPresenter>();
+        }
     }
 
     public void Initialize(BattleUnitViewSpawner spawner)
@@ -164,6 +170,10 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         ValidateAttackVsDodgePresentationPlayer();
         ResolveLongRangeShootVsAttackPresentationPlayer();
         ResolveSpecialLongRangeDuelPresentationPlayer();
+        if (damageNumberPresenter == null)
+        {
+            damageNumberPresenter = GetComponent<BattleDamageNumberPresenter>();
+        }
     }
 
     void OnDisable()
@@ -2921,14 +2931,37 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         int finalHp
     )
     {
-        if (impact == null || impact.hpDisplayStageCount <= 1 ||
-            impact.target == null || unitViewSpawner == null)
+        if (impact == null || impact.target == null || unitViewSpawner == null)
         {
             return;
         }
 
         BattleUnitViewHandle handle = unitViewSpawner.GetHandle(impact.target);
-        if (handle == null || handle.StatusView == null)
+        if (handle == null)
+        {
+            return;
+        }
+
+        if (damageNumberPresenter != null && impact.allowsDamage &&
+            impact.didHit)
+        {
+            Transform centerAnchor = handle.CenterAnchor != null
+                ? handle.CenterAnchor
+                : handle.WorldRoot != null
+                    ? handle.WorldRoot.transform
+                    : null;
+            Canvas targetCanvas = handle.WorldFollower != null
+                ? handle.WorldFollower.ResolvedTargetCanvas
+                : null;
+            damageNumberPresenter.Present(
+                impact,
+                centerAnchor,
+                targetCanvas,
+                unitViewSpawner.WorldCamera
+            );
+        }
+
+        if (impact.hpDisplayStageCount <= 1 || handle.StatusView == null)
         {
             return;
         }

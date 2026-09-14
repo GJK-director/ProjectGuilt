@@ -487,12 +487,6 @@ public static class BattleResolver
             attackCard,
             rolledPoint
         );
-        damageScaled = ApplyAllInDamageMultiplier(
-            damageScaled,
-            plan.sourceCardState,
-            resourceSnapshot
-        );
-
         plan.freeActionPoint = rolledPoint;
         plan.unrespondedEnemyPoint = rolledPoint;
         plan.freeActionHasRolled = true;
@@ -1841,13 +1835,44 @@ public static class BattleResolver
             return;
         }
 
-        int[] segmentPercents = sourceCardState != null &&
-            sourceCardState.cardData != null
-            ? sourceCardState.cardData.damageImpactPercents
+        CardTestData cardData = sourceCardState != null
+            ? sourceCardState.cardData
             : null;
-        int segmentCount = segmentPercents != null && segmentPercents.Length > 0
-            ? segmentPercents.Length
-            : 1;
+        int[] segmentPercents = cardData != null
+            ? cardData.damageImpactPercents
+            : null;
+        string distributionMode = cardData != null
+            ? BattleDamageDistributionMode.ResolveOrDefault(
+                cardData.damageDistributionMode
+            )
+            : BattleDamageDistributionMode.Independent;
+        int segmentCount = BattleDamageDistribution.GetSegmentCount(
+            segmentPercents
+        );
+        if (BattleAllInRules.IsAllIn(sourceCardState) &&
+            resourceSnapshot != null)
+        {
+            segmentCount = Mathf.Min(
+                segmentCount,
+                Mathf.Max(0, resourceSnapshot.capturedStack)
+            );
+        }
+
+        if (segmentCount <= 0)
+        {
+            return;
+        }
+
+        if (distributionMode == BattleDamageDistributionMode.Cumulative &&
+            segmentCount > 1 &&
+            (cardData == null || cardData.damageImpactDelaySeconds == null ||
+                cardData.damageImpactDelaySeconds.Length < segmentCount))
+        {
+            Debug.LogWarning(
+                "累计伤害卡牌的damageImpactDelaySeconds配置不足：" +
+                (cardData != null ? cardData.cardID : "unknown")
+            );
+        }
 
         for (int segmentIndex = 0; segmentIndex < segmentCount; segmentIndex++)
         {
@@ -1867,24 +1892,61 @@ public static class BattleResolver
                 shouldTriggerHit,
                 plan.runtimeInteraction
             );
-            impact.damageMultiplierPercent =
-                BattleAllInRules.CombineDamageMultiplierPercent(
-                    initialDamageMultiplierPercent,
-                    segmentPercent
-                );
-            if (precalculatedDamageScaled >= 0)
+            if (distributionMode == BattleDamageDistributionMode.Cumulative)
             {
-                impact.SetPrecalculatedDamage(
-                    BattleCalculator.ConvertScaledDamageToHPDamage(
-                        BattleAllInRules.CombineDamageMultiplierPercent(
-                            precalculatedDamageScaled,
-                            segmentPercent
-                        )
-                    )
+                impact.damageMultiplierPercent = Mathf.Max(
+                    0,
+                    initialDamageMultiplierPercent
                 );
+                if (precalculatedDamageScaled >= 0)
+                {
+                    int baseScaled =
+                        BattleDamageDistribution.CombineMultiplierPercent(
+                            precalculatedDamageScaled,
+                            initialDamageMultiplierPercent
+                        );
+                    int baseResolvedDamage =
+                        BattleCalculator.ConvertScaledDamageToHPDamage(
+                            baseScaled
+                        );
+                    impact.SetPrecalculatedDamage(
+                        BattleDamageDistribution.GetCumulativeSegmentDamage(
+                            baseResolvedDamage,
+                            segmentPercents,
+                            segmentIndex
+                        )
+                    );
+                }
+            }
+            else
+            {
+                impact.damageMultiplierPercent =
+                    BattleDamageDistribution.CombineMultiplierPercent(
+                        initialDamageMultiplierPercent,
+                        segmentPercent
+                    );
+                if (precalculatedDamageScaled >= 0)
+                {
+                    impact.SetPrecalculatedDamage(
+                        BattleCalculator.ConvertScaledDamageToHPDamage(
+                            BattleDamageDistribution.CombineMultiplierPercent(
+                                precalculatedDamageScaled,
+                                segmentPercent
+                            )
+                        )
+                    );
+                }
             }
 
-            ApplyAllInImpactData(impact, sourceCardState, resourceSnapshot);
+            if (cardData != null && cardData.damageImpactDelaySeconds != null &&
+                segmentIndex > 0 &&
+                segmentIndex < cardData.damageImpactDelaySeconds.Length)
+            {
+                impact.damageImpactDelaySeconds = Mathf.Max(
+                    0f,
+                    cardData.damageImpactDelaySeconds[segmentIndex]
+                );
+            }
             if (segmentCount > 1)
             {
                 impact.hpDisplayStageCount = 1;
@@ -1895,7 +1957,8 @@ public static class BattleResolver
 
     internal static bool TryCommitNextResolutionStep(
         BattleResolutionPlan plan,
-        out BattleResolveResult completedResult
+        out BattleResolveResult completedResult,
+        bool deferDefeatCheckpoint = false
     )
     {
         completedResult = null;
@@ -1929,6 +1992,12 @@ public static class BattleResolver
             return true;
         }
 
+        if (!deferDefeatCheckpoint && !CommitDefeatCheckpoint(plan))
+        {
+            plan.runtimeInteraction?.TryAbort();
+            return false;
+        }
+
         completedResult = CompleteResolution(plan);
         return completedResult != null;
     }
@@ -1958,6 +2027,7 @@ public static class BattleResolver
         }
 
         impact.didHit = false;
+        impact.resolvedDamage = 0;
         impact.actualDamage = 0;
         impact.committedDamage = 0;
         impact.didKill = false;
@@ -1970,7 +2040,7 @@ public static class BattleResolver
             return true;
         }
 
-        if (impact.allowsDamage && impact.target.IsDead())
+        if (impact.allowsDamage && impact.target.IsDefeated())
         {
             impact.state = BattleImpactState.Skipped;
             return true;
@@ -1989,7 +2059,23 @@ public static class BattleResolver
             );
             damageScaled = damageScaled *
                 Mathf.Max(0, impact.damageMultiplierPercent) / 100;
-            candidateDamage = BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+            int baseResolvedDamage =
+                BattleCalculator.ConvertScaledDamageToHPDamage(damageScaled);
+            if (BattleDamageDistributionMode.ResolveOrDefault(
+                    impact.sourceCardState.cardData.damageDistributionMode
+                ) == BattleDamageDistributionMode.Cumulative)
+            {
+                candidateDamage =
+                    BattleDamageDistribution.GetCumulativeSegmentDamage(
+                        baseResolvedDamage,
+                        impact.sourceCardState.cardData.damageImpactPercents,
+                        impact.impactIndex
+                    );
+            }
+            else
+            {
+                candidateDamage = baseResolvedDamage;
+            }
         }
 
         if (impact.allowsDamage)
@@ -2010,6 +2096,8 @@ public static class BattleResolver
                 ? Mathf.Max(0, modifierContext.damage)
                 : Mathf.Max(0, candidateDamage);
         }
+
+        impact.resolvedDamage = Mathf.Max(0, candidateDamage);
 
         if (impact.shouldTriggerHit)
         {
@@ -2046,10 +2134,9 @@ public static class BattleResolver
                     actualDamage
                 );
             }
-            bool didKill = sourceHpBefore > 0 &&
+            bool reachedZero = sourceHpBefore > 0 &&
                 actualDamage > 0 &&
                 sourceHpAfter <= 0;
-            impact.didKill = didKill;
             TriggerBattleEvent(
                 BattleTiming.AfterDamage,
                 impact.attacker,
@@ -2058,30 +2145,56 @@ public static class BattleResolver
                 impact.clashPoint,
                 actualDamage,
                 impact.didHit,
-                didKill,
+                false,
                 impact.clashResult,
                 impact
             );
-            if (didKill)
+            if (reachedZero && plan.pendingDefeatImpact == null)
             {
-                TriggerBattleEvent(
-                    BattleTiming.AfterKill,
-                    impact.attacker,
-                    impact.target,
-                    impact.sourceCardState,
-                    impact.clashPoint,
-                    actualDamage,
-                    impact.didHit,
-                    true,
-                    impact.clashResult,
-                    impact
-                );
+                plan.pendingDefeatImpact = impact;
             }
         }
 
         impact.actualDamage = actualDamage;
         impact.committedDamage = actualDamage;
         impact.state = BattleImpactState.Committed;
+        return true;
+    }
+
+    internal static bool CommitDefeatCheckpoint(BattleResolutionPlan plan)
+    {
+        if (plan == null || plan.pendingDefeatImpact == null)
+        {
+            return true;
+        }
+
+        BattleImpact impact = plan.pendingDefeatImpact;
+        CharacterData target = impact.target;
+        if (target == null || target.IsDefeated())
+        {
+            plan.pendingDefeatImpact = null;
+            return true;
+        }
+        if (target.currentHP > 0)
+        {
+            return true;
+        }
+
+        target.MarkDefeated();
+        impact.didKill = true;
+        TriggerBattleEvent(
+            BattleTiming.AfterKill,
+            impact.attacker,
+            impact.target,
+            impact.sourceCardState,
+            impact.clashPoint,
+            impact.actualDamage,
+            impact.didHit,
+            true,
+            impact.clashResult,
+            impact
+        );
+        plan.pendingDefeatImpact = null;
         return true;
     }
 
@@ -4645,50 +4758,6 @@ public static class BattleResolver
             : rule.consumeTiming;
 
         return snapshot;
-    }
-
-    static int ApplyAllInDamageMultiplier(
-        int damageScaled,
-        BattleCardState cardState,
-        BattleClashResourceSnapshot resourceSnapshot
-    )
-    {
-        if (!BattleAllInRules.IsAllIn(cardState) || resourceSnapshot == null)
-        {
-            return damageScaled;
-        }
-
-        int allInMultiplier = BattleAllInRules.GetDamageMultiplierPercent(
-            resourceSnapshot.capturedStack
-        );
-        return BattleAllInRules.CombineDamageMultiplierPercent(
-            damageScaled,
-            allInMultiplier
-        );
-    }
-
-    static void ApplyAllInImpactData(
-        BattleImpact impact,
-        BattleCardState cardState,
-        BattleClashResourceSnapshot resourceSnapshot
-    )
-    {
-        if (impact == null || !BattleAllInRules.IsAllIn(cardState) ||
-            resourceSnapshot == null)
-        {
-            return;
-        }
-
-        impact.damageMultiplierPercent =
-            BattleAllInRules.CombineDamageMultiplierPercent(
-                impact.damageMultiplierPercent,
-                BattleAllInRules.GetDamageMultiplierPercent(
-                    resourceSnapshot.capturedStack
-                )
-            );
-        impact.hpDisplayStageCount = BattleAllInRules.GetHpDisplayStageCount(
-            resourceSnapshot.capturedStack
-        );
     }
 
     static CardResourceRuleData GetFirstResourceRule(CardTestData cardData)

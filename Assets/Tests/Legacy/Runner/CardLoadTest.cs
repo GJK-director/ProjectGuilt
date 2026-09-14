@@ -3609,9 +3609,13 @@ public static class BattleAngerAndKnifeCardsBasicTests
             lethalTarget
         );
         CompletePlan(lethalPlan);
+        bool defeatCheckpoint = BattleResolver.CommitDefeatCheckpoint(lethalPlan);
         bool killStopsSecond = lethalPlan != null && lethalPlan.impacts.Count == 2 &&
+            defeatCheckpoint &&
+            lethalTarget.IsDefeated() &&
             lethalPlan.impacts[0].didKill &&
-            lethalPlan.impacts[1].state == BattleImpactState.Skipped &&
+            lethalPlan.impacts[1].state == BattleImpactState.Committed &&
+            lethalPlan.impacts[1].resolvedDamage > 0 &&
             lethalPlan.impacts[1].actualDamage == 0 &&
             BattleAngerRules.GetAnger(lethalAttacker) == 1;
 
@@ -4246,7 +4250,9 @@ public static class BattleAngerAndKnifeCardsBasicTests
             cooldown = source.cooldown,
             damageFormula = source.damageFormula,
             defenseFormula = source.defenseFormula,
+            damageDistributionMode = source.damageDistributionMode,
             damageImpactPercents = source.damageImpactPercents,
+            damageImpactDelaySeconds = source.damageImpactDelaySeconds,
             hpDisplayStageCount = source.hpDisplayStageCount,
             isSinCard = source.isSinCard,
             sinCardCategory = source.sinCardCategory,
@@ -30612,6 +30618,19 @@ internal static class BattleTimingMigrationFixture
             consumeAllCapturedOnSuccess = allIn,
             insufficientBehavior = CardResourceInsufficientBehavior.ActionUnavailable
         };
+        if (allIn)
+        {
+            card.cardData.damageDistributionMode =
+                BattleDamageDistributionMode.Cumulative;
+            card.cardData.damageImpactPercents = new[]
+            {
+                100, 180, 230, 270, 300, 320
+            };
+            card.cardData.damageImpactDelaySeconds = new[]
+            {
+                0f, 0f, 0f, 0f, 0f, 0f
+            };
+        }
         return card;
     }
 
@@ -30626,8 +30645,21 @@ internal static class BattleTimingMigrationFixture
 
     internal static BattleResolveResult Complete(BattleResolutionPlan plan)
     {
-        return BattleResolver.TryCommitNextResolutionStep(plan, out BattleResolveResult result)
-            ? result : null;
+        int guard = 0;
+        BattleResolveResult result = null;
+        while (plan != null &&
+            plan.State != BattleResolutionPlanState.Completed &&
+            guard++ < 8)
+        {
+            if (!BattleResolver.TryCommitNextResolutionStep(
+                    plan,
+                    out result
+                ))
+            {
+                return null;
+            }
+        }
+        return result ?? (plan != null ? plan.CompletedResult : null);
     }
 
     internal static bool Observe(System.Func<List<BattleEventContext>, bool> test)
@@ -30830,7 +30862,12 @@ public static class BattleDeckFrozenSemanticsMigrationTests
         return noDumpOnLoss && block != null && block.resultType == "DefenseFullBlock" &&
             allIn.cardUsedCommittedForCurrentAction && BattleBulletRules.GetBullet(owner) == 0 &&
             snapshot != null && snapshot.capturedStack == 6 &&
-            BattleAllInRules.GetDamageMultiplierPercent(snapshot.capturedStack) == 320;
+            allIn.cardData != null &&
+            allIn.cardData.damageDistributionMode ==
+                BattleDamageDistributionMode.Cumulative &&
+            allIn.cardData.damageImpactPercents != null &&
+            allIn.cardData.damageImpactPercents.Length >= snapshot.capturedStack &&
+            allIn.cardData.damageImpactPercents[snapshot.capturedStack - 1] == 320;
     }
 
     static bool VerifyBreath(List<CardTestData> cards)
@@ -31876,9 +31913,21 @@ public static class BattleResourceSpecialStateNormalizationTests
         bool capturedBeforePayment = snapshot != null && snapshot.capturedStack == 6 &&
             BattleBulletRules.GetBullet(winner) == 6;
         BattleResolveResult winningResult = BattleTimingMigrationFixture.Complete(winningPlan);
+        bool hasSixRealImpacts = winningPlan != null && winningPlan.impacts.Count == 6;
+        if (hasSixRealImpacts)
+        {
+            foreach (BattleImpact impact in winningPlan.impacts)
+            {
+                if (impact == null || impact.hpDisplayStageCount != 1)
+                {
+                    hasSixRealImpacts = false;
+                    break;
+                }
+            }
+        }
         bool usedSnapshot = capturedBeforePayment && winningResult != null &&
             winningResult.damage == 32 && BattleBulletRules.GetBullet(winner) == 0 &&
-            winningPlan.impacts.Count == 1 && winningPlan.impacts[0].hpDisplayStageCount == 6;
+            hasSixRealImpacts;
 
         CharacterData loser = BattleTimingMigrationFixture.Unit("mode128_all_in_loser");
         BattleBulletRules.ReloadToCapacity(loser);
@@ -33561,9 +33610,11 @@ public static class BattleImpactFactsTests
     {
         ImpactFixture fixture = CreateImpactFixture("mode125_overkill", 3, 10);
         bool committed = BattleResolver.CommitImpact(fixture.plan, fixture.impact);
+        bool checkpoint = BattleResolver.CommitDefeatCheckpoint(fixture.plan);
         bool completed = Complete(fixture.plan, out BattleResolveResult result);
-        return committed && completed && result != null && result.damage == 3 &&
-            fixture.impact.actualDamage == 3 && fixture.impact.committedDamage == 3 &&
+        return committed && checkpoint && completed && result != null && result.damage == 3 &&
+            fixture.impact.resolvedDamage == 10 && fixture.impact.actualDamage == 3 &&
+            fixture.impact.committedDamage == 3 && fixture.target.IsDefeated() &&
             fixture.impact.didKill && Count(events, BattleTiming.AfterDamage) == 1 &&
             Count(events, BattleTiming.AfterKill) == 1;
     }
@@ -33572,8 +33623,10 @@ public static class BattleImpactFactsTests
     {
         ImpactFixture fixture = CreateImpactFixture("mode125_kill_owner", 3, 3);
         bool committed = BattleResolver.CommitImpact(fixture.plan, fixture.impact);
+        bool checkpoint = BattleResolver.CommitDefeatCheckpoint(fixture.plan);
         BattleEventContext afterKill = Find(events, BattleTiming.AfterKill);
-        return committed && fixture.impact.didKill && afterKill != null &&
+        return committed && checkpoint && fixture.target.IsDefeated() &&
+            fixture.impact.didKill && afterKill != null &&
             object.ReferenceEquals(afterKill.impact, fixture.impact) &&
             object.ReferenceEquals(afterKill.cardState, fixture.card) &&
             afterKill.damage == fixture.impact.actualDamage;
@@ -33618,11 +33671,13 @@ public static class BattleImpactFactsTests
             fixture.plan,
             fixture.impact
         );
+        bool checkpoint = BattleResolver.CommitDefeatCheckpoint(fixture.plan);
         BattleEventContext modifier = Find(events, BattleTiming.DamageModifier);
         BattleEventContext hit = Find(events, BattleTiming.Hit);
         BattleEventContext afterDamage = Find(events, BattleTiming.AfterDamage);
         BattleEventContext afterKill = Find(events, BattleTiming.AfterKill);
-        return committed && fixture.target.IsDead() && modifier != null &&
+        return committed && checkpoint && fixture.target.IsDead() &&
+            fixture.target.IsDefeated() && modifier != null &&
             hit != null && afterDamage != null && afterKill != null &&
             object.ReferenceEquals(modifier.impact, fixture.impact) &&
             object.ReferenceEquals(hit.impact, fixture.impact) &&
@@ -33636,10 +33691,11 @@ public static class BattleImpactFactsTests
             Count(events, BattleTiming.Hit) == 1 &&
             Count(events, BattleTiming.AfterDamage) == 1 &&
             Count(events, BattleTiming.AfterKill) == 1 &&
-            fixture.impact.didHit && fixture.impact.actualDamage == 3 &&
+            fixture.impact.didHit && fixture.impact.resolvedDamage == 3 &&
+            fixture.impact.actualDamage == 3 &&
             fixture.impact.committedDamage == 3 && fixture.impact.didKill &&
             afterDamage.damage == 3 && afterKill.damage == 3 &&
-            afterDamage.isKill && afterKill.isKill;
+            !afterDamage.isKill && afterKill.isKill;
     }
 
     static BattleResolutionPlan CreateDefensePlan(string id, int attackPoint, int defensePoint)

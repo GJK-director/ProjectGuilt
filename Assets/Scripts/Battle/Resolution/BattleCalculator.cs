@@ -279,7 +279,7 @@ public static class BattleCalculator
     }
 
     // ConvertScaledDamageToHPDamage = 把内部伤害转换成实际扣血
-    // 例如：550 → 6
+    // 例如：550 → 5
     public static int ConvertScaledDamageToHPDamage(int scaledDamage)
     {
         if (scaledDamage <= 0)
@@ -287,8 +287,8 @@ public static class BattleCalculator
             return 0;
         }
 
-        // 向上取整
-        return (scaledDamage + VALUE_SCALE - 1) / VALUE_SCALE;
+        // 伤害内部值统一按非负整数向下取整。
+        return scaledDamage / VALUE_SCALE;
     }
 
     // CalculateRemainingAttackPointAfterDefense = 计算防御后的剩余攻击点数

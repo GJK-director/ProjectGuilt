@@ -18,6 +18,7 @@ public class CharacterData
     public int maxHP;
     //currentHP当前hp
     public int currentHP;
+    private bool defeated;
     // 旧测试仍通过 currentGuilt 读写负罪感。
     // 正式战斗绑定 RuntimeState 后，该兼容属性会转读写战斗公共负罪感。
     private int legacyCurrentGuilt = 0;
@@ -164,6 +165,16 @@ public class CharacterData
     public bool IsDead()
     {
         return currentHP <= 0;
+    }
+
+    public bool IsDefeated()
+    {
+        return defeated;
+    }
+
+    public void MarkDefeated()
+    {
+        defeated = true;
     }
 
     // RollTurnSpeed = 投掷本回合速度

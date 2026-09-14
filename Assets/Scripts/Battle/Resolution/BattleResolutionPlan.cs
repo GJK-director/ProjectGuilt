@@ -69,12 +69,15 @@ public sealed class BattleImpact
     public bool shouldTriggerHit;
     public BattleImpactState state;
     public bool didHit;
+    // DamageModifier之后、目标HP实际扣除/Clamp之前的本段伤害。
+    public int resolvedDamage;
     public int actualDamage;
     public int committedDamage;
     public bool didKill;
     public bool usesPrecalculatedDamage;
     public int precalculatedDamage;
     public int damageMultiplierPercent = 100;
+    public float damageImpactDelaySeconds;
     public int hpDisplayStageCount = 1;
     public BattleScopedDamageModifier scopedDamageModifier;
     public BattleRuntimeInteraction runtimeInteraction;
@@ -103,6 +106,7 @@ public sealed class BattleImpact
         this.shouldTriggerHit = shouldTriggerHit;
         this.runtimeInteraction = runtimeInteraction;
         didHit = false;
+        resolvedDamage = 0;
         actualDamage = 0;
         committedDamage = 0;
         didKill = false;
@@ -152,6 +156,7 @@ public sealed class BattleResolutionPlan
     public int guardDownStackToConsume;
 
     public readonly List<BattleImpact> impacts = new List<BattleImpact>();
+    public BattleImpact pendingDefeatImpact;
 
     public BattleResolutionPlanState State { get; internal set; }
     public BattleResolveResult CompletedResult { get; internal set; }

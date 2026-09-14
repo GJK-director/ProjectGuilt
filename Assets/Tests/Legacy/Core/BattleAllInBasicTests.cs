@@ -22,12 +22,17 @@ public static class BattleAllInBasicTests
             template.minPoint + 1 == 3 && template.maxPoint + 1 == 6 &&
             template.minPoint + 6 == 8 && template.maxPoint + 6 == 11 &&
             template.minPoint + 4 + 2 == 8 && template.maxPoint + 4 + 2 == 11;
-        bool multipliers = BattleAllInRules.GetDamageMultiplierPercent(1) == 100 &&
-            BattleAllInRules.GetDamageMultiplierPercent(2) == 180 &&
-            BattleAllInRules.GetDamageMultiplierPercent(3) == 230 &&
-            BattleAllInRules.GetDamageMultiplierPercent(4) == 270 &&
-            BattleAllInRules.GetDamageMultiplierPercent(5) == 300 &&
-            BattleAllInRules.GetDamageMultiplierPercent(6) == 320;
+        bool multipliers = template != null &&
+            template.damageDistributionMode ==
+                BattleDamageDistributionMode.Cumulative &&
+            template.damageImpactPercents != null &&
+            template.damageImpactPercents.Length == 6 &&
+            template.damageImpactPercents[0] == 100 &&
+            template.damageImpactPercents[1] == 180 &&
+            template.damageImpactPercents[2] == 230 &&
+            template.damageImpactPercents[3] == 270 &&
+            template.damageImpactPercents[4] == 300 &&
+            template.damageImpactPercents[5] == 320;
         bool success = VerifyFormalResolution(template, 3, true, out int successDamage);
         bool failure = VerifyFormalResolution(template, 4, false, out _);
         bool empty = VerifyZeroBullet(template);
@@ -84,7 +89,8 @@ public static class BattleAllInBasicTests
         BattleResolutionPlan plan = BattleResolver.BuildRespondedClashResolutionPlan(
             slot, intent, session
         );
-        if (plan == null || plan.impacts.Count != 1)
+        int expectedImpactCount = shouldWin ? bullet : 1;
+        if (plan == null || plan.impacts.Count != expectedImpactCount)
         {
             return false;
         }
@@ -93,9 +99,19 @@ public static class BattleAllInBasicTests
         if (shouldWin)
         {
             if (!object.ReferenceEquals(impact.sourceCardState, allIn) ||
-                impact.hpDisplayStageCount != bullet)
+                impact.hpDisplayStageCount != 1)
             {
                 return false;
+            }
+            for (int index = 0; index < plan.impacts.Count; index++)
+            {
+                if (!object.ReferenceEquals(
+                        plan.impacts[index].sourceCardState,
+                        allIn
+                    ) || plan.impacts[index].hpDisplayStageCount != 1)
+                {
+                    return false;
+                }
             }
         }
         else if (!object.ReferenceEquals(impact.sourceCardState, enemyAttack) ||
@@ -203,6 +219,9 @@ public static class BattleAllInBasicTests
             maxPoint = maxPoint,
             cooldown = source.cooldown,
             damageFormula = source.damageFormula,
+            damageDistributionMode = source.damageDistributionMode,
+            damageImpactPercents = source.damageImpactPercents,
+            damageImpactDelaySeconds = source.damageImpactDelaySeconds,
             traits = source.traits,
             resourceRule = source.resourceRule
         };
@@ -224,4 +243,3 @@ public static class BattleAllInBasicTests
         return null;
     }
 }
-

@@ -107,6 +107,7 @@
     "guiltCost": 0,
     "isSinCard": false,
     "damageFormula": "PointAsDamage",
+    "damageDistributionMode": "Independent",
     "damageImpactPercents": [
       80,
       80
@@ -333,6 +334,23 @@
     "cooldown": 3,
     "guiltCost": 0,
     "damageFormula": "PointAsDamage",
+    "damageDistributionMode": "Cumulative",
+    "damageImpactPercents": [
+      100,
+      180,
+      230,
+      270,
+      300,
+      320
+    ],
+    "damageImpactDelaySeconds": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
     "resourceRule": {
       "resourceType": "BuffStack",
       "resourceID": "Bullet",

@@ -1212,7 +1212,8 @@ public static class BattleExecutionPlanExecutor
 
         if (!BattleResolver.TryCommitNextResolutionStep(
                 plan,
-                out result
+                out result,
+                true
             ))
         {
             return false;

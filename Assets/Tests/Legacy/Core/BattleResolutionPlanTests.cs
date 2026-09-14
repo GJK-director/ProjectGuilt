@@ -60,7 +60,7 @@ public static class BattleResolutionPlanTests
         Debug.Log("模式82 L Completed Plan重复推进保持幂等：" + l);
         Debug.Log("模式82 M Impact读取提交时DamageTaken：" + m);
         Debug.Log("模式82 N Defense使用Session固定remainingAttack：" + n);
-        Debug.Log("模式82 O 已死亡目标后续Impact跳过且不重复AfterKill：" + o);
+        Debug.Log("模式82 O HP归零后续Impact仍提交，Checkpoint仅归属首段：" + o);
         Debug.Log("模式82 P FreeAttack Build不扣血且Impact Commit后才扣血：" + p);
         Debug.Log("模式82 Q FreeAttack同步入口仍返回旧结果语义：" + q);
         Debug.Log("模式82 R 只有Melee FreeAction进入Pausable，Ability保持同步：" + r);
@@ -337,9 +337,15 @@ public static class BattleResolutionPlanTests
         BattleResolver.TryCommitNextResolutionStep(context.resolutionPlan, out BattleResolveResult firstResult);
         int killProbe = context.ally.GetBuffStack("Bullet");
         BattleResolver.TryCommitNextResolutionStep(context.resolutionPlan, out BattleResolveResult finalResult);
-        return firstResult == null && finalResult != null && context.enemy.IsDead() &&
-            killProbe == 1 && context.ally.GetBuffStack("Bullet") == 1 &&
-            context.resolutionPlan.impacts[1].state == BattleImpactState.Skipped;
+        bool checkpoint = BattleResolver.CommitDefeatCheckpoint(context.resolutionPlan);
+        return firstResult == null && finalResult != null && checkpoint &&
+            context.enemy.IsDead() && context.enemy.IsDefeated() &&
+            killProbe == 0 && context.ally.GetBuffStack("Bullet") == 1 &&
+            context.resolutionPlan.impacts[0].didKill &&
+            context.resolutionPlan.impacts[1].state == BattleImpactState.Committed &&
+            context.resolutionPlan.impacts[1].resolvedDamage > 0 &&
+            context.resolutionPlan.impacts[1].actualDamage == 0 &&
+            !context.resolutionPlan.impacts[1].didKill;
     }
 
     static bool VerifyFreeAttackPlanDelaysDamage()

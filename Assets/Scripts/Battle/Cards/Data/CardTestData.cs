@@ -30,6 +30,67 @@ public static class CardResourceConsumeTiming
     public const string OnResolvedParticipation = "OnResolvedParticipation";
 }
 
+public static class BattleDamageDistributionMode
+{
+    public const string Independent = "Independent";
+    public const string Cumulative = "Cumulative";
+
+    public static string ResolveOrDefault(string value)
+    {
+        return value == Cumulative ? Cumulative : Independent;
+    }
+}
+
+// 通用多段伤害分布计算。它只把卡牌数据中的总量百分比转换为真实Impact段。
+public static class BattleDamageDistribution
+{
+    public static int CombineMultiplierPercent(int current, int additional)
+    {
+        return UnityEngine.Mathf.Max(0, current) *
+            UnityEngine.Mathf.Max(0, additional) / 100;
+    }
+
+    public static int GetSegmentCount(int[] percents)
+    {
+        return percents != null && percents.Length > 0 ? percents.Length : 1;
+    }
+
+    public static int GetCumulativeSegmentDamage(
+        int baseResolvedDamage,
+        int[] cumulativePercents,
+        int segmentIndex
+    )
+    {
+        int currentTotal = GetCumulativeTotal(
+            baseResolvedDamage,
+            cumulativePercents,
+            segmentIndex
+        );
+        int previousTotal = segmentIndex > 0
+            ? GetCumulativeTotal(
+                baseResolvedDamage,
+                cumulativePercents,
+                segmentIndex - 1
+            )
+            : 0;
+        return System.Math.Max(0, currentTotal - previousTotal);
+    }
+
+    static int GetCumulativeTotal(
+        int baseResolvedDamage,
+        int[] cumulativePercents,
+        int segmentIndex
+    )
+    {
+        int percent = cumulativePercents != null &&
+            segmentIndex >= 0 && segmentIndex < cumulativePercents.Length
+            ? System.Math.Max(0, cumulativePercents[segmentIndex])
+            : 100;
+        long total = (long)System.Math.Max(0, baseResolvedDamage) * percent;
+        return (int)System.Math.Min(int.MaxValue, total / 100);
+    }
+}
+
 public static class CardUsePolicy
 {
     public const string Normal = "Normal";
@@ -66,7 +127,7 @@ public class CardResourceRuleData
     public string consumeTiming;
 }
 
-// ALL IN 的卡牌固有规则：把本次资源快照捕获的子弹作为一次攻击的倍率与显示分段。
+// ALL IN 的卡牌固有规则：识别卡牌并保留旧兼容查询；实际伤害分段来自CardTestData。
 public static class BattleAllInRules
 {
     public static bool IsAllIn(CardTestData cardData)
@@ -79,30 +140,6 @@ public static class BattleAllInRules
         return cardState != null && IsAllIn(cardState.cardData);
     }
 
-    public static int GetDamageMultiplierPercent(int capturedBullet)
-    {
-        switch (UnityEngine.Mathf.Clamp(capturedBullet, 0, 6))
-        {
-            case 1: return 100;
-            case 2: return 180;
-            case 3: return 230;
-            case 4: return 270;
-            case 5: return 300;
-            case 6: return 320;
-            default: return 0;
-        }
-    }
-
-    public static int GetHpDisplayStageCount(int capturedBullet)
-    {
-        return UnityEngine.Mathf.Max(1, capturedBullet);
-    }
-
-    public static int CombineDamageMultiplierPercent(int current, int additional)
-    {
-        return UnityEngine.Mathf.Max(0, current) *
-            UnityEngine.Mathf.Max(0, additional) / 100;
-    }
 }
 
 // CardTestData = 卡牌测试数据
@@ -152,7 +189,11 @@ public class CardTestData
     public int guiltGain;
     // Gameplay 多段伤害百分比；缺省时保持单段 100% 伤害。
     public int[] damageImpactPercents;
-    // 仅用于单个 Impact 的 HP 表现分段，不能决定 Combat 伤害段数。
+    // Independent表示每段独立百分比；Cumulative表示累计总量百分比。
+    public string damageDistributionMode;
+    // 每个正式Impact在前一段提交后等待的时间；第0段不等待。
+    public float[] damageImpactDelaySeconds;
+    // 仅用于单个Impact的旧HP表现分段，不能决定Combat伤害段数。
     public int hpDisplayStageCount;
 
     public List<CardEffectData> effects; // 卡牌效果列表

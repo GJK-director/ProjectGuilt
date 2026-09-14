@@ -703,7 +703,7 @@ public sealed class BattleLifecycleController
                 continue;
             }
             foundUnit = true;
-            if (!unit.IsDead())
+            if (!unit.IsDefeated())
             {
                 return false;
             }

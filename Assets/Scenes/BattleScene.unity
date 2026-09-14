@@ -981,7 +981,7 @@ MonoBehaviour:
   formalPresentationTestHarness: {fileID: 283409993}
   useDebugTestInitialization: 0
   useSingleUnitDemo: 1
-  playerDeckPreset: 0
+  playerDeckPreset: 1
 --- !u!4 &283409991
 Transform:
   m_ObjectHideFlags: 0
@@ -3257,6 +3257,7 @@ GameObject:
   - component: {fileID: 833021972}
   - component: {fileID: 833021973}
   - component: {fileID: 833021974}
+  - component: {fileID: 833021975}
   m_Layer: 0
   m_Name: BattleSceneExecutionPresenter
   m_TagString: Untagged
@@ -3284,6 +3285,7 @@ MonoBehaviour:
   clashEngagementProfile: {fileID: 11400000, guid: b9f30c692f87489f94c2b784d6e5ed65, type: 2}
   specialLongRangeDuelPresentationProfile: {fileID: 11400000, guid: 30d8c998085248919b9fae8923680115, type: 2}
   battleCameraDirector: {fileID: 0}
+  damageNumberPresenter: {fileID: 833021975}
   verboseLogging: 1
 --- !u!4 &833021970
 Transform:
@@ -3342,6 +3344,21 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BattleAttackVsDodgePresentationPlayer
   presentationProfile: {fileID: 11400000, guid: 8f5ad35a90b944d19fc5e13f2bc41b78, type: 2}
   normalHitProfile: {fileID: 11400000, guid: 0df745a66f423884ca20384e8001b8d2, type: 2}
+--- !u!114 &833021975
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 833021968}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 852d7b0ee276e2545bb4ab5080bee937, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BattleDamageNumberPresenter
+  fontSize: 32
+  textColor: {r: 1, g: 1, b: 1, a: 1}
+  lifetime: 0.6
 --- !u!1 &906990934
 GameObject:
   m_ObjectHideFlags: 0
