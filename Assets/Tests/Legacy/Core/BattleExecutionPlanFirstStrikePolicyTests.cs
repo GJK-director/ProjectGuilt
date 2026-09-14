@@ -183,18 +183,32 @@ public static class ActionOrderExecutionTests
     {
         CharacterData player = Unit("order_d_player", 5);
         CharacterData enemy = Unit("order_d_enemy", 5);
+        BattleEnemyIntent enemyIntent = AttackIntent(
+            enemy,
+            player,
+            "order_d_enemy_attack",
+            1,
+            1
+        );
         BattleActionSlot playerSlot = FreeSlot(player, 1, CardType.Attack, "order_d_player_attack", false, enemy);
-        BattleActionSlot enemySlot = FreeSlot(enemy, 1, CardType.Attack, "order_d_enemy_attack", false, player);
         BattleExecutionPlan plan = Plan(
             player, null, enemy, null,
-            new List<BattleActionSlot> { enemySlot, playerSlot },
-            new List<BattleEnemyIntent>()
+            new List<BattleActionSlot> { playerSlot },
+            new List<BattleEnemyIntent> { enemyIntent }
         );
 
         return HasTwoItems(plan) &&
+            plan.executionItems[0].executionType == BattleExecutionItemType.FreeAction &&
             object.ReferenceEquals(plan.executionItems[0].actionSlot, playerSlot) &&
+            plan.executionItems[0].enemyIntent == null &&
+            object.ReferenceEquals(plan.executionItems[0].orderingActor, player) &&
+            plan.executionItems[0].actionSlotOrder == 1 &&
             plan.executionItems[0].actorPositionOrder == 1 &&
-            object.ReferenceEquals(plan.executionItems[1].actionSlot, enemySlot) &&
+            plan.executionItems[1].executionType == BattleExecutionItemType.UnrespondedEnemyIntent &&
+            plan.executionItems[1].actionSlot == null &&
+            object.ReferenceEquals(plan.executionItems[1].enemyIntent, enemyIntent) &&
+            object.ReferenceEquals(plan.executionItems[1].orderingActor, enemy) &&
+            plan.executionItems[1].actionSlotOrder == 1 &&
             plan.executionItems[1].actorPositionOrder == 2;
     }
 
@@ -202,17 +216,33 @@ public static class ActionOrderExecutionTests
     {
         CharacterData player = Unit("order_e_player", 5);
         CharacterData enemy = Unit("order_e_enemy", 5);
+        BattleEnemyIntent enemyIntent = AttackIntent(
+            enemy,
+            player,
+            "order_e_enemy_attack",
+            1,
+            1
+        );
         BattleActionSlot playerSlot2 = FreeSlot(player, 2, CardType.Attack, "order_e_player_attack", false, enemy);
-        BattleActionSlot enemySlot1 = FreeSlot(enemy, 1, CardType.Attack, "order_e_enemy_attack", false, player);
         BattleExecutionPlan plan = Plan(
             player, null, enemy, null,
-            new List<BattleActionSlot> { playerSlot2, enemySlot1 },
-            new List<BattleEnemyIntent>()
+            new List<BattleActionSlot> { playerSlot2 },
+            new List<BattleEnemyIntent> { enemyIntent }
         );
 
         return HasTwoItems(plan) &&
-            object.ReferenceEquals(plan.executionItems[0].actionSlot, enemySlot1) &&
-            object.ReferenceEquals(plan.executionItems[1].actionSlot, playerSlot2);
+            plan.executionItems[0].executionType == BattleExecutionItemType.UnrespondedEnemyIntent &&
+            plan.executionItems[0].actionSlot == null &&
+            object.ReferenceEquals(plan.executionItems[0].enemyIntent, enemyIntent) &&
+            object.ReferenceEquals(plan.executionItems[0].orderingActor, enemy) &&
+            plan.executionItems[0].actionSlotOrder == 1 &&
+            plan.executionItems[0].actorPositionOrder == 2 &&
+            plan.executionItems[1].executionType == BattleExecutionItemType.FreeAction &&
+            object.ReferenceEquals(plan.executionItems[1].actionSlot, playerSlot2) &&
+            plan.executionItems[1].enemyIntent == null &&
+            object.ReferenceEquals(plan.executionItems[1].orderingActor, player) &&
+            plan.executionItems[1].actionSlotOrder == 2 &&
+            plan.executionItems[1].actorPositionOrder == 1;
     }
 
     static bool SameSpeedActionsGroupBySlotThenBattlePosition()
@@ -221,23 +251,86 @@ public static class ActionOrderExecutionTests
         CharacterData ally2 = Unit("order_f_ally_2", 5);
         CharacterData enemy1 = Unit("order_f_enemy_1", 5);
         CharacterData enemy2 = Unit("order_f_enemy_2", 5);
+        BattleEnemyIntent enemy1Slot1 = AttackIntent(
+            enemy1,
+            ally1,
+            "order_f_enemy_1_slot_1",
+            1,
+            1
+        );
+        BattleEnemyIntent enemy1Slot2 = AttackIntent(
+            enemy1,
+            ally1,
+            "order_f_enemy_1_slot_2",
+            2,
+            2
+        );
+        BattleEnemyIntent enemy2Slot1 = AttackIntent(
+            enemy2,
+            ally1,
+            "order_f_enemy_2_slot_1",
+            1,
+            3
+        );
+        BattleEnemyIntent enemy2Slot2 = AttackIntent(
+            enemy2,
+            ally1,
+            "order_f_enemy_2_slot_2",
+            2,
+            4
+        );
         List<BattleActionSlot> slots = new List<BattleActionSlot>
         {
-            FreeSlot(enemy2, 2, CardType.Attack, "order_f_e2_s2", false, ally1),
-            FreeSlot(ally1, 2, CardType.Attack, "order_f_a1_s2", false, enemy1),
-            FreeSlot(enemy1, 1, CardType.Attack, "order_f_e1_s1", false, ally1),
-            FreeSlot(ally2, 1, CardType.Attack, "order_f_a2_s1", false, enemy1),
-            FreeSlot(enemy2, 1, CardType.Attack, "order_f_e2_s1", false, ally1),
-            FreeSlot(ally1, 1, CardType.Attack, "order_f_a1_s1", false, enemy1),
             FreeSlot(ally2, 2, CardType.Attack, "order_f_a2_s2", false, enemy1),
-            FreeSlot(enemy1, 2, CardType.Attack, "order_f_e1_s2", false, ally1)
+            FreeSlot(ally1, 1, CardType.Attack, "order_f_a1_s1", false, enemy1),
+            FreeSlot(ally2, 1, CardType.Attack, "order_f_a2_s1", false, enemy1),
+            FreeSlot(ally1, 2, CardType.Attack, "order_f_a1_s2", false, enemy1)
         };
         BattleExecutionPlan plan = Plan(
             ally1, ally2, enemy1, enemy2, slots,
-            new List<BattleEnemyIntent>()
+            new List<BattleEnemyIntent>
+            {
+                enemy2Slot2,
+                enemy1Slot1,
+                enemy2Slot1,
+                enemy1Slot2
+            }
         );
         CharacterData[] expectedActors = { ally1, ally2, enemy1, enemy2, ally1, ally2, enemy1, enemy2 };
         int[] expectedSlots = { 1, 1, 1, 1, 2, 2, 2, 2 };
+        BattleExecutionItemType[] expectedTypes =
+        {
+            BattleExecutionItemType.FreeAction,
+            BattleExecutionItemType.FreeAction,
+            BattleExecutionItemType.UnrespondedEnemyIntent,
+            BattleExecutionItemType.UnrespondedEnemyIntent,
+            BattleExecutionItemType.FreeAction,
+            BattleExecutionItemType.FreeAction,
+            BattleExecutionItemType.UnrespondedEnemyIntent,
+            BattleExecutionItemType.UnrespondedEnemyIntent
+        };
+        BattleActionSlot[] expectedSlotsByItem =
+        {
+            slots[1],
+            slots[2],
+            null,
+            null,
+            slots[3],
+            slots[0],
+            null,
+            null
+        };
+        BattleEnemyIntent[] expectedIntents =
+        {
+            null,
+            null,
+            enemy1Slot1,
+            enemy2Slot1,
+            null,
+            null,
+            enemy1Slot2,
+            enemy2Slot2
+        };
 
         if (plan == null || plan.executionItems == null || plan.executionItems.Count != expectedActors.Length)
         {
@@ -248,6 +341,9 @@ public static class ActionOrderExecutionTests
         {
             BattleExecutionItem item = plan.executionItems[index];
             if (item == null ||
+                item.executionType != expectedTypes[index] ||
+                !object.ReferenceEquals(item.actionSlot, expectedSlotsByItem[index]) ||
+                !object.ReferenceEquals(item.enemyIntent, expectedIntents[index]) ||
                 !object.ReferenceEquals(item.orderingActor, expectedActors[index]) ||
                 item.actionSlotOrder != expectedSlots[index])
             {
