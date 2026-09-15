@@ -55,6 +55,15 @@ Controller 只在 `Prepare` / `PlanReady` 阶段应用 Planning display order；
 行动顺序数字的视觉迭代只调整上述 Prefab 中 OrderText 的 RectTransform、字体、字号、颜色、对齐方式、TMP Material，以及未来明确属于数字显示的背景、图标、FirstStrike 边框或动画。不得通过修改 Controller、Snapshot、Resolver、slot mapping 或 sorting 来实现视觉调整。
 
 未来如抽取独立 View，应保持 `BattleActionSlotUIView` → `ActionOrderIndicatorUIView` → Image/TMP/Animator 的显示边界，并继续保留 `SetOrder` / `ClearOrder` 作为接线契约；本阶段不提前接入该抽取。
+
+## Keyword Tooltip Contract
+
+卡牌黄色词条 Hover 的 owner 是 `BattleCardUIView`。命中顺序为 Exact TMP Link Hit → Padding Fallback；Fallback 按 TMP 字符的真实行分段计算，并由 `keywordHoverPaddingX` / `keywordHoverPaddingY` 控制，不通过透明 UI 覆盖层实现，因此不会新增 Raycast interception layer。
+
+二级面板的打开、关闭和 Source/Panel Hover ownership 由 `BattleSecondaryInfoPanelHost` 负责。`hoverOpenDelay` 是 Inspector 可调字段，使用 `Time.unscaledTime`；代码默认值为 `0.45f`，当前正式 `Assets/Prefabs/Battle/Units/UI/BattleSecondaryInfoPanel.prefab` 保存值为 `0.1`。
+
+`DefaultCloseGrace` 仍为 `0.12f`，本次未 Inspector 化。`BattleCardTooltipResolver`、卡牌点击、关键词数据来源以及现有 Clear/Exit/Disable 生命周期不属于该配置入口。
+
 ## SelfActionDropZone Contract
 
 `SelfActionDropZone` 是 Ally Status UI 的自身目标判定区域。它由 `BattleCharacterStatusWorldFollower` 负责世界跟随，使用角色的 `Center World Anchor` 投影到 Canvas；`Center Offset` 是人工布局偏移，`SelfActionDropZone` RectTransform 的 Width/Height 是人工判定范围。运行时投影持续写入位置，不能把运行时 Pos X/Pos Y 当作正式默认布局入口。

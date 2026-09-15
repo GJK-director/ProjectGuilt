@@ -15,6 +15,7 @@ Last Verified: 2026-09-15
 | 修改 Buff | [Buff 实用操作](#2-buff-实用操作) |
 | 增加卡牌效果 | [增加卡牌效果](#17-我要给卡牌增加效果) |
 | 修改二级词条 | [二级词条 / Keywords](#3-二级词条--keywords) |
+| 调整卡牌黄色词条 Hover | [卡牌黄色词条 Hover 与二级面板](#31-我要调整卡牌黄色词条-hover-判定和二级面板弹出速度) |
 | 修改牌组 | [修改牌组](#9-修改牌组) |
 | 修改卡牌视觉 | [卡牌图片 / 卡面视觉](#5-卡牌图片--卡面视觉) |
 | 修改镜头 | [Camera](#14-其他非卡牌功能) |
@@ -161,6 +162,25 @@ Last Verified: 2026-09-15
 `CardTestData.keywords` 是本卡局部关键词说明。修改某一张卡自己的二级词条时，修改 `CardsTest.json` 对应卡牌的 `keywords`。
 
 项目还存在全局关键词说明，部分全局词条描述由程序侧维护，不是全部都能从 `CardsTest.json` 改。本卡局部关键词可以直接改 JSON；需要修改多张卡共享的全局关键词定义时，不要只改某张卡，找 Sol 确认当前来源。
+
+### 3.1 我要调整卡牌黄色词条 Hover 判定和二级面板弹出速度
+
+卡牌黄色词条 Hover 的正式配置入口：
+
+`Assets/Art/battle/kapai/BattleCardUI.prefab` → `BattleCardUIView` →
+
+- `Keyword Hover Padding X`：扩大关键词左右方向的判定范围。
+- `Keyword Hover Padding Y`：扩大关键词上下方向的判定范围。
+
+这两个参数只扩展黄色关键词附近的命中区域，不会把整张卡变成关键词 Hover 区，也不会新增透明 UI 覆盖层。代码默认值为 `keywordHoverPaddingX = 0`、`keywordHoverPaddingY = 0`；当前正式 Prefab 保存值为 `Padding X = 35`、`Padding Y = 15`。
+
+二级面板打开时间的正式配置入口：
+
+`Assets/Prefabs/Battle/Units/UI/BattleSecondaryInfoPanel.prefab` → `BattleSecondaryInfoPanelHost` → `Hover Open Delay`。
+
+`0` 表示不增加人为等待；`0.1` 表示 Hover 后约等待 `0.1` 秒；`1` 表示 Hover 后约等待 `1` 秒。代码默认值为 `hoverOpenDelay = 0.45`；当前正式 Prefab 保存值为 `Hover Open Delay = 0.1`。实际关闭宽限仍由现有 `DefaultCloseGrace = 0.12` 控制，不是本入口的 Inspector 参数。
+
+卡牌黄色词条 Hover、二级面板 Delay 已由用户在 Unity 中人工验收：`USER UNITY MANUAL VERIFIED`。
 
 ## 4. 新增卡牌
 

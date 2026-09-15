@@ -121,6 +121,7 @@ MonoBehaviour:
   footerText: {fileID: 8214833818915664528}
   panelLayout: {fileID: 9079998184357848996}
   overlayCanvas: {fileID: 4113186166101153283}
+  hoverOpenDelay: 0.1
 --- !u!1 &7218246684674228714
 GameObject:
   m_ObjectHideFlags: 0

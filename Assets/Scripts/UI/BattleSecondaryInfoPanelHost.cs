@@ -54,7 +54,6 @@ public struct BattleSecondaryInfoHoverRequest
 // 面板创建、延时、定位和关闭逻辑不向业务 View 暴露第二套接口。
 public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
 {
-    const float DefaultShowDelay = 0.45f;
     const float DefaultCloseGrace = 0.12f;
     const int OverlaySortingOrder = 32767;
     const float ReferenceScreenHeight = 1080f;
@@ -80,6 +79,8 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
     [SerializeField] TMP_Text footerText;
     [SerializeField] VerticalLayoutGroup panelLayout;
     [SerializeField] Canvas overlayCanvas;
+    [Header("Hover")]
+    [SerializeField, Min(0f)] float hoverOpenDelay = 0.45f;
 
     RectTransform hostRect;
     Canvas sourceRootCanvas;
@@ -305,7 +306,7 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
             panelHovered = false;
             HidePanelOnly();
             showAtUnscaledTime =
-                Time.unscaledTime + DefaultShowDelay;
+                Time.unscaledTime + Mathf.Max(0f, hoverOpenDelay);
         }
     }
 

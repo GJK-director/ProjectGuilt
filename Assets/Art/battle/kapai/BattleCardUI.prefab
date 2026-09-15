@@ -353,6 +353,8 @@ MonoBehaviour:
   cooldownText: {fileID: 0}
   visualStyle: {fileID: 4339292013884297875}
   motionView: {fileID: 8533283622046652624}
+  keywordHoverPaddingX: 35
+  keywordHoverPaddingY: 15
 --- !u!114 &4339292013884297875
 MonoBehaviour:
   m_ObjectHideFlags: 0

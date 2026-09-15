@@ -17,6 +17,9 @@ public class BattleCardUIView : MonoBehaviour,
     [SerializeField] private BattleCardVisualStyle visualStyle;
     [SerializeField] private BattleCardMotionUIView motionView;
     [SerializeField, Range(0f, 1f)] private float consumedAlpha = 0.45f;
+    [Header("关键词 Hover")]
+    [SerializeField, Min(0f)] private float keywordHoverPaddingX;
+    [SerializeField, Min(0f)] private float keywordHoverPaddingY;
 
     private CharacterData boundOwner;
     private BattleCardState boundCardState;
@@ -251,6 +254,13 @@ public class BattleCardUIView : MonoBehaviour,
             eventData.position,
             eventData.enterEventCamera
         );
+        if (linkIndex < 0)
+        {
+            linkIndex = FindIntersectingKeywordLinkWithPadding(
+                eventData.position,
+                eventData.enterEventCamera
+            );
+        }
         if (linkIndex < 0 ||
             linkIndex >= descriptionText.textInfo.linkCount)
         {
@@ -290,6 +300,183 @@ public class BattleCardUIView : MonoBehaviour,
                 true
             )
         );
+    }
+
+    int FindIntersectingKeywordLinkWithPadding(
+        Vector2 pointerScreenPosition,
+        Camera eventCamera
+    )
+    {
+        if (descriptionText == null ||
+            descriptionText.textInfo.linkCount == 0)
+        {
+            return -1;
+        }
+
+        if (!RectTransformUtility.ScreenPointToLocalPointInRectangle(
+                descriptionText.rectTransform,
+                pointerScreenPosition,
+                eventCamera,
+                out Vector2 localPointerPosition))
+        {
+            return -1;
+        }
+
+        float paddingX = Mathf.Max(0f, keywordHoverPaddingX);
+        float paddingY = Mathf.Max(0f, keywordHoverPaddingY);
+        int bestLinkIndex = -1;
+        float bestDistanceSquared = float.PositiveInfinity;
+
+        for (int linkIndex = 0;
+            linkIndex < descriptionText.textInfo.linkCount;
+            linkIndex++)
+        {
+            TMP_LinkInfo linkInfo =
+                descriptionText.textInfo.linkInfo[linkIndex];
+            bool hasSegment = false;
+            int segmentLineNumber = -1;
+            float segmentMinX = 0f;
+            float segmentMaxX = 0f;
+            float segmentMinY = 0f;
+            float segmentMaxY = 0f;
+
+            for (int characterOffset = 0;
+                characterOffset < linkInfo.linkTextLength;
+                characterOffset++)
+            {
+                int characterIndex =
+                    linkInfo.linkTextfirstCharacterIndex + characterOffset;
+                if (characterIndex < 0 ||
+                    characterIndex >= descriptionText.textInfo.characterInfo.Length)
+                {
+                    continue;
+                }
+
+                TMP_CharacterInfo characterInfo =
+                    descriptionText.textInfo.characterInfo[characterIndex];
+                if (descriptionText.overflowMode == TextOverflowModes.Page &&
+                    characterInfo.pageNumber + 1 != descriptionText.pageToDisplay)
+                {
+                    continue;
+                }
+
+                if (!hasSegment ||
+                    segmentLineNumber != characterInfo.lineNumber)
+                {
+                    if (hasSegment)
+                    {
+                        ConsiderKeywordSegment(
+                            linkIndex,
+                            localPointerPosition,
+                            paddingX,
+                            paddingY,
+                            segmentMinX,
+                            segmentMaxX,
+                            segmentMinY,
+                            segmentMaxY,
+                            ref bestLinkIndex,
+                            ref bestDistanceSquared
+                        );
+                    }
+
+                    hasSegment = true;
+                    segmentLineNumber = characterInfo.lineNumber;
+                    segmentMinX = characterInfo.bottomLeft.x;
+                    segmentMaxX = characterInfo.topRight.x;
+                    segmentMinY = characterInfo.descender;
+                    segmentMaxY = characterInfo.ascender;
+                    continue;
+                }
+
+                segmentMinX = Mathf.Min(
+                    segmentMinX,
+                    characterInfo.bottomLeft.x
+                );
+                segmentMaxX = Mathf.Max(
+                    segmentMaxX,
+                    characterInfo.topRight.x
+                );
+                segmentMinY = Mathf.Min(
+                    segmentMinY,
+                    characterInfo.descender
+                );
+                segmentMaxY = Mathf.Max(
+                    segmentMaxY,
+                    characterInfo.ascender
+                );
+            }
+
+            if (hasSegment)
+            {
+                ConsiderKeywordSegment(
+                    linkIndex,
+                    localPointerPosition,
+                    paddingX,
+                    paddingY,
+                    segmentMinX,
+                    segmentMaxX,
+                    segmentMinY,
+                    segmentMaxY,
+                    ref bestLinkIndex,
+                    ref bestDistanceSquared
+                );
+            }
+        }
+
+        return bestLinkIndex;
+    }
+
+    static void ConsiderKeywordSegment(
+        int linkIndex,
+        Vector2 pointerPosition,
+        float paddingX,
+        float paddingY,
+        float minX,
+        float maxX,
+        float minY,
+        float maxY,
+        ref int bestLinkIndex,
+        ref float bestDistanceSquared
+    )
+    {
+        Rect originalBounds = Rect.MinMaxRect(
+            minX,
+            minY,
+            maxX,
+            maxY
+        );
+        Rect paddedBounds = Rect.MinMaxRect(
+            minX - paddingX,
+            minY - paddingY,
+            maxX + paddingX,
+            maxY + paddingY
+        );
+        if (!paddedBounds.Contains(pointerPosition))
+        {
+            return;
+        }
+
+        float distanceX = pointerPosition.x < originalBounds.xMin
+            ? originalBounds.xMin - pointerPosition.x
+            : pointerPosition.x > originalBounds.xMax
+                ? pointerPosition.x - originalBounds.xMax
+                : 0f;
+        float distanceY = pointerPosition.y < originalBounds.yMin
+            ? originalBounds.yMin - pointerPosition.y
+            : pointerPosition.y > originalBounds.yMax
+                ? pointerPosition.y - originalBounds.yMax
+                : 0f;
+        float distanceSquared =
+            distanceX * distanceX + distanceY * distanceY;
+
+        if (bestLinkIndex < 0 ||
+            distanceSquared < bestDistanceSquared ||
+            (Mathf.Approximately(distanceSquared, bestDistanceSquared) &&
+                linkIndex < bestLinkIndex))
+        {
+            bestLinkIndex = linkIndex;
+            bestDistanceSquared = distanceSquared;
+        }
     }
 
     void ClearKeywordHover()
