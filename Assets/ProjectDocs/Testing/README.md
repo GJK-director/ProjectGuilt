@@ -6,8 +6,8 @@ Last Verified: 2026-09-11
 
 ## Current Facts
 
-- Formal Suites: 4 C# owners。
-- Formal Cases: 35 public static bool Cases。
+- Formal Suites: 6 C# owners。
+- Formal Cases: 47 public static bool Cases。
 - Shared C#: 6。
 - Legacy/Core C#: 34；Legacy Runner 还包含内嵌测试。
 - Active BattleTestMode: 110；当前有对应的 110 个 dispatch 分支。
