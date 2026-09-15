@@ -55,6 +55,16 @@ Last Verified: 2026-09-15
 
 多段数据还包括 `damageImpactPercents`。它表达 Gameplay 伤害段的倍率；`hpDisplayStageCount` 只负责一个 `BattleImpact` 内的 HP 表现分段，不能当成多段伤害机制。
 
+更详细的两阶段伤害、Cumulative 累计分段、Impact interval、`resolvedDamage` / `actualDamage` 与 Damage Number 说明见 [Damage Contract](Battle/Damage.md)。
+
+策划操作上的边界：
+
+- 需要两个独立伤害段时，配置 `damageDistributionMode`、`damageImpactPercents` 和 `damageImpactDelaySeconds`；每段会分别提交 DamageModifier、HP 和 Damage Number。
+- 需要累计卡牌时使用 `Cumulative`；例如 Base 7 与 `[100, 180, 230]` 形成真实段 `7、5、4`。
+- 需要调整数字大小、颜色、寿命时，检查 `BattleScene` 上的 `BattleDamageNumberPresenter` Inspector 字段；当前正式值和生命周期限制见 Damage 文档。
+- HP 变为 0 但尚未正式结束时，按 `HP Depleted` 与 `Defeated` 区分，不要用 `IsDead()` 代替终局判断。
+- 特殊卡视觉 Damage Marker 目前是 `RESERVED / NOT IMPLEMENTED IN v0.1`，不是现有卡的配置入口。
+
 ### 1.4 我要修改冷却
 
 修改 `cooldown`，保存后退出 Play Mode，再按[最快验证方法](#10-最快验证方法)进入 `BattleScene` 验证卡牌可用时间和实际 CD。

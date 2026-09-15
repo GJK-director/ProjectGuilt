@@ -15,9 +15,9 @@ Last Verified: 2026-09-15
 | Buffs | [Battle/Buffs](../../Scripts/Battle/Buffs) | CharacterData 状态应用、BuffData/PendingBuffData | BuffDefinitions.json | Turn/Effects/Units/UI | Loader、Events | Ally/EnemyStatusUI | Buff/Conservation Legacy | Buff Preview | CURRENT / 高；旧 timing |
 | Card Effects | [Battle/Cards/Effects](../../Scripts/Battle/Cards/Effects) | CardEffectExecutor | effects/condition/filter/formula | EventProcessor | Character、资源、结算修正 | BattleScene（间接） | RuleEvaluation/ScopedDamage Legacy | SampleScene | CURRENT / 高 |
 | Turn | [Battle/Turn](../../Scripts/Battle/Turn) | BattleTurnProcessor.StartTurn/EndTurn | pending Buff、速度、CD | Lifecycle | Events、Character | BattleScene（间接） | LifecycleTiming Legacy | BattleScene | CURRENT / 高 |
-| Lifecycle | [Battle/Lifecycle](../../Scripts/Battle/Lifecycle) | BattleLifecycleController | BattleLifecyclePhase、RuntimeState | UI/自动回合 | Runner、PlanManager、Turn | BattleScene | LifecycleController/PhaseContract Legacy | BattleScene | CURRENT / 高 |
+| Lifecycle | [Battle/Lifecycle](../../Scripts/Battle/Lifecycle) | BattleLifecycleController、BattleTurnProcessor、CharacterData | BattleLifecyclePhase、RuntimeState、IsDefeated / Defeat Checkpoint | UI/自动回合/Resolver | Runner、PlanManager、Turn、Resolution | BattleScene | LifecycleController/PhaseContract/Defeat Legacy | BattleScene | CURRENT / 高 |
 | Actions / Planning | [Battle/Actions](../../Scripts/Battle/Actions) | BattleActionSlotManager | ActionSlot、placement、response | UI Router/Controller | Card eligibility、Targeting | ActionSlot/status UI | assignment/interaction Legacy | BattleScene | CURRENT / 高；DEFERRED_DEBT |
-| Resolution / Clash | [Battle/Resolution](../../Scripts/Battle/Resolution) | BattleResolver、Calculator、ClashSession | roll snapshot、ResolutionPlan/impact | Executor/Runner | Cards、Character、Events | Presenter（间接） | Clash/ResolutionPlan/Generic Legacy | 正式 Harness | CURRENT / 高；DEFERRED_DEBT |
+| Resolution / Clash | [Battle/Resolution](../../Scripts/Battle/Resolution) | BattleResolver、BattleCalculator、BattleResolutionPlan、BattleImpact、BattleClashSession | roll snapshot、ResolutionPlan/impact、damage modifier | Executor/Runner/Scene Presenter | Cards、Character、Events | Presenter（间接） | Clash/ResolutionPlan/Generic/Damage Legacy | 正式 Harness | CURRENT / 高；DEFERRED_DEBT |
 | Execution | [Battle/Execution](../../Scripts/Battle/Execution) | BattleActionOrderResolver、BattlePlanningOrderSnapshot、PlanManager、PlanExecutor、Runner | ExecutionPlan/Item/Action/Context、Planning order snapshot | Lifecycle/UI planning | Resolver、Presentation protocol | BattleScene | FirstStrike、PlanningOrderSnapshot Suites；RollGate/Pausable Legacy | 正式 Harness | CURRENT / 高；DEFERRED_DEBT |
 | EnemyIntent | [Battle/EnemyIntent](../../Scripts/Battle/EnemyIntent) | BattleDefinitionBootstrap.CreateIntentQueueForTurn | Encounter pattern/cycle、Enemy cardIDs | Scene Bootstrap provider | Definitions、ActionSlot | BattleScene | EnemyIntent Suite；Mode103 | SampleScene/BattleScene | CURRENT / 中高；生成在 Bootstrap |
 | Targeting / Interaction | [Battle/Targeting](../../Scripts/Battle/Targeting) | BattleTargeting；BattleInteractionClassifier（Battle/Interactions） | speed、target、effective context | Planning/Executor/Presenter | Slot、Intent、Unit | 关系 UI（间接） | Classifier/EffectiveInteraction Legacy | BattleScene | CURRENT / 高 |
@@ -35,7 +35,7 @@ Last Verified: 2026-09-15
 
 ## Domain Contracts
 
-[Battle](Battle/README.md)：[Cards](Battle/Cards.md)、[Buffs](Battle/Buffs.md)、[Execution](Battle/Execution.md)、[Resolution](Battle/Resolution.md)、[Lifecycle](Battle/Lifecycle.md)、[EnemyIntent](Battle/EnemyIntent.md)、[Units](Battle/Units.md)、[Bootstrap](Battle/Bootstrap.md)。
+[Battle](Battle/README.md)：[Cards](Battle/Cards.md)、[Buffs](Battle/Buffs.md)、[Execution](Battle/Execution.md)、[Resolution](Battle/Resolution.md)、[Damage](Battle/Damage.md)、[Lifecycle](Battle/Lifecycle.md)、[EnemyIntent](Battle/EnemyIntent.md)、[Units](Battle/Units.md)、[Bootstrap](Battle/Bootstrap.md)。
 
 [Presentation](Presentation/README.md)：[BattlePresentation](Presentation/BattlePresentation.md)、[Camera](Presentation/Camera.md)。另见 [UI](UI/README.md)、[BattleUI](UI/BattleUI.md)、[Story](Story/StorySystem.md)、[Settings](Settings/MenuAndSettings.md)。
 
@@ -68,6 +68,7 @@ Last Verified: 2026-09-15
 - [BattleEndPanelController](../../Scripts/UI/Battle/BattleEndPanelController.cs)：Bootstrap 调用 Bind，按需创建终局 UI。
 - [Scene Presenter](../../Scripts/Presentation/BattleSceneExecutionPresenter.cs)：按需 AddComponent LongRangeShootVsAttack / SpecialLongRangeDuel Player。
 - [BattleAutoClashController](../../Scripts/Battle/Bootstrap/BattleAutoClashController.cs)：BattleSceneBootstrap 同 GameObject 上的可选 Scene Inspector 配置；只提供 Auto Clash 设置，不负责 Update、Coroutine 或计时。
+- [BattleDamageNumberPresenter](../../Scripts/Presentation/BattleDamageNumberPresenter.cs)：BattleScene 上的 Damage Number owner；由 [Scene Presenter](../../Scripts/Presentation/BattleSceneExecutionPresenter.cs) 在 Impact Commit Observer 边界调用，读取 `BattleImpact.resolvedDamage` 并投影到目标 Canvas。
 - [BattleWorldFollowProjectionDiagnostic](../../Scripts/UI/Debug/BattleWorldFollowProjectionDiagnostic.cs)：保留的手工诊断工具；[BattleUnitViewSpawner](../../Scripts/UI/BattleUnits/BattleUnitViewSpawner.cs) 正式 Runtime 不再自动添加/绑定它，需要投影诊断时才人工挂载/使用。
 - Roll Panel 通过 Resources 路径实例化。没有 Scene m_Script 引用不等于没有 Runtime consumer。
 

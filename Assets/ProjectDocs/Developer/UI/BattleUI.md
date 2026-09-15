@@ -70,6 +70,10 @@ Controller 只在 `Prepare` / `PlanReady` 阶段应用 Planning display order；
 
 `Ability`、`Defense`、`Dodge` 可以进行 Self placement；`Attack` 禁止 Self。正式 Self placement 写入 `BattleActionPlacementType.Self`，不生成正式 Action Relation Line。
 
+## Damage Number UI Contract
+
+`BattleDamageNumberPresenter` 是 Damage Number owner；`BattleSceneExecutionPresenter.OnImpactCommitted` 在真实 `BattleImpact` Commit 后调用它，并传入 `impact.resolvedDamage`。目标坐标使用 `BattleUnitViewHandle.CenterAnchor`（缺少时 fallback `WorldRoot`）经 `WorldFollower.ResolvedTargetCanvas` 和 `WorldCamera` 投影到 Canvas。当前 `BattleScene` 绑定、`Font Size` / `Text Color` / `Lifetime` 以及未实现的 Fade、Move、避让、Crit、Heal、Shield、pooling 等限制见 [Damage](../Battle/Damage.md)。
+
 ## Invariants
 
 View 不自行提交伤害；选择状态与正式安排分开；Data 与 Prefab 配置分别核验。
