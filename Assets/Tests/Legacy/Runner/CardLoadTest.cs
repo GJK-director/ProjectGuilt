@@ -13068,7 +13068,7 @@ public class CardLoadTest : MonoBehaviour
 
     void RunBattleCardCommonRulesPhaseOneBasicTestSequence()
     {
-        bool[] results = new bool[16];
+        bool[] results = new bool[18];
 
         BattleEndedTestContext firstStrikeContext =
             CreateBattleEndedTestContext(
@@ -13132,8 +13132,8 @@ public class CardLoadTest : MonoBehaviour
         );
         results[0] = firstAssignment && sameSlotRefresh;
 
-        bool modernSecondRejected =
-            !BattleActionSlotManager.TryAssignToEnemy(
+        bool modernSecondAssigned =
+            BattleActionSlotManager.TryAssignToEnemy(
                 firstStrikeContext.runtimeState,
                 firstStrikeContext.allyA,
                 2,
@@ -13162,8 +13162,8 @@ public class CardLoadTest : MonoBehaviour
             firstStrikeContext.enemy,
             out legacyEligibility
         );
-        bool legacySecondRejected =
-            !BattleActionSlotManager.AssignFreeAction(
+        bool legacySecondAssigned =
+            BattleActionSlotManager.AssignFreeAction(
                 legacyFirstStrikeSlots,
                 firstStrikeContext.allyA,
                 2,
@@ -13177,18 +13177,49 @@ public class CardLoadTest : MonoBehaviour
                 firstStrikeContext.enemy,
                 out legacyEligibility
             );
-        results[1] = modernSecondRejected &&
+        results[1] = modernSecondAssigned &&
             legacyFirstAssigned &&
-            legacySecondRejected;
+            legacySecondAssigned &&
+            firstStrikeSlots[0].cardState != null &&
+            firstStrikeSlots[1].cardState != null &&
+            !object.ReferenceEquals(
+                firstStrikeSlots[0].cardState,
+                firstStrikeSlots[1].cardState
+            );
 
-        results[3] = BattleActionSlotManager.TryAssignToEnemy(
-            firstStrikeContext.runtimeState,
-            firstStrikeContext.allyB,
-            1,
-            firstStrikeB,
-            firstStrikeContext.enemy,
-            out assignmentResult
-        );
+        results[16] = firstStrikeSlots[0].assignmentSequence > 0 &&
+            firstStrikeSlots[1].assignmentSequence > 0 &&
+            firstStrikeSlots[1].assignmentSequence >
+                firstStrikeSlots[0].assignmentSequence;
+
+        BattleActionAssignmentResult duplicateFirstStrikeResult;
+        bool duplicateFirstStrikeAssigned =
+            BattleActionSlotManager.TryAssignToEnemy(
+                firstStrikeContext.runtimeState,
+                firstStrikeContext.allyA,
+                3,
+                firstStrikeA2,
+                firstStrikeContext.enemy,
+                out duplicateFirstStrikeResult
+            );
+        bool duplicateFirstStrikeRejected =
+            !duplicateFirstStrikeAssigned &&
+            duplicateFirstStrikeResult != null &&
+            duplicateFirstStrikeResult.eligibilityResult != null &&
+            duplicateFirstStrikeResult.eligibilityResult.failureReason ==
+                CardEligibilityFailureReason.CardAlreadyAssigned &&
+            firstStrikeSlots[2].IsEmpty();
+
+        bool differentActorFirstStrikeAssigned =
+            BattleActionSlotManager.TryAssignToEnemy(
+                firstStrikeContext.runtimeState,
+                firstStrikeContext.allyB,
+                1,
+                firstStrikeB,
+                firstStrikeContext.enemy,
+                out assignmentResult
+            );
+        results[17] = differentActorFirstStrikeAssigned;
         results[4] = BattleActionSlotManager.TryAssignToEnemy(
             firstStrikeContext.runtimeState,
             firstStrikeContext.allyA,
@@ -13204,16 +13235,11 @@ public class CardLoadTest : MonoBehaviour
             1,
             out assignmentResult
         );
-        bool secondAssignedAfterCancel =
-            BattleActionSlotManager.TryAssignToEnemy(
-                firstStrikeContext.runtimeState,
-                firstStrikeContext.allyA,
-                2,
-                firstStrikeA2,
-                firstStrikeContext.enemy,
-                out assignmentResult
-            );
-        results[2] = cancelled && secondAssignedAfterCancel;
+        results[2] = cancelled &&
+            firstStrikeSlots[0].IsEmpty() &&
+            object.ReferenceEquals(firstStrikeSlots[1].cardState, firstStrikeA2) &&
+            firstStrikeSlots[1].assignmentSequence > 0;
+        results[3] = duplicateFirstStrikeRejected;
 
         BattleExecutionPlan firstStrikePlan =
             BattleExecutionPlanManager.CreateSpeedBasedExecutionPlan(
@@ -13262,17 +13288,48 @@ public class CardLoadTest : MonoBehaviour
             selfAbility,
             out assignmentResult
         );
-        results[7] = !BattleActionSlotManager.TryAssignToEnemy(
-            abilityContext.runtimeState,
+        BattleCardState modernEnemyAbility = CreateMode105AbilityCard(
             abilityContext.allyA,
-            2,
-            CreateMode105AbilityCard(
-                abilityContext.allyA,
-                "common105_ability_enemy_modern"
-            ),
-            abilityContext.enemy,
-            out assignmentResult
+            "common105_ability_enemy_modern"
         );
+        BattleActionAssignmentResult modernEnemyAbilityResult;
+        bool modernEnemyAbilityAssigned =
+            BattleActionSlotManager.TryAssignToEnemy(
+                abilityContext.runtimeState,
+                abilityContext.allyA,
+                2,
+                modernEnemyAbility,
+                abilityContext.enemy,
+                out modernEnemyAbilityResult
+            );
+        BattleActionSlot modernEnemyAbilitySlot =
+            BattleActionSlotManager.GetSlot(
+                abilitySlots,
+                abilityContext.allyA,
+                2
+            );
+        results[7] = modernEnemyAbilityAssigned &&
+            modernEnemyAbilityResult != null &&
+            modernEnemyAbilityResult.isSuccess &&
+            modernEnemyAbilitySlot != null &&
+            !modernEnemyAbilitySlot.IsEmpty() &&
+            object.ReferenceEquals(
+                modernEnemyAbilitySlot.cardState,
+                modernEnemyAbility
+            ) &&
+            modernEnemyAbilitySlot.placementType ==
+                BattleActionPlacementType.SpecificEnemy &&
+            modernEnemyAbilitySlot.slotType ==
+                BattleActionSlotType.FreeAction &&
+            object.ReferenceEquals(
+                modernEnemyAbilitySlot.target,
+                abilityContext.enemy
+            ) &&
+            object.ReferenceEquals(
+                modernEnemyAbilitySlot.requestedEnemy,
+                abilityContext.enemy
+            ) &&
+            modernEnemyAbilitySlot.requestedEnemyIntent == null;
 
         List<BattleActionSlot> legacyAbilitySlots =
             BattleActionSlotManager.CreateCharacterActionSlots(
@@ -13418,14 +13475,14 @@ public class CardLoadTest : MonoBehaviour
 
         string[] names =
         {
-            "同角色第一张FirstStrike可绑定且同槽刷新不自冲突",
-            "同角色第二张FirstStrike在modern与legacy均被拒绝",
-            "解绑后第二张FirstStrike可绑定",
-            "不同角色可各自绑定FirstStrike",
+            "第一张FirstStrike可绑定且同槽刷新不自冲突",
+            "同角色两槽可绑定两张不同FirstStrike",
+            "取消第一张FirstStrike不影响第二张",
+            "同一BattleCardState重复安排失败",
             "已有FirstStrike时普通卡仍可绑定",
             "后槽FirstStrike在ExecutionPlan中优先",
             "modern Ability可绑定自己",
-            "modern Ability不能绑定Enemy",
+            "modern Ability可绑定SpecificEnemy",
             "legacy Ability不能绑定AllyB",
             "legacy AssignFreeAction不能把Ability绑定Enemy",
             "legacy AssignResponse不能用Ability响应Intent",
@@ -13433,7 +13490,9 @@ public class CardLoadTest : MonoBehaviour
             "公开Bullet Buff可显示",
             "内部Buff机制存在但UI不显示",
             "内部Buff不占UI容量且不制造Overflow",
-            "同buffID公开Buff继续聚合Stack"
+            "同buffID公开Buff继续聚合Stack",
+            "两张FirstStrike的assignmentSequence均为正且后者更晚",
+            "不同角色可各自绑定FirstStrike"
         };
 
         bool allPassed = true;

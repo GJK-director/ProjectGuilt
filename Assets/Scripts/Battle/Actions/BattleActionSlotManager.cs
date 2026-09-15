@@ -1211,19 +1211,6 @@ public static class BattleActionSlotManager
             return false;
         }
 
-        if (HasOtherFirstStrikeAssignment(
-                runtimeState.actionSlots,
-                slot,
-                owner,
-                cardState))
-        {
-            result = CreateAssignmentFailure(
-                "准备阶段安排失败：同一角色每回合最多只能安排一张 FirstStrike 卡",
-                CardEligibilityFailureReason.UnsupportedCondition
-            );
-            return false;
-        }
-
         eligibility = BattleCardManager.EvaluateCardEligibility(owner, eligibilityTarget, cardState);
 
         if (!eligibility.isEligible)
@@ -1761,40 +1748,6 @@ public static class BattleActionSlotManager
         return false;
     }
 
-    static bool HasOtherFirstStrikeAssignment(
-        List<BattleActionSlot> slots,
-        BattleActionSlot targetSlot,
-        CharacterData actor,
-        BattleCardState cardState
-    )
-    {
-        if (slots == null || actor == null || cardState == null ||
-            !cardState.HasTrait(BattleCardTrait.FirstStrike))
-        {
-            return false;
-        }
-
-        foreach (BattleActionSlot slot in slots)
-        {
-            if (slot == null || slot.IsEmpty() ||
-                object.ReferenceEquals(slot, targetSlot) ||
-                !slot.cardState.HasTrait(BattleCardTrait.FirstStrike))
-            {
-                continue;
-            }
-
-            CharacterData assignedActor = slot.actor != null
-                ? slot.actor
-                : slot.owner;
-            if (object.ReferenceEquals(assignedActor, actor))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
     static long GetNextAssignmentSequence(List<BattleActionSlot> slots)
     {
         long maxSequence = 0;
@@ -1973,19 +1926,6 @@ public static class BattleActionSlotManager
         {
             result = CreateFailure(CardEligibilityFailureReason.CardAlreadyAssigned, "同一张卡本回合已经被安排");
             Debug.Log(result.failureMessage);
-            return false;
-        }
-
-        if (HasOtherFirstStrikeAssignment(
-                slots,
-                targetSlot,
-                actor,
-                cardState))
-        {
-            result = CreateFailure(
-                CardEligibilityFailureReason.UnsupportedCondition,
-                "安排行动失败：同一角色每回合最多只能安排一张 FirstStrike 卡"
-            );
             return false;
         }
 
