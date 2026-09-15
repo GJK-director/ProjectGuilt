@@ -26,6 +26,10 @@ Protocol/InteractionContext、Profile assets。
 
 Runner → request → Scene Presenter → Player/Camera/Character → completion。
 
+## Damage Impact Presentation
+
+默认近战 Attack-v-Attack 的 `ImpactIndex == 0` 由 `BattleSceneExecutionPresenter.TryStartDefaultAttackImpact` 启动完整 `BattleAttackVsAttackPresentationPlayer` Slash / Hit 表现；视觉接触由 `ReachVisualImpact` 标记，不能直接写 HP。Presenter completion 返回 Runner 后才允许 `BattleResolver.CommitImpact`。后续 Impact 由 Runner 按 delay gate 逐段提交，不重复完整默认攻击动画。提交后的 `BattleImpact` 由 `OnImpactCommitted` 通知 Damage Number observer。未来特殊卡 Damage Marker 仍为 `RESERVED / NOT IMPLEMENTED IN v0.1`。详细责任边界见 [Damage](../Battle/Damage.md)。
+
 ## Invariants
 
 视觉不重排规则提交；完成/取消只走对应协议；动态 Player 也是真实 consumer。

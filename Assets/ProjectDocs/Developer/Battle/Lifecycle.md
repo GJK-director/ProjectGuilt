@@ -26,6 +26,10 @@ RuntimeState、living participants、plan。
 
 Init → Prepare/PlanReady → Executing → TurnResolved → TurnEnding → TurnEnded → PreparingNextTurn → Prepare；终局走 BattleEnded。
 
+## HP / Defeat Boundary
+
+`CharacterData.IsDead()` 只表示 `currentHP <= 0`。正式终局使用 `CharacterData.IsDefeated()`；Damage plan 的 `pendingDefeatImpact` 由 `BattleResolver.CommitDefeatCheckpoint` 在 Action / Resolution 完成边界确认，调用 `MarkDefeated` 并触发 `AfterKill`，之后 `EvaluateBattleEnd` 才进入 `BattleEnded`。详见 [Damage](Damage.md)。
+
 ## Invariants
 
 进入状态须满足 controller guard；TurnStart/TurnEnd 与卡牌事件各有职责；表现结束与终局判定不能混写。

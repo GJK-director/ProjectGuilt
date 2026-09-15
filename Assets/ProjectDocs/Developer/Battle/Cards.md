@@ -26,6 +26,10 @@ CardsTest；preset manifest。
 
 Loader → Factory/Bootstrap → CardState → CardUsed/Effects。
 
+## Damage Distribution
+
+多段伤害由 `CardTestData.damageDistributionMode`、`damageImpactPercents` 和 `damageImpactDelaySeconds` 配置，并由 `BattleResolver.AddDamageImpacts` 建立多个真实 `BattleImpact`。`hpDisplayStageCount` 只负责单个 Impact 的旧 HP 表现分段，不能代替 Gameplay 多段伤害。具体的 Independent / Cumulative 语义、提交顺序和 Damage Number 见 [Damage](Damage.md)。
+
 ## Invariants
 
 实例不可按同名混同；正式使用后果经 CardUsed 提交；Ability 不进入 clash；显式 preset 与默认牌来源区分。

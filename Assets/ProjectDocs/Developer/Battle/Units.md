@@ -26,6 +26,10 @@ Character/EnemyDefinitions、Cards；Scene Prefab 字段。
 
 Loader → Factory → CharacterData/CardState → Spawner。
 
+## HP Depleted vs Defeated
+
+`CharacterData.currentHP` 归零表示 HP Depleted，`IsDead()` 会返回 true；这不等于正式 Defeated。只有 `BattleResolver.CommitDefeatCheckpoint` 调用 `CharacterData.MarkDefeated()` 后，`IsDefeated()` 才为 true。多段伤害可在 HP 已归零但 checkpoint 尚未完成时继续由同一 plan 表达；Damage 细节见 [Damage](Damage.md)。
+
 ## Invariants
 
 Runtime 实例与 Definition 分离；显式 cardIDs 不修改原定义；prefabKey 不是 Spawner 自动选择器。
