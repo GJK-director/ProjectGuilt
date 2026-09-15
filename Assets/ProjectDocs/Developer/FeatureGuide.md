@@ -352,12 +352,14 @@ Card runtime 会在 Bootstrap 时重新创建；`BuffDefinitionLoader` 有静态
 
 ### 14.2 我要开启或调整自动拼点
 
-在 `BattleScene` 中选中 `BattleSceneBootstrap` GameObject，手动添加 `BattleAutoClashController`。
+路径：`BattleScene` → `BattleSceneBootstrap` GameObject → `BattleAutoClashController`。在 Inspector 中查看或调整该组件；如果是在尚未接入它的场景中使用，才需要手动添加组件。
 
 配置：
 
 - `Enable Auto Clash`：关闭时保留手动拼点；开启时，执行阶段自动拼点。
 - `Auto Clash Delay`：进入正式 Roll Gate 后的等待时间，最小为 `0`。常用值为 `0`、`0.1`、`1`。
+
+新建组件时的代码默认值是 `Enable Auto Clash = false`、`Auto Clash Delay = 0.1`；当前正式 `BattleScene` 的序列化配置是 `Enable Auto Clash = true`、`Auto Clash Delay = 0`。以 Scene Inspector 中的序列化值为准。
 
 Planning 阶段的 Space 永远保留，仍由玩家按下以开始正式执行。Auto ON 时，执行阶段原本用于手动 Roll 的 Space 不再触发拼点。
 
