@@ -2,7 +2,7 @@
 
 Status: CURRENT
 Role: DOMAIN CONTRACT
-Last Verified: 2026-09-11
+Last Verified: 2026-09-15
 
 路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
@@ -42,6 +42,19 @@ Planning 阶段仍由 Space 调用 `TryStartCompleteTurnCycle()`。Auto ON 不�
 
 新增命中区需要在 Ally Status UI 上人工放置透明 Graphic，设置其 RectTransform 后绑定 `BattleCharacterStatusUIView.characterTargetHitbox`；新增轮廓需要在 Ally World Prefab 实例上人工添加并配置 `BattleCharacterTargetOutline`。缺少这些可选引用不会阻止 Runtime 生成。
 
+## Action Order UI Contract
+
+正式数据显示链为：`BattlePlanningOrderSnapshot` → `BattleSimpleUIController.RefreshActionSlotOrderViews()` → `BattleCharacterStatusUIView.SetSlotOrder(...)` → `BattleActionSlotUIView.SetOrder()` / `ClearOrder()` → TMP `OrderText`。
+
+Controller 只在 `Prepare` / `PlanReady` 阶段应用 Planning display order；其他阶段先清除四个角色状态 View 的槽位 order。View 只负责显示，不读取 Resolver、Snapshot 或运行时行动关系，也不自行计算排序。`SetOrder(0)` 仍显示 `0`；负数直接清除；绑定到不同角色或槽位时清除旧数字；缺少 `orderText` 时安全跳过，并在真正调用 `SetOrder` 时最多输出一次明确警告。
+
+正式 Prefab 为 `Assets/Prefabs/Battle/Units/UI/AllyStatusUI.prefab` 与 `Assets/Prefabs/Battle/Units/UI/EnemyStatusUI.prefab`。每个 `Slot_01` / `Slot_02` 都有 `OrderText` / `Order Text` TMP 子物体；四个 OrderText 的 `Raycast Target` 保持关闭。正式 Slot identity 不由 Prefab 中的视觉 X 坐标或镜像外观决定，映射由 `BattleCharacterStatusUIView` 的 `slot01View` / `slot02View` 以及 UI slot index 决定。不要因为 Enemy Prefab 看起来左右镜像而交换正式 Slot1 / Slot2 引用，也不要断开 `BattleActionSlotUIView.orderText` 的序列化引用。
+
+## Action Order Visual Iteration
+
+行动顺序数字的视觉迭代只调整上述 Prefab 中 OrderText 的 RectTransform、字体、字号、颜色、对齐方式、TMP Material，以及未来明确属于数字显示的背景、图标、FirstStrike 边框或动画。不得通过修改 Controller、Snapshot、Resolver、slot mapping 或 sorting 来实现视觉调整。
+
+未来如抽取独立 View，应保持 `BattleActionSlotUIView` → `ActionOrderIndicatorUIView` → Image/TMP/Animator 的显示边界，并继续保留 `SetOrder` / `ClearOrder` 作为接线契约；本阶段不提前接入该抽取。
 ## SelfActionDropZone Contract
 
 `SelfActionDropZone` 是 Ally Status UI 的自身目标判定区域。它由 `BattleCharacterStatusWorldFollower` 负责世界跟随，使用角色的 `Center World Anchor` 投影到 Canvas；`Center Offset` 是人工布局偏移，`SelfActionDropZone` RectTransform 的 Width/Height 是人工判定范围。运行时投影持续写入位置，不能把运行时 Pos X/Pos Y 当作正式默认布局入口。

@@ -2,7 +2,7 @@
 
 Status: CURRENT
 Role: DOMAIN CONTRACT
-Last Verified: 2026-09-11
+Last Verified: 2026-09-15
 
 路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
@@ -16,7 +16,7 @@ Last Verified: 2026-09-11
 
 ## Main Entry
 
-BattleExecutionPlanManager / Executor / Runner。
+BattleActionOrderResolver / BattlePlanningOrderSnapshot / BattleExecutionPlanManager / Executor / Runner。
 
 ## Data
 
@@ -28,7 +28,23 @@ Lifecycle → Plan → Runner/Executor → Resolver + Presentation completion。
 
 ## Action Order Contract
 
-`BattleExecutionPlanManager` 先将带 `FirstStrike` 的完整 ExecutionItem 排入 FirstStrike 层；未带该 Trait 的 Ability 与其他普通行动共同属于 Normal 层。Normal 层按有效速度降序排序，响应项使用双方速度较大值；同速响应仅在响应者与敌人速度相等时获得响应优先级。随后使用排序方位的行动槽位、BattleRuntimeState 中的战斗位置和稳定顺序完成确定性排序。已建立的响应 pairing 不会被拆开，未响应的敌方 Defense/Dodge 不会生成独立执行项。
+`BattleActionOrderResolver` 是 Action Order 的 shared authoritative sorter。它只读取当前 Planning 状态，生成并排序 candidates，不回写 `ActionSlot`、`BattleEnemyIntent` 或 `BattleRuntimeState`。`BattleExecutionPlanManager` 将 candidates 转换为 `ExecutionItem`；`BattlePlanningOrderSnapshot` 复用同一 Resolver 结果作为只读 Planning projection，不在各自实现第二套排序规则。
+
+正式 priority tier 只有两层：`FirstStrike` 与 `Normal`。只有带 `FirstStrike` Trait 的完整候选进入 FirstStrike 层；未带该 Trait 的 Ability 与其他普通行动共同属于 Normal 层。Ability 不会因为卡牌类型自动获得 FirstStrike。
+
+Normal 层按 effective speed 降序排序。Responded Item 的 `effectiveSpeed = max(response actor speed, enemy speed)`。当 response actor speed > enemy speed 时，`orderingActor` 为 response actor，`orderingSlot` 为 response player slot；当 response actor speed <= enemy speed 时，`orderingActor` 为 enemy，`orderingSlot` 为 enemy `enemySlotIndex`。只有 response actor speed == enemy speed 的 true equal-speed response 才有 `responsePriority = 0`，其他为 `1`。
+
+正式 comparator 依次使用：1. `priorityTier`；2. 双方均为 FirstStrike 时 `firstStrikeSourceSequence` descending；3. `effectiveSpeed` descending；4. `responsePriority` ascending；5. 双方 `responsePriority == 0` 时 `actionAssignmentSequence` descending；6. `actionSlotOrder` ascending；7. `actorPositionOrder` ascending；8. `stableOrder`。`actorPositionOrder` 在 `runtimeState` 可用时来自 `runtimeState.GetBattlePositionIndex(...)`。
+
+正式 tier 只有 FirstStrike / Normal。普通 Ability 属于 Normal，Ability + FirstStrike 属于 FirstStrike；Responded Pair 任一参与卡带 FirstStrike，整个 Pair 进入 FirstStrike tier，pairing 不拆。对拥有 player `assignmentSequence` 的 FirstStrike，后安排者优先；enemy prefilled FirstStrike 没有 player sequence 时，继续使用后续确定性排序键。
+
+多个 FirstStrike 可以合法存在于同一角色的不同槽位。未响应的敌方 Defense/Dodge 不生成独立执行项。
+
+## Planning Snapshot
+
+`BattlePlanningOrderSnapshot` 只读地复用 `BattleActionOrderResolver`，为 Planning UI 提供 display order，不改变 `BattleActionSlot`、`BattleEnemyIntent` 或 `BattleRuntimeState`。Ally empty 返回 `null`；Ally filled but Planning inactive 返回 `0`；active scheduled candidate 返回 positive。Enemy active Attack 返回 positive；unresponded Defense / Dodge 返回 `0`。Formal Responded Pair 中，Ally responder 与 Enemy Intent 必须共享同一个 positive order，不论 Responded 内卡型是 Attack / Defense / Dodge。
+
+`0` 表示不作为独立 active Planning queue item，不代表 Runtime 永远不会参与 interaction，也不消耗 positive numbering。正整数始终连续，例如 `0, 1, 2`，不是 `0, 2, 3`。
 
 ## Impact / Completion Boundary
 
@@ -58,7 +74,7 @@ Resolution、Lifecycle、Presentation protocol。
 
 ## Regression Tests
 
-FirstStrike Suite 与 Action Order Formal Suite；RollGate/Pausable/Interaction Legacy。两套 Execution 排序测试由 retained 的 `BattleExecutionPlanFirstStrikePolicyTests` caller 统一执行。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
+FirstStrike Suite、Planning Order Snapshot Suite、Action Order Formal Suite 与 Action Order View Suite；RollGate/Pausable/Interaction Legacy。Execution 排序测试由 retained 的 `BattleExecutionPlanFirstStrikePolicyTests` caller 和 Mode105 retained caller 统一执行。实际 caller 见 [RegressionTestMap](../../Testing/RegressionTestMap.md)，需要时查 [Legacy inventory](../../Testing/LegacyModeMigration.md)。
 
 ## Manual Verification
 

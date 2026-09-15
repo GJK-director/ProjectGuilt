@@ -2,7 +2,7 @@
 
 Status: CURRENT
 Role: CANONICAL AI REPO MAP
-Last Verified: 2026-09-11
+Last Verified: 2026-09-15
 
 路径事实唯一 owner。按 Domain 定位，不维护全部 helper 数据库；契约看领域文档，数据语义看 [DataPipeline](DataPipeline.md)，具体运行看 [RegressionTestMap](../Testing/RegressionTestMap.md) 和 [ManualHarnesses](../Testing/ManualHarnesses.md)。
 
@@ -18,7 +18,7 @@ Last Verified: 2026-09-11
 | Lifecycle | [Battle/Lifecycle](../../Scripts/Battle/Lifecycle) | BattleLifecycleController | BattleLifecyclePhase、RuntimeState | UI/自动回合 | Runner、PlanManager、Turn | BattleScene | LifecycleController/PhaseContract Legacy | BattleScene | CURRENT / 高 |
 | Actions / Planning | [Battle/Actions](../../Scripts/Battle/Actions) | BattleActionSlotManager | ActionSlot、placement、response | UI Router/Controller | Card eligibility、Targeting | ActionSlot/status UI | assignment/interaction Legacy | BattleScene | CURRENT / 高；DEFERRED_DEBT |
 | Resolution / Clash | [Battle/Resolution](../../Scripts/Battle/Resolution) | BattleResolver、Calculator、ClashSession | roll snapshot、ResolutionPlan/impact | Executor/Runner | Cards、Character、Events | Presenter（间接） | Clash/ResolutionPlan/Generic Legacy | 正式 Harness | CURRENT / 高；DEFERRED_DEBT |
-| Execution | [Battle/Execution](../../Scripts/Battle/Execution) | PlanManager、PlanExecutor、Runner | ExecutionPlan/Item/Action/Context | Lifecycle | Resolver、Presentation protocol | BattleScene | FirstStrike Suite；RollGate/Pausable Legacy | 正式 Harness | CURRENT / 高；DEFERRED_DEBT |
+| Execution | [Battle/Execution](../../Scripts/Battle/Execution) | BattleActionOrderResolver、BattlePlanningOrderSnapshot、PlanManager、PlanExecutor、Runner | ExecutionPlan/Item/Action/Context、Planning order snapshot | Lifecycle/UI planning | Resolver、Presentation protocol | BattleScene | FirstStrike、PlanningOrderSnapshot Suites；RollGate/Pausable Legacy | 正式 Harness | CURRENT / 高；DEFERRED_DEBT |
 | EnemyIntent | [Battle/EnemyIntent](../../Scripts/Battle/EnemyIntent) | BattleDefinitionBootstrap.CreateIntentQueueForTurn | Encounter pattern/cycle、Enemy cardIDs | Scene Bootstrap provider | Definitions、ActionSlot | BattleScene | EnemyIntent Suite；Mode103 | SampleScene/BattleScene | CURRENT / 中高；生成在 Bootstrap |
 | Targeting / Interaction | [Battle/Targeting](../../Scripts/Battle/Targeting) | BattleTargeting；BattleInteractionClassifier（Battle/Interactions） | speed、target、effective context | Planning/Executor/Presenter | Slot、Intent、Unit | 关系 UI（间接） | Classifier/EffectiveInteraction Legacy | BattleScene | CURRENT / 高 |
 | Units | [Battle/Units](../../Scripts/Battle/Units) | BattleUnitFactory、CharacterData | Character/EnemyDefinitions | Bootstrap、规则、UI | CardManager、Definitions | World/Status Prefab 经 Spawner | DefaultCard/Binding Legacy；Bootstrap Suite | BattleScene | CURRENT / 高 |
@@ -26,7 +26,7 @@ Last Verified: 2026-09-11
 | Guilt | [Battle/Guilt](../../Scripts/Battle/Guilt) | GuiltManager.AddGuilt/GetCurrentGuilt | guiltGain、共享 RuntimeState | 卡牌使用/角色/UI | RuntimeState | Guilt UI | 罪卡/资源 Legacy | BattleScene | CURRENT / 中高；角色兼容值 |
 | Events | [Battle/Events](../../Scripts/Battle/Events) | BattleEventProcessor.ProcessEvent | BattleTiming、EventContext | Turn/Resolver | CardManager、Pending/Conservation、Effects | 无直接资产 | CardUsed/Resolved/Impact/Timing Legacy | SampleScene | CURRENT / 高；legacy vocabulary |
 | Data | [Data](../../Scripts/Data) | Card/Character/Enemy/Encounter/Buff Loader | Resources/Data JSON | Bootstrap/Factory/Effects/Tests | Resources、JSON、Definitions/Validation | Resources 数据 | Cards/Bootstrap/EnemyIntent Suite；数据 Legacy | SampleScene/BattleScene | CURRENT / 中高 |
-| UI | [UI](../../Scripts/UI) | 局部 View/Host；Core/BattleSimpleUIController 跨流程协调 | RuntimeState、CardState、Prefab 字段 | Scene/UI input | Planning/Lifecycle/Spawner/Presentation | Hand/Card/Slot/详情/Roll Prefab | UI/关键词/关系线 Legacy | BattleScene/Preview | CURRENT / 高；Controller DEFERRED_DEBT |
+| UI | [UI](../../Scripts/UI) | 局部 View/Host；Core/BattleSimpleUIController 跨流程协调 | RuntimeState、CardState、Prefab 字段 | BattleSimpleUIController → BattleCharacterStatusUIView → BattleActionSlotUIView；Scene/UI input | Planning/Lifecycle/Spawner/Presentation | Hand/Card/Slot/详情/Roll Prefab | UI/关键词/关系线 Legacy；Action Order View Suite | BattleScene/Preview | CURRENT / 高；Controller DEFERRED_DEBT |
 | Presentation | [Presentation](../../Scripts/Presentation) | BattleSceneExecutionPresenter、Router、Players | request/completion、Profiles | Execution Runner | Camera/Character/UI | BattleScene、Sandbox、Settings profiles | Protocol/Engagement/Binding/Pausable Legacy | 正式 Harness/Sandbox | CURRENT / 高；DEFERRED_DEBT |
 | Camera | [Camera](../../Scripts/Camera) | BattleCameraDirector、GrayboxBattleCameraController | framing/motion 参数、角色位置 | Presenter/TurnCoordinator | Camera、Spawner | BattleScene camera | 相关 Presentation Legacy | 热键/Sandbox | CURRENT / 高；DEFERRED_DEBT |
 | Story | [Story](../../Scripts/Story) | StorySceneFacade → FlowController/NodeExecutor | Resources/Story/prologue_501.json | IntroStoryHost/StoryTestHost | ContentProvider、StoryView | NewGameText、StoryPanel | 无 Formal Story Suite；Editor validate | StoryTestHost/NewGameText | CURRENT / 中高；独立 asmdef |
@@ -52,7 +52,8 @@ Last Verified: 2026-09-11
 
 ## Test and Support Locations
 
-- [Suites](../../Tests/Suites)：EnemyIntent/EnemyIntentTests、Cards/CardDeckManifestTests、Execution/FirstStrikeExecutionTests、Bootstrap/DeckPresetBootstrapTests。
+- [Suites](../../Tests/Suites)：EnemyIntent/EnemyIntentTests、Cards/CardDeckManifestTests、Execution/FirstStrikeExecutionTests、Execution/BattlePlanningOrderSnapshotTests、UI/BattleActionSlotOrderViewTests、Bootstrap/DeckPresetBootstrapTests。
+- Action Order retained coverage：`ActionOrderExecutionTests` 仍位于 [BattleExecutionPlanFirstStrikePolicyTests](../../Tests/Legacy/Core/BattleExecutionPlanFirstStrikePolicyTests.cs) 内，由 retained caller 执行。
 - [Shared](../../Tests/Shared)：BattleConsolePresenter；Builders 下 BattleScenarioBuilder、TestCharacterFactory、TestCardFactory、TestIntentFactory；Fixtures 下 BattleTestContext。
 - [Legacy/Core](../../Tests/Legacy/Core)：standalone regression 与 retained wrappers；[Legacy/Runner/CardLoadTest](../../Tests/Legacy/Runner/CardLoadTest.cs) 还包含内嵌测试。不可仅扫描 Core 判断全部覆盖。
 - [StoryTestHost](../../Tests/Harness/Story/StoryTestHost.cs)：需显式宿主绑定，无 tracked Scene/Prefab 绑定。

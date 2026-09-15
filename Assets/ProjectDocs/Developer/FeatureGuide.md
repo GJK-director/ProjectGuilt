@@ -2,7 +2,7 @@
 
 Status: CURRENT
 Role: HUMAN DEVELOPER FEATURE GUIDE
-Last Verified: 2026-09-11
+Last Verified: 2026-09-15
 
 这是 Project Guilt 面向策划和开发者的任务操作手册。请先按“我想做什么”查找入口；只有需要理解内部代码、排查异常或确认职责边界时，再阅读 [CodeMap](CodeMap.md) 或找 Sol。普通策划不需要先理解 Runtime Owner。
 
@@ -23,6 +23,7 @@ Last Verified: 2026-09-11
 | 修改剧情 | [Story](#14-其他非卡牌功能) |
 | 修改设置/UI | [UI / Settings](#14-其他非卡牌功能) |
 | 开启/调整自动拼点 | [自动拼点](#142-我要开启或调整自动拼点) |
+| 调整行动顺序数字视觉 | [行动顺序数字视觉](#143-我要调整行动顺序数字) |
 | 修改后进行验证 | [最快验证方法](#10-最快验证方法) |
 
 ## 1. 卡牌制作
@@ -331,6 +332,14 @@ Card runtime 会在 Bootstrap 时重新创建；`BuffDefinitionLoader` 有静态
 Planning 阶段的 Space 永远保留，仍由玩家按下以开始正式执行。Auto ON 时，执行阶段原本用于手动 Roll 的 Space 不再触发拼点。
 
 自动模式是切换 Runner 的 `RollMode`，由现有 Auto Roll Gate 自动推进，不是模拟自动按空格。Auto Clash 覆盖正式 Runner 原本负责的 Roll Gate 范围，包括 Clash、unilateral roll、Defense 和 Dodge。
+
+### 14.3 我要调整行动顺序数字
+
+正式位置：`Assets/Prefabs/Battle/Units/UI/AllyStatusUI.prefab` 与 `Assets/Prefabs/Battle/Units/UI/EnemyStatusUI.prefab`。在对应的 `Slot_01` 或 `Slot_02` 下找到 `OrderText` / `Order Text` TMP 子物体，直接调整 RectTransform、字体、字号、颜色和对齐方式。
+
+四个 OrderText 的 `Raycast Target` 必须保持关闭，避免数字显示挡住卡牌或目标区域的点击。不要交换 `Slot_01` / `Slot_02` 的位置或引用，也不要断开 `BattleActionSlotUIView.orderText`。
+
+如果以后需要给数字增加背景、图标、FirstStrike 边框或动画，只调整数字显示本身；不要为此改动卡牌安排、行动关系线或执行顺序。
 
 ## DOC IMPACT GATE
 

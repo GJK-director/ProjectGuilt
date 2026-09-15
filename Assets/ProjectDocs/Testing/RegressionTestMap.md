@@ -2,7 +2,7 @@
 
 Status: CURRENT
 Role: CURRENT REGRESSION MAP
-Last Verified: 2026-09-11
+Last Verified: 2026-09-15
 
 路径事实见 [CodeMap](../Developer/CodeMap.md#test-and-support-locations)。Legacy 字样描述载体，不自动判定行为过时；下表未列出的回归从 [Legacy inventory](LegacyModeMigration.md) 查询，不能推断没有保护。
 
@@ -11,7 +11,7 @@ Last Verified: 2026-09-11
 | Domain | Formal Coverage | Legacy Unique Coverage | Current Caller | JIT Migration Note |
 |---|---|---|---|---|
 | EnemyIntent/Bootstrap/Resolution | EnemyIntentTests：5 Case | Mode103 其余 ownership、provider/自动回合、伤害/表现集成 | CardLoadTest Mode103 → FullBattleIntegrationRegressionTests；Test4 部分、Test5 全部委托 | 保留集成边界，不把部分委托写成全迁移 |
-| Cards/Execution FirstStrike | FirstStrikeExecutionTests：13 Case；ActionOrderExecutionTests：12 Case | Mode86 JSON traits missing/null/empty compatibility；LongRangeShoot non-implication | CardLoadTest Mode86；Formal execution 经 retained wrapper 链 | priority/order/pairing 有重叠，unique coverage 仍在 Legacy |
+| Cards/Execution FirstStrike | FirstStrikeExecutionTests：13 Case；ActionOrderExecutionTests：12 Case；BattlePlanningOrderSnapshotTests：12 Case；BattleActionSlotOrderViewTests：5 Case | Mode86 JSON traits missing/null/empty compatibility；LongRangeShoot non-implication | CardLoadTest Mode86；Mode105（Multi FirstStrike planning、Planning Snapshot A-L、Action Slot Order View A-E）；Formal execution 经 retained wrapper 链 | priority/order/pairing 有重叠，Planning Snapshot 复用 Resolver；View 只验证显示契约；unique coverage 仍在 Legacy |
 | Cards/Decks | CardDeckManifestTests：6 Case | Mode115 grouping、reference identity、fallback、runtime deck stability | Mode115 → BattleDeckHandGroupingTests → BattleDeckBootstrapPresetTests | Grouping 不是自动归类为手工 UI；按规则价值迁 |
 | Bootstrap preset | DeckPresetBootstrapTests：11 Case | 其他正式初始化/provider 与 Settings 集成 | retained Mode114 wrapper；Mode103/133 | 不为每个旧 Mode 建新 Suite |
 | Knife/Resolution | 当前无该域完整 Formal owner | Mode107 Anger/Knife/Iai/Double Slash/Heavy/Breath/staged HP 组合 | CardLoadTest Mode107 → BattleAngerAndKnifeCardsBasicTests | 修改对应规则再拆相关契约 |
@@ -27,11 +27,13 @@ Last Verified: 2026-09-11
 
 Mode115 ACTIVE → BattleDeckHandGroupingTests → BattleDeckBootstrapPresetTests（retained Mode114 wrapper）
 → BattleDeckManifestTests（retained Mode109 wrapper）
-→ BattleExecutionPlanFirstStrikePolicyTests（retained Mode89 wrapper）
+→ BattleExecutionPlanFirstStrikePolicyTests（retained Mode89 wrapper；其中保留 `ActionOrderExecutionTests`）
 → FirstStrikeExecutionTests。
 
 Mode114 wrapper 同时直接调用 Cards/Bootstrap Formal Cases；Mode109 wrapper 调用 Cards Cases。
 89/109/114 均无 active standalone enum/dispatch，但 wrapper 仍被消费。Formal ownership != standalone retirement != wrapper deletion。
+
+Mode105 直接覆盖 Multi FirstStrike planning、Planning Order Snapshot A-L 与 Action Slot Order View A-E；Mode86 保留 JSON FirstStrike compatibility 与 LongRangeShoot non-implication。Node5A final regression 中，用户已在 Unity Runtime 中运行 Mode86、Mode90、Mode105、Mode110、Mode115，各入口均 Passed: True；另已完成 BattleScene Action Order 人工验收。
 
 ## Running and Provenance
 
