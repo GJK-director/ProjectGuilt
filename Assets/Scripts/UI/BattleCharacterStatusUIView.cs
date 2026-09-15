@@ -124,6 +124,30 @@ public class BattleCharacterStatusUIView : MonoBehaviour
         slotView?.SetBoundActionSlot(actionSlot);
     }
 
+    public void SetSlotOrder(int slotIndex, int? order)
+    {
+        BattleActionSlotUIView slotView = GetSlotView(slotIndex);
+        if (slotView == null)
+        {
+            return;
+        }
+
+        if (order.HasValue)
+        {
+            slotView.SetOrder(order.Value);
+        }
+        else
+        {
+            slotView.ClearOrder();
+        }
+    }
+
+    public void ClearSlotOrders()
+    {
+        slot01View?.ClearOrder();
+        slot02View?.ClearOrder();
+    }
+
     public CharacterData BoundCharacter => boundCharacter;
 
     public bool IsEnemyView => isEnemy;

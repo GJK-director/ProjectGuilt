@@ -2956,6 +2956,7 @@ public class BattleSimpleUIController : MonoBehaviour
         RefreshCharacterStatusViews();
         SynchronizeCharacterUIVisibilityWithLifecycle();
         RefreshActionSlotIntentViews();
+        RefreshActionSlotOrderViews();
         RefreshActionRelations();
         RefreshTestCardView();
         RefreshTestCardHandView();
@@ -3118,6 +3119,95 @@ public class BattleSimpleUIController : MonoBehaviour
                 BattleActionSlotUIState.AllyActionSet
             );
         }
+    }
+
+    private void RefreshActionSlotOrderViews()
+    {
+        ClearActionSlotOrderViews();
+
+        if (runtimeState == null ||
+            runtimeState.IsBattleEnded ||
+            (runtimeState.LifecyclePhase != BattleLifecyclePhase.Prepare &&
+             runtimeState.LifecyclePhase != BattleLifecyclePhase.PlanReady))
+        {
+            return;
+        }
+
+        BattlePlanningOrderSnapshot snapshot =
+            BattleExecutionPlanManager.CreatePlanningOrderSnapshot(
+                runtimeState.actionSlots,
+                runtimeState.intentQueue,
+                runtimeState
+            );
+        if (snapshot == null)
+        {
+            return;
+        }
+
+        if (runtimeState.actionSlots != null)
+        {
+            foreach (BattleActionSlot slot in runtimeState.actionSlots)
+            {
+                if (slot == null)
+                {
+                    continue;
+                }
+
+                BattleCharacterStatusUIView ownerStatusView =
+                    GetAllyStatusView(slot.owner);
+                int uiSlotIndex = slot.slotIndex - 1;
+                if (ownerStatusView == null ||
+                    uiSlotIndex < 0 ||
+                    uiSlotIndex > 1)
+                {
+                    continue;
+                }
+
+                ownerStatusView.SetSlotOrder(
+                    uiSlotIndex,
+                    snapshot.GetActionSlotDisplayOrder(slot)
+                );
+            }
+        }
+
+        if (runtimeState.intentQueue == null)
+        {
+            return;
+        }
+
+        foreach (BattleEnemyIntent intent in runtimeState.intentQueue)
+        {
+            if (intent == null)
+            {
+                continue;
+            }
+
+            BattleCharacterStatusUIView enemyStatusView =
+                GetEnemyStatusView(intent.enemy);
+            int uiSlotIndex =
+                BattleCardAssignmentRouter.EnemySlotIndexToUIIndex(
+                    intent.enemySlotIndex
+                );
+            if (enemyStatusView == null ||
+                uiSlotIndex < 0 ||
+                uiSlotIndex > 1)
+            {
+                continue;
+            }
+
+            enemyStatusView.SetSlotOrder(
+                uiSlotIndex,
+                snapshot.GetEnemyIntentDisplayOrder(intent)
+            );
+        }
+    }
+
+    private void ClearActionSlotOrderViews()
+    {
+        ally01StatusView?.ClearSlotOrders();
+        ally02StatusView?.ClearSlotOrders();
+        enemy01StatusView?.ClearSlotOrders();
+        enemy02StatusView?.ClearSlotOrders();
     }
 
     private void ResetActionSlotIntentBaseStates()

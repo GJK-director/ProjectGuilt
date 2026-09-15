@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -25,6 +26,7 @@ public class BattleActionSlotUIView : MonoBehaviour,
     [SerializeField] private Sprite slotAllyTargetedNoActionSprite;
     [SerializeField] private Sprite slotEnemyEmptySprite;
     [SerializeField] private Sprite slotEnemyActionSetSprite;
+    [SerializeField] private TMP_Text orderText;
     [SerializeField]
     private BattleActionSlotSelectionEffectUIView selectionEffectView;
     [SerializeField] private RectTransform relationLineAnchor;
@@ -38,6 +40,7 @@ public class BattleActionSlotUIView : MonoBehaviour,
     private bool isHovered;
     private bool warnedMissingSlotImage;
     private bool warnedMissingSelectionEffect;
+    private bool warnedMissingOrderText;
     private CharacterData boundCharacter;
     private int slotIndex = -1;
     private bool isEnemySlot;
@@ -79,6 +82,10 @@ public class BattleActionSlotUIView : MonoBehaviour,
         isHovered = false;
         RefreshDisplayedSprite();
         selectionEffectView?.StopAndReset();
+        if (orderText != null)
+        {
+            ClearOrder();
+        }
     }
 
     public void SetState(BattleActionSlotUIState state)
@@ -167,6 +174,7 @@ public class BattleActionSlotUIView : MonoBehaviour,
             committedState = currentBaseState;
             RefreshSelectionEffectReference();
             selectionEffectView?.StopAndReset();
+            ClearOrder();
         }
 
         boundCharacter = character;
@@ -175,6 +183,43 @@ public class BattleActionSlotUIView : MonoBehaviour,
         leftClickHandler = onLeftClicked;
         rightClickHandler = onRightClicked;
         RefreshDisplayedSprite();
+    }
+
+    public void SetOrder(int order)
+    {
+        if (order < 0)
+        {
+            ClearOrder();
+            return;
+        }
+
+        if (orderText == null)
+        {
+            if (!warnedMissingOrderText)
+            {
+                Debug.LogWarning(
+                    "BattleActionSlotUIView 缺少 Order Text，无法显示行动顺序。",
+                    this
+                );
+                warnedMissingOrderText = true;
+            }
+
+            return;
+        }
+
+        orderText.text = order.ToString();
+        orderText.gameObject.SetActive(true);
+    }
+
+    public void ClearOrder()
+    {
+        if (orderText == null)
+        {
+            return;
+        }
+
+        orderText.text = string.Empty;
+        orderText.gameObject.SetActive(false);
     }
 
     public void SetBoundEnemyIntent(BattleEnemyIntent enemyIntent)
@@ -209,6 +254,12 @@ public class BattleActionSlotUIView : MonoBehaviour,
         slotAllyTargetedNoActionSprite = sprite;
         slotEnemyEmptySprite = sprite;
         slotEnemyActionSetSprite = sprite;
+    }
+
+    internal void ConfigureOrderTextForTesting(TMP_Text text)
+    {
+        orderText = text;
+        ClearOrder();
     }
 
     internal void CommitStateFeedbackForTesting()
