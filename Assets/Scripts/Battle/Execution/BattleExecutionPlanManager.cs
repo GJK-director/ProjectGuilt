@@ -103,139 +103,91 @@ public static class BattleExecutionPlanManager
     )
     {
         BattleExecutionPlan executionPlan = new BattleExecutionPlan();
-        List<BattleExecutionItem> candidates = new List<BattleExecutionItem>();
-        List<CharacterData> fallbackBattleOrder = BuildFallbackBattleOrder(actionSlots, intentQueue);
-        int stableOrder = 1;
+        List<BattleActionOrderCandidate> orderedCandidates =
+            BattleActionOrderResolver.Resolve(
+                actionSlots,
+                intentQueue,
+                runtimeState
+            );
 
-        if (intentQueue != null)
+        ResetInvalidRespondedIntentsForExecution(actionSlots, intentQueue);
+
+        for (int index = 0; index < orderedCandidates.Count; index++)
         {
-            foreach (BattleEnemyIntent intent in intentQueue)
-            {
-                if (intent == null)
-                {
-                    continue;
-                }
-
-                if (!intent.isResponded && IsReactiveEnemyDefensiveIntent(intent))
-                {
-                    continue;
-                }
-
-                BattleActionSlot responseSlot = intent.isResponded
-                    ? FindValidResponseSlot(actionSlots, intent)
+            BattleActionOrderCandidate candidate = orderedCandidates[index];
+            List<BattleActionSlot> passiveGuardCandidates =
+                candidate.executionType ==
+                BattleExecutionItemType.UnrespondedEnemyIntent
+                    ? BattleGuardSelectionManager.CollectGuardCandidates(
+                        actionSlots,
+                        candidate.enemyIntent
+                    )
                     : null;
-
-                if (intent.isResponded && responseSlot == null)
-                {
-                    Debug.LogWarning(
-                        "敌人意图" +
-                        intent.intentOrder +
-                        " 标记为已响应但没有有效主响应槽位，已恢复原目标并按 Unresponded 生成"
-                    );
-                    intent.ResetResponseState();
-                }
-
-                BattleExecutionItemType itemType = responseSlot != null
-                    ? BattleExecutionItemType.RespondedEnemyIntent
-                    : BattleExecutionItemType.UnrespondedEnemyIntent;
-                int responseActorSpeed = responseSlot != null
-                    ? GetSpeed(responseSlot.actor)
-                    : int.MinValue;
-                int enemySpeed = GetSpeed(intent.enemy);
-                bool responseActorDrivesOrdering = responseSlot != null &&
-                    responseActorSpeed > enemySpeed;
-                CharacterData orderingActor = responseActorDrivesOrdering
-                    ? responseSlot.actor
-                    : intent.enemy;
-                int orderingSlot = responseActorDrivesOrdering
-                    ? responseSlot.slotIndex
-                    : intent.enemySlotIndex;
-                BattleExecutionItem item = new BattleExecutionItem(
-                    stableOrder,
-                    itemType,
-                    intent,
-                    responseSlot,
-                    itemType == BattleExecutionItemType.UnrespondedEnemyIntent
-                        ? BattleGuardSelectionManager.CollectGuardCandidates(actionSlots, intent)
-                        : null
-                );
-                PopulatePlannedInteractionType(item);
-
-                PopulateSortMetadata(
-                    item,
-                    orderingActor,
-                    responseSlot != null
-                        ? System.Math.Max(responseActorSpeed, enemySpeed)
-                        : enemySpeed,
-                    responseSlot != null && responseActorSpeed == enemySpeed
-                        ? 0
-                        : 1,
-                    orderingSlot,
-                    GetBattlePositionIndex(runtimeState, fallbackBattleOrder, orderingActor),
-                    stableOrder,
-                    responseSlot != null ? responseSlot.assignmentSequence : 0
-                );
-                item.priorityTier = GetPriorityTier(item);
-                PopulateFirstStrikeSourceMetadata(item);
-                candidates.Add(item);
-                stableOrder++;
-            }
-        }
-
-        if (actionSlots != null)
-        {
-            foreach (BattleActionSlot slot in actionSlots)
-            {
-                if (!IsActionSlotReady(slot) ||
-                    slot.slotType != BattleActionSlotType.FreeAction ||
-                    slot.isUsed ||
-                    slot.actor.IsDead())
-                {
-                    continue;
-                }
-
-                BattleExecutionItem item = new BattleExecutionItem(
-                    stableOrder,
-                    BattleExecutionItemType.FreeAction,
-                    null,
-                    slot
-                );
-                PopulatePlannedInteractionType(item);
-                PopulateSortMetadata(
-                    item,
-                    slot.actor,
-                    GetSpeed(slot.actor),
-                    1,
-                    slot.slotIndex,
-                    GetBattlePositionIndex(runtimeState, fallbackBattleOrder, slot.actor),
-                    stableOrder,
-                    slot.assignmentSequence
-                );
-                item.priorityTier = GetPriorityTier(item);
-                PopulateFirstStrikeSourceMetadata(item);
-                candidates.Add(item);
-                stableOrder++;
-            }
-        }
-
-        candidates.Sort(CompareExecutionItems);
-
-        for (int index = 0; index < candidates.Count; index++)
-        {
-            candidates[index].order = index + 1;
-            executionPlan.AddItem(candidates[index]);
+            BattleExecutionItem item = new BattleExecutionItem(
+                index + 1,
+                candidate.executionType,
+                candidate.enemyIntent,
+                candidate.actionSlot,
+                passiveGuardCandidates
+            );
+            item.orderingActor = candidate.orderingActor;
+            item.priorityTier = candidate.priorityTier;
+            item.effectiveSpeed = candidate.effectiveSpeed;
+            item.responsePriority = candidate.responsePriority;
+            item.actionSlotOrder = candidate.actionSlotOrder;
+            item.actorPositionOrder = candidate.actorPositionOrder;
+            item.stableOrder = candidate.stableOrder;
+            item.actionAssignmentSequence = candidate.actionAssignmentSequence;
+            item.firstStrikeSourceSequence = candidate.firstStrikeSourceSequence;
+            PopulatePlannedInteractionType(item);
+            executionPlan.AddItem(item);
         }
 
         return executionPlan;
     }
 
-    static bool IsReactiveEnemyDefensiveIntent(BattleEnemyIntent intent)
+    public static BattlePlanningOrderSnapshot CreatePlanningOrderSnapshot(
+        List<BattleActionSlot> actionSlots,
+        List<BattleEnemyIntent> intentQueue,
+        BattleRuntimeState runtimeState
+    )
     {
-        string cardType = intent != null && intent.enemyCardState != null &&
-            intent.enemyCardState.cardData != null
-                ? intent.enemyCardState.cardData.cardType
-                : string.Empty;
-        return cardType == CardType.Defense || cardType == CardType.Dodge;
+        return BattlePlanningOrderSnapshot.Create(
+            actionSlots,
+            intentQueue,
+            runtimeState
+        );
+    }
+
+    static void ResetInvalidRespondedIntentsForExecution(
+        List<BattleActionSlot> actionSlots,
+        List<BattleEnemyIntent> intentQueue
+    )
+    {
+        if (intentQueue == null)
+        {
+            return;
+        }
+
+        foreach (BattleEnemyIntent intent in intentQueue)
+        {
+            if (intent == null ||
+                !intent.isResponded ||
+                BattleActionOrderResolver.HasValidResponseSlot(
+                    actionSlots,
+                    intent
+                ))
+            {
+                continue;
+            }
+
+            Debug.LogWarning(
+                "敌人意图" +
+                intent.intentOrder +
+                " 标记为已响应但没有有效主响应槽位，已恢复原目标并按 Unresponded 生成"
+            );
+            intent.ResetResponseState();
+        }
     }
 
     // PrintExecutionPlan = 打印执行计划
@@ -597,45 +549,6 @@ public static class BattleExecutionPlanManager
         return slot;
     }
 
-    static void PopulateSortMetadata(
-        BattleExecutionItem item,
-        CharacterData orderingActor,
-        int effectiveSpeed,
-        int responsePriority,
-        int actionSlotOrder,
-        int actorPositionOrder,
-        int stableOrder,
-        long actionAssignmentSequence
-    )
-    {
-        item.orderingActor = orderingActor;
-        item.effectiveSpeed = effectiveSpeed;
-        item.responsePriority = responsePriority;
-        item.actionSlotOrder = actionSlotOrder;
-        item.actorPositionOrder = actorPositionOrder;
-        item.stableOrder = stableOrder;
-        item.actionAssignmentSequence = actionAssignmentSequence;
-    }
-
-    static void PopulateFirstStrikeSourceMetadata(BattleExecutionItem item)
-    {
-        if (item == null)
-        {
-            return;
-        }
-
-        item.firstStrikeSourceSequence = 0;
-
-        BattleCardState actionCard = item.actionSlot != null
-            ? item.actionSlot.cardState
-            : null;
-        if (actionCard != null && actionCard.HasTrait(BattleCardTrait.FirstStrike))
-        {
-            item.firstStrikeSourceSequence = item.actionSlot.assignmentSequence;
-        }
-
-    }
-
     // 只记录计划生成时已经确定的双方卡牌，不参与运行时 Guard / Dodge 的替换选择。
     static void PopulatePlannedInteractionType(BattleExecutionItem item)
     {
@@ -672,301 +585,6 @@ public static class BattleExecutionPlanManager
         }
 
         item.interactionType = BattleInteractionType.NoInteraction;
-    }
-
-    static int CompareExecutionItems(BattleExecutionItem left, BattleExecutionItem right)
-    {
-        int result = left.priorityTier.CompareTo(right.priorityTier);
-        if (result != 0)
-        {
-            return result;
-        }
-
-        if (left.priorityTier == BattleExecutionPriorityTier.FirstStrike &&
-            right.priorityTier == BattleExecutionPriorityTier.FirstStrike)
-        {
-            result = right.firstStrikeSourceSequence.CompareTo(
-                left.firstStrikeSourceSequence
-            );
-            if (result != 0)
-            {
-                return result;
-            }
-        }
-
-        result = right.effectiveSpeed.CompareTo(left.effectiveSpeed);
-        if (result != 0)
-        {
-            return result;
-        }
-
-        result = left.responsePriority.CompareTo(right.responsePriority);
-        if (result != 0)
-        {
-            return result;
-        }
-
-        if (left.responsePriority == 0 && right.responsePriority == 0)
-        {
-            result = right.actionAssignmentSequence.CompareTo(
-                left.actionAssignmentSequence
-            );
-            if (result != 0)
-            {
-                return result;
-            }
-        }
-
-        result = left.actionSlotOrder.CompareTo(right.actionSlotOrder);
-        if (result != 0)
-        {
-            return result;
-        }
-
-        result = left.actorPositionOrder.CompareTo(right.actorPositionOrder);
-        if (result != 0)
-        {
-            return result;
-        }
-
-        return left.stableOrder.CompareTo(right.stableOrder);
-    }
-
-    static BattleExecutionPriorityTier GetPriorityTier(BattleExecutionItem item)
-    {
-        return ItemHasTrait(item, BattleCardTrait.FirstStrike)
-            ? BattleExecutionPriorityTier.FirstStrike
-            : BattleExecutionPriorityTier.Normal;
-    }
-
-    // Responded Item 的双方卡牌共同决定整个已配对 Item 的先攻层级，不拆开原有 pairing。
-    static bool ItemHasTrait(BattleExecutionItem item, BattleCardTrait trait)
-    {
-        if (item == null)
-        {
-            return false;
-        }
-
-        BattleCardState actionSlotCard = item.actionSlot != null
-            ? item.actionSlot.cardState
-            : null;
-        BattleCardState enemyIntentCard = item.enemyIntent != null
-            ? item.enemyIntent.enemyCardState
-            : null;
-
-        return (actionSlotCard != null && actionSlotCard.HasTrait(trait)) ||
-            (enemyIntentCard != null && enemyIntentCard.HasTrait(trait));
-    }
-
-    static int GetSpeed(CharacterData character)
-    {
-        return character != null ? character.GetCurrentSpeed() : int.MinValue;
-    }
-
-    static int GetBattlePositionIndex(
-        BattleRuntimeState runtimeState,
-        List<CharacterData> fallbackBattleOrder,
-        CharacterData character
-    )
-    {
-        if (runtimeState != null)
-        {
-            int runtimePosition = runtimeState.GetBattlePositionIndex(character);
-            if (runtimePosition != int.MaxValue)
-            {
-                return runtimePosition;
-            }
-        }
-
-        if (character == null || fallbackBattleOrder == null)
-        {
-            return int.MaxValue;
-        }
-
-        for (int index = 0; index < fallbackBattleOrder.Count; index++)
-        {
-            if (object.ReferenceEquals(fallbackBattleOrder[index], character))
-            {
-                return index + 1;
-            }
-        }
-
-        return int.MaxValue;
-    }
-
-    static List<CharacterData> BuildFallbackBattleOrder(
-        List<BattleActionSlot> actionSlots,
-        List<BattleEnemyIntent> intentQueue
-    )
-    {
-        List<CharacterData> battleOrder = new List<CharacterData>();
-
-        if (actionSlots != null)
-        {
-            foreach (BattleActionSlot slot in actionSlots)
-            {
-                if (slot == null)
-                {
-                    continue;
-                }
-
-                AddCharacterReferenceIfMissing(battleOrder, slot.owner);
-                AddCharacterReferenceIfMissing(battleOrder, slot.actor);
-            }
-        }
-
-        if (intentQueue != null)
-        {
-            foreach (BattleEnemyIntent intent in intentQueue)
-            {
-                if (intent == null)
-                {
-                    continue;
-                }
-
-                AddCharacterReferenceIfMissing(battleOrder, intent.enemy);
-                AddCharacterReferenceIfMissing(battleOrder, intent.originalTargetCharacter);
-                AddCharacterReferenceIfMissing(battleOrder, intent.actualTargetCharacter);
-            }
-        }
-
-        return battleOrder;
-    }
-
-    static void AddCharacterReferenceIfMissing(
-        List<CharacterData> characters,
-        CharacterData character
-    )
-    {
-        if (characters == null || character == null)
-        {
-            return;
-        }
-
-        foreach (CharacterData existingCharacter in characters)
-        {
-            if (object.ReferenceEquals(existingCharacter, character))
-            {
-                return;
-            }
-        }
-
-        characters.Add(character);
-    }
-
-    // IsHighSpeedResponseSlot = 判断响应槽位是否能高速抢先
-    static bool IsHighSpeedResponseSlot(BattleActionSlot slot)
-    {
-        if (!IsActionSlotReady(slot))
-        {
-            return false;
-        }
-
-        if (slot.slotType != BattleActionSlotType.RespondToEnemyIntent)
-        {
-            return false;
-        }
-
-        if (slot.enemyIntent == null || slot.enemyIntent.enemy == null)
-        {
-            return false;
-        }
-
-        return IsActorFasterThan(slot.actor, slot.enemyIntent.enemy);
-    }
-
-    // IsHighSpeedFreeActionSlot = 判断自由行动是否能抢在目标前
-    static bool IsHighSpeedFreeActionSlot(BattleActionSlot slot)
-    {
-        if (!IsActionSlotReady(slot))
-        {
-            return false;
-        }
-
-        if (slot.slotType != BattleActionSlotType.FreeAction)
-        {
-            return false;
-        }
-
-        if (slot.target == null)
-        {
-            return false;
-        }
-
-        return IsActorFasterThan(slot.actor, slot.target);
-    }
-
-    // IsActorFasterThan = 判断 actor 当前速度是否严格大于 target
-    static bool IsActorFasterThan(CharacterData actor, CharacterData target)
-    {
-        if (actor == null || target == null)
-        {
-            return false;
-        }
-
-        return actor.GetCurrentSpeed() > target.GetCurrentSpeed();
-    }
-
-    // IsIntentInQueue = 判断敌人意图是否属于当前意图队列
-    static bool IsIntentInQueue(List<BattleEnemyIntent> intentQueue, BattleEnemyIntent targetIntent)
-    {
-        if (intentQueue == null || targetIntent == null)
-        {
-            return false;
-        }
-
-        foreach (BattleEnemyIntent intent in intentQueue)
-        {
-            if (object.ReferenceEquals(intent, targetIntent))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    // GetIntentQueueByIntentOrder = 按 intentOrder 获取敌人意图顺序
-    static List<BattleEnemyIntent> GetIntentQueueByIntentOrder(List<BattleEnemyIntent> intentQueue)
-    {
-        List<BattleEnemyIntent> orderedIntents = new List<BattleEnemyIntent>();
-
-        if (intentQueue == null)
-        {
-            return orderedIntents;
-        }
-
-        foreach (BattleEnemyIntent intent in intentQueue)
-        {
-            if (intent != null)
-            {
-                orderedIntents.Add(intent);
-            }
-        }
-
-        orderedIntents.Sort(CompareIntentOrder);
-        return orderedIntents;
-    }
-
-    // CompareIntentOrder = 比较敌人意图顺序
-    static int CompareIntentOrder(BattleEnemyIntent left, BattleEnemyIntent right)
-    {
-        if (left == null && right == null)
-        {
-            return 0;
-        }
-
-        if (left == null)
-        {
-            return 1;
-        }
-
-        if (right == null)
-        {
-            return -1;
-        }
-
-        return left.intentOrder.CompareTo(right.intentOrder);
     }
 
     // FindSlotByEnemyIntent = 根据敌人意图查找绑定的行动槽位

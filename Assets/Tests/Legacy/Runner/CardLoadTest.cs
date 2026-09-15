@@ -13068,7 +13068,7 @@ public class CardLoadTest : MonoBehaviour
 
     void RunBattleCardCommonRulesPhaseOneBasicTestSequence()
     {
-        bool[] results = new bool[18];
+        bool[] results = new bool[19];
 
         BattleEndedTestContext firstStrikeContext =
             CreateBattleEndedTestContext(
@@ -13288,6 +13288,7 @@ public class CardLoadTest : MonoBehaviour
             selfAbility,
             out assignmentResult
         );
+        results[18] = BattlePlanningOrderSnapshotTests.Run();
         BattleCardState modernEnemyAbility = CreateMode105AbilityCard(
             abilityContext.allyA,
             "common105_ability_enemy_modern"
@@ -13492,7 +13493,8 @@ public class CardLoadTest : MonoBehaviour
             "内部Buff不占UI容量且不制造Overflow",
             "同buffID公开Buff继续聚合Stack",
             "两张FirstStrike的assignmentSequence均为正且后者更晚",
-            "不同角色可各自绑定FirstStrike"
+            "不同角色可各自绑定FirstStrike",
+            "Planning Order Snapshot A-L"
         };
 
         bool allPassed = true;
