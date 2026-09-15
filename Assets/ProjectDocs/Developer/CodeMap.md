@@ -46,7 +46,7 @@ Last Verified: 2026-09-15
 - [Story JSON](../../Resources/Story/prologue_501.json)；[StoryPanel](../../Scripts/Story/Prefabs/StoryPanel.prefab)。
 - [Scenes](../../Scenes)：Menu、NewGameText、BattleScene 正式主链；SampleScene 为 Legacy host；Sandbox 为人工入口。BattleTest、StorySample、BattleSimpleUITest_02 不默认视为正式入口；[_Recovery](../../_Recovery) 是恢复资产。
 - [BattleCardUI](../../Art/battle/kapai/BattleCardUI.prefab)、[World Prefabs](../../Prefabs/Battle/Units/World)、[Status Prefabs](../../Prefabs/Battle/Units/UI)。
-- [ActionSlotCardInfoPanel](../../Prefabs/BattleActionSlotCardInfoPanel.prefab)、[SecondaryInfoPanel](../../Prefabs/BattleSecondaryInfoPanel.prefab)、[ActionRollPanel](../../Resources/UI/BattleActionRollPanel.prefab)。
+- [ActionSlotCardInfoPanel](../../Prefabs/BattleActionSlotCardInfoPanel.prefab)、[SecondaryInfoPanel](../../Prefabs/Battle/Units/UI/BattleSecondaryInfoPanel.prefab)、[ActionRollPanel](../../Resources/UI/BattleActionRollPanel.prefab)。
 - [Presentation Profiles](../../Settings)：Attack/Guard/Dodge、ClashEngagement、Hit、SpecialLongRangeDuel 等资产。
 - [Editor](../../Editor)：CardLoadTest/Sandbox/Camera Inspectors、IntroStorySceneSetup、UI Prefab generators。生成器会写资源，校验与重建必须区分。
 
