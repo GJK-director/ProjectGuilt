@@ -2,7 +2,7 @@
 
 Status: CURRENT
 Role: DOMAIN CONTRACT
-Last Verified: 2026-09-15
+Last Verified: 2026-09-16
 
 路径与绑定 owner：[CodeMap](../CodeMap.md)。数据消费语义：[DataPipeline](../DataPipeline.md)。
 
@@ -25,6 +25,24 @@ RuntimeState/CardState/Slot/Intent；Prefab/Scene。
 ## Runtime Flow
 
 Scene 绑定 → Runtime View → 输入 Router → Planning；执行结果刷新 UI。
+
+## Card Cooldown Visual
+
+- Runtime source：`BattleCardState.currentCooldown`
+- View：`BattleCardUIView`
+- Prefab：`BattleCardUI.prefab`
+- `currentCooldown > 0` → 显示 `CooldownOverlay` 和当前剩余 CD 文本。
+- `currentCooldown <= 0` → 两者隐藏。
+- UI 不保存第二份 CD 状态，不负责 CD Tick、卡牌使用资格或 `Update` polling。
+- 当前通过 Bind / SetCard / 手牌重新建立刷新表现。
+
+视觉配置归 Prefab：Overlay 色彩 / Alpha、TMP Font Size、TMP RectTransform Position、TMP Color。
+
+交互要求：`CooldownOverlay` 和 `CooldownValueText` 的 `Raycast Target` 都必须为 `false`，视觉层不得阻挡 Hover / Click。
+
+Legacy：现有旧 `cooldownText` / `HideLegacyCooldown()` 仍保持兼容状态，不要把新显示重新接回 legacy `cooldownText`。
+
+Manual Verification：CD 0 无遮罩无数字；CD 1/3/10 显示对应数字；CD 下降后重新刷新手牌并在回到 0 后隐藏；Hover / Selection / Tooltip / Click 无回归。
 
 ## Auto Clash Input Boundary
 

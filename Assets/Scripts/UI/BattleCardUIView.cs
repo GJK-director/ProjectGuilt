@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 public class BattleCardUIView : MonoBehaviour,
     IPointerEnterHandler,
@@ -14,6 +15,8 @@ public class BattleCardUIView : MonoBehaviour,
     [SerializeField] private TMP_Text typeText;
     [SerializeField] private TMP_Text descriptionText;
     [SerializeField] private TMP_Text cooldownText;
+    [SerializeField] private Image cooldownOverlay;
+    [SerializeField] private TMP_Text cooldownValueText;
     [SerializeField] private BattleCardVisualStyle visualStyle;
     [SerializeField] private BattleCardMotionUIView motionView;
     [SerializeField, Range(0f, 1f)] private float consumedAlpha = 0.45f;
@@ -99,7 +102,7 @@ public class BattleCardUIView : MonoBehaviour,
             warnedMissingVisualStyle = true;
         }
 
-        ApplyConsumedState();
+        RefreshRuntimeVisualState();
     }
 
     public void SetEmpty()
@@ -116,6 +119,13 @@ public class BattleCardUIView : MonoBehaviour,
         SetText(typeText, "");
         SetText(descriptionText, "");
         HideLegacyCooldown();
+        ApplyCooldownVisual();
+    }
+
+    void RefreshRuntimeVisualState()
+    {
+        ApplyConsumedState();
+        ApplyCooldownVisual();
     }
 
     void ApplyConsumedState()
@@ -156,6 +166,26 @@ public class BattleCardUIView : MonoBehaviour,
         availabilityCanvasGroup.alpha = isConsumed
             ? availableCanvasGroupAlpha * Mathf.Clamp01(consumedAlpha)
             : availableCanvasGroupAlpha;
+    }
+
+    void ApplyCooldownVisual()
+    {
+        bool isOnCooldown =
+            boundCardState != null &&
+            boundCardState.currentCooldown > 0;
+
+        if (cooldownOverlay != null)
+        {
+            cooldownOverlay.gameObject.SetActive(isOnCooldown);
+        }
+
+        if (cooldownValueText != null)
+        {
+            cooldownValueText.text = isOnCooldown
+                ? boundCardState.currentCooldown.ToString()
+                : string.Empty;
+            cooldownValueText.gameObject.SetActive(isOnCooldown);
+        }
     }
 
     public void OnPointerEnter(PointerEventData eventData)

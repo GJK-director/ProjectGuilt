@@ -2,7 +2,7 @@
 
 Status: CURRENT
 Role: HUMAN DEVELOPER FEATURE GUIDE
-Last Verified: 2026-09-15
+Last Verified: 2026-09-16
 
 这是 Project Guilt 面向策划和开发者的任务操作手册。请先按“我想做什么”查找入口；只有需要理解内部代码、排查异常或确认职责边界时，再阅读 [CodeMap](CodeMap.md) 或找 Sol。普通策划不需要先理解 Runtime Owner。
 
@@ -68,6 +68,11 @@ Last Verified: 2026-09-15
 ### 1.4 我要修改冷却
 
 修改 `cooldown`，保存后退出 Play Mode，再按[最快验证方法](#10-最快验证方法)进入 `BattleScene` 验证卡牌可用时间和实际 CD。
+
+当前卡牌冷却表现会读取 Runtime 的 `BattleCardState.currentCooldown`。
+剩余 CD 大于 0 时显示冷却遮罩和当前剩余数字，回到 0 后隐藏。
+如果只是修改冷却显示样式，不要修改 `cooldown` Gameplay 数据，
+请看“卡牌图片 / 卡面视觉”中的 CD 显示说明。
 
 ### 1.5 我要修改卡牌类型
 
@@ -212,6 +217,34 @@ Last Verified: 2026-09-15
 当前 `BattleCardUI` 使用共享卡框，由 `rarity` / `isSinCard` 选择：`White`、`Blue`、`Purple`、`Gold`、`Sin`。新增普通卡当前不需要放一张独立卡图。
 
 想修改某个品质的共享卡框，属于 Prefab / Visual Style 资产修改，不是单张卡 JSON 配置。想让某张卡拥有独立插画，当前系统不支持策划纯配置，找 Sol。不要自行新增 `artwork` 字段。
+
+### 5.1 CD 冷却显示
+
+当前资产：`Assets/Art/battle/kapai/BattleCardUI.prefab`
+
+当前运行 View：`Assets/Scripts/UI/BattleCardUIView.cs`
+
+Prefab 层级：
+
+```text
+VisualRoot
+└── CooldownOverlay
+    └── CooldownValueText
+```
+
+规则：
+
+- `currentCooldown <= 0`：遮罩和 CD 数字隐藏。
+- `currentCooldown > 0`：遮罩显示，`CooldownValueText` 显示当前 `currentCooldown`。
+
+视觉参数全部在 Prefab 中调整：
+
+- `CooldownOverlay`：Image Color / Alpha；当前默认黑色、Alpha `0.5`。
+- `CooldownValueText`：TextMeshProUGUI → Font Size；RectTransform → Pos X / Pos Y；TextMeshProUGUI → Color / Vertex Color。
+
+两个 UI Graphic 都必须保持 `Raycast Target = false`。
+这些只是视觉参数，不拥有卡牌是否可用的规则。卡牌能否使用仍由现有 CardState / CardManager / CanSelect 链路决定。
+不要让普通开发者为了改字号或颜色去修改 C#。
 
 ## 6. Trait
 
