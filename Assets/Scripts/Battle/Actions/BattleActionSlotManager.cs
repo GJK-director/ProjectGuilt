@@ -404,6 +404,27 @@ public static class BattleActionSlotManager
         RebuildPreparedActionRoles(runtimeState.actionSlots, runtimeState.intentQueue);
     }
 
+    // TryFindCurrentResponseSlot = 查找某个敌人意图当前正式生效的响应槽位。
+    // 只读取已经重建好的当前关系，不读取 requestedEnemyIntent，也不改写运行时状态。
+    public static bool TryFindCurrentResponseSlot(
+        BattleRuntimeState runtimeState,
+        BattleEnemyIntent intent,
+        out BattleActionSlot slot
+    )
+    {
+        slot = null;
+        if (runtimeState == null ||
+            intent == null ||
+            !intent.isResponded ||
+            !ContainsIntentReference(runtimeState.intentQueue, intent))
+        {
+            return false;
+        }
+
+        slot = FindSlotByEnemyIntent(runtimeState.actionSlots, intent);
+        return slot != null;
+    }
+
     // AssignResponseToEnemyIntent = 安排一个槽位响应敌人意图
     // slots = 所有行动槽位。
     // slotIndex = 要放入的槽位编号。

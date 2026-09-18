@@ -22,6 +22,7 @@ public static class BattleInteractionStateAndEndLockTests
         public BattleLifecycleController lifecycleController;
         public BattleSimpleUIController uiController;
         public BattleCardHandUIView handView;
+        public Button sinCardSwitchButton;
         public BattleCardSelectionController selectionController;
         public BattleActionRelationLineController relationLineController;
         public BattleActionSlotUIView allyASlotView;
@@ -32,14 +33,16 @@ public static class BattleInteractionStateAndEndLockTests
 
     public static bool Run()
     {
-        bool[] results = new bool[16];
+        bool[] results = new bool[24];
         TestContext context = null;
         try
         {
             context = CreateInteractionContext();
             RunPlanningInteractionTests(context, results);
+            RunDefaultSourceSelectionTests(results);
             RunBattleEndedLogTests(results);
             RunBattleEndedInteractionTests(context, results);
+            RunSinCardSwitchButtonVisibilityTests(results);
         }
         catch (Exception exception)
         {
@@ -63,14 +66,22 @@ public static class BattleInteractionStateAndEndLockTests
             "已安排槽位可再次显示卡牌",
             "成功替换后再次隐藏卡牌",
             "取消安排后保持槽位选择和卡牌",
-            "新回合Prepare不默认显示角色1卡牌",
+            "普通Refresh不重复默认选择",
             "Victory首次BattleEnded只打印一次游戏结束",
             "Defeat首次BattleEnded只打印一次游戏结束",
             "重复Evaluate与重建Controller不重复打印",
             "BattleEnded后战斗交互入口均拒绝",
             "BattleEnded后自动回合不创建下一回合",
             "BattleEnded清除临时选择与卡牌展示",
-            "BattleEnded保留角色战斗数据与结果"
+            "BattleEnded保留角色战斗数据与结果",
+            "无手牌时罪卡切换按钮隐藏",
+            "正式手牌显示时罪卡切换按钮显示",
+            "清理手牌后罪卡切换按钮隐藏",
+            "默认选择速度最快角色的Slot1",
+            "同速时默认选择战斗位置更靠前角色",
+            "默认选择严格使用Formal Slot1",
+            "清除默认选择后普通Refresh不重新选择",
+            "进入下一回合后默认选择可再次执行"
         };
 
         bool allPassed = true;
@@ -82,8 +93,150 @@ public static class BattleInteractionStateAndEndLockTests
             );
             allPassed &= results[index];
         }
-        Debug.Log("模式78 16项聚合结果：" + allPassed);
+        Debug.Log("模式78 24项聚合结果：" + allPassed);
         return allPassed;
+    }
+
+    private static void RunDefaultSourceSelectionTests(bool[] results)
+    {
+        TestContext fastestContext = null;
+        TestContext tieContext = null;
+        TestContext slotContext = null;
+        TestContext refreshContext = null;
+        TestContext nextTurnContext = null;
+        try
+        {
+            fastestContext = CreateDefaultSelectionContext(8, 12);
+            InvokePrivate(
+                fastestContext.uiController,
+                "TrySelectDefaultSourceSlotForCurrentTurn"
+            );
+            results[19] = object.ReferenceEquals(
+                    GetSelectedSlotView(fastestContext.uiController),
+                    fastestContext.allyBSlotView
+                ) &&
+                fastestContext.allyBSlotView.FormalSlotIndex == 1;
+
+            tieContext = CreateDefaultSelectionContext(10, 10);
+            InvokePrivate(
+                tieContext.uiController,
+                "TrySelectDefaultSourceSlotForCurrentTurn"
+            );
+            results[20] = object.ReferenceEquals(
+                GetSelectedSlotView(tieContext.uiController),
+                tieContext.allyASlotView
+            );
+
+            slotContext = CreateDefaultSelectionContext(12, 8);
+            InvokePrivate(
+                slotContext.uiController,
+                "TrySelectDefaultSourceSlotForCurrentTurn"
+            );
+            results[21] = object.ReferenceEquals(
+                    GetSelectedSlotView(slotContext.uiController),
+                    slotContext.allyASlotView
+                ) &&
+                slotContext.allyASlotView.FormalSlotIndex == 1 &&
+                slotContext.allyBSlotView.FormalSlotIndex == 1;
+
+            refreshContext = CreateDefaultSelectionContext(12, 8);
+            InvokePrivate(
+                refreshContext.uiController,
+                "TrySelectDefaultSourceSlotForCurrentTurn"
+            );
+            refreshContext.uiController.ClearPlanningSelectionAndHideCards();
+            InvokePrivate(refreshContext.uiController, "RefreshView");
+            results[22] = !refreshContext.uiController.HasPlanningSlotSelection &&
+                refreshContext.uiController.PlanningHandOwner == null &&
+                refreshContext.uiController.VisiblePlanningCardCount == 0;
+
+            nextTurnContext = CreateDefaultSelectionContext(12, 8);
+            InvokePrivate(
+                nextTurnContext.uiController,
+                "TrySelectDefaultSourceSlotForCurrentTurn"
+            );
+            nextTurnContext.uiController.ClearPlanningSelectionAndHideCards();
+            nextTurnContext.runtimeState.currentTurn++;
+            InvokePrivate(
+                nextTurnContext.uiController,
+                "TrySelectDefaultSourceSlotForCurrentTurn"
+            );
+            results[23] = object.ReferenceEquals(
+                GetSelectedSlotView(nextTurnContext.uiController),
+                nextTurnContext.allyASlotView
+            );
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError("模式78默认来源选择测试夹具异常：" + exception);
+            for (int index = 19; index <= 23; index++)
+            {
+                results[index] = false;
+            }
+        }
+        finally
+        {
+            DestroyContext(fastestContext);
+            DestroyContext(tieContext);
+            DestroyContext(slotContext);
+            DestroyContext(refreshContext);
+            DestroyContext(nextTurnContext);
+        }
+    }
+
+    private static void RunSinCardSwitchButtonVisibilityTests(bool[] results)
+    {
+        TestContext context = null;
+        GameObject buttonObject = null;
+        try
+        {
+            context = CreateInteractionContext();
+            buttonObject = new GameObject(
+                "Interaction78SinCardSwitchButton",
+                typeof(RectTransform),
+                typeof(CanvasRenderer),
+                typeof(Image),
+                typeof(Button)
+            );
+            buttonObject.transform.SetParent(context.root.transform, false);
+            context.sinCardSwitchButton = buttonObject.GetComponent<Button>();
+            SetPrivateField(
+                context.uiController,
+                "qiehuanButton",
+                context.sinCardSwitchButton
+            );
+
+            context.uiController.ClearPlanningSelectionAndHideCards();
+            results[16] = !context.sinCardSwitchButton.gameObject.activeSelf;
+
+            bool selectedSlot1 = context.uiController.TrySelectActionSlotForPlanning(
+                context.allyASlotView
+            );
+            results[17] = selectedSlot1 &&
+                context.sinCardSwitchButton.gameObject.activeSelf;
+
+            context.uiController.ClearPlanningSelectionAndHideCards();
+            results[18] = !context.sinCardSwitchButton.gameObject.activeSelf;
+        }
+        catch (Exception exception)
+        {
+            Debug.LogError("模式78罪卡切换按钮测试夹具异常：" + exception);
+            for (int index = 16; index <= 18; index++)
+            {
+                results[index] = false;
+            }
+        }
+        finally
+        {
+            if (buttonObject != null)
+            {
+                UnityEngine.Object.Destroy(buttonObject);
+            }
+            if (context != null && context.root != null)
+            {
+                UnityEngine.Object.Destroy(context.root);
+            }
+        }
     }
 
     private static void RunPlanningInteractionTests(
@@ -299,7 +452,7 @@ public static class BattleInteractionStateAndEndLockTests
             true
         );
 
-        context.allyA.AddBuff("Bullet", 2, -1);
+        context.allyA.AddBuff("Bullet", 2);
         context.allyAAttack.currentCooldown = 1;
         int allyHPBefore = context.allyA.currentHP;
         int buffBefore = context.allyA.GetBuffStack("Bullet");
@@ -587,6 +740,78 @@ public static class BattleInteractionStateAndEndLockTests
         );
         context.enemySlotView.SetBoundEnemyIntent(context.enemyIntent);
         return context;
+    }
+
+    private static TestContext CreateDefaultSelectionContext(
+        int allyASpeed,
+        int allyBSpeed
+    )
+    {
+        TestContext context = CreateInteractionContext();
+        context.allyA.turnSpeed = allyASpeed;
+        context.allyB.turnSpeed = allyBSpeed;
+
+        GameObject allyAStatusObject = new GameObject(
+            "Interaction78DefaultAllyAStatus",
+            typeof(RectTransform),
+            typeof(BattleCharacterStatusUIView)
+        );
+        allyAStatusObject.transform.SetParent(context.root.transform, false);
+        BattleCharacterStatusUIView allyAStatusView =
+            allyAStatusObject.GetComponent<BattleCharacterStatusUIView>();
+        SetPrivateField(
+            allyAStatusView,
+            "slot01View",
+            context.allyASlotView
+        );
+
+        GameObject allyBStatusObject = new GameObject(
+            "Interaction78DefaultAllyBStatus",
+            typeof(RectTransform),
+            typeof(BattleCharacterStatusUIView)
+        );
+        allyBStatusObject.transform.SetParent(context.root.transform, false);
+        BattleCharacterStatusUIView allyBStatusView =
+            allyBStatusObject.GetComponent<BattleCharacterStatusUIView>();
+        SetPrivateField(
+            allyBStatusView,
+            "slot01View",
+            context.allyBSlotView
+        );
+
+        SetPrivateField(
+            context.uiController,
+            "ally01StatusView",
+            allyAStatusView
+        );
+        SetPrivateField(
+            context.uiController,
+            "ally02StatusView",
+            allyBStatusView
+        );
+        return context;
+    }
+
+    private static BattleActionSlotUIView GetSelectedSlotView(
+        BattleSimpleUIController controller
+    )
+    {
+        BattleCardInteractionCoordinator coordinator =
+            GetPrivateField<BattleCardInteractionCoordinator>(
+                controller,
+                "cardInteractionCoordinator"
+            );
+        return coordinator != null
+            ? coordinator.SelectedActionSlotView
+            : null;
+    }
+
+    private static void DestroyContext(TestContext context)
+    {
+        if (context != null && context.root != null)
+        {
+            UnityEngine.Object.Destroy(context.root);
+        }
     }
 
     private static BattleRuntimeState CreateTerminalRuntime(string prefix)

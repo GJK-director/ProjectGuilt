@@ -151,10 +151,6 @@ public sealed class BattleResolutionPlan
     public BattleClashPointSnapshot freeActionPointSnapshot;
     public BattleClashResourceSnapshot freeActionResourceSnapshot;
 
-    // Defense 的一次性 Guard 只消费本次计算实际看到的层数。
-    public int guardUpStackToConsume;
-    public int guardDownStackToConsume;
-
     public readonly List<BattleImpact> impacts = new List<BattleImpact>();
     public BattleImpact pendingDefeatImpact;
 

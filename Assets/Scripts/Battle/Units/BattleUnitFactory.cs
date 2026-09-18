@@ -200,7 +200,7 @@ public static class BattleUnitFactory
                 return false;
             }
 
-            if (initialBuff.stack <= 0 || (initialBuff.duration != -1 && initialBuff.duration <= 0))
+            if (initialBuff.stack < 0)
             {
                 errorMessage = ownerID + " 创建失败：initialBuff 数值非法：" + initialBuff.buffID;
                 return false;
@@ -257,7 +257,7 @@ public static class BattleUnitFactory
                 continue;
             }
 
-            unit.AddBuff(initialBuff.buffID, initialBuff.stack, initialBuff.duration);
+            unit.SetInitialBuffState(initialBuff.buffID, initialBuff.stack, initialBuff.intensity);
         }
     }
 }

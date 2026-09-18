@@ -48,6 +48,8 @@ public class BattleActionSlotUIView : MonoBehaviour,
     private BattleActionSlot boundActionSlot;
     private Action<BattleActionSlotUIView> leftClickHandler;
     private Action<BattleActionSlotUIView> rightClickHandler;
+    private Func<BattleActionSlotUIView, BattleActionSlotCardInfoHoverRequest>
+        pairedHoverRequestResolver;
     private Coroutine stateFeedbackCoroutine;
 
     public CharacterData BoundCharacter => boundCharacter;
@@ -246,6 +248,14 @@ public class BattleActionSlotUIView : MonoBehaviour,
         }
     }
 
+    internal void SetPairedHoverRequestResolver(
+        Func<BattleActionSlotUIView, BattleActionSlotCardInfoHoverRequest>
+            resolver
+    )
+    {
+        pairedHoverRequestResolver = resolver;
+    }
+
     internal void ConfigureTestVisuals(Image image, Sprite sprite)
     {
         slotImage = image;
@@ -345,6 +355,30 @@ public class BattleActionSlotUIView : MonoBehaviour,
         BattleActionSlotCardInfoPointerEvent pointerEvent
     )
     {
+        BattleActionSlotCardInfoHoverRequest request =
+            BuildCardInfoPanelRequest(pointerEvent);
+        BattleActionSlotCardInfoPanelHost.HandlePointer(request);
+
+        if (pointerEvent ==
+            BattleActionSlotCardInfoPointerEvent.HoverEnter ||
+            pointerEvent == BattleActionSlotCardInfoPointerEvent.Refresh)
+        {
+            BattleActionSlotCardInfoPanelHost.HandlePairedHover(
+                this,
+                pairedHoverRequestResolver?.Invoke(this)
+            );
+        }
+        else if (pointerEvent ==
+            BattleActionSlotCardInfoPointerEvent.SourceInvalidated)
+        {
+            BattleActionSlotCardInfoPanelHost.ClearPairedOwnedBy(gameObject);
+        }
+    }
+
+    internal BattleActionSlotCardInfoHoverRequest BuildCardInfoPanelRequest(
+        BattleActionSlotCardInfoPointerEvent pointerEvent
+    )
+    {
         BattleCardState cardState = isEnemySlot
             ? boundEnemyIntent?.enemyCardState
             : boundActionSlot?.cardState;
@@ -356,15 +390,13 @@ public class BattleActionSlotUIView : MonoBehaviour,
                 boundEnemyIntent?.originalTargetCharacter)
             : boundActionSlot?.target;
 
-        BattleActionSlotCardInfoPanelHost.HandlePointer(
-            new BattleActionSlotCardInfoHoverRequest(
-                gameObject,
-                isEnemySlot,
-                owner,
-                target,
-                cardState,
-                pointerEvent
-            )
+        return new BattleActionSlotCardInfoHoverRequest(
+            gameObject,
+            isEnemySlot,
+            owner,
+            target,
+            cardState,
+            pointerEvent
         );
     }
 

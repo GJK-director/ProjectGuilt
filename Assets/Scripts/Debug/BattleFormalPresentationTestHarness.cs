@@ -2929,7 +2929,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
         int safeStack = Mathf.Max(0, bulletStack);
         if (safeStack > 0)
         {
-            actor.AddBuff("Bullet", safeStack, -1);
+            actor.AddBuff("Bullet", safeStack);
         }
 
         return actor.GetBuffStack("Bullet") >= safeStack;
@@ -2957,7 +2957,7 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
 
         if (bulletStack > 0)
         {
-            shooter.AddBuff("Bullet", bulletStack, -1);
+            shooter.AddBuff("Bullet", bulletStack);
         }
     }
 

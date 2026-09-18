@@ -139,7 +139,7 @@ public static class BattlePresentationProtocolTests
         TestContext context = CreateContext("presentation83_e", CardType.Attack, 6, 4);
         context.playerCard.cardData.cooldown = 1;
         AddProbeEffect(context.playerCard, BattleTiming.Hit, "GuardUp", 1);
-        context.ally.AddBuff("NextClashPointUp", 1, 1);
+        context.ally.AddBuff("NextClashPointUp", 1);
         bool pending = ReachResolutionPending(context);
         bool requested = Advance(context);
         BattlePresentationRequest request = context.presenter.GetLastRequest();
@@ -563,9 +563,8 @@ public static class BattlePresentationProtocolTests
             trigger = timing,
             effectType = CardEffectType.ApplyBuff,
             target = CardTargetType.Self,
-            buffType = buffID,
-            stack = stack,
-            duration = -1,
+            buffID = buffID,
+            stackDelta = stack,
             applyTiming = "Immediate"
         });
     }

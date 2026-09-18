@@ -992,12 +992,9 @@ public static class BattleGuardSelectionManager
             return false;
         }
 
-        CardEligibilityResult eligibility = BattleCardManager.EvaluateCardEligibility(
-            slot.actor,
-            enemyIntent.enemy,
-            slot.cardState
-        );
-        return eligibility != null && eligibility.isEligible;
+        // Active Continuous Dodge is the same deferred card use, not a new play.
+        // Its ordinary CardUsed cooldown must not be re-evaluated here.
+        return true;
     }
 
     public static List<BattleActionSlot> CollectGuardCandidates(

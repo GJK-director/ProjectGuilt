@@ -1,4 +1,4 @@
-﻿// 脚本中文说明：战斗回合处理器。负责回合开始和回合结束时处理速度、待生效 Buff、Buff 持续时间和卡牌 CD。
+﻿// 脚本中文说明：战斗回合处理器。负责回合开始和回合结束时处理速度、待生效 Buff 和卡牌 CD。
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -50,7 +50,7 @@ public static class BattleTurnProcessor
     // End = 结束，Turn = 回合。
     public static void EndTurn(List<CharacterData> units)
     {
-        Debug.Log("===== 回合结束，处理 Buff 持续时间 =====");
+        Debug.Log("===== 回合结束 =====");
 
         foreach (CharacterData unit in units)
         {
@@ -59,12 +59,6 @@ public static class BattleTurnProcessor
                 continue;
             }
 
-            // 第一部分：旧 Buff 系统的回合结束检测
-            // 例如：强壮 / 伤害提升 / 速度上升 持续时间减少
-            //旧的buff不受到新的回合结束的检测，我们这里在回合结束的函数里单独让他处理一次回合结束
-            unit.CheckBuffsByTiming("TurnEnd");
-
-            // 第二部分：新事件系统的回合结束事件
             // 这里会通知 BattleCardManager，让卡牌 CD -1
             BattleEventContext context = new BattleEventContext(BattleTiming.TurnEnd)
                 .SetUserAndTarget(unit, null);

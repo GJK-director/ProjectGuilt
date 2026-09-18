@@ -45,14 +45,9 @@
         "trigger": "OnPlay",
         "effectType": "ApplyBuff",
         "target": "Self",
-        "buffType": "AbilityPower",
-        "buffName": "能力强化",
-        "buffCategory": "UpBuff",
-        "value": 0,
-        "stack": 1,
-        "duration": 1,
-        "checkTiming": "TurnEnd",
-        "expireRule": "DurationDown"
+          "buffID": "AbilityPower",
+          "stackDelta": 1,
+          "value": 0
       }
     ]
   },

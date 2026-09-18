@@ -13,6 +13,8 @@ Last Verified: 2026-09-16
 | 修改已有卡牌 | [卡牌制作](#1-卡牌制作) |
 | 新增卡牌 | [新增卡牌](#4-新增卡牌) |
 | 修改 Buff | [Buff 实用操作](#2-buff-实用操作) |
+| 修改 Buff 三级面板 | [Buff 三级面板](#21-我要修改-buff-三级面板) |
+| 调整角色脚底 Buff 图标 Hover 判定范围 | [Buff 图标 Hover 判定范围](#22-我要调整角色脚底-buff-图标-hover-判定范围) |
 | 增加卡牌效果 | [增加卡牌效果](#17-我要给卡牌增加效果) |
 | 修改二级词条 | [二级词条 / Keywords](#3-二级词条--keywords) |
 | 调整卡牌黄色词条 Hover | [卡牌黄色词条 Hover 与二级面板](#31-我要调整卡牌黄色词条-hover-判定和二级面板弹出速度) |
@@ -25,6 +27,7 @@ Last Verified: 2026-09-16
 | 修改设置/UI | [UI / Settings](#14-其他非卡牌功能) |
 | 开启/调整自动拼点 | [自动拼点](#142-我要开启或调整自动拼点) |
 | 调整行动顺序数字视觉 | [行动顺序数字视觉](#143-我要调整行动顺序数字) |
+| 验证行动槽卡牌详情 Hover | [行动槽卡牌详情 Hover](#144-我要验证行动槽卡牌详情-hover) |
 | 修改后进行验证 | [最快验证方法](#10-最快验证方法) |
 
 ## 1. 卡牌制作
@@ -101,7 +104,7 @@ Last Verified: 2026-09-16
 - `ActivateModification`
 - `ActivateConservation`
 
-不要自行写新的 `effectType` 名字。最常用的是 `ApplyBuff`，需要关注 `trigger`、`target`、`buffType`、`stack`、`duration`、`applyTiming`、`conditions`、`filters`、`formula`。
+不要自行写新的 `effectType` 名字。最常用的是 `ApplyBuff`，需要关注 `trigger`、`target`、`buffID`、`stackDelta`、可选的 `intensityDelta`、`applyTiming`、`delayTurns`、`applyTimes`、`intervalTurns`、`conditions`、`filters`、`formula`。
 
 ### 1.8 我要控制效果什么时候触发
 
@@ -150,15 +153,15 @@ Last Verified: 2026-09-16
 
 `BuffDefinitions` 定义 Buff 本身。卡牌要实际给予 Buff，通常仍需要在 `CardsTest.json` 的 `effects` 中配置 `ApplyBuff`。
 
-| 我想获得 | 复用 ID | 每层作用 |
+| 我想获得 | 复用 ID | 当前读取语义 |
 |---|---|---|
-| 下一次拼点 +X | `NextClashPointUp` | `ClashPoint +1` |
-| 当前攻击卡点数 +X | `Strength` | `AttackPoint +1` |
-| 下一张点数卡 +X | `NextCardPointUp` | `CardPoint +1` |
-| 造成伤害提高 | `DamageUp` | `DamageDealt +10%` |
-| 造成伤害降低 | `DamageDown` | `DamageDealt -10%` |
-| 受到伤害提高 | `Vulnerable` | `DamageTaken +10%` |
-| 受到伤害降低 | `DamageReduction` | `DamageTaken -10%` |
+| 下一次拼点 +X | `NextClashPointUp` | `intensity` 作为一次 ClashPoint 加成，`stack` 是剩余触发次数 |
+| 当前攻击卡点数 +X | `Strength` | 只要 `stack > 0`，读取 `intensity` 加到 AttackPoint |
+| 下一张点数卡 +X | `NextCardPointUp` | `intensity` 作为一次 CardPoint 加成，`stack` 是剩余触发次数 |
+| 造成伤害提高 | `DamageUp` | 读取 `intensity` 作为 DamageDealt Modifier |
+| 造成伤害降低 | `DamageDown` | 读取 `intensity` 作为 DamageDealt Modifier |
+| 受到伤害提高 | `Vulnerable` | 读取 `intensity` 作为 DamageTaken Modifier |
+| 受到伤害降低 | `DamageReduction` | 读取 `intensity` 作为 DamageTaken Modifier |
 | 子弹 | `Bullet` | 由射击资源规则读取 |
 | 怒 | `Anger` | 由 Anger 规则读取 |
 | 改装 | `Modification` | 由 Modification 规则读取 |
@@ -170,7 +173,35 @@ Last Verified: 2026-09-16
 
 完全新增资源不能纯 JSON 得到完整正式资源语义，找 Sol。
 
+### Anger 零层状态与验证
+
+Anger Definition 的配置入口是 `Assets/Resources/Data/Buffs/BuffDefinitions.json`。愤怒卡 `sin_anger_001` 使用 `EnableAngerMechanic`：成功使用后启用 Anger mechanic，并确保 Anger canonical state 存在；首次建立时是 0 层，不直接增加 1 层。运行时 owner 是 `CharacterData` 的 `Anger` state，Iai 的清空 owner 是 `BattleKnifeCardRules.FinalizeCompletedInteraction`，会把层数归零但保留 retained-zero state。
+
+验证时运行现有 Anger / Buff regression，确认愤怒卡成功后机制已启用、`Anger` state 非空且 stack 为 0；再确认后续增加和消费回到 0 时一级 Buff 图标仍显示数字 0。不要通过 UI 或新增 bool 伪造 Anger state。
+
+Buff 的正式 Runtime state 是 `CharacterData` 中按 `buffID` 唯一保存的 `BuffData`，字段为 `stack` 与 `intensity`。重复普通 `ApplyBuff` 只增加 `stack`；需要改变每次效果强度时，才在 Effect 中显式填写 `intensityDelta`。`stack` 与 `intensity` 是两个独立语义，不能把它们默认相乘。
+
+定义中的 `maxStacks` 与 `maxIntensity`（大于 0 时）负责上限；`retainWhenZero` 决定消费到 0 后是否保留 Runtime state，`showWhenZero` 只决定一级 UI 是否显示 0 层。`consumeRule` 决定正式事件边界上的消费规则；它们不是卡牌描述字段，也不应通过 UI 伪造。
+
 `NextClashPointUp` 本身是可复用通用 Buff；但当前 `dodge_001` 的 `GrantNextClashPointUpOnSuccessfulDodge` 属于特殊 Trait / Pending 行为。如果只是给予下一次拼点 `+X`，优先参考通用 Buff；如果要求“只有闪避成功后才给予”，参考现有 Trait，并在不确定时找 Sol。
+
+### 2.1 我要修改 Buff 三级面板
+
+Buff 的一级图标由 `BattleBuffGroupUIView` 根据角色当前 canonical Active Buff state 交给 `BattleBuffIconUIView`。Hover 后的二级面板内容和 Buff 三级明细由 `BattleSecondaryInfoPanelHost` 应用；不要在 UI 层伪造 Buff 层数或生命周期。
+
+正式视觉入口是 `Assets/Prefabs/Battle/Units/UI/BattleSecondaryInfoPanel.prefab`。当前序列化接线字段包括 `buffDetailRoot`、`bubbleContainer`、`bubbleTemplate`、`stackLabelText`、`stackValueText`、`durationLabelText` 和 `durationValueText`。当前 canonical bubble 由每个 `buffID` state 生成一条 summary details，使用 `stack`，在定义需要时附带 `intensity`；不显示 per-instance source / duration。需要调整背景、字体、颜色、字号、间距或 Padding 时，先改这个 Prefab；需要改变 state、Pending mutation、消费或保留语义时，找 Sol 检查 `CharacterData` / `BattleBuffGroupUIView` / `BattleSecondaryInfoPanelHost`。
+
+当前修改后的最短验收路径是：让目标角色获得对应 Buff，在 `BattleScene` Hover 角色 Buff 图标，确认正文、一级 canonical state 层数，以及 `BuffDetailRoot` 中对应 summary Bubble 的层数与必要的强度；再检查普通卡牌黄色词条仍走原有二级面板路径。
+
+### 2.2 我要调整角色脚底 Buff 图标 Hover 判定范围
+
+正式入口是 Ally 与 Enemy 状态 UI Prefab 中的：
+
+`FootStatusGroup` → `BuffGroup` → `BuffTemplate` → `HoverHitbox`
+
+`HoverHitbox` 是透明 Image 命中层。需要统一调整所有角色脚底 Buff 图标的 Hover 范围时，在两个正式 Prefab 的 `HoverHitbox` RectTransform 中修改 `Anchored Position X/Y`、`Width` 和 `Height`；运行时 Buff 图标由 `BattleBuffGroupUIView` 从该模板实例化，因此不要按 `buffID` 单独配置，也不要放大 `IconImage` 或 `StackText` 来代替判定框，也不要恢复已经退休的 `DecayText`。
+
+Ally 与 Enemy 的模板参数应保持一致。视觉 Graphic 的 `Raycast Target` 保持关闭，只有 `HoverHitbox` 参与命中；`BattleBuffIconUIView` 继续作为 `BuffTemplate` 根节点上的 Pointer owner，`BattleSecondaryInfoPanelHost` 不负责计算 Hover 区域。修改后在 `BattleScene` 分别检查 Ally 与 Enemy 的 Buff Hover，以及普通卡牌黄色词条仍使用原有二级面板路径。
 
 ## 3. 二级词条 / Keywords
 
@@ -266,6 +297,8 @@ traits 只能使用代码已有枚举值。想复用完全相同的正式机制�
 
 罪卡相关字段为 `isSinCard`、`consumeOnUse`、`maxUseCount`、`sinCardUseRule`、`sinCardCategory`、`guiltGain`。当前 category 为 `Clash`、`Ability`；当前 use rule 为 `UseCount`、`Permanent`。
 
+当前行动槽的卡牌显示时，`CardModeSwitchButton` 同时出现；卡牌区域关闭时，按钮同时隐藏。按钮只作为当前手牌存在时的普通卡 / 罪卡切换入口，`ToggleCardGroup()` 仍保留 Runtime guard。
+
 `guiltGain` 当前有正式使用链路，表示增加负罪感。虽然 `guiltCost` 字段存在，但当前没有足够证据把它写成已确认的正式支付机制；不要依赖 `guiltCost` 设计正式消耗，需要该机制时找 Sol。
 
 ## 9. 修改牌组
@@ -286,11 +319,13 @@ Manifest 引用不存在的 `cardID` 会使正式 Bootstrap 初始化失败。
 
 Card runtime 会在 Bootstrap 时重新创建；`BuffDefinitionLoader` 有静态缓存。因此不要依赖正在运行的战斗自动热更新。
 
+每次进入新的 `Prepare` 后，正式角色 UI 完成绑定时会自动把当前速度最快且仍可用的友方正式 Slot1 作为默认来源，并以战斗位置作为同速时的次级顺序。玩家可以直接改选其他角色/槽位或清空选择；普通刷新不会把选择抢回。默认来源使用现有 Planning 手牌路径，因此需要验证时观察对应角色手牌与 `CardModeSwitchButton` 是否按原规则显示。
+
 分别观察：
 
 - 改基础点数：看卡面范围和实际拼点。
 - 改 Effect：触发对应条件，观察 Buff、资源和伤害。
-- 改 Buff：观察层数、点数/伤害修正和持续时间。
+- 改 Buff：观察层数、强度、点数/伤害修正，以及触发消费和归零保留行为。
 - 改 keywords：查看卡牌 Tooltip / 二级说明。
 - 新增卡：确认进入 manifest 后出现在正式手牌。
 
@@ -311,7 +346,7 @@ Card runtime 会在 Bootstrap 时重新创建；`BuffDefinitionLoader` 有静态
 - `cooldown`
 - 已支持的 `damageFormula`
 - 已存在的 `EffectType`
-- 已存在 Buff 的 `stack/duration`
+- 已存在 Buff 的 `stackDelta` 与可选 `intensityDelta`；生命周期规则改动需同时核对 Buff definition 的 `retainWhenZero` / `showWhenZero` / `consumeRule`
 - 本卡 `keywords`
 - 已有资源规则的数值
 - 设计已经明确要调整现有 `Knife` / `Shooting` 牌组成员时，可以把已经存在的 `cardID` 加入对应现有 Deck Manifest；如果因此出现既有 Regression Test 失败，不自行修改测试，交给 Sol 判断
@@ -406,10 +441,18 @@ Planning 阶段的 Space 永远保留，仍由玩家按下以开始正式执行�
 
 如果以后需要给数字增加背景、图标、FirstStrike 边框或动画，只调整数字显示本身；不要为此改动卡牌安排、行动关系线或执行顺序。
 
+### 14.4 我要验证行动槽卡牌详情 Hover
+
+Hover 已安排的 Ally 或 Enemy 行动槽时，先确认当前卡牌详情正常显示；如果该行动槽存在正式最终 response relation，应同时看到另一侧原本的卡牌详情。单方面行动只显示当前卡牌。
+
+如果同一 Enemy Intent 后来由另一个合法 responder 替换，Hover 应只显示最终 responder 的详情，不应根据 `requestedEnemyIntent` 显示历史 Slot。Enemy 侧已有 Locked 详情时，paired Hover 不得覆盖 Locked 内容；面板位置和现有 Ally / Enemy 布局不应改变。
+
+最短人工验收路径是：在 `BattleScene` 安排一组响应行动，分别 Hover Ally responder、Enemy Intent、无响应行动槽和替换前的旧 Slot，观察双侧详情、最终 responder、Hover Exit 清理以及 Locked 内容是否保持。
+
 ## DOC IMPACT GATE
 
-CodeMap: NO
-Reason: 当前 Runtime 路径和架构没有变化。
+CodeMap: YES
+Reason: Action Slot Card Info Host 新增 paired display state，并消费 BattleActionSlotManager 的最终 response read-only query。
 
 FeatureGuide: YES
 Reason: 本任务就是重写人类操作手册。
@@ -417,5 +460,5 @@ Reason: 本任务就是重写人类操作手册。
 Domain Docs: NO
 Reason: 没有修改 Domain 规则。
 
-Testing Docs: NO
-Reason: 没有改变测试架构或治理规则。
+Testing Docs: YES
+Reason: Mode105 retained runner 新增 Paired Action Slot Hover A-D coverage；本轮未修改测试治理结构。

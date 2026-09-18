@@ -6,8 +6,10 @@ Last Verified: 2026-09-11
 
 ## Current Facts
 
-- Formal Suites: 6 C# owners。
-- Formal Cases: 47 public static bool Cases。
+- Formal Suites: 7 C# owners。
+- Formal Cases: 56 public static bool Cases。
+- Formal Suite owners and case counts: `EnemyIntentTests` 5；`DeckPresetBootstrapTests` 11；`CardDeckManifestTests` 6；`FirstStrikeExecutionTests` 13；`BattlePlanningOrderSnapshotTests` 12；`BattleActionSlotOrderViewTests` 5；`BattleActionSlotPairedHoverTests` 4。
+- Formal Cases total only counts these seven suite owners under `Assets/Tests/Suites`; retained Legacy tests and compatibility wrappers are not counted again。
 - Shared C#: 6。
 - Legacy/Core C#: 34；Legacy Runner 还包含内嵌测试。
 - Active BattleTestMode: 110；当前有对应的 110 个 dispatch 分支。

@@ -218,9 +218,8 @@ public static class CardDataLoader
                         effect.trigger + " / " +
                         effect.effectType + " / " +
                         effect.target + " / " +
-                        effect.buffType + " x" +
-                        effect.stack + "，持续 " +
-                        effect.duration + " 回合"
+                        effect.buffID + " x" +
+                        effect.stackDelta
                     );
                 }
             }

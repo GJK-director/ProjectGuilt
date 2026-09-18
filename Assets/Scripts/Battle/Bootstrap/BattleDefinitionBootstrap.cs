@@ -369,6 +369,8 @@ public static class BattleDefinitionBootstrap
         {
             character.TryConsumeBuffStackAsResource(resourceID, stack, out _);
         }
+
+        character.ClearBuff(resourceID);
     }
 
     public static BattleDefinitionIntentQueueResult CreateIntentQueueForTurn(

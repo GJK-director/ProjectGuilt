@@ -65,6 +65,8 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
         public BattleActionSlotCardInfoHoverRequest hoveredRequest;
         public GameObject lockedSource;
         public BattleActionSlotCardInfoHoverRequest lockedRequest;
+        public GameObject pairedOwnerSource;
+        public BattleActionSlotCardInfoHoverRequest pairedRequest;
         public bool sourcePointerInside;
         public bool panelPointerInside;
         public bool hoverExitPending;
@@ -144,6 +146,27 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
             source != null &&
             (instance.allyState.Tracks(source) ||
                 instance.enemyState.Tracks(source));
+    }
+
+    public static void HandlePairedHover(
+        BattleActionSlotUIView ownerSource,
+        BattleActionSlotCardInfoHoverRequest partnerRequest
+    )
+    {
+        if (instance == null || ownerSource == null)
+        {
+            return;
+        }
+
+        instance.ReceivePairedHover(
+            ownerSource.gameObject,
+            partnerRequest
+        );
+    }
+
+    public static void ClearPairedOwnedBy(GameObject ownerSource)
+    {
+        instance?.ClearPairedOwnedByInternal(ownerSource);
     }
 
     static bool ConsumeSuppressedClickLock(GameObject source)
@@ -285,10 +308,35 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
                 break;
             case BattleActionSlotCardInfoPointerEvent.SourceInvalidated:
                 ClearSource(state, request.source);
+                ClearPairedOwnedByInternal(request.source);
                 break;
         }
 
         RefreshSide(state, request.isEnemySide);
+    }
+
+    void ReceivePairedHover(
+        GameObject ownerSource,
+        BattleActionSlotCardInfoHoverRequest partnerRequest
+    )
+    {
+        if (ownerSource == null)
+        {
+            return;
+        }
+
+        ClearPairedOwnedByInternal(ownerSource);
+        if (partnerRequest == null || partnerRequest.cardState == null)
+        {
+            return;
+        }
+
+        SideDisplayState state = partnerRequest.isEnemySide
+            ? enemyState
+            : allyState;
+        state.pairedOwnerSource = ownerSource;
+        state.pairedRequest = partnerRequest;
+        RefreshSide(state, partnerRequest.isEnemySide);
     }
 
     static void SetHoveredRequest(
@@ -400,7 +448,18 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
     void RefreshSide(SideDisplayState state, bool enemySide)
     {
         BattleActionSlotCardInfoHoverRequest request =
-            state.hoveredRequest ?? state.lockedRequest;
+            state.hoveredRequest ??
+            state.lockedRequest ??
+            state.pairedRequest;
+
+        if (request != null &&
+            request.cardState == null &&
+            object.ReferenceEquals(request, state.pairedRequest))
+        {
+            state.pairedOwnerSource = null;
+            state.pairedRequest = null;
+            request = null;
+        }
         if (request == null || request.cardState == null)
         {
             state.panelPointerInside = false;
@@ -441,6 +500,13 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
             changed = true;
         }
 
+        if (state.pairedRequest != null &&
+            state.pairedOwnerSource == null)
+        {
+            state.pairedRequest = null;
+            changed = true;
+        }
+
         if (changed)
         {
             RefreshSide(state, enemySide);
@@ -450,10 +516,18 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
     void CloseSide(bool enemySide)
     {
         SideDisplayState state = enemySide ? enemyState : allyState;
+        GameObject closingSource = state.hoveredSource ?? state.lockedSource;
+        if (closingSource != null)
+        {
+            ClearPairedOwnedByInternal(closingSource);
+        }
+
         state.hoveredSource = null;
         state.hoveredRequest = null;
         state.lockedSource = null;
         state.lockedRequest = null;
+        state.pairedOwnerSource = null;
+        state.pairedRequest = null;
         state.sourcePointerInside = false;
         state.panelPointerInside = false;
         state.hoverExitPending = false;
@@ -500,7 +574,43 @@ public sealed class BattleActionSlotCardInfoPanelHost : MonoBehaviour
 
         GameObject exitedSource = state.hoveredSource;
         ClearHoveredRequest(state, exitedSource);
+        ClearPairedOwnedByInternal(exitedSource);
         RefreshSide(state, enemySide);
+    }
+
+    void ClearPairedOwnedByInternal(GameObject ownerSource)
+    {
+        if (ownerSource == null)
+        {
+            return;
+        }
+
+        bool allyChanged = ClearPairedState(allyState, ownerSource);
+        bool enemyChanged = ClearPairedState(enemyState, ownerSource);
+        if (allyChanged)
+        {
+            RefreshSide(allyState, false);
+        }
+        if (enemyChanged)
+        {
+            RefreshSide(enemyState, true);
+        }
+    }
+
+    static bool ClearPairedState(
+        SideDisplayState state,
+        GameObject ownerSource
+    )
+    {
+        if (state == null ||
+            state.pairedOwnerSource != ownerSource)
+        {
+            return false;
+        }
+
+        state.pairedOwnerSource = null;
+        state.pairedRequest = null;
+        return true;
     }
 
     void HidePanels()

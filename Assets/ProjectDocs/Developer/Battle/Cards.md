@@ -26,6 +26,12 @@ CardsTest；preset manifest。
 
 Loader → Factory/Bootstrap → CardState → CardUsed/Effects。
 
+## Anger Card Lifecycle
+
+`sin_anger_001` 的 `OnPlay / EnableAngerMechanic` 会启用 Anger mechanic，并在 Anger state 尚不存在时确保 `Anger` canonical state 以 0 层存在；它不会因为使用愤怒卡就直接增加 1 层。后续层数由正式 Anger 规则增加。
+
+带有 `IaiAnger` 的 `sin_iai_001` 在正式使用完成后清空 Anger stacks，但保留 Anger canonical state。Battle reset 的 state 删除属于 Bootstrap 初始化清理，不是 Iai 的消费语义。
+
 ## Damage Distribution
 
 多段伤害由 `CardTestData.damageDistributionMode`、`damageImpactPercents` 和 `damageImpactDelaySeconds` 配置，并由 `BattleResolver.AddDamageImpacts` 建立多个真实 `BattleImpact`。`hpDisplayStageCount` 只负责单个 Impact 的旧 HP 表现分段，不能代替 Gameplay 多段伤害。具体的 Independent / Cumulative 语义、提交顺序和 Damage Number 见 [Damage](Damage.md)。

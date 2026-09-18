@@ -143,6 +143,7 @@ public class BattleSimpleUIController : MonoBehaviour
     private bool hasCompletedNewTurnPresentation;
     private int scenePresentedTurnCycleVersion;
     private bool terminalInteractionStateCleared;
+    private int lastDefaultSourceSelectionTurn = int.MinValue;
     private readonly BattleCardSelectionController cardSelectionController =
         new BattleCardSelectionController();
     private BattleCardInteractionCoordinator cardInteractionCoordinator;
@@ -407,6 +408,7 @@ public class BattleSimpleUIController : MonoBehaviour
 
             lastLog = "正式战斗初始化完成：已进入 Prepare 阶段";
             RefreshView();
+            TrySelectDefaultSourceSlotForCurrentTurn();
             isInitialized = true;
             return true;
         }
@@ -444,6 +446,7 @@ public class BattleSimpleUIController : MonoBehaviour
             }
 
             RefreshView();
+            TrySelectDefaultSourceSlotForCurrentTurn();
             isInitialized = true;
             return true;
         }
@@ -515,7 +518,7 @@ public class BattleSimpleUIController : MonoBehaviour
         BindCharacterStatusSlotInteractions();
         BindCardHandInteractions();
         BindButtonEvents();
-        // 初始化与每场战斗首次进入Prepare都不默认选择角色或展示手牌。
+        // 初始化阶段先完成正式 View / Slot 绑定，默认选择在最终 RefreshView 后处理。
         ClearPlanningSelectionAndHideCards();
         return true;
     }
@@ -2296,6 +2299,7 @@ public class BattleSimpleUIController : MonoBehaviour
         DisableAllCharacterTargetSurfaces();
         ClearSelectedActionState();
         testCardHandView?.ClearCards();
+        SetCardModeSwitchButtonVisible(false);
         testCardView?.SetEmpty();
         actionRelationLineController?.EndCardTargetingPreview();
         actionRelationLineController?.ClearSelectedSlot();
@@ -2637,6 +2641,7 @@ public class BattleSimpleUIController : MonoBehaviour
         }
 
         RefreshView();
+        TrySelectDefaultSourceSlotForCurrentTurn();
         if (result != null && result.advancedToNextTurn)
         {
             LogTurnTransitionDevelopment(
@@ -2705,6 +2710,16 @@ public class BattleSimpleUIController : MonoBehaviour
             ? "完整回合跨帧执行失败"
             : failureMessage;
         RefreshView();
+    }
+
+    private void SetCardModeSwitchButtonVisible(bool visible)
+    {
+        if (qiehuanButton == null)
+        {
+            return;
+        }
+
+        qiehuanButton.gameObject.SetActive(visible);
     }
 
     private void ResetTurnEndPresentationState(bool cancelCoordinator)
@@ -2932,6 +2947,72 @@ public class BattleSimpleUIController : MonoBehaviour
         }
 
         RefreshView();
+        TrySelectDefaultSourceSlotForCurrentTurn();
+    }
+
+    private void TrySelectDefaultSourceSlotForCurrentTurn()
+    {
+        if (runtimeState == null ||
+            runtimeState.IsBattleEnded ||
+            runtimeState.LifecyclePhase != BattleLifecyclePhase.Prepare ||
+            HasCurrentPlan() ||
+            lastDefaultSourceSelectionTurn == runtimeState.currentTurn)
+        {
+            return;
+        }
+
+        lastDefaultSourceSelectionTurn = runtimeState.currentTurn;
+        if (runtimeState.allyUnits == null || runtimeState.allyUnits.Count == 0)
+        {
+            return;
+        }
+
+        List<CharacterData> candidates = new List<CharacterData>();
+        for (int index = 0; index < runtimeState.allyUnits.Count; index++)
+        {
+            CharacterData candidate = runtimeState.allyUnits[index];
+            if (candidate != null)
+            {
+                candidates.Add(candidate);
+            }
+        }
+
+        candidates.Sort((left, right) =>
+        {
+            int speedOrder = right.GetCurrentSpeed().CompareTo(
+                left.GetCurrentSpeed()
+            );
+            if (speedOrder != 0)
+            {
+                return speedOrder;
+            }
+
+            return runtimeState.GetBattlePositionIndex(left).CompareTo(
+                runtimeState.GetBattlePositionIndex(right)
+            );
+        });
+
+        for (int index = 0; index < candidates.Count; index++)
+        {
+            CharacterData candidate = candidates[index];
+            if (candidate.IsDead())
+            {
+                continue;
+            }
+
+            BattleCharacterStatusUIView statusView =
+                GetAllyStatusView(candidate);
+            BattleActionSlotUIView slot1View = statusView?.GetSlotView(0);
+            if (slot1View == null || slot1View.IsEnemySlot)
+            {
+                continue;
+            }
+
+            if (TrySelectActionSlotForPlanning(slot1View))
+            {
+                return;
+            }
+        }
     }
 
     private void RefreshView()
@@ -3291,6 +3372,7 @@ public class BattleSimpleUIController : MonoBehaviour
                 OnCharacterTargetEntered,
                 OnCharacterTargetExited
             );
+            BindPairedHoverResolvers(ally01StatusView);
         }
 
         if (ally02StatusView != null)
@@ -3307,6 +3389,7 @@ public class BattleSimpleUIController : MonoBehaviour
                 OnCharacterTargetEntered,
                 OnCharacterTargetExited
             );
+            BindPairedHoverResolvers(ally02StatusView);
         }
 
         if (enemy01StatusView != null)
@@ -3314,6 +3397,7 @@ public class BattleSimpleUIController : MonoBehaviour
             enemy01StatusView.SetEnemySlotClickHandler(
                 OnEnemyActionSlotClicked
             );
+            BindPairedHoverResolvers(enemy01StatusView);
         }
 
         if (enemy02StatusView != null)
@@ -3321,7 +3405,86 @@ public class BattleSimpleUIController : MonoBehaviour
             enemy02StatusView.SetEnemySlotClickHandler(
                 OnEnemyActionSlotClicked
             );
+            BindPairedHoverResolvers(enemy02StatusView);
         }
+    }
+
+    private void BindPairedHoverResolvers(
+        BattleCharacterStatusUIView statusView
+    )
+    {
+        if (statusView == null)
+        {
+            return;
+        }
+
+        statusView.GetSlotView(0)?.SetPairedHoverRequestResolver(
+            BuildPairedCardInfoRequest
+        );
+        statusView.GetSlotView(1)?.SetPairedHoverRequestResolver(
+            BuildPairedCardInfoRequest
+        );
+    }
+
+    private BattleActionSlotCardInfoHoverRequest BuildPairedCardInfoRequest(
+        BattleActionSlotUIView source
+    )
+    {
+        if (source == null || runtimeState == null)
+        {
+            return null;
+        }
+
+        if (!source.IsEnemySlot)
+        {
+            BattleActionSlot actionSlot = source.BoundActionSlot;
+            BattleEnemyIntent intent = actionSlot?.enemyIntent;
+            BattleActionSlot currentResponseSlot;
+            if (actionSlot == null ||
+                intent == null ||
+                !BattleActionSlotManager.TryFindCurrentResponseSlot(
+                    runtimeState,
+                    intent,
+                    out currentResponseSlot
+                ) ||
+                !object.ReferenceEquals(currentResponseSlot, actionSlot))
+            {
+                return null;
+            }
+
+            BattleCharacterStatusUIView enemyStatusView =
+                GetEnemyStatusView(intent.enemy);
+            int enemyUISlotIndex =
+                BattleCardAssignmentRouter.EnemySlotIndexToUIIndex(
+                    intent.enemySlotIndex
+                );
+            BattleActionSlotUIView enemyView =
+                enemyStatusView?.GetSlotView(enemyUISlotIndex);
+            return enemyView?.BuildCardInfoPanelRequest(
+                BattleActionSlotCardInfoPointerEvent.HoverEnter
+            );
+        }
+
+        BattleEnemyIntent enemyIntent = source.BoundEnemyIntent;
+        BattleActionSlot responderSlot;
+        if (enemyIntent == null ||
+            !BattleActionSlotManager.TryFindCurrentResponseSlot(
+                runtimeState,
+                enemyIntent,
+                out responderSlot
+            ))
+        {
+            return null;
+        }
+
+        BattleCharacterStatusUIView allyStatusView =
+            GetAllyStatusView(responderSlot.owner);
+        BattleActionSlotUIView allyView = allyStatusView?.GetSlotView(
+            responderSlot.slotIndex - 1
+        );
+        return allyView?.BuildCardInfoPanelRequest(
+            BattleActionSlotCardInfoPointerEvent.HoverEnter
+        );
     }
 
     private void BindCardHandInteractions()
@@ -3958,6 +4121,7 @@ public class BattleSimpleUIController : MonoBehaviour
             selectedCharacter.battleCards == null)
         {
             testCardHandView.ClearCards();
+            SetCardModeSwitchButtonVisible(false);
             return;
         }
 
@@ -3971,6 +4135,7 @@ public class BattleSimpleUIController : MonoBehaviour
             enemy01,
             cards
         );
+        SetCardModeSwitchButtonVisible(true);
     }
 
     private List<BattleCardState> FindPlanningHandCards(

@@ -125,12 +125,7 @@ public static class BattleGenericAttackVsDodgeTests
         const string resourceID = "Mode93AttackResource";
         fixture.attackActor.AddBuff(
             resourceID,
-            "Mode93 Attack Resource",
-            BuffCategory.AbilityBuff,
-            2,
-            -1,
-            BattleTiming.TurnEnd,
-            BuffExpireRule.Permanent
+            2
         );
         fixture.attackCard.cardData.resourceRule = new CardResourceRuleData
         {
@@ -236,12 +231,7 @@ public static class BattleGenericAttackVsDodgeTests
         const string resourceID = "Mode93LongRangeBullet";
         fixture.attackActor.AddBuff(
             resourceID,
-            "Mode93 LongRange Bullet",
-            BuffCategory.AbilityBuff,
-            1,
-            -1,
-            BattleTiming.TurnEnd,
-            BuffExpireRule.Permanent
+            1
         );
         fixture.attackCard.cardData.resourceRule = new CardResourceRuleData
         {
@@ -607,12 +597,7 @@ public static class BattleGenericAttackVsDodgeTests
     {
         actor.AddBuff(
             resourceID,
-            resourceID,
-            BuffCategory.AbilityBuff,
-            2,
-            -1,
-            BattleTiming.TurnEnd,
-            BuffExpireRule.Permanent
+            2
         );
         card.cardData.resourceRule = new CardResourceRuleData
         {

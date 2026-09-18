@@ -79,12 +79,13 @@ public static class ActionOrderExecutionTests
         bool[] results =
         {
             P6Slot1UnilateralPrecedesP6Slot2ResponseToE5(),
-            SameSpeedResponsePrecedesUnilateralAction(),
-            SlowerOriginalTargetResponseUsesEnemyOrderingActor(),
+            SameSpeedUnilateralActionPrecedesResponse(),
+            EqualEffectiveSpeedUnrespondedEnemyActionPrecedesResponse(),
             SameSpeedSlot1UsesBattlePosition(),
             SlotPriorityPrecedesBattlePosition(),
             SameSpeedActionsGroupBySlotThenBattlePosition(),
-            LaterSameSpeedResponsePrecedesEarlierResponse(),
+            SameSpeedResponsesUseSlotOrderInsteadOfAssignmentSequence(),
+            SameSpeedFreeActionsUseSlotOrder(),
             FirstStrikePrecedesFasterNormalAction(),
             LaterFirstStrikeAssignmentPrecedesEarlierAssignment(),
             AbilityUsesNormalSpeedOrdering(),
@@ -94,12 +95,13 @@ public static class ActionOrderExecutionTests
         string[] names =
         {
             "P6 Slot1 unilateral before P6 Slot2 response to E5",
-            "Same-speed response before unilateral action",
-            "Slower original-target response orders by enemy",
+            "Same-speed unilateral action before response",
+            "Equal effective speed unresponded enemy action before responded action",
             "Same-speed Slot1 uses battle position",
             "Slot priority before battle position",
             "Same-speed actions group by slot then battle position",
-            "Later same-speed response before earlier response",
+            "Same-speed responses use slot order instead of assignment sequence",
+            "Same-speed FreeActions use slot order",
             "FirstStrike before faster Normal action",
             "Later FirstStrike assignment before earlier assignment",
             "Ability uses Normal speed ordering",
@@ -139,26 +141,28 @@ public static class ActionOrderExecutionTests
             object.ReferenceEquals(plan.executionItems[1].orderingActor, player);
     }
 
-    static bool SameSpeedResponsePrecedesUnilateralAction()
+    static bool SameSpeedUnilateralActionPrecedesResponse()
     {
         CharacterData player = Unit("order_b_player", 5);
         CharacterData enemy = Unit("order_b_enemy", 5);
         BattleEnemyIntent intent = AttackIntent(enemy, player, "order_b_enemy_attack", 1, 1);
-        BattleActionSlot unilateral = FreeSlot(player, 1, CardType.Attack, "order_b_unilateral", false, enemy);
-        BattleActionSlot response = ResponseSlot(player, 2, CardType.Attack, "order_b_response", false, intent, 2);
+        BattleActionSlot response = ResponseSlot(player, 1, CardType.Attack, "order_b_response", false, intent, 2);
+        BattleActionSlot unilateral = FreeSlot(player, 2, CardType.Attack, "order_b_unilateral", false, enemy);
         BattleExecutionPlan plan = Plan(
             player, null, enemy, null,
-            new List<BattleActionSlot> { unilateral, response },
+            new List<BattleActionSlot> { response, unilateral },
             new List<BattleEnemyIntent> { intent }
         );
 
         return HasTwoItems(plan) &&
-            object.ReferenceEquals(plan.executionItems[0].actionSlot, response) &&
-            plan.executionItems[0].responsePriority == 0 &&
-            object.ReferenceEquals(plan.executionItems[1].actionSlot, unilateral);
+            plan.executionItems[0].executionType == BattleExecutionItemType.FreeAction &&
+            object.ReferenceEquals(plan.executionItems[0].actionSlot, unilateral) &&
+            plan.executionItems[1].executionType == BattleExecutionItemType.RespondedEnemyIntent &&
+            object.ReferenceEquals(plan.executionItems[1].actionSlot, response) &&
+            plan.executionItems[1].responsePriority == 0;
     }
 
-    static bool SlowerOriginalTargetResponseUsesEnemyOrderingActor()
+    static bool EqualEffectiveSpeedUnrespondedEnemyActionPrecedesResponse()
     {
         CharacterData player = Unit("order_c_player", 3);
         CharacterData enemy = Unit("order_c_enemy", 5);
@@ -172,11 +176,14 @@ public static class ActionOrderExecutionTests
         );
 
         return HasTwoItems(plan) &&
-            object.ReferenceEquals(plan.executionItems[0].enemyIntent, responseIntent) &&
-            object.ReferenceEquals(plan.executionItems[0].orderingActor, enemy) &&
-            plan.executionItems[0].actionSlotOrder == 1 &&
-            object.ReferenceEquals(plan.executionItems[1].enemyIntent, secondIntent) &&
-            plan.executionItems[1].actionSlotOrder == 2;
+            plan.executionItems[0].executionType == BattleExecutionItemType.UnrespondedEnemyIntent &&
+            object.ReferenceEquals(plan.executionItems[0].enemyIntent, secondIntent) &&
+            plan.executionItems[0].actionSlotOrder == 2 &&
+            plan.executionItems[1].executionType == BattleExecutionItemType.RespondedEnemyIntent &&
+            object.ReferenceEquals(plan.executionItems[1].enemyIntent, responseIntent) &&
+            object.ReferenceEquals(plan.executionItems[1].actionSlot, response) &&
+            object.ReferenceEquals(plan.executionItems[1].orderingActor, enemy) &&
+            plan.executionItems[1].actionSlotOrder == 1;
     }
 
     static bool SameSpeedSlot1UsesBattlePosition()
@@ -354,27 +361,51 @@ public static class ActionOrderExecutionTests
         return true;
     }
 
-    static bool LaterSameSpeedResponsePrecedesEarlierResponse()
+    static bool SameSpeedResponsesUseSlotOrderInsteadOfAssignmentSequence()
     {
-        CharacterData ally1 = Unit("order_g_ally_1", 5);
-        CharacterData ally2 = Unit("order_g_ally_2", 5);
+        CharacterData actor = Unit("order_g_actor", 5);
         CharacterData enemy1 = Unit("order_g_enemy_1", 5);
         CharacterData enemy2 = Unit("order_g_enemy_2", 5);
-        BattleEnemyIntent intentA = AttackIntent(enemy1, ally1, "order_g_intent_a", 1, 1);
-        BattleEnemyIntent intentB = AttackIntent(enemy2, ally2, "order_g_intent_b", 1, 2);
-        BattleActionSlot responseA = ResponseSlot(ally1, 1, CardType.Attack, "order_g_response_a", false, intentA, 10);
-        BattleActionSlot responseB = ResponseSlot(ally2, 1, CardType.Attack, "order_g_response_b", false, intentB, 20);
+        BattleEnemyIntent intentA = AttackIntent(enemy1, actor, "order_g_intent_a", 1, 1);
+        BattleEnemyIntent intentB = AttackIntent(enemy2, actor, "order_g_intent_b", 2, 2);
+        BattleActionSlot responseA = ResponseSlot(actor, 1, CardType.Attack, "order_g_response_a", false, intentA, 10);
+        BattleActionSlot responseB = ResponseSlot(actor, 2, CardType.Attack, "order_g_response_b", false, intentB, 20);
         BattleExecutionPlan plan = Plan(
-            ally1, ally2, enemy1, enemy2,
-            new List<BattleActionSlot> { responseA, responseB },
+            actor, null, enemy1, enemy2,
+            new List<BattleActionSlot> { responseB, responseA },
             new List<BattleEnemyIntent> { intentA, intentB }
         );
 
         return HasTwoItems(plan) &&
-            object.ReferenceEquals(plan.executionItems[0].enemyIntent, intentB) &&
-            plan.executionItems[0].actionAssignmentSequence == 20 &&
-            object.ReferenceEquals(plan.executionItems[1].enemyIntent, intentA) &&
-            plan.executionItems[1].actionAssignmentSequence == 10;
+            object.ReferenceEquals(plan.executionItems[0].actionSlot, responseA) &&
+            object.ReferenceEquals(plan.executionItems[0].enemyIntent, intentA) &&
+            plan.executionItems[0].actionSlotOrder == 1 &&
+            plan.executionItems[0].actionAssignmentSequence == 10 &&
+            object.ReferenceEquals(plan.executionItems[1].actionSlot, responseB) &&
+            object.ReferenceEquals(plan.executionItems[1].enemyIntent, intentB) &&
+            plan.executionItems[1].actionSlotOrder == 2 &&
+            plan.executionItems[1].actionAssignmentSequence == 20;
+    }
+
+    static bool SameSpeedFreeActionsUseSlotOrder()
+    {
+        CharacterData actor = Unit("order_g_free_actor", 5);
+        CharacterData enemy = Unit("order_g_free_enemy", 5);
+        BattleActionSlot slot1 = FreeSlot(actor, 1, CardType.Attack, "order_g_free_slot1", false, enemy);
+        BattleActionSlot slot2 = FreeSlot(actor, 2, CardType.Attack, "order_g_free_slot2", false, enemy);
+        BattleExecutionPlan plan = Plan(
+            actor, null, enemy, null,
+            new List<BattleActionSlot> { slot2, slot1 },
+            new List<BattleEnemyIntent>()
+        );
+
+        return HasTwoItems(plan) &&
+            plan.executionItems[0].executionType == BattleExecutionItemType.FreeAction &&
+            object.ReferenceEquals(plan.executionItems[0].actionSlot, slot1) &&
+            plan.executionItems[0].actionSlotOrder == 1 &&
+            plan.executionItems[1].executionType == BattleExecutionItemType.FreeAction &&
+            object.ReferenceEquals(plan.executionItems[1].actionSlot, slot2) &&
+            plan.executionItems[1].actionSlotOrder == 2;
     }
 
     static bool FirstStrikePrecedesFasterNormalAction()

@@ -176,11 +176,6 @@ public static class CharacterDefinitionLoader
                 return false;
             }
 
-            if (initialBuff.duration != -1 && initialBuff.duration <= 0)
-            {
-                errorMessage = ownerID + " 的 initialBuff " + initialBuff.buffID + " duration 必须为-1或大于0";
-                return false;
-            }
         }
 
         return true;

@@ -109,12 +109,20 @@ public static class BuffDefinitionLoader
     {
         if (string.IsNullOrEmpty(definition.consumeRule))
         {
-            definition.consumeRule = "None";
+            definition.consumeRule = BuffConsumeRule.None;
         }
+
+        definition.maxIntensity = Mathf.Max(0, definition.maxIntensity);
+        definition.maxStacks = Mathf.Max(0, definition.maxStacks);
 
         if (definition.description == null)
         {
             definition.description = "";
+        }
+
+        if (definition.displayName == null)
+        {
+            definition.displayName = definition.buffID;
         }
     }
 }

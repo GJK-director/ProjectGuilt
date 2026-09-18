@@ -294,16 +294,10 @@ public static class SinCardConditionChecker
         return (float)character.currentHP / character.maxHP * 100f;
     }
 
-    // GetBuffStack = 获取指定 Buff 的总层数
-    // 如果同一个 buffID 有多个 BuffData，就把层数加起来
+    // GetBuffStack = 获取指定 Buff 的 canonical state 层数
     static int GetBuffStack(CharacterData character, string buffID)
     {
         if (character == null)
-        {
-            return 0;
-        }
-
-        if (character.buffs == null || character.buffs.Count == 0)
         {
             return 0;
         }
@@ -313,25 +307,7 @@ public static class SinCardConditionChecker
             return 0;
         }
 
-        int totalStack = 0;
-
-        foreach (BuffData buff in character.buffs)
-        {
-            if (buff == null)
-            {
-                continue;
-            }
-
-            if (buff.buffID == buffID)
-            {
-                if (buff.stack > 0)
-                {
-                    totalStack += buff.stack;
-                }
-            }
-        }
-
-        return totalStack;
+        return character.GetBuffStack(buffID);
     }
     // GetConditionTarget = 获取条件检查目标
     static CharacterData GetConditionTarget(

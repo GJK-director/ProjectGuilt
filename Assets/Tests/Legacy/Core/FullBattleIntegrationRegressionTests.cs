@@ -557,7 +557,7 @@ public static class FullBattleIntegrationRegressionTests
             9
         );
         const string resource = "Mode103FullBlockResource";
-        fixture.attack.actor.AddBuff(resource, 2, -1);
+        fixture.attack.actor.AddBuff(resource, 2);
         fixture.attack.cardState.cardData.resourceRule = CreateResourceRule(resource);
         BattleResolveResult result = BattleResolver.ResolveAttackVsDefense(
             fixture.attack,
@@ -579,7 +579,7 @@ public static class FullBattleIntegrationRegressionTests
             9
         );
         const string resource = "Mode103DodgeResource";
-        fixture.attack.actor.AddBuff(resource, 2, -1);
+        fixture.attack.actor.AddBuff(resource, 2);
         fixture.attack.cardState.cardData.resourceRule = CreateResourceRule(resource);
         BattleResolveResult result = BattleResolver.ResolveAttackVsDodge(
             fixture.attack,

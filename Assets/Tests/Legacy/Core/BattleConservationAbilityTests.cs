@@ -134,7 +134,7 @@ public static class BattleConservationAbilityTests
         BattleResolveResult result = BattleResolver.ResolveFreeAction(slot);
         return result != null && result.isSuccess &&
             BattleConservationRules.IsActive(owner) &&
-            BattleConservationRules.HasPendingPointGrant(owner) &&
+            owner.GetBuffStack(BattleResourceID.Conservation) == 1 &&
             !state.hasConservationPointBonus;
     }
 
@@ -162,7 +162,7 @@ public static class BattleConservationAbilityTests
         bool assigned = BattleConservationRules.TryAssignPendingBonus(owner, state);
         return assigned && state.hasConservationPointBonus &&
             state.conservationPointBonus == 3 &&
-            !BattleConservationRules.HasPendingPointGrant(owner);
+            BattleConservationRules.IsActive(owner);
     }
 
     static bool VerifyCardStateOwnership(CardTestData source)
@@ -242,7 +242,7 @@ public static class BattleConservationAbilityTests
             return false;
         }
         return shot.conservationPointBonus == 4 &&
-            !BattleConservationRules.HasPendingPointGrant(player) &&
+            BattleConservationRules.IsActive(player) &&
             session.RollNextAttempt() && session.SideAPoint == 9;
     }
 
@@ -259,7 +259,7 @@ public static class BattleConservationAbilityTests
         slot.AssignResponse(player, shot, intent, false);
         BattleClashSession session = BattleResolver.CreateRespondedAttackClashSession(slot, intent);
         return session != null && session.RollNextAttempt() && session.IsFinalized &&
-            !BattleConservationRules.HasPendingPointGrant(player);
+            BattleConservationRules.IsActive(player);
     }
 
     static bool VerifyNonShootingDoesNotConsume()
@@ -269,8 +269,8 @@ public static class BattleConservationAbilityTests
         BattleConservationRules.Activate(owner);
         BattleCardState melee = State(owner, FixedAttack("mode113_melee", 5), "mode113_melee");
         bool rejected = !BattleConservationRules.TryAssignPendingBonus(owner, melee);
-        bool stillPending = BattleConservationRules.HasPendingPointGrant(owner);
-        return rejected && stillPending;
+        bool stillActive = BattleConservationRules.IsActive(owner);
+        return rejected && stillActive;
     }
 
     static bool VerifyKillReload(CardTestData source)
@@ -334,8 +334,8 @@ public static class BattleConservationAbilityTests
         CharacterData owner = Unit("mode113_cleanup");
         BattleConservationRules.Activate(owner);
         BattleConservationRules.ResolveTurnEnd(owner);
-        return !BattleConservationRules.IsActive(owner) &&
-            !BattleConservationRules.HasPendingPointGrant(owner);
+        return BattleConservationRules.IsActive(owner) &&
+            owner.GetBuffStack(BattleResourceID.Conservation) == 1;
     }
 
     static bool VerifyReloadThenTurnEnd(CardTestData closeSource, CardTestData allInSource)
@@ -490,4 +490,3 @@ public static class BattleConservationAbilityTests
         return null;
     }
 }
-

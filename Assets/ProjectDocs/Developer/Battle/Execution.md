@@ -34,7 +34,7 @@ Lifecycle → Plan → Runner/Executor → Resolver + Presentation completion。
 
 Normal 层按 effective speed 降序排序。Responded Item 的 `effectiveSpeed = max(response actor speed, enemy speed)`。当 response actor speed > enemy speed 时，`orderingActor` 为 response actor，`orderingSlot` 为 response player slot；当 response actor speed <= enemy speed 时，`orderingActor` 为 enemy，`orderingSlot` 为 enemy `enemySlotIndex`。只有 response actor speed == enemy speed 的 true equal-speed response 才有 `responsePriority = 0`，其他为 `1`。
 
-正式 comparator 依次使用：1. `priorityTier`；2. 双方均为 FirstStrike 时 `firstStrikeSourceSequence` descending；3. `effectiveSpeed` descending；4. `responsePriority` ascending；5. 双方 `responsePriority == 0` 时 `actionAssignmentSequence` descending；6. `actionSlotOrder` ascending；7. `actorPositionOrder` ascending；8. `stableOrder`。`actorPositionOrder` 在 `runtimeState` 可用时来自 `runtimeState.GetBattlePositionIndex(...)`。
+正式 comparator 依次使用：1. `priorityTier`；2. 双方均为 FirstStrike 时 `firstStrikeSourceSequence` descending；3. `effectiveSpeed` descending；4. 当双方均为 Normal 时，按执行类型优先级 ascending：`FreeAction` 与 `UnrespondedEnemyIntent` 为 unilateral/unopposed，优先级 `0`；`RespondedEnemyIntent` 为 responded，优先级 `1`；5. `actionSlotOrder` ascending；6. `actorPositionOrder` ascending；7. `stableOrder`。`actorPositionOrder` 在 `runtimeState` 可用时来自 `runtimeState.GetBattlePositionIndex(...)`。Normal comparator 不使用 `responsePriority` 或 `actionAssignmentSequence` 决定响应与 unilateral 的先后；FirstStrike 仍保留既有后续 metadata tie-break。
 
 正式 tier 只有 FirstStrike / Normal。普通 Ability 属于 Normal，Ability + FirstStrike 属于 FirstStrike；Responded Pair 任一参与卡带 FirstStrike，整个 Pair 进入 FirstStrike tier，pairing 不拆。对拥有 player `assignmentSequence` 的 FirstStrike，后安排者优先；enemy prefilled FirstStrike 没有 player sequence 时，继续使用后续确定性排序键。
 
@@ -45,6 +45,10 @@ Normal 层按 effective speed 降序排序。Responded Item 的 `effectiveSpeed 
 `BattlePlanningOrderSnapshot` 只读地复用 `BattleActionOrderResolver`，为 Planning UI 提供 display order，不改变 `BattleActionSlot`、`BattleEnemyIntent` 或 `BattleRuntimeState`。Ally empty 返回 `null`；Ally filled but Planning inactive 返回 `0`；active scheduled candidate 返回 positive。Enemy active Attack 返回 positive；unresponded Defense / Dodge 返回 `0`。Formal Responded Pair 中，Ally responder 与 Enemy Intent 必须共享同一个 positive order，不论 Responded 内卡型是 Attack / Defense / Dodge。
 
 `0` 表示不作为独立 active Planning queue item，不代表 Runtime 永远不会参与 interaction，也不消耗 positive numbering。正整数始终连续，例如 `0, 1, 2`，不是 `0, 2, 3`。
+
+## Continuous Dodge Continuation Selection
+
+Active Continuous Dodge 是已经开始但尚未 finalize 的同一次 Card Use。后续 Enemy Intent 选择 active Dodge 时，属于同一次 deferred use 的 continuation，不重新执行普通 Card Play Eligibility；首次 `CardUsed` 产生的 cooldown 不阻止这次 continuation，也不再次提交 `CardUsed` 或重新设置 cooldown。普通未激活的 Dodge 和其他卡牌仍严格遵守普通 cooldown 与 `EvaluateCardEligibility` 规则。
 
 ## Impact / Completion Boundary
 

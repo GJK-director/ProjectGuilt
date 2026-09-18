@@ -19,19 +19,13 @@ public class CardEffectData
     public CardEffectConditionData[] conditions;
     public CardEffectFilterData[] filters;
     public CardEffectFormulaData formula;
-    // buffName / buffCategory / checkTiming / expireRule are legacy compatibility fields.
-    // New ApplyBuff JSON should only need buffType, stack, duration and schedule fields.
-    public string buffType;      // 状态ID，例如 Strength
-    public string buffName;      // 状态中文名，例如 强壮
-    public string buffCategory;  // 状态分类：UpBuff / Debuff / AbilityBuff
+    // ApplyBuff mutation fields.
+    public string buffID;
+    public int stackDelta;
+    public int intensityDelta;
+    public bool hasIntensityDelta;
 
     public int value;            // 通用数值
-    public int stack;            // 层数
-    public int duration;         // 持续时间
-
-    public string checkTiming;   // Buff 检测阶段
-    public string expireRule;    // Buff 消失规则
-
     public string applyTiming;   // 生效方式：Immediate / Delayed
     public int delayTurns;       // 延迟几个回合后生效
     public int applyTimes;       // 总共生效几次

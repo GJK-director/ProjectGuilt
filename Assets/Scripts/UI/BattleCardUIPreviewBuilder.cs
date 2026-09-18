@@ -306,7 +306,7 @@ public static class BattleCardUIPreviewBuilder
 
             if (effect.effectType == CardEffectType.ApplyBuff)
             {
-                AppendLine(builder, GetTimingDisplayName(effect.trigger) + "：" + GetTargetDisplayName(effect.target) + "获得 " + effect.buffType + " x" + effect.stack + "。");
+                AppendLine(builder, GetTimingDisplayName(effect.trigger) + "：" + GetTargetDisplayName(effect.target) + "获得 " + effect.buffID + " x" + effect.stackDelta + "。");
                 continue;
             }
 
@@ -405,7 +405,7 @@ public static class BattleCardUIPreviewBuilder
 
             BuffDefinitionData definition;
 
-            if (!BuffDefinitionLoader.TryGetDefinition(effect.buffType, out definition) || definition == null)
+            if (!BuffDefinitionLoader.TryGetDefinition(effect.buffID, out definition) || definition == null)
             {
                 continue;
             }
@@ -420,7 +420,9 @@ public static class BattleCardUIPreviewBuilder
                 continue;
             }
 
-            modifier += effect.stack * definition.valuePerStack;
+            int effectIntensity = definition.defaultIntensity +
+                (effect.hasIntensityDelta ? effect.intensityDelta : 0);
+            modifier += effectIntensity;
         }
 
         return Mathf.RoundToInt(modifier);
@@ -440,7 +442,7 @@ public static class BattleCardUIPreviewBuilder
         return timingMatches &&
             effect.effectType == CardEffectType.ApplyBuff &&
             effect.target == CardTargetType.Self &&
-            !string.IsNullOrEmpty(effect.buffType);
+            !string.IsNullOrEmpty(effect.buffID);
     }
 
     static bool DoesStatAffectCardPoint(CardTestData cardData, string targetStat)

@@ -37,6 +37,7 @@ public class BattleCardState
     // 节约只属于这张卡牌实例的一次行动，不写入 CardTestData 或角色点数 Buff。
     public int conservationPointBonus;
     public bool hasConservationPointBonus;
+    public bool conservationPointBonusAssigned;
     public bool conservationKillReloadArmed;
 
     // Borrowed for this Action's roll; character ownership ends only at CardUsed.
@@ -116,6 +117,7 @@ public class BattleCardState
         pendingIaiAngerClear = false;
         conservationPointBonus = 0;
         hasConservationPointBonus = false;
+        conservationPointBonusAssigned = false;
         conservationKillReloadArmed = false;
         borrowedBreathPointBonus = 0;
         borrowedBreathGeneration = 0;

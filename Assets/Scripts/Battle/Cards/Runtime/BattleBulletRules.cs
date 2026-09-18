@@ -49,7 +49,7 @@ public static class BattleBulletRules
     {
         if (delta > 0)
         {
-            character.AddBuff(BattleResourceID.Bullet, delta, -1);
+            character.AddBuff(BattleResourceID.Bullet, delta);
             return;
         }
 
@@ -69,7 +69,6 @@ public sealed class BattlePendingState
     public int nextUsedAttackPointBonus;
     public long breathGeneration;
     public bool reloadAtTurnEnd;
-    public bool conservationPointGrant;
 }
 
 public static class BattlePendingRules
@@ -140,7 +139,7 @@ public static class BattleModificationRules
             return;
         }
 
-        character.AddBuff(BattleResourceID.Modification, 1, -1);
+        character.AddBuff(BattleResourceID.Modification, 1);
         ClampToCapacity(character);
     }
 
@@ -173,7 +172,7 @@ public static class BattleModificationRules
 
 }
 
-// 节约规则只保存本回合的激活、单次卡实例转移和回合末结算。
+// 节约规则只保存实例转移、卡牌正式使用消费和回合末结算。
 public static class BattleConservationRules
 {
     public static bool IsActive(CharacterData character)
@@ -189,16 +188,7 @@ public static class BattleConservationRules
             return;
         }
 
-        if (!IsActive(character))
-        {
-            character.AddBuff(BattleResourceID.Conservation, 1, -1);
-        }
-        character.conservationPointGrantPending = true;
-    }
-
-    public static bool HasPendingPointGrant(CharacterData character)
-    {
-        return character != null && character.conservationPointGrantPending;
+        character.AddBuff(BattleResourceID.Conservation, 1);
     }
 
     public static bool IsShootingAttack(BattleCardState cardState)
@@ -230,17 +220,18 @@ public static class BattleConservationRules
         BattleCardState cardState
     )
     {
-        if (!HasPendingPointGrant(character) || !IsShootingAttack(cardState) ||
-            cardState.owner != character || cardState.hasConservationPointBonus)
+        if (!IsActive(character) || !IsShootingAttack(cardState) ||
+            cardState.owner != character ||
+            cardState.conservationPointBonusAssigned)
         {
             return false;
         }
 
         int bonus = GetPointBonusForBullet(BattleBulletRules.GetBullet(character));
         cardState.conservationPointBonus = bonus;
+        cardState.conservationPointBonusAssigned = true;
         cardState.hasConservationPointBonus = bonus > 0;
         cardState.conservationKillReloadArmed = bonus > 0;
-        character.conservationPointGrantPending = false;
         return true;
     }
 
@@ -266,6 +257,20 @@ public static class BattleConservationRules
             BattleBulletRules.ReloadToCapacity(context.user);
             context.cardState.conservationKillReloadArmed = false;
             return;
+        }
+
+        if (context.timing == BattleTiming.CardUsed &&
+            context.user != null &&
+            context.cardState != null &&
+            context.cardState.owner == context.user &&
+            context.cardState.cardUsedCommittedForCurrentAction &&
+            IsShootingAttack(context.cardState))
+        {
+            context.user.ConsumeBuffStackByRule(
+                BattleResourceID.Conservation,
+                BuffConsumeRule.NextEligibleShootingCardUsed,
+                1
+            );
         }
 
         if (context.timing == BattleTiming.TurnEnd)
@@ -301,7 +306,6 @@ public static class BattleConservationRules
         {
             character.TakeDamage(damage);
         }
-        Clear(character);
         return damage;
     }
 
@@ -312,15 +316,6 @@ public static class BattleConservationRules
             return;
         }
 
-        int stack = character.GetBuffStack(BattleResourceID.Conservation);
-        if (stack > 0)
-        {
-            character.TryConsumeBuffStackAsResource(
-                BattleResourceID.Conservation,
-                stack,
-                out _
-            );
-        }
-        character.conservationPointGrantPending = false;
+        character.ClearBuff(BattleResourceID.Conservation);
     }
 }

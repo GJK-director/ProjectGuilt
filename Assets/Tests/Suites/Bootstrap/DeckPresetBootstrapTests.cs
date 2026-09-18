@@ -451,7 +451,7 @@ public static class DeckPresetBootstrapTests
                     {
                         buffID = buff.buffID,
                         stack = buff.stack,
-                        duration = buff.duration
+                        intensity = buff.intensity
                     });
                 }
             }
@@ -509,7 +509,7 @@ public static class DeckPresetBootstrapTests
                 continue;
             }
             if (a.buffID != b.buffID || a.stack != b.stack ||
-                a.duration != b.duration)
+                a.intensity != b.intensity)
             {
                 return false;
             }

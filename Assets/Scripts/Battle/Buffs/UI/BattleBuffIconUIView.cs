@@ -11,7 +11,6 @@ public class BattleBuffIconUIView : MonoBehaviour,
 {
     [SerializeField] private Image iconImage;
     [SerializeField] private TMP_Text stackText;
-    [SerializeField] private TMP_Text decayText;
 
     private bool isOverflow;
     private int overflowHiddenCount;
@@ -37,14 +36,14 @@ public class BattleBuffIconUIView : MonoBehaviour,
     public void SetBuff(
         Sprite iconSprite,
         int stack,
-        int endTurnDelta = 0,
         BattleSecondaryInfoContent infoContent = null,
-        string infoKey = null
+        string infoKey = null,
+        bool showWhenZero = false
     )
     {
         hasExplicitVisualState = true;
 
-        if (stack <= 0)
+        if (stack < 0 || (stack == 0 && !showWhenZero))
         {
             SetEmpty();
             return;
@@ -74,12 +73,6 @@ public class BattleBuffIconUIView : MonoBehaviour,
             stackText.text = stack.ToString();
         }
 
-        if (decayText != null)
-        {
-            bool showDecay = endTurnDelta < 0;
-            decayText.gameObject.SetActive(showDecay);
-            decayText.text = showDecay ? endTurnDelta.ToString() : "";
-        }
     }
 
     public void SetOverflow(
@@ -116,11 +109,6 @@ public class BattleBuffIconUIView : MonoBehaviour,
                 (prefix ?? string.Empty) + hiddenCount;
         }
 
-        if (decayText != null)
-        {
-            decayText.text = "";
-            decayText.gameObject.SetActive(false);
-        }
     }
 
     public void SetOverflowClickHandler(Action<int> handler)
@@ -130,13 +118,11 @@ public class BattleBuffIconUIView : MonoBehaviour,
 
     internal void ConfigureTestVisuals(
         Image image,
-        TMP_Text stack,
-        TMP_Text decay
+        TMP_Text stack
     )
     {
         iconImage = image;
         stackText = stack;
-        decayText = decay;
         SetEmpty();
     }
 
@@ -198,12 +184,6 @@ public class BattleBuffIconUIView : MonoBehaviour,
         {
             stackText.text = "";
             stackText.gameObject.SetActive(false);
-        }
-
-        if (decayText != null)
-        {
-            decayText.text = "";
-            decayText.gameObject.SetActive(false);
         }
 
         gameObject.SetActive(false);

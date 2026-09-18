@@ -385,20 +385,34 @@ public static class BattleActionOrderResolver
             return result;
         }
 
-        result = left.responsePriority.CompareTo(right.responsePriority);
-        if (result != 0)
+        if (left.priorityTier == BattleExecutionPriorityTier.Normal &&
+            right.priorityTier == BattleExecutionPriorityTier.Normal)
         {
-            return result;
-        }
-
-        if (left.responsePriority == 0 && right.responsePriority == 0)
-        {
-            result = right.actionAssignmentSequence.CompareTo(
-                left.actionAssignmentSequence
+            result = GetNormalExecutionTypePriority(left.executionType).CompareTo(
+                GetNormalExecutionTypePriority(right.executionType)
             );
             if (result != 0)
             {
                 return result;
+            }
+        }
+        else
+        {
+            result = left.responsePriority.CompareTo(right.responsePriority);
+            if (result != 0)
+            {
+                return result;
+            }
+
+            if (left.responsePriority == 0 && right.responsePriority == 0)
+            {
+                result = right.actionAssignmentSequence.CompareTo(
+                    left.actionAssignmentSequence
+                );
+                if (result != 0)
+                {
+                    return result;
+                }
             }
         }
 
@@ -415,5 +429,14 @@ public static class BattleActionOrderResolver
         }
 
         return left.stableOrder.CompareTo(right.stableOrder);
+    }
+
+    static int GetNormalExecutionTypePriority(
+        BattleExecutionItemType executionType
+    )
+    {
+        return executionType == BattleExecutionItemType.RespondedEnemyIntent
+            ? 1
+            : 0;
     }
 }

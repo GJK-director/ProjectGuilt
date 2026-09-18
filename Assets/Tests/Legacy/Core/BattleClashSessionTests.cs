@@ -323,25 +323,15 @@ public static class BattleClashSessionTests
         );
         AddInitializationProbeEffects(playerAttack);
         AddInitializationProbeEffects(enemyAttack);
-        player.AddBuff("NextClashPointUp", 1, 1);
-        enemy.AddBuff("NextClashPointUp", 1, 1);
+        player.AddBuff("NextClashPointUp", 1);
+        enemy.AddBuff("NextClashPointUp", 1);
         player.AddBuff(
             "Clash80GPlayerProbe",
-            "Clash80GPlayerProbe",
-            "AbilityBuff",
-            1,
-            2,
-            BattleTiming.ClashStart,
-            "DurationDown"
+            1
         );
         enemy.AddBuff(
             "Clash80GEnemyProbe",
-            "Clash80GEnemyProbe",
-            "AbilityBuff",
-            1,
-            2,
-            BattleTiming.ClashStart,
-            "DurationDown"
+            1
         );
 
         BattleEnemyIntent intent = CreateIntent(
@@ -366,8 +356,8 @@ public static class BattleClashSessionTests
         bool initializationState =
             player.GetBuffStack("Bullet") == 2 &&
             enemy.GetBuffStack("Bullet") == 2 &&
-            GetBuffDuration(player, "Clash80GPlayerProbe") == 1 &&
-            GetBuffDuration(enemy, "Clash80GEnemyProbe") == 1 &&
+            player.GetBuffStack("Clash80GPlayerProbe") == 1 &&
+            enemy.GetBuffStack("Clash80GEnemyProbe") == 1 &&
             playerPointSnapshot.nextClashPointStack == 1 &&
             enemyPointSnapshot.nextClashPointStack == 1;
 
@@ -381,8 +371,8 @@ public static class BattleClashSessionTests
             enemy.GetBuffStack("Bullet") == 2 &&
             player.GetBuffStack("NextClashPointUp") == 1 &&
             enemy.GetBuffStack("NextClashPointUp") == 1 &&
-            GetBuffDuration(player, "Clash80GPlayerProbe") == 1 &&
-            GetBuffDuration(enemy, "Clash80GEnemyProbe") == 1 &&
+            player.GetBuffStack("Clash80GPlayerProbe") == 1 &&
+            enemy.GetBuffStack("Clash80GEnemyProbe") == 1 &&
             object.ReferenceEquals(
                 session.SideA.pointSnapshot,
                 playerPointSnapshot
@@ -565,28 +555,10 @@ public static class BattleClashSessionTests
             trigger = timing,
             effectType = CardEffectType.ApplyBuff,
             target = CardTargetType.Self,
-            buffType = "Bullet",
-            stack = 1,
-            duration = -1,
+            buffID = "Bullet",
+            stackDelta = 1,
             applyTiming = "Immediate"
         };
     }
 
-    static int GetBuffDuration(CharacterData character, string buffID)
-    {
-        if (character == null || character.buffs == null)
-        {
-            return int.MinValue;
-        }
-
-        foreach (BuffData buff in character.buffs)
-        {
-            if (buff != null && buff.buffID == buffID)
-            {
-                return buff.duration;
-            }
-        }
-
-        return int.MinValue;
-    }
 }

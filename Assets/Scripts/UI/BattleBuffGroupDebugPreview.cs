@@ -115,12 +115,7 @@ public sealed class BattleBuffGroupDebugPreview : MonoBehaviour
                 : validDefaultStack;
             previewCharacter.AddBuff(
                 "DebugPreviewBuff_" + number,
-                "预览Buff " + number,
-                "UpBuff",
-                stack,
-                2,
-                "TurnEnd",
-                "DurationDown"
+                stack
             );
         }
 

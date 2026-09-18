@@ -566,7 +566,7 @@ public static class BattleAngerRules
         int addAmount = Mathf.Min(amount, MaxStack - GetAnger(character));
         if (addAmount > 0)
         {
-            character.AddBuff(BattleResourceID.Anger, addAmount, -1);
+            character.AddBuff(BattleResourceID.Anger, addAmount);
         }
     }
 
@@ -586,9 +586,16 @@ public static class BattleAngerRules
 
     public static void ClearAnger(CharacterData character)
     {
-        if (character != null)
+        if (character == null)
         {
-            RemoveAnger(character, character.GetBuffStack(BattleResourceID.Anger));
+            return;
+        }
+
+        character.EnsureBuffState(BattleResourceID.Anger);
+        int currentStack = character.GetBuffStack(BattleResourceID.Anger);
+        if (currentStack > 0)
+        {
+            RemoveAnger(character, currentStack);
         }
     }
 

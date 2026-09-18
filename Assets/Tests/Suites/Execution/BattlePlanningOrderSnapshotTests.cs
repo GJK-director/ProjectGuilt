@@ -7,9 +7,9 @@ public static class BattlePlanningOrderSnapshotTests
     {
         bool[] results =
         {
-            VerifyMixedSpeedResponseOrdering(),
-            VerifyEqualSpeedResponsePrivilege(),
-            VerifySlowerResponseUsesEnemySlotOrder(),
+            VerifyFasterAllyUnilateralPrecedesResponse(),
+            VerifyEqualSpeedUnilateralPrecedesResponse(),
+            VerifyEqualEffectiveSpeedUnrespondedEnemyActionPrecedesResponse(),
             VerifySameSpeedMultiActorOrdering(),
             VerifyFirstStrikePrecedesFasterNormal(),
             VerifyLaterFirstStrikePrecedesEarlierFirstStrike(),
@@ -22,9 +22,9 @@ public static class BattlePlanningOrderSnapshotTests
         };
         string[] names =
         {
-            "A mixed-speed response ordering",
-            "B true equal-speed response privilege",
-            "C slower response uses enemy slot order",
+            "A faster ally unilateral before response",
+            "B true equal-speed unilateral before response",
+            "C equal effective speed unresponded enemy action before responded action",
             "D same-speed multi-actor slot ordering",
             "E FirstStrike precedes faster Normal",
             "F later FirstStrike source first",
@@ -49,9 +49,9 @@ public static class BattlePlanningOrderSnapshotTests
         return passed;
     }
 
-    public static bool VerifyMixedSpeedResponseOrdering()
+    public static bool VerifyFasterAllyUnilateralPrecedesResponse()
     {
-        TestContext context = CreateFourUnitContext(6, 5, 5, 5);
+        TestContext context = CreateFourUnitContext(8, 5, 5, 5);
         BattleEnemyIntent responseIntent = CreateIntent(
             "snapshot_a_response",
             context.enemy1,
@@ -72,17 +72,17 @@ public static class BattlePlanningOrderSnapshotTests
         );
         BattleActionSlot unilateral = FreeSlot(
             context.ally1,
-            1,
+            2,
             Card(context.ally1, CardType.Attack, "snapshot_a_free"),
             context.enemy1,
-            1
+            2
         );
         BattleActionSlot response = ResponseSlot(
             context.ally1,
-            2,
+            1,
             Card(context.ally1, CardType.Attack, "snapshot_a_response_card"),
             responseIntent,
-            2
+            1
         );
 
         BattlePlanningOrderSnapshot snapshot = Snapshot(
@@ -96,9 +96,9 @@ public static class BattlePlanningOrderSnapshotTests
             Order(snapshot.GetEnemyIntentDisplayOrder(unrespondedIntent)) == 3;
     }
 
-    public static bool VerifyEqualSpeedResponsePrivilege()
+    public static bool VerifyEqualSpeedUnilateralPrecedesResponse()
     {
-        TestContext context = CreateFourUnitContext(5, 5, 5, 5);
+        TestContext context = CreateFourUnitContext(6, 6, 6, 5);
         BattleEnemyIntent responseIntent = CreateIntent(
             "snapshot_b_response",
             context.enemy1,
@@ -110,29 +110,29 @@ public static class BattlePlanningOrderSnapshotTests
         );
         BattleActionSlot unilateral = FreeSlot(
             context.ally1,
-            1,
+            2,
             Card(context.ally1, CardType.Attack, "snapshot_b_free"),
             context.enemy1,
-            1
+            2
         );
         BattleActionSlot response = ResponseSlot(
             context.ally1,
-            2,
+            1,
             Card(context.ally1, CardType.Attack, "snapshot_b_response_card"),
             responseIntent,
-            2
+            1
         );
         BattlePlanningOrderSnapshot snapshot = Snapshot(
             context,
             new List<BattleActionSlot> { unilateral, response },
             new List<BattleEnemyIntent> { responseIntent }
         );
-        return Order(snapshot.GetActionSlotDisplayOrder(response)) == 1 &&
-            Order(snapshot.GetEnemyIntentDisplayOrder(responseIntent)) == 1 &&
-            Order(snapshot.GetActionSlotDisplayOrder(unilateral)) == 2;
+        return Order(snapshot.GetActionSlotDisplayOrder(unilateral)) == 1 &&
+            Order(snapshot.GetActionSlotDisplayOrder(response)) == 2 &&
+            Order(snapshot.GetEnemyIntentDisplayOrder(responseIntent)) == 2;
     }
 
-    public static bool VerifySlowerResponseUsesEnemySlotOrder()
+    public static bool VerifyEqualEffectiveSpeedUnrespondedEnemyActionPrecedesResponse()
     {
         TestContext context = CreateFourUnitContext(3, 3, 5, 5);
         BattleEnemyIntent responseIntent = CreateIntent(
@@ -165,9 +165,9 @@ public static class BattlePlanningOrderSnapshotTests
             new List<BattleActionSlot> { response },
             new List<BattleEnemyIntent> { unrespondedIntent, responseIntent }
         );
-        return Order(snapshot.GetActionSlotDisplayOrder(response)) == 1 &&
-            Order(snapshot.GetEnemyIntentDisplayOrder(responseIntent)) == 1 &&
-            Order(snapshot.GetEnemyIntentDisplayOrder(unrespondedIntent)) == 2;
+        return Order(snapshot.GetActionSlotDisplayOrder(response)) == 2 &&
+            Order(snapshot.GetEnemyIntentDisplayOrder(responseIntent)) == 2 &&
+            Order(snapshot.GetEnemyIntentDisplayOrder(unrespondedIntent)) == 1;
     }
 
     public static bool VerifySameSpeedMultiActorOrdering()

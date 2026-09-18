@@ -365,12 +365,7 @@ public static class BattleGenericUnilateralAttackTests
         {
             fixture.attackActor.AddBuff(
                 resourceID,
-                resourceID,
-                BuffCategory.AbilityBuff,
-                initialStack,
-                -1,
-                BattleTiming.TurnEnd,
-                BuffExpireRule.Permanent
+                initialStack
             );
         }
         fixture.attackCard.cardData.resourceRule = new CardResourceRuleData
@@ -391,13 +386,8 @@ public static class BattleGenericUnilateralAttackTests
             trigger = timing,
             effectType = CardEffectType.ApplyBuff,
             target = CardTargetType.Self,
-            buffType = buffID,
-            buffName = buffID,
-            buffCategory = BuffCategory.AbilityBuff,
-            stack = 1,
-            duration = -1,
-            checkTiming = BattleTiming.TurnEnd,
-            expireRule = BuffExpireRule.Permanent,
+            buffID = buffID,
+            stackDelta = 1,
             applyTiming = "Immediate"
         };
     }

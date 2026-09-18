@@ -814,12 +814,7 @@ public static class BattleGenericPausableRoutingTests
         {
             actor.AddBuff(
                 resourceID,
-                resourceID,
-                BuffCategory.AbilityBuff,
-                initialStack,
-                -1,
-                BattleTiming.TurnEnd,
-                BuffExpireRule.Permanent
+                initialStack
             );
         }
 

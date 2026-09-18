@@ -126,11 +126,11 @@ public static class BattleResolutionPlanTests
             "GuardUp",
             1
         );
-        normal.ally.AddBuff("Bullet", 3, -1);
-        normal.ally.AddBuff("NextClashPointUp", 1, 1);
+        normal.ally.AddBuff("Bullet", 3);
+        normal.ally.AddBuff("NextClashPointUp", 1);
         normal = RecreateFinalizedContext(normal, CardType.Attack, 6, 4);
         normal.resolutionPlan = BuildPlan(normal);
-        normal.ally.AddBuff("Bullet", 2, -1);
+        normal.ally.AddBuff("Bullet", 2);
         BattleResolver.TryCommitNextResolutionStep(normal.resolutionPlan, out BattleResolveResult firstResult);
         int bulletAfterFirst = normal.ally.GetBuffStack("Bullet");
         int clashBuffAfterFirst = normal.ally.GetBuffStack("NextClashPointUp");
@@ -292,7 +292,7 @@ public static class BattleResolutionPlanTests
     {
         TestContext context = CreateFinalizedContext("resolution82_m", CardType.Attack, 5, 4);
         context.resolutionPlan = BuildPlan(context);
-        context.enemy.AddBuff("Vulnerable", 10, 2);
+        context.enemy.AddBuff("Vulnerable", 10, 90);
         BattleResolver.TryCommitNextResolutionStep(context.resolutionPlan, out BattleResolveResult result);
         return result != null && context.resolutionPlan.impacts[0].basePower == 5 &&
             result.damage == 10 && context.enemy.currentHP == 20;
@@ -305,12 +305,7 @@ public static class BattleResolutionPlanTests
         int fixedRemaining = context.session.RemainingAttackPoint;
         context.ally.AddBuff(
             "GuardUp",
-            "守势",
-            "UpBuff",
-            100,
-            2,
-            BattleTiming.ClashStart,
-            "ConsumeOnTrigger"
+            100
         );
         BattleResolver.TryCommitNextResolutionStep(context.resolutionPlan, out BattleResolveResult result);
         return fixedRemaining == 4 && context.resolutionPlan.impacts[0].basePower == 4 &&
@@ -881,9 +876,8 @@ public static class BattleResolutionPlanTests
             trigger = timing,
             effectType = CardEffectType.ApplyBuff,
             target = CardTargetType.Self,
-            buffType = "Bullet",
-            stack = stack,
-            duration = -1,
+            buffID = "Bullet",
+            stackDelta = stack,
             applyTiming = "Immediate"
         });
     }
@@ -900,9 +894,8 @@ public static class BattleResolutionPlanTests
             trigger = timing,
             effectType = CardEffectType.ApplyBuff,
             target = CardTargetType.Self,
-            buffType = buffID,
-            stack = stack,
-            duration = 2,
+            buffID = buffID,
+            stackDelta = stack,
             applyTiming = "Immediate"
         });
     }
@@ -1524,7 +1517,7 @@ public static class BattleLongRangeShootResourceContractTests
         };
         if (usesBullet)
         {
-            owner.AddBuff("Bullet", 3, -1);
+            owner.AddBuff("Bullet", 3);
         }
         return BattleCardManager.CreateBattleCard(owner, data, id + "_instance");
     }
@@ -1549,9 +1542,8 @@ public static class BattleLongRangeShootResourceContractTests
             trigger = BattleTiming.Resolved,
             effectType = CardEffectType.ApplyBuff,
             target = CardTargetType.Self,
-            buffType = buffID,
-            stack = 1,
-            duration = -1,
+            buffID = buffID,
+            stackDelta = 1,
             applyTiming = "Immediate"
         });
     }

@@ -26,6 +26,10 @@ BattleResolver / BattleCalculator / BattleClashSession。
 
 Execution → Clash/Plan → Roll → Impact → Events。
 
+## Continuous Dodge Resolution Contract
+
+首次正式 Dodge 响应正常提交一次 `CardUsed`，随后成功结果使用 `DeferForContinuousDodge`，保持同一次卡牌使用处于 deferred 状态。后续 Continuous Dodge continuation 不重复提交 `CardUsed`，成功后继续保持 active/deferred。只有失败的正式路径或 `FinalizeActionCardUse` 触发的正式收尾，才提交最终的玩家侧 `CardResolved` 并完成行动槽使用。
+
 ## Invariants
 
 使用有效快照；表现读取结果而不重新随机；事件与资源后果不能重复提交。

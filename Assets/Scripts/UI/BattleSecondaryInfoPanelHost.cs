@@ -1,13 +1,57 @@
 using TMPro;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+
+public sealed class BattleSecondaryInfoStat
+{
+    public readonly string label;
+    public readonly string value;
+
+    public bool IsValid =>
+        !string.IsNullOrWhiteSpace(label) &&
+        !string.IsNullOrWhiteSpace(value);
+
+    public BattleSecondaryInfoStat(
+        string statLabel,
+        string statValue
+    )
+    {
+        label = statLabel ?? string.Empty;
+        value = statValue ?? string.Empty;
+    }
+}
+
+public sealed class BattleSecondaryInfoBubbleData
+{
+    public readonly string detailsText;
+
+    public bool HasDetails =>
+        !string.IsNullOrWhiteSpace(detailsText);
+
+    public BattleSecondaryInfoBubbleData(string details)
+    {
+        detailsText = details ?? string.Empty;
+    }
+}
 
 public sealed class BattleSecondaryInfoContent
 {
     public readonly string title;
     public readonly string body;
     public readonly string footer;
+    public readonly BattleSecondaryInfoStat primaryStat;
+    public readonly BattleSecondaryInfoStat secondaryStat;
+    public readonly IReadOnlyList<BattleSecondaryInfoBubbleData> buffBubbles;
+
+    public bool HasBuffBubbles =>
+        buffBubbles != null && buffBubbles.Count > 0;
+
+    public bool HasBuffSummary =>
+        HasBuffBubbles ||
+        (primaryStat != null && primaryStat.IsValid) ||
+        (secondaryStat != null && secondaryStat.IsValid);
 
     public bool IsValid =>
         !string.IsNullOrWhiteSpace(title) &&
@@ -16,12 +60,18 @@ public sealed class BattleSecondaryInfoContent
     public BattleSecondaryInfoContent(
         string contentTitle,
         string contentBody,
-        string contentFooter = ""
+        string contentFooter = "",
+        BattleSecondaryInfoStat contentPrimaryStat = null,
+        BattleSecondaryInfoStat contentSecondaryStat = null,
+        IReadOnlyList<BattleSecondaryInfoBubbleData> contentBuffBubbles = null
     )
     {
         title = contentTitle ?? string.Empty;
         body = contentBody ?? string.Empty;
         footer = contentFooter ?? string.Empty;
+        primaryStat = contentPrimaryStat;
+        secondaryStat = contentSecondaryStat;
+        buffBubbles = contentBuffBubbles;
     }
 }
 
@@ -77,6 +127,16 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
     [SerializeField] TMP_Text titleText;
     [SerializeField] TMP_Text bodyText;
     [SerializeField] TMP_Text footerText;
+    [Header("Buff Summary")]
+    [SerializeField] RectTransform buffSummaryRoot;
+    [SerializeField] TMP_Text stackLabelText;
+    [SerializeField] TMP_Text stackValueText;
+    [SerializeField] TMP_Text durationLabelText;
+    [SerializeField] TMP_Text durationValueText;
+    [Header("Buff Details")]
+    [SerializeField] RectTransform buffDetailRoot;
+    [SerializeField] RectTransform bubbleContainer;
+    [SerializeField] GameObject bubbleTemplate;
     [SerializeField] VerticalLayoutGroup panelLayout;
     [SerializeField] Canvas overlayCanvas;
     [Header("Hover")]
@@ -101,6 +161,8 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
     Rect lastSafeArea;
     Vector2 lastHostSize = new Vector2(-1f, -1f);
     bool responsiveLayoutDirty = true;
+    readonly List<GameObject> buffBubbleInstances =
+        new List<GameObject>();
 
     // 给所有二级信息触发源保留的唯一宿主调用接口。
     public static void HandlePointer(
@@ -183,6 +245,7 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
 
         ResolvePrefabReferences();
         BuildPanel();
+        EnsureBuffDetailReferences();
         EnsurePanelPointerRelay();
         HidePanelOnly();
         KeepCanvasInFront();
@@ -385,6 +448,181 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
         panelObject.SetActive(false);
     }
 
+    void EnsureBuffDetailReferences()
+    {
+        if (panelRect == null)
+        {
+            return;
+        }
+
+        if (buffDetailRoot == null)
+        {
+            GameObject detailObject = new GameObject(
+                "BuffDetailRoot",
+                typeof(RectTransform),
+                typeof(VerticalLayoutGroup),
+                typeof(ContentSizeFitter)
+            );
+            detailObject.transform.SetParent(panelRect, false);
+            buffDetailRoot = detailObject.GetComponent<RectTransform>();
+            ConfigureVerticalLayout(
+                detailObject.GetComponent<VerticalLayoutGroup>(),
+                4f
+            );
+            ConfigureContentSizeFitter(
+                detailObject.GetComponent<ContentSizeFitter>()
+            );
+        }
+
+        if (bubbleContainer == null)
+        {
+            GameObject containerObject = new GameObject(
+                "BubbleContainer",
+                typeof(RectTransform),
+                typeof(VerticalLayoutGroup),
+                typeof(ContentSizeFitter)
+            );
+            containerObject.transform.SetParent(buffDetailRoot, false);
+            bubbleContainer = containerObject.GetComponent<RectTransform>();
+            ConfigureVerticalLayout(
+                containerObject.GetComponent<VerticalLayoutGroup>(),
+                4f
+            );
+            ConfigureContentSizeFitter(
+                containerObject.GetComponent<ContentSizeFitter>()
+            );
+        }
+
+        if (bubbleTemplate == null)
+        {
+            bubbleTemplate = CreateBubbleTemplate();
+            bubbleTemplate.transform.SetParent(bubbleContainer, false);
+        }
+
+        EnsureBubbleText(
+            bubbleTemplate.transform,
+            "Source",
+            BaseBodyFontSize,
+            new Color32(205, 177, 104, 255)
+        );
+        EnsureBubbleText(
+            bubbleTemplate.transform,
+            "Details",
+            BaseFooterFontSize,
+            new Color32(235, 237, 242, 255)
+        );
+        SetBubbleGraphicsRaycastTarget(bubbleTemplate, false);
+        bubbleTemplate.SetActive(false);
+        buffDetailRoot.gameObject.SetActive(false);
+    }
+
+    GameObject CreateBubbleTemplate()
+    {
+        GameObject template = new GameObject(
+            "BubbleTemplate",
+            typeof(RectTransform),
+            typeof(Image),
+            typeof(VerticalLayoutGroup),
+            typeof(ContentSizeFitter)
+        );
+        template.layer = gameObject.layer;
+        Image image = template.GetComponent<Image>();
+        image.color = new Color32(74, 68, 57, 245);
+        image.raycastTarget = false;
+        ConfigureVerticalLayout(
+            template.GetComponent<VerticalLayoutGroup>(),
+            2f
+        );
+        ConfigureContentSizeFitter(
+            template.GetComponent<ContentSizeFitter>()
+        );
+        return template;
+    }
+
+    void ConfigureVerticalLayout(
+        VerticalLayoutGroup layout,
+        float spacing
+    )
+    {
+        if (layout == null)
+        {
+            return;
+        }
+
+        layout.padding = new RectOffset(8, 8, 5, 5);
+        layout.spacing = spacing;
+        layout.childAlignment = TextAnchor.UpperLeft;
+        layout.childControlWidth = true;
+        layout.childControlHeight = true;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+    }
+
+    void ConfigureContentSizeFitter(ContentSizeFitter fitter)
+    {
+        if (fitter == null)
+        {
+            return;
+        }
+
+        fitter.horizontalFit = ContentSizeFitter.FitMode.Unconstrained;
+        fitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+    }
+
+    TMP_Text EnsureBubbleText(
+        Transform parent,
+        string objectName,
+        float fontSize,
+        Color color
+    )
+    {
+        Transform existing = parent.Find(objectName);
+        TMP_Text text = existing != null
+            ? existing.GetComponent<TMP_Text>()
+            : null;
+        if (text != null)
+        {
+            text.raycastTarget = false;
+            return text;
+        }
+
+        GameObject textObject = new GameObject(
+            objectName,
+            typeof(RectTransform),
+            typeof(TextMeshProUGUI)
+        );
+        textObject.layer = gameObject.layer;
+        textObject.transform.SetParent(parent, false);
+        TextMeshProUGUI createdText =
+            textObject.GetComponent<TextMeshProUGUI>();
+        createdText.fontSize = fontSize;
+        createdText.color = color;
+        createdText.alignment = TextAlignmentOptions.TopLeft;
+        createdText.overflowMode = TextOverflowModes.Overflow;
+        createdText.raycastTarget = false;
+        return createdText;
+    }
+
+    void SetBubbleGraphicsRaycastTarget(
+        GameObject bubble,
+        bool value
+    )
+    {
+        if (bubble == null)
+        {
+            return;
+        }
+
+        Graphic[] graphics = bubble.GetComponentsInChildren<Graphic>(true);
+        for (int index = 0; index < graphics.Length; index++)
+        {
+            if (graphics[index] != null)
+            {
+                graphics[index].raycastTarget = value;
+            }
+        }
+    }
+
     void ResolvePrefabReferences()
     {
         if (panelRect == null)
@@ -396,6 +634,51 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
         if (panelRect == null)
         {
             return;
+        }
+
+        if (buffSummaryRoot == null)
+        {
+            Transform summaryTransform = panelRect.Find(
+                "BuffSummaryRoot"
+            );
+            buffSummaryRoot = summaryTransform as RectTransform;
+        }
+
+        stackLabelText = stackLabelText ?? FindPanelText(
+            "BuffSummaryRoot/StackBubble/Label"
+        );
+        stackValueText = stackValueText ?? FindPanelText(
+            "BuffSummaryRoot/StackBubble/Value"
+        );
+        durationLabelText = durationLabelText ?? FindPanelText(
+            "BuffSummaryRoot/DurationBubble/Label"
+        );
+        durationValueText = durationValueText ?? FindPanelText(
+            "BuffSummaryRoot/DurationBubble/Value"
+        );
+
+        if (buffDetailRoot == null)
+        {
+            Transform detailTransform = panelRect.Find("BuffDetailRoot");
+            buffDetailRoot = detailTransform as RectTransform;
+        }
+
+        if (bubbleContainer == null && buffDetailRoot != null)
+        {
+            Transform containerTransform = buffDetailRoot.Find(
+                "BubbleContainer"
+            );
+            bubbleContainer = containerTransform as RectTransform;
+        }
+
+        if (bubbleTemplate == null && bubbleContainer != null)
+        {
+            Transform templateTransform = bubbleContainer.Find(
+                "BubbleTemplate"
+            );
+            bubbleTemplate = templateTransform != null
+                ? templateTransform.gameObject
+                : null;
         }
 
         if (panelLayout == null)
@@ -425,6 +708,19 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
                 footerText = text;
             }
         }
+    }
+
+    TMP_Text FindPanelText(string childPath)
+    {
+        if (panelRect == null)
+        {
+            return null;
+        }
+
+        Transform child = panelRect.Find(childPath);
+        return child != null
+            ? child.GetComponent<TMP_Text>()
+            : null;
     }
 
     bool HasCompletePanelReferences()
@@ -528,6 +824,35 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
         titleText.font = resolvedFont;
         bodyText.font = resolvedFont;
         footerText.font = resolvedFont;
+        if (stackLabelText != null)
+        {
+            stackLabelText.font = resolvedFont;
+        }
+        if (stackValueText != null)
+        {
+            stackValueText.font = resolvedFont;
+        }
+        if (durationLabelText != null)
+        {
+            durationLabelText.font = resolvedFont;
+        }
+        if (durationValueText != null)
+        {
+            durationValueText.font = resolvedFont;
+        }
+
+        if (panelRect != null)
+        {
+            TMP_Text[] panelTexts =
+                panelRect.GetComponentsInChildren<TMP_Text>(true);
+            for (int index = 0; index < panelTexts.Length; index++)
+            {
+                if (panelTexts[index] != null)
+                {
+                    panelTexts[index].font = resolvedFont;
+                }
+            }
+        }
     }
 
     bool IsPreferredChineseFont(TMP_FontAsset fontAsset)
@@ -573,13 +898,230 @@ public sealed class BattleSecondaryInfoPanelHost : MonoBehaviour
 
         titleText.text = content.title;
         bodyText.text = content.body;
+
+        bool hasBuffBubbles = content.HasBuffBubbles;
+        bool hasLegacyBuffSummary =
+            !hasBuffBubbles && content.HasBuffSummary;
+        if (buffSummaryRoot != null)
+        {
+            buffSummaryRoot.gameObject.SetActive(hasLegacyBuffSummary);
+        }
+        if (buffDetailRoot != null)
+        {
+            buffDetailRoot.gameObject.SetActive(hasBuffBubbles);
+        }
+
+        if (hasBuffBubbles)
+        {
+            ApplyBuffBubbles(content.buffBubbles);
+            footerText.text = string.Empty;
+            footerText.gameObject.SetActive(false);
+            ClearStat(stackLabelText, stackValueText);
+            ClearStat(durationLabelText, durationValueText);
+        }
+        else if (hasLegacyBuffSummary)
+        {
+            ClearBuffBubbles();
+            footerText.text = string.Empty;
+            footerText.gameObject.SetActive(false);
+            ApplyStat(
+                content.primaryStat,
+                stackLabelText,
+                stackValueText
+            );
+            ApplyStat(
+                content.secondaryStat,
+                durationLabelText,
+                durationValueText
+            );
+        }
+        else
+        {
+            ClearBuffBubbles();
+            ClearStat(
+                stackLabelText,
+                stackValueText
+            );
+            ClearStat(
+                durationLabelText,
+                durationValueText
+            );
+        }
+
         bool hasFooter = !string.IsNullOrWhiteSpace(content.footer);
-        footerText.gameObject.SetActive(hasFooter);
-        footerText.text = hasFooter ? content.footer : string.Empty;
+        if (!hasBuffBubbles && !hasLegacyBuffSummary)
+        {
+            footerText.gameObject.SetActive(hasFooter);
+            footerText.text = hasFooter ? content.footer : string.Empty;
+        }
 
         if (panelVisible)
         {
             responsiveLayoutDirty = true;
+        }
+    }
+
+    void ApplyBuffBubbles(
+        IReadOnlyList<BattleSecondaryInfoBubbleData> bubbles
+    )
+    {
+        if (bubbleContainer == null || bubbleTemplate == null)
+        {
+            return;
+        }
+
+        for (int index = 0; index < buffBubbleInstances.Count; index++)
+        {
+            if (buffBubbleInstances[index] != null)
+            {
+                buffBubbleInstances[index].SetActive(false);
+            }
+        }
+
+        int usedCount = 0;
+        if (bubbles != null)
+        {
+            for (int index = 0; index < bubbles.Count; index++)
+            {
+                BattleSecondaryInfoBubbleData data = bubbles[index];
+                if (data == null || !data.HasDetails)
+                {
+                    continue;
+                }
+
+                GameObject bubble = GetOrCreateBuffBubble(usedCount);
+                ApplyBubbleText(bubble, "Details", data.detailsText);
+                SetBubbleGraphicsRaycastTarget(bubble, false);
+                bubble.SetActive(true);
+                usedCount++;
+            }
+        }
+
+        for (int index = usedCount;
+            index < buffBubbleInstances.Count;
+            index++)
+        {
+            if (buffBubbleInstances[index] != null)
+            {
+                buffBubbleInstances[index].SetActive(false);
+            }
+        }
+
+        RefreshBuffBubbleLayout();
+    }
+
+    GameObject GetOrCreateBuffBubble(int index)
+    {
+        if (index < buffBubbleInstances.Count &&
+            buffBubbleInstances[index] != null)
+        {
+            return buffBubbleInstances[index];
+        }
+
+        GameObject bubble = Instantiate(
+            bubbleTemplate,
+            bubbleContainer,
+            false
+        );
+        bubble.name = "BuffBubble_" + index;
+        bubble.SetActive(false);
+        buffBubbleInstances.Add(bubble);
+        return bubble;
+    }
+
+    void ApplyBubbleText(
+        GameObject bubble,
+        string childName,
+        string value
+    )
+    {
+        if (bubble == null)
+        {
+            return;
+        }
+
+        Transform child = bubble.transform.Find(childName);
+        TMP_Text text = child != null
+            ? child.GetComponent<TMP_Text>()
+            : null;
+        if (text == null)
+        {
+            return;
+        }
+
+        bool hasValue = !string.IsNullOrWhiteSpace(value);
+        text.text = hasValue ? value : string.Empty;
+        text.gameObject.SetActive(hasValue);
+        if (hasValue)
+        {
+            text.ForceMeshUpdate(true);
+        }
+    }
+
+    void RefreshBuffBubbleLayout()
+    {
+        if (bubbleContainer != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(bubbleContainer);
+        }
+
+        if (buffDetailRoot != null)
+        {
+            LayoutRebuilder.ForceRebuildLayoutImmediate(buffDetailRoot);
+        }
+    }
+
+    void ClearBuffBubbles()
+    {
+        for (int index = 0; index < buffBubbleInstances.Count; index++)
+        {
+            if (buffBubbleInstances[index] != null)
+            {
+                buffBubbleInstances[index].SetActive(false);
+            }
+        }
+    }
+
+    void ApplyStat(
+        BattleSecondaryInfoStat stat,
+        TMP_Text labelText,
+        TMP_Text valueText
+    )
+    {
+        bool hasStat = stat != null && stat.IsValid;
+        if (labelText != null)
+        {
+            labelText.text = hasStat ? stat.label : string.Empty;
+            labelText.gameObject.SetActive(hasStat);
+        }
+        if (valueText != null)
+        {
+            valueText.text = hasStat ? stat.value : string.Empty;
+            valueText.gameObject.SetActive(hasStat);
+        }
+
+        Transform bubble = labelText != null
+            ? labelText.transform.parent
+            : valueText != null
+                ? valueText.transform.parent
+                : null;
+        if (bubble != null)
+        {
+            bubble.gameObject.SetActive(hasStat);
+        }
+    }
+
+    void ClearStat(TMP_Text labelText, TMP_Text valueText)
+    {
+        if (labelText != null)
+        {
+            labelText.text = string.Empty;
+            labelText.gameObject.SetActive(false);
+        }
+        if (valueText != null)
+        {
+            valueText.text = string.Empty;
+            valueText.gameObject.SetActive(false);
         }
     }
 

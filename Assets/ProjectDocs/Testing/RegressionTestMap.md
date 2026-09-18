@@ -11,12 +11,12 @@ Last Verified: 2026-09-15
 | Domain | Formal Coverage | Legacy Unique Coverage | Current Caller | JIT Migration Note |
 |---|---|---|---|---|
 | EnemyIntent/Bootstrap/Resolution | EnemyIntentTests：5 Case | Mode103 其余 ownership、provider/自动回合、伤害/表现集成 | CardLoadTest Mode103 → FullBattleIntegrationRegressionTests；Test4 部分、Test5 全部委托 | 保留集成边界，不把部分委托写成全迁移 |
-| Cards/Execution FirstStrike | FirstStrikeExecutionTests：13 Case；ActionOrderExecutionTests：12 Case；BattlePlanningOrderSnapshotTests：12 Case；BattleActionSlotOrderViewTests：5 Case | Mode86 JSON traits missing/null/empty compatibility；LongRangeShoot non-implication | CardLoadTest Mode86；Mode105（Multi FirstStrike planning、Planning Snapshot A-L、Action Slot Order View A-E）；Formal execution 经 retained wrapper 链 | priority/order/pairing 有重叠，Planning Snapshot 复用 Resolver；View 只验证显示契约；unique coverage 仍在 Legacy |
+| Cards/Execution FirstStrike | FirstStrikeExecutionTests：13 Case；ActionOrderExecutionTests：13 Case；BattlePlanningOrderSnapshotTests：12 Case；BattleActionSlotOrderViewTests：5 Case | Mode86 JSON traits missing/null/empty compatibility；LongRangeShoot non-implication | CardLoadTest Mode86；Mode105（Multi FirstStrike planning、Planning Snapshot A-L、Action Slot Order View A-E）；Formal execution 经 retained wrapper 链 | priority/order/pairing 有重叠，Planning Snapshot 复用 Resolver；View 只验证显示契约；unique coverage 仍在 Legacy |
 | Cards/Decks | CardDeckManifestTests：6 Case | Mode115 grouping、reference identity、fallback、runtime deck stability | Mode115 → BattleDeckHandGroupingTests → BattleDeckBootstrapPresetTests | Grouping 不是自动归类为手工 UI；按规则价值迁 |
 | Bootstrap preset | DeckPresetBootstrapTests：11 Case | 其他正式初始化/provider 与 Settings 集成 | retained Mode114 wrapper；Mode103/133 | 不为每个旧 Mode 建新 Suite |
 | Knife/Resolution | 当前无该域完整 Formal owner | Mode107 Anger/Knife/Iai/Double Slash/Heavy/Breath/staged HP 组合 | CardLoadTest Mode107 → BattleAngerAndKnifeCardsBasicTests | 修改对应规则再拆相关契约 |
 | Shooting/Ability/Buffs | 当前无该域完整 Formal owner | Mode113 Conservation、0 Bullet、CD、Ability 及依赖链 | CardLoadTest Mode113 → BattleConservationAbilityTests | 不误把已有 Cards manifest Case 当资源规则覆盖 |
-| UI/Keywords/Targeting | 无 UI Formal C# owner | Mode67 target surfaces/placement、Mode73 hitbox preview、Mode75 targeting lifecycle、Mode132 timing/tooltip/description 格式 | CardLoadTest Mode67；BattleActionRelationMode73Tests / Mode75；CardLoadTest Mode132 → BattleCardKeywordPresentationTests | 点击安排、关系预览、表面生命周期与文字契约分开；视觉仍需人工验收 |
+| UI/Keywords/Targeting | BattleActionSlotPairedHoverTests：4 Case（Paired Hover A-D） | Mode67 target surfaces/placement、Mode73 hitbox preview、Mode75 targeting lifecycle、Mode132 timing/tooltip/description 格式 | CardLoadTest Mode67；BattleActionRelationMode73Tests / Mode75；CardLoadTest Mode105 → BattleActionSlotPairedHoverTests；CardLoadTest Mode132 → BattleCardKeywordPresentationTests | 点击安排、关系预览、配对详情请求与文字契约分开；视觉仍需人工验收 |
 | Settings | 无 Settings Formal C# owner | Mode133 preference/display/Bootstrap 集成 | CardLoadTest Mode133 → BattleGameSettingsIntegrationTests | 结合 Menu 人工流程 |
 | Lifecycle/Turn/Events | 无对应 Formal C# owner | lifecycle/terminal/CardUsed/Resolved/ActionFinished/Impact | Legacy/Core 及 CardLoadTest 内嵌测试；按 inventory 找 caller | 先查事件顺序与资源提交合约 |
 | Resolution/Interaction | 无完整 Formal owner；FirstStrike 只覆盖其专属契约 | Generic Attack/Guard/Dodge、Clash/Context/Plan、DamageModifier/Impact/Defeat Checkpoint | Legacy/Core；CardLoadTest dispatch | 按实际 interaction 选择回归；Damage 详见 [Damage](../Developer/Battle/Damage.md) |
@@ -33,7 +33,13 @@ Mode115 ACTIVE → BattleDeckHandGroupingTests → BattleDeckBootstrapPresetTest
 Mode114 wrapper 同时直接调用 Cards/Bootstrap Formal Cases；Mode109 wrapper 调用 Cards Cases。
 89/109/114 均无 active standalone enum/dispatch，但 wrapper 仍被消费。Formal ownership != standalone retirement != wrapper deletion。
 
-Mode105 直接覆盖 Multi FirstStrike planning、Planning Order Snapshot A-L 与 Action Slot Order View A-E；Mode86 保留 JSON FirstStrike compatibility 与 LongRangeShoot non-implication。Node5A final regression 中，用户已在 Unity Runtime 中运行 Mode86、Mode90、Mode105、Mode110、Mode115，各入口均 Passed: True；另已完成 BattleScene Action Order 人工验收。
+Mode105 直接覆盖 Multi FirstStrike planning、Planning Order Snapshot A-L、Action Slot Order View A-E 与 Paired Action Slot Hover A-D；Mode86 保留 JSON FirstStrike compatibility 与 LongRangeShoot non-implication。Node5A final regression 中，用户已在 Unity Runtime 中运行 Mode86、Mode90、Mode105、Mode110、Mode115，各入口均 Passed: True；另已完成 BattleScene Action Order 人工验收。
+
+D1 Normal Action Order 当前契约：Normal priority tier → effective speed DESC → unilateral/unopposed before responded → slot order ASC → battle position ASC → stable order ASC。`FreeAction` 与 `UnrespondedEnemyIntent` 属于 unilateral/unopposed，`RespondedEnemyIntent` 属于 responded/clash；FirstStrike 的专属排序规则保持不变。
+
+## Paired Action Slot Hover Formal Coverage
+
+`BattleActionSlotPairedHoverTests`：4 Case（Paired Hover A-D），由 `CardLoadTest` Mode105 调用。覆盖 final responder replacement lookup、unopposed intent 无 paired detail、Ally → Enemy paired request/payload、Enemy → Ally paired request/payload。Locked coexistence 与 hover grace / pointer retention cleanup 属于 Unity Manual Gate，不计入自动 Case。
 
 ## Running and Provenance
 

@@ -17,24 +17,17 @@ internal sealed class BattleBuffDisplayEntry
 {
     public string buffID;
     public string displayName;
-    public int totalStack;
+    public int stack;
+    public int intensity;
+    public int maxStacks;
+    public int maxIntensity;
     public Sprite iconSprite;
     public string description;
-    public int duration;
-    public string expireRule;
+    public bool showWhenZero;
 }
 
 public class BattleBuffGroupUIView : MonoBehaviour
 {
-    private static readonly HashSet<string> PubliclyVisibleBuffIDs =
-        new HashSet<string>(StringComparer.Ordinal)
-        {
-            BattleResourceID.Bullet,
-            BattleResourceID.Anger,
-            BattleResourceID.Modification,
-            BattleResourceID.Conservation
-        };
-
     [SerializeField] private BattleBuffIconBinding[] buffBindings;
 
     [Header("槽位来源")]
@@ -77,7 +70,6 @@ public class BattleBuffGroupUIView : MonoBehaviour
     private bool warnedNestedSlots;
     private bool warnedInvalidDirectSlot;
     private int configurationWarningCount;
-    private bool includeNonPublicBuffsForTesting;
 
     internal int SlotPoolCount => slotPool.Count;
     internal int RuntimeSlotCount => slotPool.Count;
@@ -90,7 +82,7 @@ public class BattleBuffGroupUIView : MonoBehaviour
 
     internal void SetIncludeNonPublicBuffsForTesting(bool include)
     {
-        includeNonPublicBuffsForTesting = include;
+        // 保留旧测试入口；正式 UI 现在显示所有有效 Active Buff。
     }
 
     void Awake()
@@ -140,10 +132,10 @@ public class BattleBuffGroupUIView : MonoBehaviour
             slot.SetOverflowClickHandler(null);
             slot.SetBuff(
                 entry.iconSprite,
-                entry.totalStack,
-                0,
+                entry.stack,
                 BuildSecondaryInfoContent(entry),
-                "battle-buff-" + entry.buffID
+                "battle-buff-" + entry.buffID,
+                entry.showWhenZero
             );
         }
 
@@ -535,11 +527,6 @@ public class BattleBuffGroupUIView : MonoBehaviour
     {
         List<BattleBuffDisplayEntry> entries =
             new List<BattleBuffDisplayEntry>();
-        Dictionary<string, BattleBuffDisplayEntry> entryByID =
-            new Dictionary<string, BattleBuffDisplayEntry>(
-                StringComparer.Ordinal
-            );
-
         if (characterData == null || characterData.buffs == null)
         {
             return entries;
@@ -550,51 +537,45 @@ public class BattleBuffGroupUIView : MonoBehaviour
             index++)
         {
             BuffData buff = characterData.buffs[index];
-            if (buff == null ||
-                string.IsNullOrEmpty(buff.buffID) ||
-                buff.stack <= 0 ||
-                (!includeNonPublicBuffsForTesting &&
-                    !PubliclyVisibleBuffIDs.Contains(buff.buffID)))
+            BuffDefinitionData definition = null;
+            bool hasDefinition = buff != null &&
+                !string.IsNullOrEmpty(buff.buffID) &&
+                BuffDefinitionLoader.TryGetDefinition(buff.buffID, out definition) &&
+                definition != null;
+            if (buff == null || string.IsNullOrEmpty(buff.buffID) ||
+                (!hasDefinition && buff.stack <= 0) ||
+                (hasDefinition && buff.stack <= 0 && !definition.showWhenZero))
             {
-                continue;
-            }
-
-            BattleBuffDisplayEntry entry;
-            if (entryByID.TryGetValue(buff.buffID, out entry))
-            {
-                entry.totalStack += buff.stack;
                 continue;
             }
 
             BattleBuffIconBinding binding =
                 FindBinding(buff.buffID);
-            BuffDefinitionData definition;
-            BuffDefinitionLoader.TryGetDefinition(
-                buff.buffID,
-                out definition
-            );
-            entry = new BattleBuffDisplayEntry
+            BattleBuffDisplayEntry entry = new BattleBuffDisplayEntry
             {
                 buffID = buff.buffID,
-                displayName =
+                    displayName =
                     binding != null &&
                     !string.IsNullOrEmpty(binding.displayName)
                         ? binding.displayName
-                        : buff.buffName,
-                totalStack = buff.stack,
+                        : hasDefinition
+                            ? definition.displayName
+                            : buff.buffID,
+                stack = buff.stack,
+                intensity = buff.intensity,
+                maxStacks = hasDefinition ? definition.maxStacks : 0,
+                maxIntensity = hasDefinition ? definition.maxIntensity : 0,
                 iconSprite =
                     binding != null &&
                     binding.iconSprite != null
                         ? binding.iconSprite
                         : defaultBuffIcon,
                 description =
-                    definition != null
+                    hasDefinition
                         ? definition.description
                         : string.Empty,
-                duration = buff.duration,
-                expireRule = buff.expireRule
+                showWhenZero = hasDefinition && definition.showWhenZero
             };
-            entryByID.Add(entry.buffID, entry);
             entries.Add(entry);
         }
 
@@ -629,24 +610,53 @@ public class BattleBuffGroupUIView : MonoBehaviour
             : !string.IsNullOrEmpty(entry.description)
                 ? entry.description
                 : "该状态暂时没有补充说明。";
-        string durationText =
-            entry.duration < 0 ||
-            string.Equals(
-                entry.expireRule,
-                BuffExpireRule.Permanent,
-                StringComparison.Ordinal
-            )
-                ? "永久"
-                : entry.duration + " 回合";
-        string footer =
-            "当前层数：" + entry.totalStack +
-            "\n持续时间：" + durationText;
-
         return new BattleSecondaryInfoContent(
             title,
             body,
-            footer
+            "",
+            null,
+            null,
+            BuildBuffBubbleData(entry)
         );
+    }
+
+    private List<BattleSecondaryInfoBubbleData> BuildBuffBubbleData(
+        BattleBuffDisplayEntry entry
+    )
+    {
+        List<BattleSecondaryInfoBubbleData> bubbles =
+            new List<BattleSecondaryInfoBubbleData>();
+        if (entry == null)
+        {
+            return bubbles;
+        }
+
+        BuffDefinitionData definition;
+        if (!BuffDefinitionLoader.TryGetDefinition(entry.buffID, out definition) ||
+            definition == null)
+        {
+            return bubbles;
+        }
+
+        string details = "层数：" + entry.stack;
+        if (definition.maxStacks > 0)
+        {
+            details += " / " + entry.maxStacks;
+        }
+
+        if (definition.defaultIntensity != 0 || definition.maxIntensity > 0)
+        {
+            details += "  强度：" + entry.intensity +
+                (entry.maxIntensity > 0
+                    ? " / " + entry.maxIntensity
+                    : string.Empty);
+        }
+
+        bubbles.Add(new BattleSecondaryInfoBubbleData(
+            details
+        ));
+
+        return bubbles;
     }
 
     private BattleBuffIconBinding FindBinding(string buffID)

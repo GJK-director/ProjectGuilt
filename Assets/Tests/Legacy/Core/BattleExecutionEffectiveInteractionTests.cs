@@ -107,13 +107,8 @@ public static class BattleExecutionEffectiveInteractionTests
             trigger = BattleTiming.OnPlay,
             effectType = CardEffectType.ApplyBuff,
             target = CardTargetType.Self,
-            buffType = "Mode91AbilityOnPlay",
-            buffName = "Mode91 Ability OnPlay",
-            buffCategory = BuffCategory.AbilityBuff,
-            stack = 1,
-            duration = -1,
-            checkTiming = BattleTiming.TurnEnd,
-            expireRule = BuffExpireRule.Permanent,
+            buffID = "Mode91AbilityOnPlay",
+            stackDelta = 1,
             applyTiming = "Immediate"
         });
         BattleActionSlot slot = new BattleActionSlot(actor, 1);
@@ -346,7 +341,7 @@ public static class BattleExecutionEffectiveInteractionTests
             CardType.Defense,
             CardType.Dodge
         );
-        fixture.player.AddBuff("Mode91Resource", 3, -1);
+        fixture.player.AddBuff("Mode91Resource", 3);
         fixture.playerCard.cardData.resourceRule = new CardResourceRuleData
         {
             resourceType = "BuffStack",

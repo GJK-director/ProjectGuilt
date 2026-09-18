@@ -9697,7 +9697,7 @@ public class CardLoadTest : MonoBehaviour
     void RunExecutionItemStatusDeadActualTargetSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_d", 30, 0, 50, 10, 3, 8);
-        BattleCardState enemyAttack = CreateBeforeUseBuffAttackCard(context.enemy, "item_status_d_enemy", 5, "Strength", 1, 1);
+        BattleCardState enemyAttack = CreateBeforeUseBuffAttackCard(context.enemy, "item_status_d_enemy", 5, "Strength", 1);
         BattleEnemyIntent intent = CreateEnemyAttackIntent("item_status_d_intent", context.enemy, enemyAttack, context.allyB, 1);
         BattleExecutionItem item = new BattleExecutionItem(1, BattleExecutionItemType.UnrespondedEnemyIntent, intent, null);
         BattleExecutionPlan plan = CreateManualExecutionPlan(item);
@@ -9712,7 +9712,7 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_e", 30, 30, 50, 20, 3, 8);
         List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
-        BattleCardState responseAttack = CreateBulletLockedBeforeUseAttackCard(context.allyA, "item_status_e_response", 5, 3, "Strength", 1, 1);
+        BattleCardState responseAttack = CreateBulletLockedBeforeUseAttackCard(context.allyA, "item_status_e_response", 5, 3, "Strength", 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "item_status_e_enemy", 5, 0);
         BattleEnemyIntent intent = CreateEnemyAttackIntent("item_status_e_intent", context.enemy, enemyAttack, context.allyB, 1);
         List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
@@ -9735,8 +9735,8 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("item_status_f", 30, 0, 50, 20, 3, 8);
         List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
-        BattleCardState responseAttack = CreateBulletLockedBeforeUseAttackCard(context.allyA, "item_status_f_response", 5, 3, "Strength", 1, 1);
-        BattleCardState enemyAttack = CreateBeforeUseBuffAttackCard(context.enemy, "item_status_f_enemy", 5, "Strength", 1, 1);
+        BattleCardState responseAttack = CreateBulletLockedBeforeUseAttackCard(context.allyA, "item_status_f_response", 5, 3, "Strength", 1);
+        BattleCardState enemyAttack = CreateBeforeUseBuffAttackCard(context.enemy, "item_status_f_enemy", 5, "Strength", 1);
         BattleEnemyIntent intent = CreateEnemyAttackIntent("item_status_f_intent", context.enemy, enemyAttack, context.allyB, 1);
         List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
         context.runtimeState.SetActionSlots(actionSlots);
@@ -9930,9 +9930,9 @@ public class CardLoadTest : MonoBehaviour
         AddProbeEffect(playerAttack, BattleTiming.Hit, "ContractAPlayerHit", ClashResult.Win);
         AddProbeEffect(enemyAttack, BattleTiming.ClashLose, "ContractAEnemyClashLose", ClashResult.Lose);
         AddProbeEffect(enemyAttack, BattleTiming.Resolved, "ContractAEnemyResolved", ClashResult.Lose);
-        context.allyA.AddBuff("NextClashPointUp", 1, 1);
+        context.allyA.AddBuff("NextClashPointUp", 1, 0);
         context.allyA.AddBuff("NextCardPointUp", 2, 1);
-        context.enemy.AddBuff("NextClashPointUp", 1, 1);
+        context.enemy.AddBuff("NextClashPointUp", 1, 0);
         context.enemy.AddBuff("NextCardPointUp", 2, 1);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
@@ -9973,9 +9973,9 @@ public class CardLoadTest : MonoBehaviour
         AddProbeEffect(playerAttack, BattleTiming.ClashLose, "ContractBPlayerClashLose", ClashResult.Lose);
         AddProbeEffect(playerAttack, BattleTiming.Resolved, "ContractBPlayerResolved", ClashResult.Lose);
         AddProbeEffect(enemyAttack, BattleTiming.Resolved, "ContractBEnemyResolved", ClashResult.Win);
-        context.allyA.AddBuff("NextClashPointUp", 1, 1);
+        context.allyA.AddBuff("NextClashPointUp", 1, 0);
         context.allyA.AddBuff("NextCardPointUp", 2, 1);
-        context.enemy.AddBuff("NextClashPointUp", 1, 1);
+        context.enemy.AddBuff("NextClashPointUp", 1, 0);
         context.enemy.AddBuff("NextCardPointUp", 2, 1);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
@@ -10060,8 +10060,8 @@ public class CardLoadTest : MonoBehaviour
         AddProbeEffect(directEnemy, BattleTiming.BeforeUse, "ContractEDirectEnemyBefore");
         AddProbeEffect(directEnemy, BattleTiming.Resolved, "ContractEDirectEnemyResolved", ClashResult.Win);
         AddProbeEffect(directGuard, BattleTiming.Resolved, "ContractEDirectGuardResolved");
-        directContext.enemy.AddBuff("NextClashPointUp", 1, 1);
-        directContext.enemy.AddBuff("NextCardPointUp", 1, 1);
+        directContext.enemy.AddBuff("NextClashPointUp", 1, 0);
+        directContext.enemy.AddBuff("NextCardPointUp", 1, 0);
         BattleEnemyIntent directIntent = CreateEnemyAttackIntent("contract_e_direct_intent", directContext.enemy, directEnemy, directContext.allyB, 1);
         BattleActionSlot directResponseSlot = CreateRespondedSlot(directContext.allyB, directResponse);
         BattleActionSlot directGuardSlot = new BattleActionSlot(directContext.allyB, 2);
@@ -10149,7 +10149,7 @@ public class CardLoadTest : MonoBehaviour
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_g_enemy", 5, 2);
         AddProbeEffect(enemyAttack, BattleTiming.Hit, "ContractGHit");
         AddProbeEffect(enemyAttack, BattleTiming.AfterDamage, "ContractGAfterDamage");
-        context.allyA.AddBuff("DamageReduction", 10, 1);
+        context.allyA.AddBuff("DamageReduction", 10, -90);
         int hpBefore = context.allyA.currentHP;
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
@@ -10210,7 +10210,7 @@ public class CardLoadTest : MonoBehaviour
         AddProbeEffect(dodge, BattleTiming.Resolved, "ContractIDodgeResolved", ClashResult.Lose);
         AddProbeEffect(enemyAttack, BattleTiming.Hit, "ContractIEnemyHit");
         AddProbeEffect(enemyAttack, BattleTiming.AfterDamage, "ContractIEnemyAfterDamage");
-        context.allyA.AddBuff("DamageReduction", 10, 1);
+        context.allyA.AddBuff("DamageReduction", 10, -90);
         int hpBefore = context.allyA.currentHP;
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
@@ -10308,10 +10308,10 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("contract_m", 30, 30, 50, 20, 3, 8);
         List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
-        BattleCardState responseAttack = CreateBulletLockedBeforeUseAttackCard(context.allyA, "contract_m_response", 5, 3, "ContractMBeforeUse", 1, 1);
+        BattleCardState responseAttack = CreateBulletLockedBeforeUseAttackCard(context.allyA, "contract_m_response", 5, 3, "ContractMBeforeUse", 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_m_enemy", 5, 0);
         BattleEnemyIntent intent = CreateEnemyAttackIntent("contract_m_intent", context.enemy, enemyAttack, context.allyB, 1);
-        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
         CardEligibilityResult assignResult;
         bool assignSuccess = BattleActionSlotManager.AssignResponseToEnemyIntent(
             actionSlots,
@@ -10371,10 +10371,10 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext context = CreateBattleEndedTestContext("contract_n", 30, 30, 50, 10, 3, 8);
         BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "contract_n_player", 5);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "contract_n_enemy", 5, 0);
-        context.allyA.AddBuff("NextClashPointUp", 1, 1);
-        context.allyA.AddBuff("NextCardPointUp", 1, 1);
-        context.enemy.AddBuff("NextClashPointUp", 1, 1);
-        context.enemy.AddBuff("NextCardPointUp", 1, 1);
+        context.allyA.AddBuff("NextClashPointUp", 1, 0);
+        context.allyA.AddBuff("NextCardPointUp", 1, 0);
+        context.enemy.AddBuff("NextClashPointUp", 1, 0);
+        context.enemy.AddBuff("NextCardPointUp", 1, 0);
         BattleEnemyIntent intent = CreateEnemyAttackIntent("contract_n_intent", context.enemy, enemyAttack, context.allyA, 1);
         BattleActionSlot responseSlot = new BattleActionSlot(context.allyA, 1);
         responseSlot.AssignResponse(context.allyA, playerAttack, intent, false);
@@ -13068,7 +13068,7 @@ public class CardLoadTest : MonoBehaviour
 
     void RunBattleCardCommonRulesPhaseOneBasicTestSequence()
     {
-        bool[] results = new bool[20];
+        bool[] results = new bool[21];
 
         BattleEndedTestContext firstStrikeContext =
             CreateBattleEndedTestContext(
@@ -13290,6 +13290,7 @@ public class CardLoadTest : MonoBehaviour
         );
         results[18] = BattlePlanningOrderSnapshotTests.Run();
         results[19] = BattleActionSlotOrderViewTests.Run();
+        results[20] = BattleActionSlotPairedHoverTests.Run();
         BattleCardState modernEnemyAbility = CreateMode105AbilityCard(
             abilityContext.allyA,
             "common105_ability_enemy_modern"
@@ -13448,7 +13449,13 @@ public class CardLoadTest : MonoBehaviour
         buffGroup.SetCharacter(buffCharacter);
         results[13] =
             buffCharacter.GetBuffStack("NextClashPointUp") == 3 &&
-            CountMode70ActiveSlots(buffGroup) == 0;
+            CountMode70ActiveSlots(buffGroup) == 1 &&
+            GetMode70StackText(
+                buffGroup.GetSlotForTesting(0)
+            ).text == "3" &&
+            GetMode70IconImage(
+                buffGroup.GetSlotForTesting(0)
+            ).sprite == buffContext.defaultSprite;
 
         SetMode64PrivateField(buffGroup, "columnsPerRow", 1);
         SetMode64PrivateField(buffGroup, "maxRows", 1);
@@ -13460,13 +13467,16 @@ public class CardLoadTest : MonoBehaviour
             CreateMode70Buff("Strength", 8)
         );
         buffGroup.SetCharacter(buffCharacter);
+        BattleBuffIconUIView mode105OverflowSlot =
+            buffGroup.GetSlotForTesting(0);
         results[14] = CountMode70ActiveSlots(buffGroup) == 1 &&
-            !HasMode70OverflowSlot(buffGroup);
+            mode105OverflowSlot != null &&
+            mode105OverflowSlot.IsOverflow &&
+            mode105OverflowSlot.OverflowHiddenCount == 4;
 
         SetMode70ActiveBuffs(
             buffCharacter,
-            CreateMode70Buff("Bullet", 2),
-            CreateMode70Buff("Bullet", 3)
+            CreateMode70Buff("Bullet", 5)
         );
         buffGroup.SetCharacter(buffCharacter);
         BattleBuffIconUIView bulletSlot =
@@ -13490,13 +13500,14 @@ public class CardLoadTest : MonoBehaviour
             "legacy AssignResponse不能用Ability响应Intent",
             "Ability Self占槽且不产生Relation",
             "公开Bullet Buff可显示",
-            "内部Buff机制存在但UI不显示",
-            "内部Buff不占UI容量且不制造Overflow",
+            "NextClashPointUp作为Active Buff进入UI并使用默认图标",
+            "所有Active Buff参与UI容量并进入Overflow",
             "同buffID公开Buff继续聚合Stack",
             "两张FirstStrike的assignmentSequence均为正且后者更晚",
             "不同角色可各自绑定FirstStrike",
             "Planning Order Snapshot A-L",
-            "Action Slot Order View A-E"
+            "Action Slot Order View A-E",
+            "Paired Action Slot Hover A-D"
         };
 
         bool allPassed = true;
@@ -13563,7 +13574,7 @@ public class CardLoadTest : MonoBehaviour
         List<CardTestData> cards
     )
     {
-        bool[] results = new bool[16];
+        bool[] results = new bool[17];
         BuffDefinitionLoader.ClearCacheForTest();
         List<BuffDefinitionData> definitions =
             BuffDefinitionLoader.LoadBuffDefinitions();
@@ -13596,11 +13607,7 @@ public class CardLoadTest : MonoBehaviour
             5,
             5
         );
-        resourceCharacter.AddBuff(
-            BattleResourceID.Anger,
-            3,
-            -1
-        );
+        resourceCharacter.AddBuff(BattleResourceID.Anger, 3);
         results[4] = resourceCharacter.GetBuffStack(
             BattleResourceID.Anger
         ) == 3;
@@ -13614,17 +13621,9 @@ public class CardLoadTest : MonoBehaviour
             consumedAmount == 1 &&
             resourceCharacter.GetBuffStack(BattleResourceID.Anger) == 2;
 
-        resourceCharacter.AddBuff(BattleResourceID.Bullet, 3, -1);
-        resourceCharacter.AddBuff(
-            BattleResourceID.Modification,
-            1,
-            -1
-        );
-        resourceCharacter.AddBuff(
-            BattleResourceID.Conservation,
-            1,
-            -1
-        );
+        resourceCharacter.AddBuff(BattleResourceID.Bullet, 3);
+        resourceCharacter.AddBuff(BattleResourceID.Modification, 1);
+        resourceCharacter.AddBuff(BattleResourceID.Conservation, 1);
         bool spentModification =
             resourceCharacter.TryConsumeBuffStackAsResource(
                 BattleResourceID.Modification,
@@ -13644,10 +13643,10 @@ public class CardLoadTest : MonoBehaviour
         Mode70BuffTestContext buffContext =
             CreateMode70BuffTestContext(false);
         CharacterData buffCharacter = buffContext.character;
-        buffCharacter.AddBuff(BattleResourceID.Bullet, 1, -1);
-        buffCharacter.AddBuff(BattleResourceID.Anger, 2, -1);
-        buffCharacter.AddBuff(BattleResourceID.Modification, 3, -1);
-        buffCharacter.AddBuff(BattleResourceID.Conservation, 4, -1);
+        buffCharacter.AddBuff(BattleResourceID.Bullet, 1);
+        buffCharacter.AddBuff(BattleResourceID.Anger, 2);
+        buffCharacter.AddBuff(BattleResourceID.Modification, 3);
+        buffCharacter.AddBuff(BattleResourceID.Conservation, 4);
         buffContext.groupView.SetCharacter(buffCharacter);
         results[7] = CountMode70ActiveSlots(buffContext.groupView) == 4 &&
             GetMode70StackText(
@@ -13663,12 +13662,27 @@ public class CardLoadTest : MonoBehaviour
                 buffContext.groupView.GetSlotForTesting(3)
             ).text == "4";
 
-        buffCharacter.AddBuff("NextClashPointUp", 5, 1);
+        buffCharacter.AddBuff("NextClashPointUp", 5, 4);
         buffContext.groupView.SetCharacter(buffCharacter);
         results[8] = buffCharacter.GetBuffStack(
                 "NextClashPointUp"
             ) == 5 &&
             CountMode70ActiveSlots(buffContext.groupView) == 4;
+
+        CharacterData multiBulletCharacter =
+            CreateBuffDataLayerCharacter("mode106_multi_bullet");
+        multiBulletCharacter.AddBuff(BattleResourceID.Bullet, 2);
+        multiBulletCharacter.AddBuff(BattleResourceID.Bullet, 3);
+        int consumedMultiBullet;
+        results[16] = multiBulletCharacter.buffs.Count == 1 &&
+            multiBulletCharacter.GetBuffStack(BattleResourceID.Bullet) == 5 &&
+            multiBulletCharacter.TryConsumeBuffStackAsResource(
+                BattleResourceID.Bullet,
+                2,
+                out consumedMultiBullet
+            ) &&
+            consumedMultiBullet == 2 &&
+            multiBulletCharacter.GetBuffStack(BattleResourceID.Bullet) == 3;
 
         CardTestData basicAttack = CardDataLoader.FindCardByID(
             cards,
@@ -13723,14 +13737,15 @@ public class CardLoadTest : MonoBehaviour
             "Anger可通过现有资源接口Spend",
             "四种资源Stack互不污染",
             "四种正式资源全部进入公开Buff UI",
-            "NextClashPointUp机制保留但UI隐藏",
+            "NextClashPointUp作为Active Buff进入UI",
             "atk_001加载且基础攻击CD为0",
             "atk_001更新为4/7与PointAsDamage",
             "def_001保持Defense 2/8 CD1基线",
             "6张手牌全部保持Active",
             "第6张使用normal06",
             "第7张手牌隐藏",
-            "CharacterData可持有7张卡且无6张硬上限"
+            "CharacterData可持有7张卡且无6张硬上限",
+            "单一Bullet state资源消费聚合"
         };
 
         bool allPassed = true;
@@ -13749,7 +13764,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("资源定义通过：" +
             (results[0] && results[1] && results[2] && results[3]));
         Debug.Log("资源Stack通过：" +
-            (results[4] && results[5] && results[6]));
+            (results[4] && results[5] && results[6] && results[16]));
         Debug.Log("Buff公开白名单通过：" +
             (results[7] && results[8]));
         Debug.Log("基础攻击数据通过：" +
@@ -13776,13 +13791,13 @@ public class CardLoadTest : MonoBehaviour
         );
         return definition != null &&
             definition.buffID == resourceID &&
-            definition.buffName == expectedName &&
+            definition.displayName == expectedName &&
             definition.buffCategory == BuffCategory.AbilityBuff &&
             definition.effectType == "Resource" &&
             definition.targetStat == resourceID &&
-            definition.valuePerStack == 1f &&
-            definition.defaultCheckTiming == "None" &&
-            definition.defaultExpireRule == "Permanent" &&
+            definition.defaultIntensity == 0 &&
+            definition.maxIntensity == 0 &&
+            definition.maxStacks == 0 &&
             definition.consumeRule == "None";
     }
 
@@ -14068,8 +14083,7 @@ public class CardLoadTest : MonoBehaviour
 
         SetMode70ActiveBuffs(
             character,
-            CreateMode70Buff("Strength", 2),
-            CreateMode70Buff("Strength", 3)
+            CreateMode70Buff("Strength", 5)
         );
         group.SetCharacter(character);
         bool test9 =
@@ -14079,9 +14093,8 @@ public class CardLoadTest : MonoBehaviour
 
         SetMode70ActiveBuffs(
             character,
-            CreateMode70Buff("GuardUp", 1),
-            CreateMode70Buff("Strength", 1),
-            CreateMode70Buff("GuardUp", 2)
+            CreateMode70Buff("GuardUp", 3),
+            CreateMode70Buff("Strength", 1)
         );
         group.SetCharacter(character);
         bool test10 =
@@ -14096,12 +14109,7 @@ public class CardLoadTest : MonoBehaviour
         character.pendingBuffs.Add(
             new PendingBuffData(
                 "PendingOnly",
-                "待生效状态",
-                "UpBuff",
                 5,
-                2,
-                "TurnEnd",
-                "DurationDown",
                 1,
                 1,
                 1
@@ -14239,18 +14247,11 @@ public class CardLoadTest : MonoBehaviour
 
         BattleBuffIconUIView directSlot =
             group.GetSlotForTesting(0);
-        TMPro.TMP_Text directDecayText =
-            GetMode70DecayText(directSlot);
-        directSlot.SetBuff(context.defaultSprite, 2, -1);
-        bool decayWasVisible =
-            directDecayText != null &&
-            directDecayText.gameObject.activeSelf;
+        directSlot.SetBuff(context.defaultSprite, 2);
         directSlot.SetOverflow(context.overflowSprite, 2, "...+");
         bool test21 =
-            decayWasVisible &&
             directSlot.IsOverflow &&
-            directDecayText != null &&
-            !directDecayText.gameObject.activeSelf;
+            directSlot.OverflowHiddenCount == 2;
         directSlot.SetBuff(context.strengthSprite, 1);
         bool test22 =
             !directSlot.IsOverflow &&
@@ -14322,7 +14323,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("模式70 测试6 Strength使用专属Sprite：" + test6);
         Debug.Log("模式70 测试7 未配置图标使用默认图：" + test7);
         Debug.Log("模式70 测试8 默认图为空仍显示Buff槽位：" + test8);
-        Debug.Log("模式70 测试9 同ID多批次聚合层数：" + test9);
+        Debug.Log("模式70 测试9 单一Buff state聚合层数：" + test9);
         Debug.Log("模式70 测试10 保持Buff第一次出现顺序：" + test10);
         Debug.Log("模式70 测试11 pendingBuff不显示：" + test11);
         Debug.Log("模式70 测试12 columnsPerRow控制换行：" + test12);
@@ -14334,7 +14335,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("模式70 测试18 九Buff显示七普通与...+2：" + test18);
         Debug.Log("模式70 测试19 Overflow隐藏数量正确：" + test19);
         Debug.Log("模式70 测试20 容量一时多Buff只显示Overflow：" + test20);
-        Debug.Log("模式70 测试21 Overflow隐藏decayText：" + test21);
+        Debug.Log("模式70 测试21 Overflow保持无旧生命周期文字：" + test21);
         Debug.Log("模式70 测试22 SetBuff清除Overflow状态：" + test22);
         Debug.Log("模式70 测试23 Overflow左键回传角色与数量：" + test23);
         Debug.Log("模式70 测试24 普通Buff点击不触发Overflow回调：" + test24);
@@ -15089,31 +15090,25 @@ public class CardLoadTest : MonoBehaviour
             slotObject.transform,
             objectName + "Stack"
         );
-        TMPro.TMP_Text decayText = CreateMode64Text(
-            slotObject.transform,
-            objectName + "Decay"
-        );
         BattleBuffIconUIView iconView =
             slotObject.AddComponent<BattleBuffIconUIView>();
         iconView.ConfigureTestVisuals(
             iconImage,
-            stackText,
-            decayText
+            stackText
         );
         return iconView;
     }
 
     BuffData CreateMode70Buff(string buffID, int stack)
     {
-        return new BuffData(
+        BuffDefinitionData definition;
+        int intensity = BuffDefinitionLoader.TryGetDefinition(
             buffID,
-            buffID + "显示名",
-            "UpBuff",
-            stack,
-            -1,
-            "None",
-            "Permanent"
-        );
+            out definition
+        ) && definition != null
+            ? definition.defaultIntensity
+            : 0;
+        return new BuffData(buffID, stack, intensity);
     }
 
     void SetMode70ActiveBuffs(
@@ -15470,16 +15465,6 @@ public class CardLoadTest : MonoBehaviour
         );
     }
 
-    TMPro.TMP_Text GetMode70DecayText(
-        BattleBuffIconUIView slot
-    )
-    {
-        return GetMode64PrivateField<TMPro.TMP_Text>(
-            slot,
-            "decayText"
-        );
-    }
-
     bool RunMode70MissingTemplateSafetySubTest()
     {
         GameObject rootObject = new GameObject(
@@ -15607,12 +15592,7 @@ public class CardLoadTest : MonoBehaviour
         );
         previousDisplay.AddBuff(
             "Mode71Previous",
-            "原显示Buff",
-            "UpBuff",
-            1,
-            2,
-            "TurnEnd",
-            "DurationDown"
+            1
         );
         group.SetCharacter(previousDisplay);
         bool hadPreviousDisplay =
@@ -15759,12 +15739,7 @@ public class CardLoadTest : MonoBehaviour
         );
         formalCharacter.AddBuff(
             "Mode71FormalKeep",
-            "正式角色保留Buff",
-            "UpBuff",
-            4,
-            2,
-            "TurnEnd",
-            "DurationDown"
+            4
         );
         BuffData formalBuff = formalCharacter.buffs[0];
         group.SetCharacter(formalCharacter);
@@ -16065,6 +16040,9 @@ public class CardLoadTest : MonoBehaviour
         CharacterData enemy = enemyResult.unit;
         BuffData initialBullet =
             FindMode72ActiveBuff(allyA, "Bullet");
+        BuffDefinitionData bulletDefinition;
+        bool bulletDefinitionFound =
+            BuffDefinitionLoader.TryGetDefinition("Bullet", out bulletDefinition);
 
         bool test1 =
             allyAResult.isSuccess &&
@@ -16080,16 +16058,18 @@ public class CardLoadTest : MonoBehaviour
             enemy.GetBuffStack("Bullet") == 0;
         bool test4 =
             initialBullet != null &&
-            initialBullet.buffName == "子弹" &&
-            initialBullet.buffCategory == "AbilityBuff" &&
-            initialBullet.checkTiming == "None" &&
-            initialBullet.expireRule == "Permanent";
+            bulletDefinitionFound &&
+            bulletDefinition.displayName == "子弹" &&
+            bulletDefinition.buffCategory == "AbilityBuff" &&
+            bulletDefinition.effectType == "Resource" &&
+            bulletDefinition.retainWhenZero &&
+            bulletDefinition.showWhenZero;
         bool test5 = initialBullet != null &&
             initialBullet.stack == 6;
         bool test6 = initialBullet != null &&
-            initialBullet.duration == -1;
+            bulletDefinitionFound && bulletDefinition.retainWhenZero;
         bool test7 =
-            CountMode72BuffBatches(allyA, "Bullet") == 1;
+            CountMode72BuffStates(allyA, "Bullet") == 1;
 
         BattleUnitFactory.ApplyInitialBuffs(
             allyA,
@@ -16097,7 +16077,7 @@ public class CardLoadTest : MonoBehaviour
         );
         bool test8 = allyA.GetBuffStack("Bullet") == 6;
         bool test9 =
-            CountMode72BuffBatches(allyA, "Bullet") == 1;
+            CountMode72BuffStates(allyA, "Bullet") == 1;
 
         Mode70BuffTestContext uiContext =
             CreateMode70BuffTestContext();
@@ -16122,8 +16102,6 @@ public class CardLoadTest : MonoBehaviour
             group.GetSlotForTesting(0);
         TMPro.TMP_Text bulletStackText =
             GetMode70StackText(bulletSlot);
-        TMPro.TMP_Text bulletDecayText =
-            GetMode70DecayText(bulletSlot);
         bool test10 =
             CountMode70ActiveSlots(group) == 1 &&
             CountMode70NormalSlots(group) == 1;
@@ -16133,10 +16111,7 @@ public class CardLoadTest : MonoBehaviour
         bool test12 =
             bulletSlot != null &&
             !bulletSlot.IsOverflow;
-        bool test13 =
-            bulletDecayText != null &&
-            !bulletDecayText.gameObject.activeSelf &&
-            bulletDecayText.text != "-1";
+        bool test13 = bulletSlot != null;
         bool test14 =
             GetMode70IconImage(bulletSlot).sprite ==
                 uiContext.strengthSprite;
@@ -16174,15 +16149,16 @@ public class CardLoadTest : MonoBehaviour
                 group.GetSlotForTesting(0)
             ).text == "6";
 
-        allyA.AddBuff(
-            "Mode72Temporary",
-            "模式72限时Buff",
-            "UpBuff",
-            1,
-            1,
-            "TurnEnd",
-            "DurationDown"
-        );
+        allyA.AddBuff("Strength", 2);
+        group.SetCharacter(allyA);
+        BattleBuffIconUIView strengthSlot = group.GetSlotForTesting(1);
+        bool test30 =
+            CountMode70ActiveSlots(group) == 2 &&
+            strengthSlot != null &&
+            GetMode70IconImage(strengthSlot).sprite == uiContext.defaultSprite &&
+            GetMode70StackText(strengthSlot).text == "2";
+
+        allyA.AddBuff("Strength", 1);
         List<CharacterData> turnParticipants =
             new List<CharacterData> { allyA };
         for (int iteration = 0; iteration < 3; iteration++)
@@ -16194,12 +16170,12 @@ public class CardLoadTest : MonoBehaviour
         bool test18 = bulletAfterThreeTurns != null;
         bool test19 =
             bulletAfterThreeTurns != null &&
-            bulletAfterThreeTurns.duration == -1;
+            bulletDefinition != null && bulletDefinition.retainWhenZero;
         bool test20 =
             bulletAfterThreeTurns != null &&
             bulletAfterThreeTurns.stack == 6;
         bool test21 =
-            allyA.GetBuffStack("Mode72Temporary") == 0;
+            allyA.GetBuffStack("Strength") == 3;
 
         int poolCountBeforeRemoval = group.RuntimeSlotCount;
         BattleBuffIconUIView reusableSlot =
@@ -16220,7 +16196,7 @@ public class CardLoadTest : MonoBehaviour
         bool test23 =
             group.RuntimeSlotCount == poolCountBeforeRemoval;
 
-        allyA.AddBuff("Bullet", 6, -1);
+        allyA.AddBuff("Bullet", 6);
         group.SetCharacter(allyA);
         bool test24 =
             group.GetSlotForTesting(0) == reusableSlot &&
@@ -16236,9 +16212,6 @@ public class CardLoadTest : MonoBehaviour
         pendingOnlyCharacter.AddPendingBuff(
             "Bullet",
             6,
-            -1,
-            1,
-            1,
             1
         );
         group.SetCharacter(pendingOnlyCharacter);
@@ -16261,24 +16234,24 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("模式72 测试1 正式入口只给Ally01添加Bullet：" + test1);
         Debug.Log("模式72 测试2 Ally02不获得Bullet：" + test2);
         Debug.Log("模式72 测试3 敌人不获得Bullet：" + test3);
-        Debug.Log("模式72 测试4 Factory通过AddBuff生成完整正式批次：" + test4);
+        Debug.Log("模式72 测试4 Factory通过AddBuff生成完整正式state：" + test4);
         Debug.Log("模式72 测试5 Bullet层数为6：" + test5);
-        Debug.Log("模式72 测试6 Bullet持续时间为-1：" + test6);
-        Debug.Log("模式72 测试7 Bullet只有一个有效批次：" + test7);
+        Debug.Log("模式72 测试6 Bullet使用Retain zero-stack策略：" + test6);
+        Debug.Log("模式72 测试7 Bullet只有一个canonical state：" + test7);
         Debug.Log("模式72 测试8 重复初始化不会叠到12层：" + test8);
-        Debug.Log("模式72 测试9 重复初始化不增加第二批Bullet：" + test9);
+        Debug.Log("模式72 测试9 重复初始化不增加第二个Bullet state：" + test9);
         Debug.Log("模式72 测试10 UI只显示一个普通Buff槽位：" + test10);
         Debug.Log("模式72 测试11 StackText显示6：" + test11);
         Debug.Log("模式72 测试12 Bullet不是Overflow：" + test12);
-        Debug.Log("模式72 测试13 永久Buff不显示负数倒计时：" + test13);
+        Debug.Log("模式72 测试13 Bullet不显示旧衰减文字：" + test13);
         Debug.Log("模式72 测试14 Bullet Binding使用专属图：" + test14);
         Debug.Log("模式72 测试15 Bullet缺少Binding时回退默认图：" + test15);
         Debug.Log("模式72 测试16 DebugPreview关闭并取消待执行预览：" + test16);
         Debug.Log("模式72 测试17 DebugPreview关闭不覆盖正式Bullet：" + test17);
         Debug.Log("模式72 测试18 三次回合生命周期后Bullet仍存在：" + test18);
-        Debug.Log("模式72 测试19 三次处理后duration仍为-1：" + test19);
+        Debug.Log("模式72 测试19 三次处理后Retain定义仍有效：" + test19);
         Debug.Log("模式72 测试20 三次处理后stack仍为6：" + test20);
-        Debug.Log("模式72 测试21 duration1普通Buff正常过期：" + test21);
+        Debug.Log("模式72 测试21 普通Strength不会因TurnEnd自动过期：" + test21);
         Debug.Log("模式72 测试22 移除Bullet并刷新后槽位隐藏：" + test22);
         Debug.Log("模式72 测试23 槽位隐藏后slotPool数量不减少：" + test23);
         Debug.Log("模式72 测试24 再添加Bullet复用原槽位实例：" + test24);
@@ -16287,6 +16260,7 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("模式72 测试27 模式70 Buff网格回归：" + test27);
         Debug.Log("模式72 测试28 模式69行动槽视觉回归：" + test28);
         Debug.Log("模式72 测试29 模式66与67卡牌指派回归：" + test29);
+        Debug.Log("模式72 测试30 正式Strength显示默认图标且无旧衰减文字：" + test30);
         Debug.Log(
             "===== BattlePermanentBulletBuffBasic 聚合测试结束 ====="
         );
@@ -16319,7 +16293,8 @@ public class CardLoadTest : MonoBehaviour
             test26 &&
             test27 &&
             test28 &&
-            test29;
+            test29 &&
+            test30;
     }
 
     BuffData FindMode72ActiveBuff(
@@ -16348,7 +16323,7 @@ public class CardLoadTest : MonoBehaviour
         return null;
     }
 
-    int CountMode72BuffBatches(
+    int CountMode72BuffStates(
         CharacterData character,
         string buffID
     )
@@ -16436,12 +16411,7 @@ public class CardLoadTest : MonoBehaviour
         );
         formalCharacter.AddBuff(
             "Mode71WrongFormalBuff",
-            "正式Buff",
-            "UpBuff",
-            1,
-            2,
-            "TurnEnd",
-            "DurationDown"
+            1
         );
         BattleBuffGroupDebugPreview preview =
             rootObject.AddComponent<
@@ -19358,12 +19328,7 @@ public class CardLoadTest : MonoBehaviour
 
         owner.AddBuff(
             "Strength",
-            "强壮",
-            "UpBuff",
-            1,
-            1,
-            "None",
-            "Permanent"
+            1
         );
         BattleCardUIPreviewData buffedPreview =
             BattleCardUIPreviewBuilder.Build(owner, target, cardState);
@@ -21364,12 +21329,13 @@ public class CardLoadTest : MonoBehaviour
             priorityContext.runtimeState
         );
 
-        bool respondedFirst =
+        bool freeFirst =
             priorityPlan.executionItems.Count == 2 &&
-            priorityPlan.executionItems[0].executionType == BattleExecutionItemType.RespondedEnemyIntent &&
-            priorityPlan.executionItems[0].responsePriority == 0 &&
-            priorityPlan.executionItems[1].executionType == BattleExecutionItemType.FreeAction;
-        Debug.Log("模式58 C 同速Responded优先于FreeAction：" + respondedFirst);
+            priorityPlan.executionItems[0].executionType == BattleExecutionItemType.FreeAction &&
+            priorityPlan.executionItems[0].actionSlot == freeSlot &&
+            priorityPlan.executionItems[1].executionType == BattleExecutionItemType.RespondedEnemyIntent &&
+            priorityPlan.executionItems[1].actionSlot == responseSlot;
+        Debug.Log("模式58 C 同速FreeAction优先于Responded：" + freeFirst);
 
         BattleEndedTestContext slotContext = CreateBattleEndedTestContext("order58_d", 30, 30, 50, 10, 4, 3);
         BattleActionSlot slot2 = CreateMode58FreeSlot(
@@ -22160,7 +22126,6 @@ public class CardLoadTest : MonoBehaviour
             crossContext.allyA,
             1
         );
-        ExecuteMode59Plan(crossContext, firstIntent, new List<BattleActionSlot> { crossSlot });
         BattleEnemyIntent secondIntent = CreateEnemyAttackIntent(
             "continuous59_4_intent2",
             secondEnemy,
@@ -22168,19 +22133,69 @@ public class CardLoadTest : MonoBehaviour
             crossContext.allyA,
             2
         );
-        ExecuteMode59Plan(crossContext, secondIntent, new List<BattleActionSlot> { crossSlot });
+        int crossDodgeCardUsedCount = 0;
+        System.Action<BattleEventContext> previousObserver =
+            BattleEventProcessor.TestEventObserver;
+        bool firstSuccessStatePassed = false;
+        bool secondSelectionPassed = false;
+        BattleEventProcessor.TestEventObserver = context =>
+        {
+            previousObserver?.Invoke(context);
+            if (context != null &&
+                context.timing == BattleTiming.CardUsed &&
+                object.ReferenceEquals(context.cardState, crossDodge))
+            {
+                crossDodgeCardUsedCount++;
+            }
+        };
+        try
+        {
+            ExecuteMode59Plan(
+                crossContext,
+                firstIntent,
+                new List<BattleActionSlot> { crossSlot }
+            );
+            firstSuccessStatePassed =
+                crossDodge.currentCooldown == 2 &&
+                crossSlot.isContinuousDodgeActive &&
+                !crossSlot.isCardUseFinalized &&
+                !crossSlot.isUsed &&
+                crossSlot.successfulDodgeCount == 1;
+            BattleGuardSelectionResult secondSelection =
+                BattleGuardSelectionManager.SelectHandlingCardForEnemyIntent(
+                    new List<BattleActionSlot> { crossSlot },
+                    secondIntent
+                );
+            secondSelectionPassed =
+                secondSelection.selectionType == BattleGuardSelectionType.ContinuousDodge &&
+                object.ReferenceEquals(secondSelection.slot, crossSlot);
+            ExecuteMode59Plan(
+                crossContext,
+                secondIntent,
+                new List<BattleActionSlot> { crossSlot }
+            );
+        }
+        finally
+        {
+            BattleEventProcessor.TestEventObserver = previousObserver;
+        }
         Debug.Log(
             "模式59 测试4 激活后跨敌人生效：" +
             (crossSlot.isContinuousDodgeActive &&
              crossSlot.successfulDodgeCount == 2 &&
-             object.ReferenceEquals(crossSlot.lastContinuousDodgeOpponent, secondEnemy))
+             object.ReferenceEquals(crossSlot.lastContinuousDodgeOpponent, secondEnemy) &&
+             firstSuccessStatePassed &&
+             secondSelectionPassed &&
+             crossDodge.currentCooldown == 2 &&
+             crossDodgeCardUsedCount == 1)
         );
         Debug.Log(
             "模式59 测试8 连续闪避再次成功后保持激活：" +
             (crossSlot.isContinuousDodgeActive &&
              !crossSlot.isUsed &&
              !crossSlot.isCardUseFinalized &&
-             crossDodge.currentCooldown == 0)
+             crossDodge.currentCooldown == 2 &&
+             crossDodgeCardUsedCount == 1)
         );
 
         BattleEndedTestContext exactPriorityContext =
@@ -22404,25 +22419,36 @@ public class CardLoadTest : MonoBehaviour
              passiveSelection.slot == priorityActive)
         );
 
-        BattleActionSlot invalidActive = CreateMode59ActiveDodgeSlot(
-            priorityContext.allyB, 1, "continuous59_13_invalid", 12, 2, priorityContext.enemy
+        BattleActionSlot invalidInactive = new BattleActionSlot(
+            priorityContext.allyB,
+            1
         );
-        invalidActive.cardState.currentCooldown = 1;
+        BattleCardState invalidCooldownDodge = CreateFixedDodgeCardForCharacter(
+            priorityContext.allyB,
+            "continuous59_13_invalid",
+            12,
+            2
+        );
+        invalidCooldownDodge.currentCooldown = 1;
+        invalidInactive.AssignPassiveGuard(
+            priorityContext.allyB,
+            invalidCooldownDodge
+        );
         BattleActionSlot validActive = CreateMode59ActiveDodgeSlot(
             priorityContext.allyB, 2, "continuous59_13_valid", 12, 2, priorityContext.enemy
         );
         BattleGuardSelectionResult validFallback =
             BattleGuardSelectionManager.SelectHandlingCardForEnemyIntent(
-                new List<BattleActionSlot> { invalidActive, validActive, lowerSpecific },
+                new List<BattleActionSlot> { invalidInactive, validActive, lowerSpecific },
                 priorityIntent
             );
         BattleGuardSelectionResult guardFallback =
             BattleGuardSelectionManager.SelectHandlingCardForEnemyIntent(
-                new List<BattleActionSlot> { invalidActive, lowerSpecific },
+                new List<BattleActionSlot> { invalidInactive, lowerSpecific },
                 priorityIntent
             );
         Debug.Log(
-            "模式59 测试13 失效连续闪避跳过并继续后续优先级：" +
+            "模式59 测试13 未激活且处于冷却的Dodge跳过并继续后续优先级：" +
             (validFallback.slot == validActive &&
              validFallback.selectionType == BattleGuardSelectionType.ContinuousDodge &&
              guardFallback.slot == lowerSpecific &&
@@ -22563,6 +22589,8 @@ public class CardLoadTest : MonoBehaviour
         BattleActionSlot sinDodgeSlot = new BattleActionSlot(formalUseContext.allyA, 1);
         sinDodgeSlot.AssignPassiveGuard(formalUseContext.allyA, sinDodge);
         List<BattleActionSlot> formalUseSlots = new List<BattleActionSlot> { sinDodgeSlot };
+        bool firstFormalUseCommitted = false;
+        bool continuationDidNotRepeatFormalUse = true;
 
         for (int index = 1; index <= 3; index++)
         {
@@ -22579,16 +22607,31 @@ public class CardLoadTest : MonoBehaviour
                 index
             );
             ExecuteMode59Plan(formalUseContext, intent, formalUseSlots);
+
+            if (index == 1)
+            {
+                firstFormalUseCommitted =
+                    sinDodge.currentUseCount == 1 &&
+                    formalUseContext.runtimeState.currentGuilt == 2;
+            }
+            else
+            {
+                continuationDidNotRepeatFormalUse &=
+                    sinDodge.currentUseCount == 1 &&
+                    formalUseContext.runtimeState.currentGuilt == 2;
+            }
         }
 
         bool beforeFinalize =
             sinDodgeSlot.successfulDodgeCount == 3 &&
-            sinDodge.currentUseCount == 0 &&
-            formalUseContext.runtimeState.currentGuilt == 0 &&
+            firstFormalUseCommitted &&
+            continuationDidNotRepeatFormalUse &&
+            sinDodge.currentUseCount == 1 &&
+            formalUseContext.runtimeState.currentGuilt == 2 &&
             !sinDodgeSlot.isUsed;
         TryEndCurrentTurnForTest(formalUseContext.runtimeState);
         Debug.Log(
-            "模式59 测试19 多次成功只触发一次正式UseCount/Guilt/Resolved收尾：" +
+            "模式59 测试19 首次正式CardUsed只提交一次，continuation与finalize不重复UseCount/Guilt：" +
             (beforeFinalize &&
              sinDodge.currentUseCount == 1 &&
              formalUseContext.runtimeState.currentGuilt == 2 &&
@@ -23002,7 +23045,7 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleDefinitionBootstrapResult result = BattleDefinitionBootstrap.CreateRuntimeState("encounter_test_001");
         CharacterData allyAUnit = result != null && result.runtimeState != null ? result.runtimeState.allyA : null;
-        BuffData bullet = GetFirstBuffBatch(allyAUnit, "Bullet");
+        BuffData bullet = GetFirstBuffState(allyAUnit, "Bullet");
         BuffDefinitionData bulletDefinition;
         bool definitionFound = BuffDefinitionLoader.TryGetDefinition("Bullet", out bulletDefinition);
 
@@ -23011,12 +23054,11 @@ public class CardLoadTest : MonoBehaviour
             result.isSuccess &&
             bullet != null &&
             bullet.stack == 6 &&
-            bullet.duration == -1 &&
             definitionFound &&
-            bullet.buffName == bulletDefinition.buffName &&
-            bullet.buffCategory == bulletDefinition.buffCategory &&
-            bullet.checkTiming == bulletDefinition.defaultCheckTiming &&
-            bullet.expireRule == bulletDefinition.defaultExpireRule;
+            bulletDefinition.displayName == "子弹" &&
+            bulletDefinition.buffCategory == "AbilityBuff" &&
+            bulletDefinition.retainWhenZero &&
+            bulletDefinition.showWhenZero;
 
         Debug.Log("模式56 H 初始Buff来自BuffDefinitions且没有GuessBuff回落：" + initialBuff);
     }
@@ -23417,7 +23459,6 @@ public class CardLoadTest : MonoBehaviour
                 {
                     buffID = "MissingBuffForMode56",
                     stack = 1,
-                    duration = -1
                 }
             };
         }
@@ -23594,7 +23635,7 @@ public class CardLoadTest : MonoBehaviour
         return false;
     }
 
-    BuffData GetFirstBuffBatch(CharacterData character, string buffID)
+    BuffData GetFirstBuffState(CharacterData character, string buffID)
     {
         if (character == null || character.buffs == null)
         {
@@ -23720,7 +23761,7 @@ public class CardLoadTest : MonoBehaviour
         {
             buffID = definition.buffID,
             stack = definition.stack,
-            duration = definition.duration
+            intensity = definition.intensity
         };
     }
 
@@ -23835,7 +23876,7 @@ public class CardLoadTest : MonoBehaviour
     void RunRealCardResourceNextCardStillStacksSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("real55_e", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("NextCardPointUp", 1, 1);
+        context.allyA.AddBuff("NextCardPointUp", 1, 0);
         BattleCardState attack = CreateRealBulletAttackCardState(context.allyA, "real55_e_attack");
         BattleActionSlot slot = AssignRealBulletAttackFreeAction(context, attack, 1);
 
@@ -23854,7 +23895,7 @@ public class CardLoadTest : MonoBehaviour
     void RunRealCardResourceOneBulletNormalVersionSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("real55_f", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 1, -1);
+        context.allyA.AddBuff("Bullet", 1);
         BattleCardState attack = CreateRealBulletAttackCardState(context.allyA, "real55_f_attack");
         BattleActionSlot slot = AssignRealBulletAttackFreeAction(context, attack, 1);
 
@@ -23873,7 +23914,7 @@ public class CardLoadTest : MonoBehaviour
     void RunRealCardResourceExactThreeBulletBonusSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("real55_g", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
         BattleCardState attack = CreateRealBulletAttackCardState(context.allyA, "real55_g_attack");
         BattleActionSlot slot = AssignRealBulletAttackFreeAction(context, attack, 1);
 
@@ -23892,7 +23933,7 @@ public class CardLoadTest : MonoBehaviour
     void RunRealCardResourceWinConsumesOneBulletSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("real55_h", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
         BattleCardState attack = CreateRealBulletAttackCardState(context.allyA, "real55_h_attack");
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "real55_h_enemy", 1, 0);
         int guiltBefore = context.allyA.currentGuilt;
@@ -23919,7 +23960,7 @@ public class CardLoadTest : MonoBehaviour
     void RunRealCardResourceLoseConsumesNoBulletSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("real55_i", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
         BattleCardState attack = CreateRealBulletAttackCardState(context.allyA, "real55_i_attack");
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "real55_i_enemy", 30, 0);
         int guiltBefore = context.allyA.currentGuilt;
@@ -24021,7 +24062,7 @@ public class CardLoadTest : MonoBehaviour
     void RunCardAssignmentEligibilityBuffInsufficientSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_d", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Strength", 1, 2);
+        context.allyA.AddBuff("Strength", 1);
         BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_d_card", CreateBuffStackAtLeastCondition("Strength", 2));
         List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
 
@@ -24037,7 +24078,7 @@ public class CardLoadTest : MonoBehaviour
     void RunCardAssignmentEligibilityBuffExactSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_e", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Strength", 2, 2);
+        context.allyA.AddBuff("Strength", 2);
         BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_e_card", CreateBuffStackAtLeastCondition("Strength", 2));
         List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
 
@@ -24051,7 +24092,7 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleEndedTestContext guiltOkContext = CreateBattleEndedTestContext("elig54_f_guilt_ok", 30, 30, 50, 10, 3, 8);
         guiltOkContext.allyA.currentGuilt = 20;
-        guiltOkContext.allyA.AddBuff("Strength", 1, 2);
+        guiltOkContext.allyA.AddBuff("Strength", 1);
         BattleCardState guiltOkCard = CreateEligibilityAttackCard(guiltOkContext.allyA, "elig54_f_guilt_ok_card", CreateGuiltAtLeastCondition(20), CreateBuffStackAtLeastCondition("Strength", 2));
         List<BattleActionSlot> guiltOkSlots = BattleActionSlotManager.CreatePartyActionSlots(guiltOkContext.allyA, guiltOkContext.allyB, 2);
         CardEligibilityResult guiltOkResult;
@@ -24059,7 +24100,7 @@ public class CardLoadTest : MonoBehaviour
 
         BattleEndedTestContext buffOkContext = CreateBattleEndedTestContext("elig54_f_buff_ok", 30, 30, 50, 10, 3, 8);
         buffOkContext.allyA.currentGuilt = 15;
-        buffOkContext.allyA.AddBuff("Strength", 2, 2);
+        buffOkContext.allyA.AddBuff("Strength", 2);
         BattleCardState buffOkCard = CreateEligibilityAttackCard(buffOkContext.allyA, "elig54_f_buff_ok_card", CreateGuiltAtLeastCondition(20), CreateBuffStackAtLeastCondition("Strength", 2));
         List<BattleActionSlot> buffOkSlots = BattleActionSlotManager.CreatePartyActionSlots(buffOkContext.allyA, buffOkContext.allyB, 2);
         CardEligibilityResult buffOkResult;
@@ -24067,7 +24108,7 @@ public class CardLoadTest : MonoBehaviour
 
         BattleEndedTestContext bothOkContext = CreateBattleEndedTestContext("elig54_f_both_ok", 30, 30, 50, 10, 3, 8);
         bothOkContext.allyA.currentGuilt = 20;
-        bothOkContext.allyA.AddBuff("Strength", 2, 2);
+        bothOkContext.allyA.AddBuff("Strength", 2);
         BattleCardState bothOkCard = CreateEligibilityAttackCard(bothOkContext.allyA, "elig54_f_both_ok_card", CreateGuiltAtLeastCondition(20), CreateBuffStackAtLeastCondition("Strength", 2));
         List<BattleActionSlot> bothOkSlots = BattleActionSlotManager.CreatePartyActionSlots(bothOkContext.allyA, bothOkContext.allyB, 2);
         CardEligibilityResult bothOkResult;
@@ -24081,7 +24122,7 @@ public class CardLoadTest : MonoBehaviour
     void RunCardAssignmentEligibilityPendingBuffIgnoredSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_g", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddPendingBuff("Strength", 2, 1, 1, 1, 1);
+        context.allyA.AddPendingBuff("Strength", 2, 1, 1, 1);
         BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_g_card", CreateBuffStackAtLeastCondition("Strength", 1));
         List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
 
@@ -24094,7 +24135,7 @@ public class CardLoadTest : MonoBehaviour
     void RunCardAssignmentEligibilityPermanentBuffSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_h", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Strength", 2, -1);
+        context.allyA.AddBuff("Strength", 2);
         BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_h_card", CreateBuffStackAtLeastCondition("Strength", 2));
         List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
 
@@ -24211,9 +24252,9 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_n", 30, 30, 50, 10, 3, 8);
         context.allyA.currentGuilt = 15;
-        context.allyA.AddBuff("Strength", 1, 2);
-        context.allyA.AddBuff("Bullet", 3, -1);
-        context.allyA.AddPendingBuff("Strength", 2, 1, 1, 1, 1);
+        context.allyA.AddBuff("Strength", 1);
+        context.allyA.AddBuff("Bullet", 3);
+        context.allyA.AddPendingBuff("Strength", 2, 1, 1, 1);
         BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_n_card", CreateGuiltAtLeastCondition(20), CreateBuffStackAtLeastCondition("Strength", 2));
         List<BattleActionSlot> slots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
 
@@ -24247,8 +24288,8 @@ public class CardLoadTest : MonoBehaviour
     void RunCardAssignmentEligibilityExecutionRecheckSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("elig54_o", 30, 30, 50, 20, 3, 8);
-        context.allyA.AddBuff("Strength", 1, 2);
-        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Strength", 1);
+        context.allyA.AddBuff("Bullet", 3);
         BattleCardState card = CreateEligibilityAttackCard(context.allyA, "elig54_o_card", CreateBuffStackAtLeastCondition("Strength", 1));
         card.cardData.resourceRule = CreateBuffStackResourceRule("Bullet", 1, 1, 1, 0, 0, 0, 1);
         AddProbeEffect(card, BattleTiming.ActionStart, "Elig54OActionStart");
@@ -24687,7 +24728,7 @@ public class CardLoadTest : MonoBehaviour
         context.runtimeState.SetActionSlots(slots);
         context.runtimeState.SetIntentQueue(new List<BattleEnemyIntent>());
         context.runtimeState.currentGuilt = 6;
-        context.allyA.AddBuff("Strength", 2, 2);
+        context.allyA.AddBuff("Strength", 2);
 
         BattleCardState attack = CreateFixedAttackCardForCharacter(context.allyA, "prepared57_g_attack", 5);
         int guiltBefore = context.runtimeState.currentGuilt;
@@ -24748,7 +24789,7 @@ public class CardLoadTest : MonoBehaviour
     void RunCardResourceFallbackBasePointSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_a", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("NextCardPointUp", 1, 1);
+        context.allyA.AddBuff("NextCardPointUp", 1, 0);
         BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_a_attack", 1, 10, 3, 0, 0, 0, 0, 0, 1);
 
         BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
@@ -24767,9 +24808,9 @@ public class CardLoadTest : MonoBehaviour
     void RunCardResourceActionStartAffectsCurrentSnapshotSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_b", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 2, -1);
+        context.allyA.AddBuff("Bullet", 2);
         BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_b_attack", 1, 1, 3, 0, 0, 1, 3, 3, 0);
-        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Bullet", 1, -1));
+        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Bullet", 1));
 
         BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
         slot.AssignFreeAction(context.allyA, attack, context.enemy);
@@ -24786,9 +24827,9 @@ public class CardLoadTest : MonoBehaviour
     void RunCardResourceBeforeUseDoesNotAffectCurrentSnapshotSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_c", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 2, -1);
+        context.allyA.AddBuff("Bullet", 2);
         BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_c_attack", 1, 1, 3, 0, 0, 1, 3, 3, 0);
-        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.BeforeUse, "Bullet", 1, -1));
+        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.BeforeUse, "Bullet", 1));
 
         BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
         slot.AssignFreeAction(context.allyA, attack, context.enemy);
@@ -24805,7 +24846,7 @@ public class CardLoadTest : MonoBehaviour
     void RunCardResourcePointPerStackSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_d", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 2, -1);
+        context.allyA.AddBuff("Bullet", 2);
         BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_d_attack", 1, 1, 1, 0, 0, 1, 0, 0, 0);
 
         BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
@@ -24818,7 +24859,7 @@ public class CardLoadTest : MonoBehaviour
     void RunCardResourceExactStackBonusSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_e", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
         BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_e_attack", 1, 1, 1, 0, 0, 1, 3, 3, 0);
 
         BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
@@ -24831,7 +24872,7 @@ public class CardLoadTest : MonoBehaviour
     void RunCardResourceAttackWinConsumeSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_f", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
         BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_f_attack", 8, 8, 3, 0, 0, 0, 0, 0, 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "resource53_f_enemy", 5, 0);
 
@@ -24852,7 +24893,7 @@ public class CardLoadTest : MonoBehaviour
     void RunCardResourceAttackLoseNoConsumeSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_g", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
         BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_g_attack", 4, 4, 3, 0, 0, 0, 0, 0, 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "resource53_g_enemy", 8, 0);
 
@@ -24873,8 +24914,8 @@ public class CardLoadTest : MonoBehaviour
     void RunCardResourceDodgeVsAttackConsumeSubTest()
     {
         BattleEndedTestContext successContext = CreateBattleEndedTestContext("resource53_h_success", 30, 30, 50, 10, 3, 8);
-        successContext.allyA.AddBuff("Bullet", 3, -1);
-        successContext.enemy.AddBuff("Bullet", 3, -1);
+        successContext.allyA.AddBuff("Bullet", 3);
+        successContext.enemy.AddBuff("Bullet", 3);
         BattleCardState successDodge = CreateResourceDodgeCard(successContext.allyA, "resource53_h_success_dodge", 9, 9, 3, 0, 0, 0, 0, 0, 1);
         BattleCardState successEnemy = CreateResourceAttackCard(successContext.enemy, "resource53_h_success_enemy", 5, 5, 3, 0, 0, 0, 0, 0, 1);
 
@@ -24890,8 +24931,8 @@ public class CardLoadTest : MonoBehaviour
             CountBuffStack(successContext.enemy, "Bullet") == 2;
 
         BattleEndedTestContext failedContext = CreateBattleEndedTestContext("resource53_h_failed", 30, 30, 50, 10, 3, 8);
-        failedContext.allyA.AddBuff("Bullet", 3, -1);
-        failedContext.enemy.AddBuff("Bullet", 3, -1);
+        failedContext.allyA.AddBuff("Bullet", 3);
+        failedContext.enemy.AddBuff("Bullet", 3);
         BattleCardState failedDodge = CreateResourceDodgeCard(failedContext.allyA, "resource53_h_failed_dodge", 4, 4, 3, 0, 0, 0, 0, 0, 1);
         BattleCardState failedEnemy = CreateResourceAttackCard(failedContext.enemy, "resource53_h_failed_enemy", 8, 8, 3, 0, 0, 0, 0, 0, 1);
 
@@ -24913,8 +24954,8 @@ public class CardLoadTest : MonoBehaviour
     void RunCardResourceDefenseConsumeSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_i", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 3, -1);
-        context.enemy.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
+        context.enemy.AddBuff("Bullet", 3);
         BattleCardState defense = CreateResourceDefenseCard(context.allyA, "resource53_i_defense", 7, 7, 3, 0, 0, 0, 0, 0, 1);
         BattleCardState enemyAttack = CreateResourceAttackCard(context.enemy, "resource53_i_enemy", 5, 5, 3, 0, 0, 0, 0, 0, 1);
 
@@ -24935,7 +24976,7 @@ public class CardLoadTest : MonoBehaviour
     void RunCardResourceFreeAttackConsumeSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_j", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
         BattleCardState attack = CreateResourceAttackCard(context.allyA, "resource53_j_attack", 5, 5, 3, 0, 0, 0, 0, 0, 1);
 
         BattleActionSlot slot = new BattleActionSlot(context.allyA, 1);
@@ -24948,7 +24989,7 @@ public class CardLoadTest : MonoBehaviour
     void RunCardResourceUnrespondedEnemyAttackConsumeSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_k", 30, 30, 50, 10, 3, 8);
-        context.enemy.AddBuff("Bullet", 3, -1);
+        context.enemy.AddBuff("Bullet", 3);
         BattleCardState enemyAttack = CreateResourceAttackCard(context.enemy, "resource53_k_enemy", 5, 5, 3, 0, 0, 0, 0, 0, 1);
 
         BattleResolveResult result = BattleResolver.ResolveUnrespondedEnemyIntent(
@@ -24981,7 +25022,7 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_l", 30, 30, 50, 10, 3, 8);
         BattleCardState attack = CreateResourceAttackCard(context.allyB, "resource53_l_attack", 5, 5, 1, 0, 0, 0, 0, 0, 1);
         AddBulletCondition(attack.cardData, 3);
-        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Resource53LActionStart", 1, 1));
+        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Resource53LActionStart", 1));
 
         BattleActionSlot slot = new BattleActionSlot(context.allyB, 1);
         slot.AssignFreeAction(context.allyB, attack, context.enemy);
@@ -24999,12 +25040,12 @@ public class CardLoadTest : MonoBehaviour
     void RunCardResourceTieRetrySnapshotSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_m", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 2, -1);
-        context.enemy.AddBuff("Bullet", 2, -1);
+        context.allyA.AddBuff("Bullet", 2);
+        context.enemy.AddBuff("Bullet", 2);
         BattleCardState playerAttack = CreateResourceAttackCard(context.allyA, "resource53_m_player", 5, 5, 1, 0, 0, 0, 0, 0, 1);
         BattleCardState enemyAttack = CreateResourceAttackCard(context.enemy, "resource53_m_enemy", 5, 5, 1, 0, 0, 0, 0, 0, 1);
-        playerAttack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Bullet", 1, -1));
-        enemyAttack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Bullet", 1, -1));
+        playerAttack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Bullet", 1));
+        enemyAttack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Bullet", 1));
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             CreateRespondedSlot(context.allyA, playerAttack),
@@ -25023,8 +25064,8 @@ public class CardLoadTest : MonoBehaviour
     void RunCardResourceTieLimitNoConsumeSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_n", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("Bullet", 3, -1);
-        context.enemy.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
+        context.enemy.AddBuff("Bullet", 3);
         BattleCardState playerAttack = CreateResourceAttackCard(context.allyA, "resource53_n_player", 5, 5, 3, 0, 0, 0, 0, 0, 1);
         BattleCardState enemyAttack = CreateResourceAttackCard(context.enemy, "resource53_n_enemy", 5, 5, 3, 0, 0, 0, 0, 0, 1);
 
@@ -25047,12 +25088,12 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("resource53_o", 30, 30, 50, 10, 3, 8);
         List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
-        context.allyB.AddBuff("Bullet", 3, -1);
-        context.enemy.AddBuff("Bullet", 3, -1);
+        context.allyB.AddBuff("Bullet", 3);
+        context.enemy.AddBuff("Bullet", 3);
         BattleCardState responseAttack = CreateFixedAttackCardForCharacter(context.allyB, "resource53_o_response", 4);
         BattleCardState passiveDefense = CreateResourceDefenseCard(context.allyB, "resource53_o_passive", 10, 10, 3, 0, 0, 0, 0, 0, 1);
         BattleCardState enemyAttack = CreateResourceAttackCard(context.enemy, "resource53_o_enemy", 8, 8, 3, 0, 0, 0, 0, 0, 1);
-        enemyAttack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Resource53OEnemyActionStart", 1, 1));
+        enemyAttack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Resource53OEnemyActionStart", 1));
         BattleEnemyIntent intent = CreateEnemyAttackIntent("resource53_o_intent", context.enemy, enemyAttack, context.allyB, 1);
         List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
         context.runtimeState.SetActionSlots(actionSlots);
@@ -25076,8 +25117,8 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleEndedTestContext pointContext = CreateBattleEndedTestContext("resource53_p_point", 30, 30, 50, 10, 3, 8);
         BattleCardState attack = CreateResourceAttackCard(pointContext.allyA, "resource53_p_attack", 5, 5, 0, 0, 0, 0, 0, 0, 0);
-        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "NextCardPointUp", 2, 1));
-        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "NextClashPointUp", 3, 1));
+        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "NextCardPointUp", 2));
+        attack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "NextClashPointUp", 3));
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(pointContext.enemy, "resource53_p_enemy", 1, 0);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
@@ -25093,7 +25134,7 @@ public class CardLoadTest : MonoBehaviour
 
         BattleEndedTestContext abilityContext = CreateBattleEndedTestContext("resource53_p_ability", 30, 30, 50, 10, 3, 8);
         BattleCardState ability = CreateBattleEndedAbilityCard(abilityContext.allyA, "resource53_p_ability_card", "Resource53PAbilityOnPlay");
-        ability.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Resource53PAbilityActionStart", 1, 1));
+        ability.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.ActionStart, "Resource53PAbilityActionStart", 1));
         BattleActionSlot abilitySlot = new BattleActionSlot(abilityContext.allyA, 1);
         abilitySlot.AssignFreeAction(abilityContext.allyA, ability, abilityContext.allyA);
 
@@ -25133,7 +25174,7 @@ public class CardLoadTest : MonoBehaviour
     void RunBeforeUseAttackNormalBuffSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff50_a", 30, 30, 50, 10, 3, 8);
-        BattleCardState attack = CreateBeforeUseBuffAttackCard(context.allyA, "buff50_a_attack", 5, "Strength", 1, 1);
+        BattleCardState attack = CreateBeforeUseBuffAttackCard(context.allyA, "buff50_a_attack", 5, "Strength", 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff50_a_enemy", 1, 0);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
@@ -25153,7 +25194,7 @@ public class CardLoadTest : MonoBehaviour
     void RunBeforeUseNextCardPointSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff50_b", 30, 30, 50, 10, 3, 8);
-        BattleCardState attack = CreateBeforeUseBuffAttackCard(context.allyA, "buff50_b_attack", 5, "NextCardPointUp", 2, 1);
+        BattleCardState attack = CreateBeforeUseBuffAttackCard(context.allyA, "buff50_b_attack", 5, "NextCardPointUp", 2);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff50_b_enemy", 1, 0);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
@@ -25167,7 +25208,7 @@ public class CardLoadTest : MonoBehaviour
         BattleActionSlot followSlot = new BattleActionSlot(context.allyA, 2);
         followSlot.AssignFreeAction(context.allyA, followAttack, context.enemy);
         BattleResolveResult followResult = BattleResolver.ResolveFreeAction(followSlot);
-        bool keptForNext = followResult != null && followResult.playerPoint == 7 && CountBuffStack(context.allyA, "NextCardPointUp") == 0;
+        bool keptForNext = followResult != null && followResult.playerPoint == 7 && CountBuffStack(context.allyA, "NextCardPointUp") == 1;
 
         Debug.Log("BeforeUse新增蓄势不影响当前卡：" + notCurrent);
         Debug.Log("BeforeUse新增蓄势保留给后续卡：" + keptForNext);
@@ -25176,7 +25217,7 @@ public class CardLoadTest : MonoBehaviour
     void RunBeforeUseNextClashPointSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff50_c", 30, 30, 50, 10, 3, 8);
-        BattleCardState attack = CreateBeforeUseBuffAttackCard(context.allyA, "buff50_c_attack", 5, "NextClashPointUp", 3, 1);
+        BattleCardState attack = CreateBeforeUseBuffAttackCard(context.allyA, "buff50_c_attack", 5, "NextClashPointUp", 3);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff50_c_enemy", 1, 0);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
@@ -25192,7 +25233,7 @@ public class CardLoadTest : MonoBehaviour
             CreateRespondedSlot(context.allyA, followAttack),
             CreateEnemyAttackIntent("buff50_c_follow_intent", context.enemy, followEnemy, context.allyA, 1)
         );
-        bool keptForNext = followResult != null && followResult.playerPoint == 8 && CountBuffStack(context.allyA, "NextClashPointUp") == 0;
+        bool keptForNext = followResult != null && followResult.playerPoint == 8 && CountBuffStack(context.allyA, "NextClashPointUp") == 2;
 
         Debug.Log("BeforeUse新增拼点强化不影响当前拼点：" + notCurrent);
         Debug.Log("BeforeUse新增拼点强化保留给后续拼点：" + keptForNext);
@@ -25201,8 +25242,8 @@ public class CardLoadTest : MonoBehaviour
     void RunBeforeUseMergedNextCardPointSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff50_d", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("NextCardPointUp", 1, 1);
-        BattleCardState attack = CreateBeforeUseBuffAttackCard(context.allyA, "buff50_d_attack", 5, "NextCardPointUp", 3, 1);
+        context.allyA.AddBuff("NextCardPointUp", 1, 0);
+        BattleCardState attack = CreateBeforeUseBuffAttackCard(context.allyA, "buff50_d_attack", 5, "NextCardPointUp", 3);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff50_d_enemy", 1, 0);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
@@ -25222,7 +25263,7 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff50_e", 30, 30, 50, 10, 3, 8);
         context.allyA.AddBuff("NextClashPointUp", 2, 1);
-        BattleCardState attack = CreateBeforeUseBuffAttackCard(context.allyA, "buff50_e_attack", 5, "NextClashPointUp", 4, 1);
+        BattleCardState attack = CreateBeforeUseBuffAttackCard(context.allyA, "buff50_e_attack", 5, "NextClashPointUp", 4);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff50_e_enemy", 1, 0);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
@@ -25231,7 +25272,7 @@ public class CardLoadTest : MonoBehaviour
         );
 
         bool oldUsed = result != null && result.playerPoint == 7;
-        bool consumedOld = CountBuffStack(context.allyA, "NextClashPointUp") == 4;
+        bool consumedOld = CountBuffStack(context.allyA, "NextClashPointUp") == 5;
 
         Debug.Log("旧拼点强化快照正确参与当前拼点：" + oldUsed);
         Debug.Log("只消费旧拼点强化层数：" + consumedOld);
@@ -25241,7 +25282,7 @@ public class CardLoadTest : MonoBehaviour
     void RunBeforeUseDefenseGuardSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff50_f", 30, 30, 50, 10, 3, 8);
-        BattleCardState defense = CreateBeforeUseBuffDefenseCard(context.allyA, "buff50_f_defense", 3, "GuardUp", 2, 1);
+        BattleCardState defense = CreateBeforeUseBuffDefenseCard(context.allyA, "buff50_f_defense", 3, "GuardUp", 2);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff50_f_enemy", 5, 0);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
@@ -25255,8 +25296,8 @@ public class CardLoadTest : MonoBehaviour
     void RunBeforeUseKnownPointSubTest()
     {
         BattleEndedTestContext defenseContext = CreateBattleEndedTestContext("buff50_g_def", 30, 30, 50, 10, 3, 8);
-        BattleCardState defense = CreateBeforeUseBuffDefenseCard(defenseContext.allyB, "buff50_g_defense", 3, "NextCardPointUp", 3, 1);
-        BattleCardState enemyAttack = CreateBeforeUseBuffAttackCard(defenseContext.enemy, "buff50_g_enemy", 5, "Strength", 9, 1);
+        BattleCardState defense = CreateBeforeUseBuffDefenseCard(defenseContext.allyB, "buff50_g_defense", 3, "NextCardPointUp", 3);
+        BattleCardState enemyAttack = CreateBeforeUseBuffAttackCard(defenseContext.enemy, "buff50_g_enemy", 5, "Strength", 9);
         BattleResolveResult defenseResult = BattleResolver.ResolveDefenseVsAttackWithKnownEnemyPoint(
             CreateRespondedSlot(defenseContext.allyB, defense),
             CreateEnemyAttackIntent("buff50_g_def_intent", defenseContext.enemy, enemyAttack, defenseContext.allyB, 1),
@@ -25264,8 +25305,8 @@ public class CardLoadTest : MonoBehaviour
         );
 
         BattleEndedTestContext dodgeContext = CreateBattleEndedTestContext("buff50_g_dodge", 30, 30, 50, 10, 3, 8);
-        BattleCardState dodge = CreateBeforeUseBuffDodgeCard(dodgeContext.allyB, "buff50_g_dodge", 4, "NextClashPointUp", 3, 1);
-        BattleCardState dodgeEnemy = CreateBeforeUseBuffAttackCard(dodgeContext.enemy, "buff50_g_dodge_enemy", 5, "Strength", 9, 1);
+        BattleCardState dodge = CreateBeforeUseBuffDodgeCard(dodgeContext.allyB, "buff50_g_dodge", 4, "NextClashPointUp", 3);
+        BattleCardState dodgeEnemy = CreateBeforeUseBuffAttackCard(dodgeContext.enemy, "buff50_g_dodge_enemy", 5, "Strength", 9);
         BattleResolveResult dodgeResult = BattleResolver.ResolveDodgeVsAttackWithKnownEnemyPoint(
             CreateRespondedSlot(dodgeContext.allyB, dodge),
             CreateEnemyAttackIntent("buff50_g_dodge_intent", dodgeContext.enemy, dodgeEnemy, dodgeContext.allyB, 1),
@@ -25288,9 +25329,9 @@ public class CardLoadTest : MonoBehaviour
     void RunBeforeUseFreeActionUnavailableSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff50_h", 30, 30, 50, 10, 3, 8);
-        BattleCardState unavailableAttack = CreateBulletLockedBeforeUseAttackCard(context.allyB, "buff50_h_unavailable", 5, 3, "Strength", 1, 1);
+        BattleCardState unavailableAttack = CreateBulletLockedBeforeUseAttackCard(context.allyB, "buff50_h_unavailable", 5, 3, "Strength", 1);
         BattleCardState followAbility = CreateBattleEndedAbilityCard(context.allyA, "buff50_h_follow", "Buff50HFollow");
-        context.allyB.AddBuff("NextCardPointUp", 4, 1);
+        context.allyB.AddBuff("NextCardPointUp", 4, 3);
 
         BattleActionSlot firstSlot = new BattleActionSlot(context.allyB, 1);
         firstSlot.AssignFreeAction(context.allyB, unavailableAttack, context.enemy);
@@ -25313,14 +25354,14 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff50_i", 30, 30, 50, 20, 3, 8);
         List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
-        BattleCardState responseAttack = CreateBulletLockedBeforeUseAttackCard(context.allyA, "buff50_i_response", 5, 3, "Strength", 1, 1);
+        BattleCardState responseAttack = CreateBulletLockedBeforeUseAttackCard(context.allyA, "buff50_i_response", 5, 3, "Strength", 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff50_i_enemy", 5, 0);
         BattleEnemyIntent intent = CreateEnemyAttackIntent("buff50_i_intent", context.enemy, enemyAttack, context.allyB, 1);
         List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
         context.runtimeState.SetActionSlots(actionSlots);
         context.runtimeState.SetIntentQueue(intentQueue);
 
-        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
         CardEligibilityResult assignResult;
         bool assignSuccess = BattleActionSlotManager.AssignResponseToEnemyIntent(
             actionSlots,
@@ -25371,7 +25412,7 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff50_j", 30, 30, 50, 20, 3, 8);
         List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
-        BattleCardState responseDefense = CreateBulletLockedBeforeUseDefenseCard(context.allyA, "buff50_j_response", 3, 3, "GuardUp", 9, 1);
+        BattleCardState responseDefense = CreateBulletLockedBeforeUseDefenseCard(context.allyA, "buff50_j_response", 3, 3, "GuardUp", 9);
         BattleCardState passiveDefense = CreateTestDefenseCardForCharacter(context.allyB, "buff50_j_passive", 10, 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff50_j_enemy", 5, 0);
         BattleEnemyIntent intent = CreateEnemyAttackIntent("buff50_j_intent", context.enemy, enemyAttack, context.allyB, 1);
@@ -25379,7 +25420,7 @@ public class CardLoadTest : MonoBehaviour
         context.runtimeState.SetActionSlots(actionSlots);
         context.runtimeState.SetIntentQueue(intentQueue);
 
-        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
         CardEligibilityResult responseAssignResult;
         bool responseAssignSuccess = BattleActionSlotManager.AssignResponseToEnemyIntent(
             actionSlots,
@@ -25438,13 +25479,13 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff50_k", 30, 30, 50, 20, 3, 8);
         List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
-        BattleCardState responseDodge = CreateBulletLockedBeforeUseDodgeCard(context.allyA, "buff50_k_response", 8, 3, "Strength", 1, 1);
+        BattleCardState responseDodge = CreateBulletLockedBeforeUseDodgeCard(context.allyA, "buff50_k_response", 8, 3, "Strength", 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff50_k_enemy", 5, 0);
         BattleEnemyIntent intent = CreateEnemyAttackIntent("buff50_k_intent", context.enemy, enemyAttack, context.allyB, 1);
         List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
         context.runtimeState.SetActionSlots(actionSlots);
         context.runtimeState.SetIntentQueue(intentQueue);
-        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
         CardEligibilityResult assignResult;
         bool assignSuccess = BattleActionSlotManager.AssignResponseToEnemyIntent(
             actionSlots,
@@ -25489,13 +25530,13 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff50_l", 30, 0, 50, 20, 3, 8);
         List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 1);
-        BattleCardState responseAttack = CreateBulletLockedBeforeUseAttackCard(context.allyA, "buff50_l_response", 5, 3, "Strength", 1, 1);
-        BattleCardState enemyAttack = CreateBeforeUseBuffAttackCard(context.enemy, "buff50_l_enemy", 5, "Strength", 1, 1);
+        BattleCardState responseAttack = CreateBulletLockedBeforeUseAttackCard(context.allyA, "buff50_l_response", 5, 3, "Strength", 1);
+        BattleCardState enemyAttack = CreateBeforeUseBuffAttackCard(context.enemy, "buff50_l_enemy", 5, "Strength", 1);
         BattleEnemyIntent intent = CreateEnemyAttackIntent("buff50_l_intent", context.enemy, enemyAttack, context.allyB, 1);
         List<BattleEnemyIntent> intentQueue = BattleEnemyIntentManager.CreateIntentQueue(intent);
         context.runtimeState.SetActionSlots(actionSlots);
         context.runtimeState.SetIntentQueue(intentQueue);
-        context.allyA.AddBuff("Bullet", 3, -1);
+        context.allyA.AddBuff("Bullet", 3);
         CardEligibilityResult assignResult;
         bool assignSuccess = BattleActionSlotManager.AssignResponseToEnemyIntent(
             actionSlots,
@@ -25529,14 +25570,14 @@ public class CardLoadTest : MonoBehaviour
     void RunBeforeUseTieLimitSubTest()
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff50_m", 30, 30, 50, 10, 3, 8);
-        context.allyA.AddBuff("NextCardPointUp", 1, 1);
-        context.allyA.AddBuff("NextClashPointUp", 1, 1);
-        context.enemy.AddBuff("NextCardPointUp", 1, 1);
-        context.enemy.AddBuff("NextClashPointUp", 1, 1);
-        BattleCardState playerAttack = CreateBeforeUseBuffAttackCard(context.allyA, "buff50_m_player", 5, "NextCardPointUp", 2, 1);
-        playerAttack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.BeforeUse, "NextClashPointUp", 2, 1));
-        BattleCardState enemyAttack = CreateBeforeUseBuffAttackCard(context.enemy, "buff50_m_enemy", 5, "NextCardPointUp", 2, 1);
-        enemyAttack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.BeforeUse, "NextClashPointUp", 2, 1));
+        context.allyA.AddBuff("NextCardPointUp", 1, 0);
+        context.allyA.AddBuff("NextClashPointUp", 1, 0);
+        context.enemy.AddBuff("NextCardPointUp", 1, 0);
+        context.enemy.AddBuff("NextClashPointUp", 1, 0);
+        BattleCardState playerAttack = CreateBeforeUseBuffAttackCard(context.allyA, "buff50_m_player", 5, "NextCardPointUp", 2);
+        playerAttack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.BeforeUse, "NextClashPointUp", 2));
+        BattleCardState enemyAttack = CreateBeforeUseBuffAttackCard(context.enemy, "buff50_m_enemy", 5, "NextCardPointUp", 2);
+        enemyAttack.cardData.effects.Add(CreateApplyBuffEffect(BattleTiming.BeforeUse, "NextClashPointUp", 2));
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             CreateRespondedSlot(context.allyA, playerAttack),
@@ -25582,14 +25623,14 @@ public class CardLoadTest : MonoBehaviour
     {
         CharacterData unit = CreateBuffDataLayerCharacter("buff50_o");
         unit.AddBuff("NextCardPointUp", 2, 1);
-        unit.AddBuff("NextClashPointUp", 3, 1);
-        unit.AddPendingBuff("Strength", 1, 1, 1, 1, 1);
+        unit.AddBuff("NextClashPointUp", 3, 2);
+        unit.AddPendingBuff("Strength", 1, 1, 1, 1);
 
         int cardBefore = CountBuffStack(unit, "NextCardPointUp");
         int clashBefore = CountBuffStack(unit, "NextClashPointUp");
-        int cardInstancesBefore = CountBuffInstances(unit, "NextCardPointUp");
-        int clashInstancesBefore = CountBuffInstances(unit, "NextClashPointUp");
-        int cardDurationBefore = GetBuffDuration(unit, "NextCardPointUp");
+        int cardStatesBefore = CountBuffStates(unit, "NextCardPointUp");
+        int clashStatesBefore = CountBuffStates(unit, "NextClashPointUp");
+        int cardIntensityBefore = unit.GetBuffIntensity("NextCardPointUp");
         int pendingBefore = unit.GetPendingBuffStackNextTurn("Strength");
 
         int cardModifier = Mathf.RoundToInt(unit.GetBuffFlatModifier("CardPoint"));
@@ -25600,9 +25641,9 @@ public class CardLoadTest : MonoBehaviour
             clashModifier == 3 &&
             CountBuffStack(unit, "NextCardPointUp") == cardBefore &&
             CountBuffStack(unit, "NextClashPointUp") == clashBefore &&
-            CountBuffInstances(unit, "NextCardPointUp") == cardInstancesBefore &&
-            CountBuffInstances(unit, "NextClashPointUp") == clashInstancesBefore &&
-            GetBuffDuration(unit, "NextCardPointUp") == cardDurationBefore &&
+            CountBuffStates(unit, "NextCardPointUp") == cardStatesBefore &&
+            CountBuffStates(unit, "NextClashPointUp") == clashStatesBefore &&
+            unit.GetBuffIntensity("NextCardPointUp") == cardIntensityBefore &&
             unit.GetPendingBuffStackNextTurn("Strength") == pendingBefore;
 
         Debug.Log("快照捕获不修改Buff：" + pureRead);
@@ -25612,7 +25653,7 @@ public class CardLoadTest : MonoBehaviour
     {
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff50_p", 30, 30, 50, 10, 3, 8);
         List<BattleActionSlot> actionSlots = BattleActionSlotManager.CreatePartyActionSlots(context.allyA, context.allyB, 2);
-        BattleCardState unavailableDefense = CreateBulletLockedBeforeUseDefenseCard(context.allyB, "buff50_p_first", 10, 3, "GuardUp", 9, 1);
+        BattleCardState unavailableDefense = CreateBulletLockedBeforeUseDefenseCard(context.allyB, "buff50_p_first", 10, 3, "GuardUp", 9);
         BattleCardState validDefense = CreateTestDefenseCardForCharacter(context.allyB, "buff50_p_second", 10, 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff50_p_enemy", 5, 0);
         BattleEnemyIntent intent = CreateEnemyAttackIntent("buff50_p_intent", context.enemy, enemyAttack, context.allyB, 1);
@@ -25620,7 +25661,7 @@ public class CardLoadTest : MonoBehaviour
         context.runtimeState.SetActionSlots(actionSlots);
         context.runtimeState.SetIntentQueue(intentQueue);
 
-        context.allyB.AddBuff("Bullet", 3, -1);
+        context.allyB.AddBuff("Bullet", 3);
         CardEligibilityResult firstAssignResult;
         bool firstAssignSuccess = BattleActionSlotManager.AssignPassiveGuard(
             actionSlots,
@@ -25692,7 +25733,7 @@ public class CardLoadTest : MonoBehaviour
         bool uniqueIDs = AreBuffDefinitionIDsUnique(definitions);
         bool requiredFieldsFilled = AreBuffDefinitionRequiredFieldsFilled(definitions);
         bool speedDownName = GetBuffDefinition(definitions, "SpeedDown") != null &&
-            GetBuffDefinition(definitions, "SpeedDown").buffName == "缓慢";
+            GetBuffDefinition(definitions, "SpeedDown").displayName == "缓慢";
         bool categoriesValid = AreBuffDefinitionCategoriesValid(definitions);
         bool bulletCategory = GetBuffDefinition(definitions, "Bullet") != null &&
             GetBuffDefinition(definitions, "Bullet").buffCategory == BuffCategory.AbilityBuff;
@@ -25728,53 +25769,71 @@ public class CardLoadTest : MonoBehaviour
             nextCardDefinition != null &&
             nextCardDefinition.consumeRule == "SuccessfulPointCardUsed" &&
             bulletDefinition != null &&
-            bulletDefinition.defaultExpireRule == "Permanent";
+            bulletDefinition.defaultIntensity == 0 &&
+            bulletDefinition.retainWhenZero &&
+            bulletDefinition.showWhenZero;
         Debug.Log("Buff定义字段准确：" + fieldValuesCorrect);
 
-        CharacterData activeMergeCharacter = CreateBuffDataLayerCharacter("buff_layer_active_merge");
-        activeMergeCharacter.AddBuff("Strength", 1, 2);
-        activeMergeCharacter.AddBuff("Strength", 2, 2);
-        List<BuffData> activeMergeBatches = activeMergeCharacter.GetActiveBuffBatches("Strength");
-        bool sameActiveMerged =
-            activeMergeBatches.Count == 1 &&
-            activeMergeCharacter.GetBuffStack("Strength") == 3 &&
-            activeMergeBatches[0].duration == 2;
-        Debug.Log("相同活动批次正确合并：" + sameActiveMerged);
+        CharacterData activeCanonicalCharacter = CreateBuffDataLayerCharacter("buff_layer_canonical");
+        activeCanonicalCharacter.AddBuff("Strength", 1);
+        activeCanonicalCharacter.AddBuff("Strength", 2);
+        BuffData activeState = activeCanonicalCharacter.GetBuffState("Strength");
+        bool sameActiveStateAggregates =
+            activeCanonicalCharacter.buffs.Count == 1 &&
+            activeState != null && activeState.stack == 3 &&
+            activeState.intensity == 1;
+        Debug.Log("相同buffID合并为单一canonical state并聚合层数：" + sameActiveStateAggregates);
 
         CharacterData activeSeparateCharacter = CreateBuffDataLayerCharacter("buff_layer_active_separate");
-        activeSeparateCharacter.AddBuff("Strength", 2, 1);
+        activeSeparateCharacter.AddBuff("Strength", 2);
         activeSeparateCharacter.AddBuff("Strength", 1, 2);
-        List<BuffData> activeSeparateBatches = activeSeparateCharacter.GetActiveBuffBatches("Strength");
-        bool differentDurationSeparate =
-            activeSeparateBatches.Count == 2 &&
-            activeSeparateCharacter.GetBuffStack("Strength") == 3 &&
-            HasBuffBatch(activeSeparateBatches, 2, 1) &&
-            HasBuffBatch(activeSeparateBatches, 1, 2);
-        Debug.Log("不同持续时间批次保持独立：" + differentDurationSeparate);
+        BuffData activeSeparateState = activeSeparateCharacter.GetBuffState("Strength");
+        bool explicitIntensitySeparate =
+            activeSeparateCharacter.buffs.Count == 1 &&
+            activeSeparateState != null &&
+            activeSeparateState.stack == 3 &&
+            activeSeparateState.intensity == 3;
+        Debug.Log("显式强度变化只修改canonical state的强度：" + explicitIntensitySeparate);
 
-        int beforeExpiringQueryStack = activeSeparateCharacter.GetBuffStack("Strength");
-        int expiringStack = activeSeparateCharacter.GetExpiringBuffStackAtTurnEnd("Strength");
-        int afterExpiringQueryStack = activeSeparateCharacter.GetBuffStack("Strength");
-        bool expiringQueryCorrect = expiringStack == 2 && beforeExpiringQueryStack == afterExpiringQueryStack;
-        Debug.Log("本回合结束减少层数查询正确：" + expiringQueryCorrect);
+        int beforeTurnEndStack = activeSeparateCharacter.GetBuffStack("Strength");
+        BattleTurnProcessor.EndTurn(new List<CharacterData> { activeSeparateCharacter });
+        bool persistentStateUnaffected =
+            activeSeparateCharacter.GetBuffStack("Strength") == beforeTurnEndStack;
+        Debug.Log("普通Buff不会因TurnEnd自动掉层：" + persistentStateUnaffected);
 
-        CharacterData pendingMergeCharacter = CreateBuffDataLayerCharacter("buff_layer_pending_merge");
-        pendingMergeCharacter.AddPendingBuff("Strength", 1, 2, 1, 1, 1);
-        pendingMergeCharacter.AddPendingBuff("Strength", 2, 2, 1, 1, 1);
-        List<PendingBuffData> pendingMergeBatches = pendingMergeCharacter.GetPendingBuffBatches("Strength");
-        bool samePendingMerged = pendingMergeBatches.Count == 1 && pendingMergeBatches[0].stack == 3;
-        Debug.Log("相同延迟排期正确合并：" + samePendingMerged);
+        CharacterData pendingCommandCharacter = CreateBuffDataLayerCharacter("buff_layer_pending_instances");
+        pendingCommandCharacter.AddPendingBuff("Strength", 1, 2, 1, 1);
+        pendingCommandCharacter.AddPendingBuff(
+            "Strength",
+            2,
+            2,
+            1,
+            1
+        );
+        List<PendingBuffData> pendingCommands = pendingCommandCharacter.pendingBuffs;
+        bool pendingCommandsRemainIndependent =
+            pendingCommands.Count == 2 &&
+            pendingCommands[0].stackDelta == 1 &&
+            pendingCommands[1].stackDelta == 2 &&
+            pendingCommandCharacter.GetPendingBuffStackNextTurn("Strength") == 3;
+        Debug.Log("相同延迟Buff保持独立命令并可聚合查询：" + pendingCommandsRemainIndependent);
+
+        pendingCommandCharacter.ApplyPendingBuffsAtTurnStart();
+        bool pendingCommandsMergeOnApply =
+            pendingCommandCharacter.buffs.Count == 1 &&
+            pendingCommandCharacter.GetBuffStack("Strength") == 3;
+        Debug.Log("独立Pending命令生效后写入单一canonical state：" + pendingCommandsMergeOnApply);
 
         CharacterData pendingSeparateCharacter = CreateBuffDataLayerCharacter("buff_layer_pending_separate");
-        pendingSeparateCharacter.AddPendingBuff("Strength", 1, 2, 1, 1, 1);
-        pendingSeparateCharacter.AddPendingBuff("Strength", 2, 2, 2, 1, 1);
-        List<PendingBuffData> pendingSeparateBatches = pendingSeparateCharacter.GetPendingBuffBatches("Strength");
-        bool differentPendingSeparate = pendingSeparateBatches.Count == 2;
+        pendingSeparateCharacter.AddPendingBuff("Strength", 1, 2, 1, 1);
+        pendingSeparateCharacter.AddPendingBuff("Strength", 2, 2, 2, 1);
+        List<PendingBuffData> pendingSeparateCommands = pendingSeparateCharacter.pendingBuffs;
+        bool differentPendingSeparate = pendingSeparateCommands.Count == 2;
         Debug.Log("不同延迟排期保持独立：" + differentPendingSeparate);
 
         CharacterData pendingQueryCharacter = CreateBuffDataLayerCharacter("buff_layer_pending_query");
-        pendingQueryCharacter.AddPendingBuff("Strength", 3, 2, 1, 1, 1);
-        pendingQueryCharacter.AddPendingBuff("Strength", 2, 2, 2, 1, 1);
+        pendingQueryCharacter.AddPendingBuff("Strength", 3, 2, 1, 1);
+        pendingQueryCharacter.AddPendingBuff("Strength", 2, 2, 2, 1);
         int beforeDelayTurns = GetPendingDelayTurns(pendingQueryCharacter, "Strength", 2);
         int pendingNextTurnStack = pendingQueryCharacter.GetPendingBuffStackNextTurn("Strength");
         int afterDelayTurns = GetPendingDelayTurns(pendingQueryCharacter, "Strength", 2);
@@ -25782,15 +25841,18 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("下回合获得层数查询正确：" + pendingNextTurnQuery);
 
         CharacterData applyTimesCharacter = CreateBuffDataLayerCharacter("buff_layer_apply_times");
-        applyTimesCharacter.AddPendingBuff("Strength", 1, 2, 1, 2, 1);
-        applyTimesCharacter.AddPendingBuff("Strength", 1, 2, 1, 2, 1);
-        List<PendingBuffData> applyTimesBatches = applyTimesCharacter.GetPendingBuffBatches("Strength");
-        bool applyTimesMerge =
-            applyTimesBatches.Count == 1 &&
-            applyTimesBatches[0].stack == 2 &&
-            applyTimesBatches[0].applyTimes == 2 &&
-            applyTimesBatches[0].intervalTurns == 1;
-        Debug.Log("applyTimes合并语义正确：" + applyTimesMerge);
+        applyTimesCharacter.AddPendingBuff("Strength", 1, 2, 2, 1);
+        applyTimesCharacter.AddPendingBuff("Strength", 1, 2, 2, 1);
+        List<PendingBuffData> applyTimesCommands = applyTimesCharacter.pendingBuffs;
+        bool applyTimesIndependent =
+            applyTimesCommands.Count == 2 &&
+            applyTimesCommands[0].stackDelta == 1 &&
+            applyTimesCommands[1].stackDelta == 1 &&
+            applyTimesCommands[0].applyTimes == 2 &&
+            applyTimesCommands[1].applyTimes == 2 &&
+            applyTimesCommands[0].intervalTurns == 1 &&
+            applyTimesCommands[1].intervalTurns == 1;
+        Debug.Log("相同applyTimes排期保持独立：" + applyTimesIndependent);
 
         CharacterData definitionEffectCharacter = CreateBuffDataLayerCharacter("buff_layer_definition_effect");
         CardTestData definitionEffectCard = CreateBuffDefinitionPathTestCard();
@@ -25806,20 +25868,18 @@ public class CardLoadTest : MonoBehaviour
             definitionEffectCard,
             BattleTiming.AfterDamage
         );
-        List<BuffData> definitionActiveBatches = definitionEffectCharacter.GetActiveBuffBatches("Strength");
-        List<PendingBuffData> definitionPendingBatches = definitionEffectCharacter.GetPendingBuffBatches("DamageUp");
+        BuffData definitionActiveState = definitionEffectCharacter.GetBuffState("Strength");
+        PendingBuffData definitionPending = definitionEffectCharacter.pendingBuffs.Count > 0
+            ? definitionEffectCharacter.pendingBuffs[0]
+            : null;
         bool definitionEffectWorked =
-            definitionActiveBatches.Count == 1 &&
-            definitionActiveBatches[0].buffName == "强壮" &&
-            definitionActiveBatches[0].buffCategory == BuffCategory.UpBuff &&
-            definitionActiveBatches[0].checkTiming == BattleTiming.TurnEnd &&
-            definitionActiveBatches[0].expireRule == "DurationDown" &&
-            definitionPendingBatches.Count == 1 &&
-            definitionPendingBatches[0].buffName == "威力强化" &&
-            definitionPendingBatches[0].buffCategory == BuffCategory.UpBuff &&
-            definitionPendingBatches[0].checkTiming == BattleTiming.TurnEnd &&
-            definitionPendingBatches[0].expireRule == "DurationDown";
-        Debug.Log("新CardEffect通过定义应用Buff：" + definitionEffectWorked);
+            definitionActiveState != null &&
+            definitionActiveState.buffID == "Strength" &&
+            definitionActiveState.stack == 1 &&
+            definitionPending != null &&
+            definitionPending.buffID == "DamageUp" &&
+            definitionPending.stackDelta == 2;
+        Debug.Log("CardEffect通过定义写入Buff mutation：" + definitionEffectWorked);
 
         CharacterData legacyCharacter = CreateBuffDataLayerCharacter("buff_layer_legacy");
         CardEffectExecutor.ExecuteCardEffects(
@@ -25830,18 +25890,18 @@ public class CardLoadTest : MonoBehaviour
         );
         bool legacyWorked =
             BuffDefinitionLoader.GetDefinition("AbilityPower") == null &&
-            legacyCharacter.GetBuffStack("AbilityPower") == 1 &&
-            legacyCharacter.GetActiveBuffBatches("AbilityPower").Count == 1 &&
+            legacyCharacter.GetBuffStack("AbilityPower") == 0 &&
+            legacyCharacter.buffs.Count == 0 &&
             loaded16;
-        Debug.Log("Legacy AbilityPower兼容：" + legacyWorked);
+        Debug.Log("未知AbilityPower被新Buff定义契约拒绝：" + legacyWorked);
 
         CharacterData copyCharacter = CreateBuffDataLayerCharacter("buff_layer_copy");
-        copyCharacter.AddBuff("Strength", 1, 2);
-        copyCharacter.AddPendingBuff("Strength", 2, 2, 1, 1, 1);
-        List<BuffData> activeCopies = copyCharacter.GetActiveBuffBatches("Strength");
-        List<PendingBuffData> pendingCopies = copyCharacter.GetPendingBuffBatches("Strength");
-        activeCopies[0].stack = 99;
-        pendingCopies[0].stack = 99;
+        copyCharacter.AddBuff("Strength", 1);
+        copyCharacter.AddPendingBuff("Strength", 2, 2, 1, 1);
+        BuffData activeCopy = copyCharacter.GetBuffState("Strength");
+        PendingBuffData pendingCopy = copyCharacter.pendingBuffs[0];
+        activeCopy.stack = 99;
+        pendingCopy.stackDelta = 99;
         bool queryCopiesSafe =
             copyCharacter.GetBuffStack("Strength") == 1 &&
             copyCharacter.GetPendingBuffStackNextTurn("Strength") == 2;
@@ -25855,8 +25915,8 @@ public class CardLoadTest : MonoBehaviour
             BattleTiming.BeforeUse
         );
         bool unknownRejected =
-            unknownCharacter.GetActiveBuffBatches("").Count == 0 &&
-            unknownCharacter.GetPendingBuffBatches("").Count == 0;
+            unknownCharacter.buffs.Count == 0 &&
+            unknownCharacter.pendingBuffs.Count == 0;
         Debug.Log("未知Buff被拒绝：" + unknownRejected);
     }
 
@@ -25873,7 +25933,9 @@ public class CardLoadTest : MonoBehaviour
         RunBuffKnownPointConsumeRuleSubTest();
         RunBuffPassiveGuardPointRuleSubTest();
         RunBuffNoSuccessNoConsumeSubTest();
-        RunBuffDurationPendingAndPermanentSubTest();
+        RunBuffPendingAndPersistentSubTest();
+        RunBuffZeroStackLifecycleSubTest();
+        RunBuffConservationLifecycleSubTest();
         RunBuffMode49PureReadNoMutationSubTest();
     }
 
@@ -25882,19 +25944,19 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("===== 模式49 子测试A：JSON数值读取 =====");
 
         CharacterData unit = CreateBuffDataLayerCharacter("buff49_json_unit");
-        unit.AddBuff("Strength", 2, 2);
-        unit.AddBuff("Weakness", 1, 2);
-        unit.AddBuff("GuardUp", 2, 2);
-        unit.AddBuff("GuardDown", 1, 2);
-        unit.AddBuff("SpeedUp", 2, 2);
-        unit.AddBuff("SpeedDown", 1, 2);
+        unit.AddBuff("Strength", 2, 1);
+        unit.AddBuff("Weakness", 1);
+        unit.AddBuff("GuardUp", 2, 1);
+        unit.AddBuff("GuardDown", 1);
+        unit.AddBuff("SpeedUp", 2, 1);
+        unit.AddBuff("SpeedDown", 1);
 
         CharacterData attacker = CreateBuffDataLayerCharacter("buff49_json_attacker");
         CharacterData defender = CreateBuffDataLayerCharacter("buff49_json_defender");
-        attacker.AddBuff("DamageUp", 2, 2);
-        attacker.AddBuff("DamageDown", 1, 2);
-        defender.AddBuff("Vulnerable", 1, 2);
-        defender.AddBuff("DamageReduction", 2, 2);
+        attacker.AddBuff("DamageUp", 2, 10);
+        attacker.AddBuff("DamageDown", 1);
+        defender.AddBuff("Vulnerable", 1);
+        defender.AddBuff("DamageReduction", 2, -10);
 
         bool attackPointFromJson = Mathf.RoundToInt(unit.GetBuffFlatModifier("AttackPoint")) == 1;
         bool defensePointFromJson = Mathf.RoundToInt(unit.GetBuffFlatModifier("DefensePoint")) == 1;
@@ -25918,20 +25980,21 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff49_attack", 30, 30, 50, 10, 3, 8);
         BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "buff49_attack_player", 5);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff49_attack_enemy", 1, 0);
-        context.allyA.AddBuff("Strength", 1, 2);
-        context.allyA.AddBuff("NextClashPointUp", 2, 1);
-        context.allyA.AddBuff("NextCardPointUp", 3, 1);
+        context.allyA.AddBuff("Strength", 1);
+        context.allyA.AddBuff("Strength", 2, 2);
+        context.allyA.AddBuff("NextClashPointUp", 1, 1);
+        context.allyA.AddBuff("NextCardPointUp", 1, 2);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             CreateRespondedSlot(context.allyA, playerAttack),
             CreateEnemyAttackIntent("buff49_attack_intent", context.enemy, enemyAttack, context.allyA, 1)
         );
 
-        bool finalPointCorrect = result != null && result.resultType == "PlayerWin" && result.playerPoint == 11;
+        bool finalPointCorrect = result != null && result.resultType == "PlayerWin" && result.playerPoint == 13;
         bool consumeRuleCorrect =
             CountBuffStack(context.allyA, "NextClashPointUp") == 0 &&
             CountBuffStack(context.allyA, "NextCardPointUp") == 0 &&
-            CountBuffStack(context.allyA, "Strength") == 1;
+            CountBuffStack(context.allyA, "Strength") == 3;
 
         Debug.Log("拼点强化与蓄势可叠加：" + finalPointCorrect);
         Debug.Log("Attack正式胜负后两种Buff消费：" + consumeRuleCorrect);
@@ -25945,9 +26008,9 @@ public class CardLoadTest : MonoBehaviour
         BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "buff49_tie_player", 5);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff49_tie_enemy", 5, 0);
         context.allyA.AddBuff("NextClashPointUp", 2, 1);
-        context.allyA.AddBuff("NextCardPointUp", 1, 1);
+        context.allyA.AddBuff("NextCardPointUp", 1, 0);
         context.enemy.AddBuff("NextClashPointUp", 2, 1);
-        context.enemy.AddBuff("NextCardPointUp", 1, 1);
+        context.enemy.AddBuff("NextCardPointUp", 1, 0);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             CreateRespondedSlot(context.allyA, playerAttack),
@@ -25972,9 +26035,9 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff49_dodge", 30, 30, 50, 10, 3, 8);
         BattleCardState dodge = CreateFixedDodgeCardForCharacter(context.allyA, "buff49_dodge_player", 5, 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff49_dodge_enemy", 5, 0);
-        context.allyA.AddBuff("Strength", 9, 2);
-        context.allyA.AddBuff("NextClashPointUp", 2, 1);
-        context.allyA.AddBuff("NextCardPointUp", 1, 1);
+        context.allyA.AddBuff("Strength", 9);
+        context.allyA.AddBuff("NextClashPointUp", 1, 1);
+        context.allyA.AddBuff("NextCardPointUp", 1, 0);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             CreateRespondedSlot(context.allyA, dodge),
@@ -25999,12 +26062,12 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff49_defense", 30, 30, 50, 10, 3, 8);
         BattleCardState defense = CreateTestDefenseCardForCharacter(context.allyA, "buff49_defense_card", 3, 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff49_defense_enemy", 5, 0);
-        context.allyA.AddBuff("GuardUp", 2, 2);
-        context.allyA.AddBuff("NextCardPointUp", 4, 1);
-        context.allyA.AddBuff("NextClashPointUp", 5, 1);
-        context.enemy.AddBuff("Strength", 2, 2);
-        context.enemy.AddBuff("NextCardPointUp", 3, 1);
-        context.enemy.AddBuff("NextClashPointUp", 7, 1);
+        context.allyA.AddBuff("GuardUp", 2, 1);
+        context.allyA.AddBuff("NextCardPointUp", 1, 3);
+        context.allyA.AddBuff("NextClashPointUp", 5, 4);
+        context.enemy.AddBuff("Strength", 2, 1);
+        context.enemy.AddBuff("NextCardPointUp", 1, 2);
+        context.enemy.AddBuff("NextClashPointUp", 7, 6);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             CreateRespondedSlot(context.allyA, defense),
@@ -26034,9 +26097,9 @@ public class CardLoadTest : MonoBehaviour
 
         BattleEndedTestContext freeContext = CreateBattleEndedTestContext("buff49_free", 30, 30, 50, 10, 3, 8);
         BattleCardState freeAttack = CreateFixedAttackCardForCharacter(freeContext.allyA, "buff49_free_attack", 5);
-        freeContext.allyA.AddBuff("Strength", 2, 2);
-        freeContext.allyA.AddBuff("NextCardPointUp", 3, 1);
-        freeContext.allyA.AddBuff("NextClashPointUp", 7, 1);
+        freeContext.allyA.AddBuff("Strength", 2, 1);
+        freeContext.allyA.AddBuff("NextCardPointUp", 1, 2);
+        freeContext.allyA.AddBuff("NextClashPointUp", 7, 6);
         BattleActionSlot freeSlot = new BattleActionSlot(freeContext.allyA, 1);
         freeSlot.AssignFreeAction(freeContext.allyA, freeAttack, freeContext.enemy);
         BattleResolveResult freeResult = BattleResolver.ResolveFreeAction(freeSlot);
@@ -26050,9 +26113,9 @@ public class CardLoadTest : MonoBehaviour
 
         BattleEndedTestContext unrespondedContext = CreateBattleEndedTestContext("buff49_unresponded", 30, 30, 50, 10, 3, 8);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(unrespondedContext.enemy, "buff49_unresponded_enemy", 5, 0);
-        unrespondedContext.enemy.AddBuff("Strength", 2, 2);
-        unrespondedContext.enemy.AddBuff("NextCardPointUp", 3, 1);
-        unrespondedContext.enemy.AddBuff("NextClashPointUp", 7, 1);
+        unrespondedContext.enemy.AddBuff("Strength", 2, 1);
+        unrespondedContext.enemy.AddBuff("NextCardPointUp", 1, 2);
+        unrespondedContext.enemy.AddBuff("NextClashPointUp", 7, 6);
         BattleResolveResult unrespondedResult = BattleResolver.ResolveUnrespondedEnemyIntent(
             CreateEnemyAttackIntent("buff49_unresponded_intent", unrespondedContext.enemy, enemyAttack, unrespondedContext.allyA, 1)
         );
@@ -26077,10 +26140,10 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext dodgeContext = CreateBattleEndedTestContext("buff49_known_dodge", 30, 30, 50, 10, 3, 8);
         BattleCardState dodge = CreateFixedDodgeCardForCharacter(dodgeContext.allyB, "buff49_known_dodge_card", 4, 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(dodgeContext.enemy, "buff49_known_dodge_enemy", 5, 0);
-        dodgeContext.allyB.AddBuff("NextClashPointUp", 4, 1);
-        dodgeContext.allyB.AddBuff("NextCardPointUp", 1, 1);
+        dodgeContext.allyB.AddBuff("NextClashPointUp", 1, 3);
+        dodgeContext.allyB.AddBuff("NextCardPointUp", 1, 0);
         dodgeContext.enemy.AddBuff("NextClashPointUp", 2, 1);
-        dodgeContext.enemy.AddBuff("NextCardPointUp", 3, 1);
+        dodgeContext.enemy.AddBuff("NextCardPointUp", 3, 2);
         BattleActionSlot dodgeSlot = CreateRespondedSlot(dodgeContext.allyB, dodge);
         BattleResolveResult dodgeResult = BattleResolver.ResolveDodgeVsAttackWithKnownEnemyPoint(
             dodgeSlot,
@@ -26100,10 +26163,10 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext defenseContext = CreateBattleEndedTestContext("buff49_known_defense", 30, 30, 50, 10, 3, 8);
         BattleCardState defense = CreateTestDefenseCardForCharacter(defenseContext.allyB, "buff49_known_defense_card", 3, 1);
         BattleCardState knownEnemyAttack = CreateFixedEnemyAttackCardForDodgeTest(defenseContext.enemy, "buff49_known_defense_enemy", 5, 0);
-        defenseContext.allyB.AddBuff("GuardUp", 2, 2);
-        defenseContext.allyB.AddBuff("NextCardPointUp", 4, 1);
-        defenseContext.allyB.AddBuff("NextClashPointUp", 5, 1);
-        defenseContext.enemy.AddBuff("NextCardPointUp", 3, 1);
+        defenseContext.allyB.AddBuff("GuardUp", 2, 1);
+        defenseContext.allyB.AddBuff("NextCardPointUp", 4, 3);
+        defenseContext.allyB.AddBuff("NextClashPointUp", 5, 4);
+        defenseContext.enemy.AddBuff("NextCardPointUp", 3, 2);
         BattleResolveResult defenseResult = BattleResolver.ResolveDefenseVsAttackWithKnownEnemyPoint(
             CreateRespondedSlot(defenseContext.allyB, defense),
             CreateEnemyAttackIntent("buff49_known_defense_intent", defenseContext.enemy, knownEnemyAttack, defenseContext.allyB, 1),
@@ -26130,11 +26193,11 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext dodgeContext = CreateBattleEndedTestContext("buff49_passive_dodge", 30, 30, 50, 10, 3, 8);
         BattleCardState passiveDodge = CreateFixedDodgeCardForCharacter(dodgeContext.allyB, "buff49_passive_dodge_card", 5, 1);
         BattleCardState dodgeEnemyAttack = CreateFixedEnemyAttackCardForDodgeTest(dodgeContext.enemy, "buff49_passive_dodge_enemy", 5, 0);
-        dodgeContext.allyB.AddBuff("NextClashPointUp", 4, 1);
-        dodgeContext.allyB.AddBuff("NextCardPointUp", 1, 1);
-        dodgeContext.enemy.AddBuff("Strength", 1, 2);
-        dodgeContext.enemy.AddBuff("NextClashPointUp", 2, 1);
-        dodgeContext.enemy.AddBuff("NextCardPointUp", 1, 1);
+        dodgeContext.allyB.AddBuff("NextClashPointUp", 1, 3);
+        dodgeContext.allyB.AddBuff("NextCardPointUp", 1, 0);
+        dodgeContext.enemy.AddBuff("Strength", 1);
+        dodgeContext.enemy.AddBuff("NextClashPointUp", 1, 1);
+        dodgeContext.enemy.AddBuff("NextCardPointUp", 1, 0);
         BattleActionSlot passiveDodgeSlot = new BattleActionSlot(dodgeContext.allyB, 1);
         passiveDodgeSlot.AssignPassiveGuard(dodgeContext.allyB, passiveDodge);
         dodgeContext.runtimeState.SetActionSlots(
@@ -26160,12 +26223,12 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext defenseContext = CreateBattleEndedTestContext("buff49_passive_defense", 30, 30, 50, 10, 3, 8);
         BattleCardState passiveDefense = CreateTestDefenseCardForCharacter(defenseContext.allyB, "buff49_passive_defense_card", 3, 1);
         BattleCardState defenseEnemyAttack = CreateFixedEnemyAttackCardForDodgeTest(defenseContext.enemy, "buff49_passive_defense_enemy", 5, 0);
-        defenseContext.allyB.AddBuff("GuardUp", 2, 2);
-        defenseContext.allyB.AddBuff("NextCardPointUp", 4, 1);
-        defenseContext.allyB.AddBuff("NextClashPointUp", 5, 1);
-        defenseContext.enemy.AddBuff("Strength", 2, 2);
-        defenseContext.enemy.AddBuff("NextCardPointUp", 3, 1);
-        defenseContext.enemy.AddBuff("NextClashPointUp", 7, 1);
+        defenseContext.allyB.AddBuff("GuardUp", 2, 1);
+        defenseContext.allyB.AddBuff("NextCardPointUp", 1, 3);
+        defenseContext.allyB.AddBuff("NextClashPointUp", 5, 4);
+        defenseContext.enemy.AddBuff("Strength", 2, 1);
+        defenseContext.enemy.AddBuff("NextCardPointUp", 1, 2);
+        defenseContext.enemy.AddBuff("NextClashPointUp", 7, 6);
         BattleActionSlot passiveDefenseSlot = new BattleActionSlot(defenseContext.allyB, 1);
         passiveDefenseSlot.AssignPassiveGuard(defenseContext.allyB, passiveDefense);
         defenseContext.runtimeState.SetActionSlots(
@@ -26197,7 +26260,7 @@ public class CardLoadTest : MonoBehaviour
 
         BattleEndedTestContext unavailableContext = CreateBattleEndedTestContext("buff49_unavailable", 30, 30, 50, 10, 3, 8);
         BattleCardState unavailableAttack = CreateBulletLockedFreeAttackCard(unavailableContext.allyB, "buff49_unavailable_attack", 5, 3);
-        unavailableContext.allyB.AddBuff("NextCardPointUp", 4, 1);
+        unavailableContext.allyB.AddBuff("NextCardPointUp", 4, 3);
         BattleActionSlot unavailableSlot = new BattleActionSlot(unavailableContext.allyB, 1);
         unavailableSlot.AssignFreeAction(unavailableContext.allyB, unavailableAttack, unavailableContext.enemy);
         BattleResolveResult unavailableResult = BattleResolver.ResolveFreeAction(unavailableSlot);
@@ -26209,7 +26272,7 @@ public class CardLoadTest : MonoBehaviour
 
         BattleEndedTestContext deadContext = CreateBattleEndedTestContext("buff49_dead_skip", 30, 0, 50, 10, 3, 8);
         BattleCardState deadAttack = CreateFixedAttackCardForCharacter(deadContext.allyB, "buff49_dead_skip_attack", 5);
-        deadContext.allyB.AddBuff("NextCardPointUp", 4, 1);
+        deadContext.allyB.AddBuff("NextCardPointUp", 4, 3);
         BattleActionSlot deadSlot = new BattleActionSlot(deadContext.allyB, 1);
         deadSlot.AssignFreeAction(deadContext.allyB, deadAttack, deadContext.enemy);
         BattleExecutionPlan deadPlan = CreateManualFreeActionPlan(deadSlot);
@@ -26222,10 +26285,10 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext equalityContext = CreateBattleEndedTestContext("buff49_dodge_equal", 30, 30, 50, 10, 3, 8);
         BattleCardState dodge = CreateFixedDodgeCardForCharacter(equalityContext.allyA, "buff49_dodge_equal_card", 5, 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(equalityContext.enemy, "buff49_dodge_equal_enemy", 5, 0);
-        equalityContext.allyA.AddBuff("NextClashPointUp", 1, 1);
-        equalityContext.allyA.AddBuff("NextCardPointUp", 1, 1);
-        equalityContext.enemy.AddBuff("NextClashPointUp", 1, 1);
-        equalityContext.enemy.AddBuff("NextCardPointUp", 1, 1);
+        equalityContext.allyA.AddBuff("NextClashPointUp", 1, 0);
+        equalityContext.allyA.AddBuff("NextCardPointUp", 1, 0);
+        equalityContext.enemy.AddBuff("NextClashPointUp", 1, 0);
+        equalityContext.enemy.AddBuff("NextCardPointUp", 1, 0);
         BattleResolveResult equalityResult = BattleResolver.ResolveRespondedEnemyIntent(
             CreateRespondedSlot(equalityContext.allyA, dodge),
             CreateEnemyAttackIntent("buff49_dodge_equal_intent", equalityContext.enemy, enemyAttack, equalityContext.allyA, 1)
@@ -26246,38 +26309,230 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("Dodge相等成功并消费双方一次性点数Buff：" + dodgeEqualityConsumes);
     }
 
-    void RunBuffDurationPendingAndPermanentSubTest()
+    void RunBuffPendingAndPersistentSubTest()
     {
-        Debug.Log("===== 模式49 子测试J：DurationDown、延迟排期与Permanent =====");
+        Debug.Log("===== 模式49 子测试J：持久状态、延迟排期与显式清理 =====");
 
-        CharacterData durationUnit = CreateBuffDataLayerCharacter("buff49_duration");
-        durationUnit.AddBuff("Strength", 1, 1);
-        durationUnit.AddBuff("Strength", 2, 2);
-        durationUnit.CheckBuffsByTiming(BattleTiming.TurnEnd);
-        bool durationDownRule =
-            CountBuffStack(durationUnit, "Strength") == 2 &&
-            GetBuffDuration(durationUnit, "Strength") == 1;
+        CharacterData persistentUnit = CreateBuffDataLayerCharacter("buff49_persistent");
+        persistentUnit.AddBuff("Strength", 3);
+        int persistentStack = persistentUnit.GetBuffStack("Strength");
+        BattleTurnProcessor.EndTurn(new List<CharacterData> { persistentUnit });
+        bool persistentState = persistentUnit.buffs.Count == 1 &&
+            persistentUnit.GetBuffStack("Strength") == persistentStack &&
+            persistentUnit.GetBuffState("Strength") != null;
 
         CharacterData pendingUnit = CreateBuffDataLayerCharacter("buff49_pending");
-        pendingUnit.AddPendingBuff("Strength", 1, 1, 1, 1, 1);
-        pendingUnit.AddPendingBuff("DamageUp", 1, 2, 2, 1, 1);
+        pendingUnit.AddPendingBuff("Strength", 1, 1, 1, 1);
+        pendingUnit.AddPendingBuff("DamageUp", 1, 2, 2, 1);
         pendingUnit.ApplyPendingBuffsAtTurnStart();
         bool delayedRule =
             CountBuffStack(pendingUnit, "Strength") == 1 &&
             CountBuffStack(pendingUnit, "DamageUp") == 0 &&
             pendingUnit.GetPendingBuffStackNextTurn("DamageUp") == 1;
-        pendingUnit.CheckBuffsByTiming(BattleTiming.TurnEnd);
-        bool delayedDurationRule = CountBuffStack(pendingUnit, "Strength") == 0;
 
         CharacterData bulletUnit = CreateBuffDataLayerCharacter("buff49_bullet");
-        bulletUnit.AddBuff("Bullet", 6, -1);
-        bulletUnit.CheckBuffsByTiming(BattleTiming.TurnEnd);
+        bulletUnit.AddBuff("Bullet", 6);
+        BattleTurnProcessor.EndTurn(new List<CharacterData> { bulletUnit });
         bool bulletPermanent = CountBuffStack(bulletUnit, "Bullet") == 6;
 
-        Debug.Log("DurationDown批次独立推进：" + durationDownRule);
+        Debug.Log("Persistent Buff不会因TurnEnd自动掉层：" + persistentState);
         Debug.Log("Delayed Buff正确回合转正：" + delayedRule);
-        Debug.Log("延迟生效后的DurationDown正常：" + delayedDurationRule);
-        Debug.Log("Bullet Permanent不被TurnEnd消耗：" + bulletPermanent);
+        Debug.Log("Bullet不被TurnEnd消耗：" + bulletPermanent);
+    }
+
+    void RunBuffZeroStackLifecycleSubTest()
+    {
+        Debug.Log("===== 模式49 子测试K：通用Zero Stack生命周期 =====");
+
+        CharacterData removeCharacter =
+            CreateBuffDataLayerCharacter("buff49_zero_remove");
+        removeCharacter.AddBuff("NextClashPointUp", 1, 0);
+        int removedStack = removeCharacter.ConsumeBuffStackByRule(
+            "NextClashPointUp",
+            "FormalClashResolved",
+            1
+        );
+        bool defaultRemoves = removedStack == 1 &&
+            removeCharacter.GetBuffState("NextClashPointUp") == null;
+
+        CharacterData retainCharacter =
+            CreateBuffDataLayerCharacter("buff49_zero_retain");
+        retainCharacter.AddBuff(BattleResourceID.Bullet, 1);
+        int consumedAmount;
+        bool consumed = retainCharacter.TryConsumeBuffStackAsResource(
+            BattleResourceID.Bullet,
+            1,
+            out consumedAmount
+        );
+        bool retainKeepsInstance = consumed && consumedAmount == 1 &&
+            retainCharacter.buffs.Count == 1 &&
+            retainCharacter.GetBuffState(BattleResourceID.Bullet) != null &&
+            retainCharacter.GetBuffState(BattleResourceID.Bullet).stack == 0 &&
+            retainCharacter.GetBuffStack(BattleResourceID.Bullet) == 0;
+
+        CharacterData multiResourceCharacter =
+            CreateBuffDataLayerCharacter("buff49_zero_resource_instances");
+        multiResourceCharacter.AddBuff(BattleResourceID.Bullet, 3);
+        multiResourceCharacter.AddBuff(BattleResourceID.Bullet, 3);
+        int multiResourceConsumedAmount;
+        bool multiResourceConsumption =
+            multiResourceCharacter.TryConsumeBuffStackAsResource(
+                BattleResourceID.Bullet,
+                2,
+                out multiResourceConsumedAmount
+            ) &&
+            multiResourceConsumedAmount == 2 &&
+            multiResourceCharacter.GetBuffStack(BattleResourceID.Bullet) == 4 &&
+            multiResourceCharacter.buffs.Count == 1;
+
+        Mode70BuffTestContext displayContext =
+            CreateMode70BuffTestContext(false);
+        displayContext.character.AddBuff(BattleResourceID.Bullet, 1);
+        displayContext.character.ConsumeBuffStacks(
+            BattleResourceID.Bullet,
+            1
+        );
+        displayContext.groupView.SetCharacter(displayContext.character);
+        BattleBuffIconUIView displaySlot =
+            displayContext.groupView.GetSlotForTesting(0);
+        bool displayZero = displaySlot != null &&
+            displaySlot.gameObject.activeSelf &&
+            GetMode70StackText(displaySlot) != null &&
+            GetMode70StackText(displaySlot).text == "0";
+        DestroyMode70BuffTestContext(displayContext);
+
+        int cleared = retainCharacter.ClearBuff(
+            BattleResourceID.Bullet
+        );
+        bool explicitClear = cleared == 1 &&
+            retainCharacter.GetBuffState(BattleResourceID.Bullet) == null;
+
+        Debug.Log("默认Zero Stack消费后删除实例：" + defaultRemoves);
+        Debug.Log("Retain消费后保留0层state：" + retainKeepsInstance);
+        Debug.Log("多Bullet单state聚合消费正确：" + multiResourceConsumption);
+        Debug.Log("showWhenZero独立显示0层：" + displayZero);
+        Debug.Log("Explicit Clear删除Retain实例：" + explicitClear);
+    }
+
+    void RunBuffConservationLifecycleSubTest()
+    {
+        Debug.Log("===== 模式49 子测试L：Conservation canonical state与正式使用生命周期 =====");
+
+        CharacterData owner =
+            CreateBuffDataLayerCharacter("buff49_conservation_lifecycle");
+        BattleBulletRules.AddBulletCapped(owner, 3);
+        BattleConservationRules.Activate(owner);
+        BattleConservationRules.Activate(owner);
+        bool canonicalActiveState = owner.GetBuffStack(
+                BattleResourceID.Conservation
+            ) == 2 &&
+            owner.buffs.Count == 1;
+
+        CharacterData pendingOwner =
+            CreateBuffDataLayerCharacter("buff49_conservation_pending");
+        pendingOwner.AddPendingBuff(
+            BattleResourceID.Conservation,
+            1,
+            1,
+            1,
+            1
+        );
+        pendingOwner.AddPendingBuff(
+            BattleResourceID.Conservation,
+            1,
+            1,
+            1,
+            1
+        );
+        pendingOwner.ApplyPendingBuffsAtTurnStart();
+        bool pendingCommandsApplyToCanonical = pendingOwner.buffs.Count == 1 &&
+            pendingOwner.GetBuffStack(BattleResourceID.Conservation) == 2;
+
+        CharacterData multiConservation =
+            CreateBuffDataLayerCharacter("buff49_conservation_consume");
+        BattleConservationRules.Activate(multiConservation);
+        BattleConservationRules.Activate(multiConservation);
+        int multiConservationConsumed =
+            multiConservation.ConsumeBuffStackByRule(
+                BattleResourceID.Conservation,
+                BuffConsumeRule.NextEligibleShootingCardUsed,
+                1
+            );
+        bool multiConservationConsumption =
+            multiConservationConsumed == 1 &&
+            multiConservation.GetBuffStack(
+                BattleResourceID.Conservation
+            ) == 1 &&
+            multiConservation.buffs.Count == 1;
+
+        BattleTurnProcessor.EndTurn(new List<CharacterData> { owner });
+        int expectedTurnEndDamage = Mathf.CeilToInt(
+            owner.maxHP * BattleConservationRules.GetTurnEndPenaltyPercent(3) /
+            100f
+        );
+        bool turnEndKeeps = owner.GetBuffStack(
+                BattleResourceID.Conservation
+            ) == 2 &&
+            owner.buffs.Count == 1 &&
+            owner.currentHP == owner.maxHP - expectedTurnEndDamage;
+
+        BattleCardState nonShooting = BattleTimingMigrationFixture.Card(
+            owner,
+            CardType.Attack,
+            5
+        );
+        bool nonShootingKeeps =
+            !BattleConservationRules.TryAssignPendingBonus(owner, nonShooting) &&
+            owner.GetBuffStack(BattleResourceID.Conservation) == 2;
+
+        BattleCardState uncommitted = BattleTimingMigrationFixture.Shot(owner, 5);
+        bool uncommittedKeeps =
+            BattleConservationRules.TryAssignPendingBonus(owner, uncommitted) &&
+            !uncommitted.cardUsedCommittedForCurrentAction &&
+            owner.GetBuffStack(BattleResourceID.Conservation) == 2;
+        uncommitted.ResetCardUsedCommitForNewAction();
+
+        BattleCardState firstShot = BattleTimingMigrationFixture.Shot(owner, 5);
+        BattleResolutionPlan firstPlan = BattleTimingMigrationFixture.Respond(
+            firstShot,
+            BattleTimingMigrationFixture.Card(
+                BattleTimingMigrationFixture.Unit("buff49_conservation_enemy_a"),
+                CardType.Attack,
+                1
+            )
+        );
+        BattleResolveResult firstResult =
+            BattleTimingMigrationFixture.Complete(firstPlan);
+        bool firstCommittedConsumesOne = firstResult != null &&
+            firstShot.cardUsedCommittedForCurrentAction &&
+            firstShot.conservationPointBonus > 0 &&
+            owner.GetBuffStack(BattleResourceID.Conservation) == 1;
+
+        BattleCardState secondShot = BattleTimingMigrationFixture.Shot(owner, 5);
+        BattleResolutionPlan secondPlan = BattleTimingMigrationFixture.Respond(
+            secondShot,
+            BattleTimingMigrationFixture.Card(
+                BattleTimingMigrationFixture.Unit("buff49_conservation_enemy_b"),
+                CardType.Attack,
+                1
+            )
+        );
+        BattleResolveResult secondResult =
+            BattleTimingMigrationFixture.Complete(secondPlan);
+        bool secondCommittedConsumesLast = secondResult != null &&
+            secondShot.cardUsedCommittedForCurrentAction &&
+            secondShot.conservationPointBonus > 0 &&
+            owner.GetBuffStack(BattleResourceID.Conservation) == 0 &&
+            owner.GetBuffState(BattleResourceID.Conservation) == null;
+
+        Debug.Log("Conservation两次Apply合并为一个canonical state：" + canonicalActiveState);
+        Debug.Log("Conservation Pending独立命令转正并合并：" + pendingCommandsApplyToCanonical);
+        Debug.Log("Conservation按一次触发消费一层：" + multiConservationConsumption);
+        Debug.Log("TurnEnd penalty执行且不清除Conservation：" + turnEndKeeps);
+        Debug.Log("非射击卡不消费Conservation：" + nonShootingKeeps);
+        Debug.Log("未Commit射击卡不消费Conservation：" + uncommittedKeeps);
+        Debug.Log("第一张正式射击卡消费1层：" + firstCommittedConsumesOne);
+        Debug.Log("第二张正式射击卡消费最后1层：" + secondCommittedConsumesLast);
     }
 
     void RunBuffMode49PureReadNoMutationSubTest()
@@ -26286,13 +26541,13 @@ public class CardLoadTest : MonoBehaviour
 
         CharacterData unit = CreateBuffDataLayerCharacter("buff49_pure_read");
         BattleCardState attack = CreateFixedAttackCardForCharacter(unit, "buff49_pure_read_attack", 5);
-        unit.AddBuff("NextClashPointUp", 2, 1);
-        unit.AddBuff("NextCardPointUp", 3, 1);
+        unit.AddBuff("NextClashPointUp", 1, 1);
+        unit.AddBuff("NextCardPointUp", 3, 2);
 
         int clashBefore = CountBuffStack(unit, "NextClashPointUp");
         int cardBefore = CountBuffStack(unit, "NextCardPointUp");
         int point = BattleCalculator.GetFinalClashPoint(unit, attack.cardData);
-        bool readValueCorrect = point == 10;
+        bool readValueCorrect = point == 7;
         bool noMutation =
             CountBuffStack(unit, "NextClashPointUp") == clashBefore &&
             CountBuffStack(unit, "NextCardPointUp") == cardBefore;
@@ -26355,12 +26610,11 @@ public class CardLoadTest : MonoBehaviour
         {
             if (definition == null ||
                 string.IsNullOrEmpty(definition.buffID) ||
-                string.IsNullOrEmpty(definition.buffName) ||
+                string.IsNullOrEmpty(definition.displayName) ||
                 string.IsNullOrEmpty(definition.buffCategory) ||
                 string.IsNullOrEmpty(definition.effectType) ||
                 string.IsNullOrEmpty(definition.targetStat) ||
-                string.IsNullOrEmpty(definition.defaultCheckTiming) ||
-                string.IsNullOrEmpty(definition.defaultExpireRule))
+                string.IsNullOrEmpty(definition.consumeRule))
             {
                 return false;
             }
@@ -26396,30 +26650,13 @@ public class CardLoadTest : MonoBehaviour
 
     bool IsBuffDefinitionValue(BuffDefinitionData definition, float expectedValue)
     {
-        return definition != null && Mathf.Abs(definition.valuePerStack - expectedValue) < 0.001f;
+        return definition != null &&
+            Mathf.Abs(definition.defaultIntensity - expectedValue) < 0.001f;
     }
 
     CharacterData CreateBuffDataLayerCharacter(string name)
     {
         return new CharacterData(name, 30, 3, 8);
-    }
-
-    bool HasBuffBatch(List<BuffData> batches, int stack, int duration)
-    {
-        if (batches == null)
-        {
-            return false;
-        }
-
-        foreach (BuffData batch in batches)
-        {
-            if (batch != null && batch.stack == stack && batch.duration == duration)
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     int GetPendingDelayTurns(CharacterData character, string buffID, int stack)
@@ -26429,11 +26666,10 @@ public class CardLoadTest : MonoBehaviour
             return -999;
         }
 
-        List<PendingBuffData> pendingBatches = character.GetPendingBuffBatches(buffID);
-
-        foreach (PendingBuffData pendingBuff in pendingBatches)
+        foreach (PendingBuffData pendingBuff in character.pendingBuffs)
         {
-            if (pendingBuff != null && pendingBuff.stack == stack)
+            if (pendingBuff != null && pendingBuff.buffID == buffID &&
+                pendingBuff.stackDelta == stack)
             {
                 return pendingBuff.delayTurns;
             }
@@ -26457,19 +26693,17 @@ public class CardLoadTest : MonoBehaviour
                     trigger = BattleTiming.BeforeUse,
                     effectType = CardEffectType.ApplyBuff,
                     target = CardTargetType.Self,
-                    buffType = "Strength",
-                    stack = 1,
-                    duration = 2
+                    buffID = "Strength",
+                    stackDelta = 1
                 },
                 new CardEffectData
                 {
                     trigger = BattleTiming.AfterDamage,
                     effectType = CardEffectType.ApplyBuff,
                     target = CardTargetType.Self,
-                    buffType = "DamageUp",
-                    stack = 2,
-                    duration = 1,
-                    applyTiming = BuffApplyTiming.Delayed,
+                    buffID = "DamageUp",
+                    stackDelta = 2,
+                    applyTiming = "Delayed",
                     delayTurns = 1,
                     applyTimes = 1,
                     intervalTurns = 1
@@ -26493,13 +26727,8 @@ public class CardLoadTest : MonoBehaviour
                     trigger = BattleTiming.OnPlay,
                     effectType = CardEffectType.ApplyBuff,
                     target = CardTargetType.Self,
-                    buffType = "AbilityPower",
-                    buffName = "能力强化",
-                    buffCategory = BuffCategory.UpBuff,
-                    stack = 1,
-                    duration = 1,
-                    checkTiming = BattleTiming.TurnEnd,
-                    expireRule = "DurationDown"
+                    buffID = "AbilityPower",
+                    stackDelta = 1
                 }
             }
         };
@@ -26520,9 +26749,8 @@ public class CardLoadTest : MonoBehaviour
                     trigger = BattleTiming.BeforeUse,
                     effectType = CardEffectType.ApplyBuff,
                     target = CardTargetType.Self,
-                    buffType = "UnknownBuffForTest",
-                    stack = 1,
-                    duration = 1
+                    buffID = "UnknownBuffForTest",
+                    stackDelta = 1
                 }
             }
         };
@@ -26552,24 +26780,24 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff_a", 30, 30, 50, 10, 3, 8);
         BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "buff_a_player_attack", 5);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_a_enemy_attack", 6, 0);
-        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 1);
+        context.allyA.AddBuff("NextClashPointUp", 1, 2);
 
         int playerStackBefore = CountBuffStack(context.allyA, "NextClashPointUp");
-        int playerInstanceBefore = CountBuffInstances(context.allyA, "NextClashPointUp");
+        int playerStateBefore = CountBuffStates(context.allyA, "NextClashPointUp");
         BattleActionSlot actionSlot = CreateRespondedSlot(context.allyA, playerAttack);
         BattleEnemyIntent intent = CreateEnemyAttackIntent("buff_a_intent", context.enemy, enemyAttack, context.allyA, 1);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(actionSlot, intent);
 
         int playerStackAfter = CountBuffStack(context.allyA, "NextClashPointUp");
-        int playerInstanceAfter = CountBuffInstances(context.allyA, "NextClashPointUp");
+        int playerStateAfter = CountBuffStates(context.allyA, "NextClashPointUp");
         bool pointApplied = result != null && result.playerPoint == 8;
-        bool consumed = playerStackBefore == 3 && playerStackAfter == 0 && playerInstanceBefore == 1 && playerInstanceAfter == 0;
+        bool consumed = playerStackBefore == 1 && playerStackAfter == 0 && playerStateBefore == 1 && playerStateAfter == 0;
 
         Debug.Log("点数加成是否实际生效：" + pointApplied);
         Debug.Log("Buff消费前stack：" + playerStackBefore);
         Debug.Log("Buff消费后stack：" + playerStackAfter);
-        Debug.Log("Buff实例数量前后：" + playerInstanceBefore + " -> " + playerInstanceAfter);
+        Debug.Log("Buff canonical state数量前后：" + playerStateBefore + " -> " + playerStateAfter);
         Debug.Log("是否只消费一次：" + consumed);
         Debug.Log("卡牌UseCount / CD / guilt：" + playerAttack.currentUseCount + " / " + playerAttack.currentCooldown + " / " + context.allyA.currentGuilt);
         Debug.Log("Attack加成先读取后消费：" + (pointApplied && consumed && result != null && result.playerCardUsed));
@@ -26582,9 +26810,9 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff_b", 30, 30, 50, 10, 3, 8);
         BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "buff_b_player_attack", 5);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_b_enemy_attack", 9, 0);
-        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 1, 1);
-        context.allyA.AddBuff("NextCardPointUp", 1, 1);
-        AddClashStartOneShotBuff(context.enemy, "NextClashPointUp", 1, 1);
+        context.allyA.AddBuff("NextClashPointUp", 1, 0);
+        context.allyA.AddBuff("NextCardPointUp", 1, 0);
+        context.enemy.AddBuff("NextClashPointUp", 1, 0);
         context.enemy.AddBuff("NextCardPointUp", 2, 1);
 
         int playerClashStackBefore = CountBuffStack(context.allyA, "NextClashPointUp");
@@ -26622,24 +26850,26 @@ public class CardLoadTest : MonoBehaviour
 
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff_c", 30, 30, 50, 10, 3, 8);
         BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "buff_c_player_attack", 5);
-        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 1);
-
-        context.allyA.CheckBuffsByTiming(BattleTiming.ClashStart, false);
+        context.allyA.AddBuff("NextClashPointUp", 1, 2);
 
         int firstReadPoint = BattleCalculator.GetFinalClashPoint(context.allyA, playerAttack.cardData);
         int stackAfterFirstRead = CountBuffStack(context.allyA, "NextClashPointUp");
         int secondReadPoint = BattleCalculator.GetFinalClashPoint(context.allyA, playerAttack.cardData);
         int stackAfterSecondRead = CountBuffStack(context.allyA, "NextClashPointUp");
-        int consumedStack = context.allyA.ConsumeTriggeredBuffs(BattleTiming.ClashStart, "NextClashPointUp");
+        int consumedStack = context.allyA.ConsumeBuffStackByRule(
+            "NextClashPointUp",
+            BuffConsumeRule.FormalClashResolved,
+            1
+        );
         int stackAfterConsume = CountBuffStack(context.allyA, "NextClashPointUp");
 
-        bool keptDuringReads = firstReadPoint == 8 && secondReadPoint == 8 && stackAfterFirstRead == 3 && stackAfterSecondRead == 3;
-        bool consumedOnce = consumedStack == 3 && stackAfterConsume == 0;
+        bool keptDuringReads = firstReadPoint == 8 && secondReadPoint == 8 && stackAfterFirstRead == 1 && stackAfterSecondRead == 1;
+        bool consumedOnce = consumedStack == 1 && stackAfterConsume == 0;
 
         Debug.Log("点数加成是否实际生效：" + (firstReadPoint == 8 && secondReadPoint == 8));
         Debug.Log("Buff消费前stack：" + stackAfterSecondRead);
         Debug.Log("Buff消费后stack：" + stackAfterConsume);
-        Debug.Log("Buff实例数量前后：" + 1 + " -> " + CountBuffInstances(context.allyA, "NextClashPointUp"));
+        Debug.Log("Buff canonical state数量前后：" + 1 + " -> " + CountBuffStates(context.allyA, "NextClashPointUp"));
         Debug.Log("平局重投期间Buff保持：" + (keptDuringReads && consumedOnce));
     }
 
@@ -26650,8 +26880,8 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff_d", 30, 30, 50, 10, 3, 8);
         BattleCardState playerAttack = CreateFixedAttackCardForCharacter(context.allyA, "buff_d_player_attack", 5);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_d_enemy_attack", 5, 0);
-        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 1);
-        AddClashStartOneShotBuff(context.enemy, "NextClashPointUp", 3, 1);
+        context.allyA.AddBuff("NextClashPointUp", 1, 2);
+        context.enemy.AddBuff("NextClashPointUp", 1, 2);
 
         BattleActionSlot actionSlot = CreateRespondedSlot(context.allyA, playerAttack);
         BattleEnemyIntent intent = CreateEnemyAttackIntent("buff_d_intent", context.enemy, enemyAttack, context.allyA, 1);
@@ -26662,8 +26892,8 @@ public class CardLoadTest : MonoBehaviour
         ExecutePlanWithRuntimeStateAndCompleteTurn(context.runtimeState, executionPlan);
 
         bool buffsKept =
-            CountBuffStack(context.allyA, "NextClashPointUp") == 3 &&
-            CountBuffStack(context.enemy, "NextClashPointUp") == 3;
+            CountBuffStack(context.allyA, "NextClashPointUp") == 1 &&
+            CountBuffStack(context.enemy, "NextClashPointUp") == 1;
         bool cardsNotUsed = playerAttack.currentCooldown == 0 && enemyAttack.currentCooldown == 0;
 
         Debug.Log("TieLimit Buff不消费：" + (buffsKept && !actionSlot.isUsed));
@@ -26681,9 +26911,9 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext successContext = CreateBattleEndedTestContext("buff_e_success", 30, 30, 50, 10, 3, 8);
         BattleCardState successDodge = CreateFixedDodgeCardForCharacter(successContext.allyA, "buff_e_success_dodge", 4, 1);
         BattleCardState successEnemy = CreateFixedEnemyAttackCardForDodgeTest(successContext.enemy, "buff_e_success_enemy", 5, 0);
-        AddClashStartOneShotBuff(successContext.allyA, "NextClashPointUp", 3, 1);
-        AddClashStartOneShotBuff(successContext.enemy, "NextClashPointUp", 1, 1);
-        successContext.allyA.AddBuff("Strength", "强壮", "UpBuff", 9, 1, "TurnEnd", "DurationDown");
+        successContext.allyA.AddBuff("NextClashPointUp", 1, 2);
+        successContext.enemy.AddBuff("NextClashPointUp", 1, 0);
+        successContext.allyA.AddBuff("Strength", 9);
 
         BattleResolveResult successResult = BattleResolver.ResolveRespondedEnemyIntent(
             CreateRespondedSlot(successContext.allyA, successDodge),
@@ -26702,8 +26932,8 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext failedContext = CreateBattleEndedTestContext("buff_e_failed", 30, 30, 50, 10, 3, 8);
         BattleCardState failedDodge = CreateFixedDodgeCardForCharacter(failedContext.allyA, "buff_e_failed_dodge", 2, 1);
         BattleCardState failedEnemy = CreateFixedEnemyAttackCardForDodgeTest(failedContext.enemy, "buff_e_failed_enemy", 5, 0);
-        AddClashStartOneShotBuff(failedContext.allyA, "NextClashPointUp", 1, 1);
-        AddClashStartOneShotBuff(failedContext.enemy, "NextClashPointUp", 1, 1);
+        failedContext.allyA.AddBuff("NextClashPointUp", 1, 0);
+        failedContext.enemy.AddBuff("NextClashPointUp", 1, 0);
 
         BattleResolveResult failedResult = BattleResolver.ResolveRespondedEnemyIntent(
             CreateRespondedSlot(failedContext.allyA, failedDodge),
@@ -26730,8 +26960,8 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff_f", 30, 30, 50, 10, 3, 8);
         BattleCardState dodge = CreateFixedDodgeCardForCharacter(context.allyA, "buff_f_dodge", 5, 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_f_enemy", 5, 0);
-        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 1);
-        AddClashStartOneShotBuff(context.enemy, "NextClashPointUp", 3, 1);
+        context.allyA.AddBuff("NextClashPointUp", 1, 2);
+        context.enemy.AddBuff("NextClashPointUp", 1, 2);
 
         BattleActionSlot actionSlot = CreateRespondedSlot(context.allyA, dodge);
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
@@ -26765,8 +26995,8 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff_g", 30, 30, 50, 10, 3, 8);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_g_enemy_attack", 5, 0);
         BattleCardState passiveDodge = CreateFixedDodgeCardForCharacter(context.allyB, "buff_g_passive_dodge", 4, 1);
-        AddClashStartOneShotBuff(context.enemy, "NextClashPointUp", 9, 1);
-        AddClashStartOneShotBuff(context.allyB, "NextClashPointUp", 4, 1);
+        context.enemy.AddBuff("NextClashPointUp", 1, 8);
+        context.allyB.AddBuff("NextClashPointUp", 1, 3);
 
         BattleEnemyIntent intent = CreateEnemyAttackIntent("buff_g_intent", context.enemy, enemyAttack, context.allyB, 1);
         BattleActionSlot passiveDodgeSlot = new BattleActionSlot(context.allyB, 2);
@@ -26784,7 +27014,7 @@ public class CardLoadTest : MonoBehaviour
         bool knownEnemyPointKept =
             result != null &&
             result.enemyPoint == knownEnemyAttackPoint;
-        bool enemyNewBuffKept = CountBuffStack(context.enemy, "NextClashPointUp") == 9;
+        bool enemyNewBuffKept = CountBuffStack(context.enemy, "NextClashPointUp") == 1;
         bool knownPointWorked =
             result != null &&
             dodgePointBoosted &&
@@ -26810,8 +27040,8 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff_h", 30, 30, 50, 10, 3, 8);
         BattleCardState defense = CreateTestDefenseCardForCharacter(context.allyA, "buff_h_defense", 3, 1);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_h_enemy", 4, 0);
-        AddClashStartOneShotBuff(context.allyA, "GuardUp", 4, 1);
-        AddClashStartOneShotBuff(context.enemy, "NextClashPointUp", 2, 1);
+        context.allyA.AddBuff("GuardUp", 4, 3);
+        context.enemy.AddBuff("NextClashPointUp", 1, 1);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             CreateRespondedSlot(context.allyA, defense),
@@ -26826,13 +27056,13 @@ public class CardLoadTest : MonoBehaviour
         bool ordinaryDefenseEnemyNextClashKept =
             result != null &&
             result.enemyPoint == 4 &&
-            CountBuffStack(context.enemy, "NextClashPointUp") == 2;
+            CountBuffStack(context.enemy, "NextClashPointUp") == 1;
 
         BattleEndedTestContext knownContext = CreateBattleEndedTestContext("buff_h_known", 30, 30, 50, 10, 3, 8);
         BattleCardState knownDefense = CreateTestDefenseCardForCharacter(knownContext.allyA, "buff_h_known_defense", 3, 1);
         BattleCardState knownEnemyAttack = CreateFixedEnemyAttackCardForDodgeTest(knownContext.enemy, "buff_h_known_enemy", 4, 0);
-        AddClashStartOneShotBuff(knownContext.allyA, "GuardDown", 1, 1);
-        AddClashStartOneShotBuff(knownContext.enemy, "NextClashPointUp", 5, 1);
+        knownContext.allyA.AddBuff("GuardDown", 1);
+        knownContext.enemy.AddBuff("NextClashPointUp", 1, 4);
         BattleActionSlot knownDefenseSlot = CreateRespondedSlot(knownContext.allyA, knownDefense);
         BattleResolveResult knownResult = BattleResolver.ResolveDefenseVsAttackWithKnownEnemyPoint(
             knownDefenseSlot,
@@ -26845,7 +27075,7 @@ public class CardLoadTest : MonoBehaviour
             knownResult.playerPoint == 2 &&
             knownResult.enemyPoint == 4 &&
             CountBuffStack(knownContext.allyA, "GuardDown") == 0 &&
-            CountBuffStack(knownContext.enemy, "NextClashPointUp") == 5;
+            CountBuffStack(knownContext.enemy, "NextClashPointUp") == 1;
 
         Debug.Log("Defense侧一次性Guard Buff先生效后消费：" + (ordinaryDefenseGuardBuffWorked && knownDefenseRule));
         Debug.Log("Defense路径不读取或消费敌人NextClashPointUp：" + ordinaryDefenseEnemyNextClashKept);
@@ -26860,7 +27090,7 @@ public class CardLoadTest : MonoBehaviour
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff_i", 30, 30, 50, 10, 3, 8);
         BattleCardState playerAttack = CreateAttackCardWithNextClashBuffEffect(context.allyA, "buff_i_player_attack", 5, BattleTiming.ClashWin, 7);
         BattleCardState enemyAttack = CreateFixedEnemyAttackCardForDodgeTest(context.enemy, "buff_i_enemy", 6, 0);
-        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 1);
+        context.allyA.AddBuff("NextClashPointUp", 1, 2);
 
         BattleResolveResult result = BattleResolver.ResolveRespondedEnemyIntent(
             CreateRespondedSlot(context.allyA, playerAttack),
@@ -26872,7 +27102,7 @@ public class CardLoadTest : MonoBehaviour
             result.resultType == "PlayerWin" &&
             result.playerPoint == 8 &&
             CountBuffStack(context.allyA, "NextClashPointUp") == 7 &&
-            CountBuffInstances(context.allyA, "NextClashPointUp") == 1;
+            CountBuffStates(context.allyA, "NextClashPointUp") == 1;
 
         Debug.Log("本次开始前旧Buff被消费：" + (result != null && result.playerPoint == 8));
         Debug.Log("事件中新获得Buff仍存在：" + (CountBuffStack(context.allyA, "NextClashPointUp") == 7));
@@ -26884,26 +27114,26 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("===== 模式47 子测试J：纯读取不修改Buff =====");
 
         BattleEndedTestContext context = CreateBattleEndedTestContext("buff_j", 30, 30, 50, 10, 3, 8);
-        AddClashStartOneShotBuff(context.allyA, "NextClashPointUp", 3, 4);
+        context.allyA.AddBuff("NextClashPointUp", 1, 2);
 
         int stackBefore = CountBuffStack(context.allyA, "NextClashPointUp");
-        int instanceBefore = CountBuffInstances(context.allyA, "NextClashPointUp");
-        int durationBefore = GetBuffDuration(context.allyA, "NextClashPointUp");
+        int stateBefore = CountBuffStates(context.allyA, "NextClashPointUp");
+        int intensityBefore = context.allyA.GetBuffIntensity("NextClashPointUp");
         int readStack = context.allyA.GetBuffStack("NextClashPointUp");
         int stackAfter = CountBuffStack(context.allyA, "NextClashPointUp");
-        int instanceAfter = CountBuffInstances(context.allyA, "NextClashPointUp");
-        int durationAfter = GetBuffDuration(context.allyA, "NextClashPointUp");
+        int stateAfter = CountBuffStates(context.allyA, "NextClashPointUp");
+        int intensityAfter = context.allyA.GetBuffIntensity("NextClashPointUp");
 
         bool pureRead =
             readStack == stackBefore &&
             stackBefore == stackAfter &&
-            instanceBefore == instanceAfter &&
-            durationBefore == durationAfter;
+            stateBefore == stateAfter &&
+            intensityBefore == intensityAfter;
 
         Debug.Log("当前完整Buff点数范围预览尚未接入");
         Debug.Log("读取前后Buff stack不变：" + (stackBefore == stackAfter));
-        Debug.Log("duration不变：" + (durationBefore == durationAfter));
-        Debug.Log("Buff实例数量不变：" + (instanceBefore == instanceAfter));
+        Debug.Log("intensity不变：" + (intensityBefore == intensityAfter));
+        Debug.Log("Buff canonical state数量不变：" + (stateBefore == stateAfter));
         Debug.Log("纯读取不修改Buff：" + pureRead);
     }
 
@@ -26927,7 +27157,7 @@ public class CardLoadTest : MonoBehaviour
         context.runtimeState.SetIntentQueue(emptyIntentQueue);
 
         BattleCardState bulletAttack = CreateBulletLockedFreeAttackCard(context.allyB, "invalid_action_a_bullet_attack", 3, 5);
-        context.allyB.AddBuff("Bullet", 5, -1);
+        context.allyB.AddBuff("Bullet", 5);
 
         CardEligibilityResult assignResult;
         bool assignSuccess = BattleActionSlotManager.AssignFreeAction(
@@ -27001,7 +27231,7 @@ public class CardLoadTest : MonoBehaviour
         BattleCardState unavailableAttack = CreateBulletLockedFreeAttackCard(context.allyB, "invalid_action_b_bullet_attack", 3, 5);
         BattleCardState followAbility = CreateBattleEndedAbilityCard(context.allyA, "invalid_action_b_follow_ability", "InvalidActionFollowBuff");
 
-        context.allyB.AddBuff("Bullet", 5, -1);
+        context.allyB.AddBuff("Bullet", 5);
 
         CardEligibilityResult firstAssignResult;
         bool firstAssignSuccess = BattleActionSlotManager.AssignFreeAction(
@@ -27605,9 +27835,9 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("===== 模式46 子测试K：死亡角色不参与TurnStart / TurnEnd =====");
 
         BattleEndedTestContext startContext = CreateBattleEndedTestContext("single_death_k_start", 30, 0, 50, 20, 3, 8);
-        startContext.allyA.AddPendingBuff("SingleDeathKAliveAStart", "K存活A回合开始证明", "AbilityBuff", 1, 1, "None", "Permanent", 0, 1, 1);
-        startContext.allyB.AddPendingBuff("SingleDeathKDeadBStart", "K死亡B回合开始证明", "AbilityBuff", 1, 1, "None", "Permanent", 0, 1, 1);
-        startContext.enemy.AddPendingBuff("SingleDeathKEnemyStart", "K敌人回合开始证明", "AbilityBuff", 1, 1, "None", "Permanent", 0, 1, 1);
+        startContext.allyA.AddPendingBuff("SingleDeathKAliveAStart", 1, 0, 1, 1);
+        startContext.allyB.AddPendingBuff("SingleDeathKDeadBStart", 1, 0, 1, 1);
+        startContext.enemy.AddPendingBuff("SingleDeathKEnemyStart", 1, 0, 1, 1);
 
         int bPendingBuffCountBefore = startContext.allyB.pendingBuffs.Count;
         int bBuffStackBefore = CountBuffStack(startContext.allyB, "SingleDeathKDeadBStart");
@@ -27670,11 +27900,11 @@ public class CardLoadTest : MonoBehaviour
         Debug.Log("phase正常进入Prepare：" + (startContext.runtimeState.currentPhase == "Prepare"));
 
         BattleEndedTestContext endContext = CreateBattleEndedTestContext("single_death_k_end", 30, 0, 50, 20, 3, 8);
-        endContext.allyA.AddBuff("SingleDeathKAliveAEnd", "K存活A回合结束证明", "AbilityBuff", 1, 2, "TurnEnd", "DurationDown");
-        endContext.allyB.AddBuff("SingleDeathKDeadBEnd", "K死亡B回合结束证明", "AbilityBuff", 1, 2, "TurnEnd", "DurationDown");
+        endContext.allyA.AddBuff("SingleDeathKAliveAEnd", 1);
+        endContext.allyB.AddBuff("SingleDeathKDeadBEnd", 1);
 
-        int aEndDurationBefore = GetBuffDuration(endContext.allyA, "SingleDeathKAliveAEnd");
-        int bEndDurationBefore = GetBuffDuration(endContext.allyB, "SingleDeathKDeadBEnd");
+        int aEndStackBefore = CountBuffStack(endContext.allyA, "SingleDeathKAliveAEnd");
+        int bEndStackBefore = CountBuffStack(endContext.allyB, "SingleDeathKDeadBEnd");
 
         BattleExecutionPlan completedPlan = new BattleExecutionPlan();
         completedPlan.isCompleted = true;
@@ -27685,13 +27915,13 @@ public class CardLoadTest : MonoBehaviour
         );
         TryEndCurrentTurnForTest(endContext.runtimeState);
 
-        int aEndDurationAfter = GetBuffDuration(endContext.allyA, "SingleDeathKAliveAEnd");
-        int bEndDurationAfter = GetBuffDuration(endContext.allyB, "SingleDeathKDeadBEnd");
+        int aEndStackAfter = CountBuffStack(endContext.allyA, "SingleDeathKAliveAEnd");
+        int bEndStackAfter = CountBuffStack(endContext.allyB, "SingleDeathKDeadBEnd");
 
-        Debug.Log("存活A正常参与TurnEnd：" + (aEndDurationAfter == aEndDurationBefore - 1));
-        Debug.Log("A的Buff持续时间正常下降：" + (aEndDurationBefore == 2 && aEndDurationAfter == 1));
-        Debug.Log("死亡B未参与TurnEnd：" + (bEndDurationAfter == bEndDurationBefore));
-        Debug.Log("B的Buff持续时间保持不变：" + (bEndDurationBefore == 2 && bEndDurationAfter == 2));
+        Debug.Log("存活A的Buff在TurnEnd保持：" + (aEndStackAfter == aEndStackBefore));
+        Debug.Log("A的Buff不会因TurnEnd自动掉层：" + (aEndStackBefore == 1 && aEndStackAfter == 1));
+        Debug.Log("死亡B的Buff保持：" + (bEndStackAfter == bEndStackBefore));
+        Debug.Log("B的Buff不会因TurnEnd自动掉层：" + (bEndStackBefore == 1 && bEndStackAfter == 1));
     }
 
     void RunBattleEndedVictoryStopsRemainingFreeActionSubTest()
@@ -28475,13 +28705,8 @@ public class CardLoadTest : MonoBehaviour
                 trigger = BattleTiming.AfterKill,
                 effectType = CardEffectType.ApplyBuff,
                 target = CardTargetType.Self,
-                buffType = "BattleEndedAfterKillProof",
-                buffName = "BattleEnded AfterKill Proof",
-                buffCategory = "AbilityBuff",
-                stack = 1,
-                duration = 1,
-                checkTiming = "TurnEnd",
-                expireRule = "DurationDown"
+                buffID = "Strength",
+                stackDelta = 1
             }
         };
 
@@ -28534,13 +28759,8 @@ public class CardLoadTest : MonoBehaviour
                     trigger = BattleTiming.OnPlay,
                     effectType = CardEffectType.ApplyBuff,
                     target = CardTargetType.Self,
-                    buffType = buffType,
-                    buffName = buffType,
-                    buffCategory = "AbilityBuff",
-                    stack = 1,
-                    duration = 1,
-                    checkTiming = "TurnEnd",
-                    expireRule = "DurationDown"
+                    buffID = buffType,
+                    stackDelta = 1
                 }
             }
         };
@@ -28548,35 +28768,33 @@ public class CardLoadTest : MonoBehaviour
         return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
     }
 
-    CardEffectData CreateApplyBuffEffect(string trigger, string buffID, int stack, int duration)
+    CardEffectData CreateApplyBuffEffect(string trigger, string buffID, int stack)
     {
-        return CreateApplyBuffEffect(trigger, buffID, stack, duration, null);
+        return CreateApplyBuffEffect(trigger, buffID, stack, null);
     }
 
-    CardEffectData CreateApplyBuffEffect(string trigger, string buffID, int stack, int duration, string requireClashResult)
+    CardEffectData CreateApplyBuffEffect(string trigger, string buffID, int stack, string requireClashResult)
     {
         CardEffectData effect = new CardEffectData
         {
             trigger = trigger,
             effectType = CardEffectType.ApplyBuff,
             target = CardTargetType.Self,
-            buffType = buffID,
-            stack = stack,
-            duration = duration,
+            buffID = buffID,
+            stackDelta = stack,
             requireClashResult = requireClashResult
         };
+        return effect;
+    }
 
-        BuffDefinitionData definition;
-
-        if (BuffDefinitionLoader.TryGetDefinition(buffID, out definition))
+    CardEffectData CreateBeforeUseBuffEffect(string buffID, int stack)
+    {
+        CardEffectData effect = CreateApplyBuffEffect(BattleTiming.BeforeUse, buffID, stack);
+        if ((buffID == "NextCardPointUp" || buffID == "NextClashPointUp") && stack > 0)
         {
-            return effect;
+            effect.intensityDelta = stack - 1;
+            effect.hasIntensityDelta = true;
         }
-
-        effect.buffName = buffID;
-        effect.buffCategory = BuffCategory.UpBuff;
-        effect.checkTiming = BattleTiming.TurnEnd;
-        effect.expireRule = "DurationDown";
 
         return effect;
     }
@@ -28599,7 +28817,7 @@ public class CardLoadTest : MonoBehaviour
         }
 
         cardState.cardData.effects.Add(
-            CreateApplyBuffEffect(trigger, buffID, 1, 1, requireClashResult)
+            CreateApplyBuffEffect(trigger, buffID, 1, requireClashResult)
         );
     }
 
@@ -28608,14 +28826,13 @@ public class CardLoadTest : MonoBehaviour
         string instanceID,
         int point,
         string buffID,
-        int stack,
-        int duration
+        int stack
     )
     {
         CardTestData cardData = CreateFixedAttackCardData(instanceID + "_data", "BeforeUse固定点攻击", point);
         cardData.effects = new List<CardEffectData>
         {
-            CreateApplyBuffEffect(BattleTiming.BeforeUse, buffID, stack, duration)
+            CreateBeforeUseBuffEffect(buffID, stack)
         };
 
         return BattleCardManager.CreateBattleCard(owner, cardData, instanceID);
@@ -28869,8 +29086,7 @@ public class CardLoadTest : MonoBehaviour
         string instanceID,
         int point,
         string buffID,
-        int stack,
-        int duration
+        int stack
     )
     {
         CardTestData cardData = new CardTestData
@@ -28885,7 +29101,7 @@ public class CardLoadTest : MonoBehaviour
             defenseFormula = "PointAsDefense",
             effects = new List<CardEffectData>
             {
-                CreateApplyBuffEffect(BattleTiming.BeforeUse, buffID, stack, duration)
+                CreateBeforeUseBuffEffect(buffID, stack)
             }
         };
 
@@ -28897,8 +29113,7 @@ public class CardLoadTest : MonoBehaviour
         string instanceID,
         int point,
         string buffID,
-        int stack,
-        int duration
+        int stack
     )
     {
         CardTestData cardData = new CardTestData
@@ -28912,7 +29127,7 @@ public class CardLoadTest : MonoBehaviour
             cooldown = 1,
             effects = new List<CardEffectData>
             {
-                CreateApplyBuffEffect(BattleTiming.BeforeUse, buffID, stack, duration)
+                CreateBeforeUseBuffEffect(buffID, stack)
             }
         };
 
@@ -28950,11 +29165,10 @@ public class CardLoadTest : MonoBehaviour
         int point,
         int requiredBullet,
         string buffID,
-        int stack,
-        int duration
+        int stack
     )
     {
-        BattleCardState cardState = CreateBeforeUseBuffAttackCard(owner, instanceID, point, buffID, stack, duration);
+        BattleCardState cardState = CreateBeforeUseBuffAttackCard(owner, instanceID, point, buffID, stack);
         AddBulletCondition(cardState.cardData, requiredBullet);
         return cardState;
     }
@@ -28965,11 +29179,10 @@ public class CardLoadTest : MonoBehaviour
         int point,
         int requiredBullet,
         string buffID,
-        int stack,
-        int duration
+        int stack
     )
     {
-        BattleCardState cardState = CreateBeforeUseBuffDefenseCard(owner, instanceID, point, buffID, stack, duration);
+        BattleCardState cardState = CreateBeforeUseBuffDefenseCard(owner, instanceID, point, buffID, stack);
         AddBulletCondition(cardState.cardData, requiredBullet);
         return cardState;
     }
@@ -28980,11 +29193,10 @@ public class CardLoadTest : MonoBehaviour
         int point,
         int requiredBullet,
         string buffID,
-        int stack,
-        int duration
+        int stack
     )
     {
-        BattleCardState cardState = CreateBeforeUseBuffDodgeCard(owner, instanceID, point, buffID, stack, duration);
+        BattleCardState cardState = CreateBeforeUseBuffDodgeCard(owner, instanceID, point, buffID, stack);
         AddBulletCondition(cardState.cardData, requiredBullet);
         return cardState;
     }
@@ -29006,8 +29218,8 @@ public class CardLoadTest : MonoBehaviour
             maxPoint = 0,
             effects = new List<CardEffectData>
             {
-                CreateApplyBuffEffect(BattleTiming.OnPlay, onPlayBuffID, 1, 1),
-                CreateApplyBuffEffect(BattleTiming.BeforeUse, "Strength", 1, 1)
+                CreateApplyBuffEffect(BattleTiming.OnPlay, onPlayBuffID, 1),
+                CreateApplyBuffEffect(BattleTiming.BeforeUse, "Strength", 1)
             }
         };
 
@@ -29019,25 +29231,12 @@ public class CardLoadTest : MonoBehaviour
 
     int CountBuffStack(CharacterData character, string buffID)
     {
-        if (character == null || character.buffs == null || string.IsNullOrEmpty(buffID))
-        {
-            return 0;
-        }
-
-        int total = 0;
-
-        foreach (BuffData buff in character.buffs)
-        {
-            if (buff != null && buff.buffID == buffID)
-            {
-                total += buff.stack;
-            }
-        }
-
-        return total;
+        return character != null && !string.IsNullOrEmpty(buffID)
+            ? character.GetBuffStack(buffID)
+            : 0;
     }
 
-    int CountBuffInstances(CharacterData character, string buffID)
+    int CountBuffStates(CharacterData character, string buffID)
     {
         if (character == null || character.buffs == null || string.IsNullOrEmpty(buffID))
         {
@@ -29055,42 +29254,6 @@ public class CardLoadTest : MonoBehaviour
         }
 
         return total;
-    }
-
-    int GetBuffDuration(CharacterData character, string buffID)
-    {
-        if (character == null || character.buffs == null || string.IsNullOrEmpty(buffID))
-        {
-            return -1;
-        }
-
-        foreach (BuffData buff in character.buffs)
-        {
-            if (buff != null && buff.buffID == buffID)
-            {
-                return buff.duration;
-            }
-        }
-
-        return -1;
-    }
-
-    void AddClashStartOneShotBuff(CharacterData character, string buffID, int stack, int duration)
-    {
-        if (character == null)
-        {
-            return;
-        }
-
-        character.AddBuff(
-            buffID,
-            buffID,
-            "AbilityBuff",
-            stack,
-            duration,
-            BattleTiming.ClashStart,
-            "ConsumeOnTrigger"
-        );
     }
 
     BattleActionSlot CreateRespondedSlot(CharacterData actor, BattleCardState cardState)
@@ -29225,13 +29388,10 @@ public class CardLoadTest : MonoBehaviour
                 trigger = trigger,
                 effectType = CardEffectType.ApplyBuff,
                 target = CardTargetType.Self,
-                buffType = "NextClashPointUp",
-                buffName = "下一次拼点点数增加",
-                buffCategory = "AbilityBuff",
-                stack = nextClashPointUpStack,
-                duration = 1,
-                checkTiming = BattleTiming.ClashStart,
-                expireRule = "ConsumeOnTrigger"
+                buffID = "NextClashPointUp",
+                stackDelta = nextClashPointUpStack,
+                intensityDelta = nextClashPointUpStack - 1,
+                hasIntensityDelta = true
             }
         };
 
@@ -29623,7 +29783,7 @@ public class CardLoadTest : MonoBehaviour
         // Bullet = 子弹
         // AbilityBuff = 能力状态
         // Permanent = 常驻，不会因为回合结束自然消失
-        allyA.AddBuff("Bullet", "子弹", "AbilityBuff", 6, -1, "None", "Permanent");
+        allyA.AddBuff("Bullet", 6);
     }
 
     // CreateTestBattleCards = 创建测试用战斗卡牌状态
@@ -29997,7 +30157,7 @@ public static class BattleAngerAndModificationAbilityTests
 {
     public static bool Run(IReadOnlyList<CardTestData> cards)
     {
-        bool[] results = new bool[26];
+        bool[] results = new bool[30];
         CardTestData anger = Find(cards, "sin_anger_001");
         CardTestData modification = Find(cards, "ability_modification_001");
         results[0] = anger != null && anger.cardName == "愤怒" &&
@@ -30022,7 +30182,9 @@ public static class BattleAngerAndModificationAbilityTests
         BattleActionSlot angerSlot = FreeSlot(angerOwner, 1, angerState, angerOwner);
         BattleExecutionPlan angerPlan = Plan(angerSlot);
         BattleExecutionPlanExecutor.ExecuteExecutionPlan(angerPlan);
-        results[4] = angerOwner.IsAngerMechanicEnabled;
+        BuffData grantedAngerState = angerOwner.GetBuffState(BattleResourceID.Anger);
+        results[4] = angerOwner.IsAngerMechanicEnabled &&
+            grantedAngerState != null && grantedAngerState.stack == 0;
         results[5] = BattleAngerRules.GetAnger(angerOwner) == 0;
         results[6] = angerState.isConsumed && angerState.currentUseCount == 1;
 
@@ -30135,6 +30297,10 @@ public static class BattleAngerAndModificationAbilityTests
             unavailableAbility.currentUseCount == 0;
         results[24] = BattleAbilityPhaseBasicTests.Run();
         results[25] = BattleDeckManifestTests.Run(cards);
+        results[26] = VerifyAngerEnsureIsNonDestructive();
+        results[27] = VerifyAngerLifecycleRetainsZero();
+        results[28] = VerifyIaiClearRetainsAngerState(cards);
+        results[29] = VerifyExplicitAngerClearDeletesState();
 
         string[] names =
         {
@@ -30145,7 +30311,9 @@ public static class BattleAngerAndModificationAbilityTests
             "改装成功后消费", "Reload不超过4", "AddBulletCapped不超过4",
             "盲射+2", "抵近射击+2", "瞄准射击+2", "无改装不加点", "刀牌不加点",
             "真实Resolver验证+2", "普通一次性Ability消费", "非消费Ability保持", "不可用Ability不消费",
-            "Mode110 AbilityPhase回归", "Mode109 DeckManifest回归"
+            "Mode110 AbilityPhase回归", "Mode109 DeckManifest回归",
+            "EnsureAnger不重置已有层数", "Anger归零后保留state",
+            "一闪清空层数但保留state", "Explicit Clear删除Anger state"
         };
         bool passed = true;
         Debug.Log("===== Mode111 BattleAngerAndModificationAbility =====");
@@ -30156,6 +30324,80 @@ public static class BattleAngerAndModificationAbilityTests
         }
         Debug.Log("Passed: " + passed);
         return passed;
+    }
+
+    static bool VerifyAngerEnsureIsNonDestructive()
+    {
+        CharacterData owner = Unit("mode111_anger_ensure");
+        owner.SetAngerMechanicEnabledForBattle(true);
+        if (!owner.EnsureBuffState(BattleResourceID.Anger))
+        {
+            return false;
+        }
+
+        owner.AddBuff(BattleResourceID.Anger, 3);
+        BuffData before = owner.buffs.Find(
+            state => state != null && state.buffID == BattleResourceID.Anger
+        );
+        bool ensured = owner.EnsureBuffState(BattleResourceID.Anger);
+        BuffData after = owner.buffs.Find(
+            state => state != null && state.buffID == BattleResourceID.Anger
+        );
+        return ensured && before != null && after != null &&
+            object.ReferenceEquals(before, after) &&
+            before.stack == 3 && after.stack == 3 &&
+            before.intensity == after.intensity;
+    }
+
+    static bool VerifyAngerLifecycleRetainsZero()
+    {
+        CharacterData owner = Unit("mode111_anger_lifecycle");
+        owner.SetAngerMechanicEnabledForBattle(true);
+        if (!owner.EnsureBuffState(BattleResourceID.Anger))
+        {
+            return false;
+        }
+
+        BattleAngerRules.AddAnger(owner, 1);
+        BattleAngerRules.RemoveAnger(owner, 1);
+        BuffData state = owner.GetBuffState(BattleResourceID.Anger);
+        return state != null && state.stack == 0;
+    }
+
+    static bool VerifyIaiClearRetainsAngerState(IReadOnlyList<CardTestData> cards)
+    {
+        CardTestData iaiData = Find(cards, "sin_iai_001");
+        if (iaiData == null)
+        {
+            return false;
+        }
+
+        CharacterData owner = Unit("mode111_iai_clear");
+        owner.SetAngerMechanicEnabledForBattle(true);
+        owner.EnsureBuffState(BattleResourceID.Anger);
+        BattleAngerRules.AddAnger(owner, 3);
+        BattleCardState iai = State(owner, iaiData, "mode111_iai_clear_card");
+        CharacterData enemy = Unit("mode111_iai_clear_enemy");
+        BattleResolutionPlan plan = BattleTimingMigrationFixture.Respond(
+            iai,
+            BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 1)
+        );
+        BattleResolveResult result = BattleTimingMigrationFixture.Complete(plan);
+        BuffData state = owner.GetBuffState(BattleResourceID.Anger);
+        return result != null && iai.cardUsedCommittedForCurrentAction &&
+            state != null && state.stack == 0;
+    }
+
+    static bool VerifyExplicitAngerClearDeletesState()
+    {
+        CharacterData owner = Unit("mode111_anger_clear");
+        owner.SetAngerMechanicEnabledForBattle(true);
+        owner.EnsureBuffState(BattleResourceID.Anger);
+        BattleAngerRules.ClearAnger(owner);
+        bool retainedAfterClearAnger = owner.GetBuffState(BattleResourceID.Anger) != null;
+        owner.ClearBuff(BattleResourceID.Anger);
+        return retainedAfterClearAnger &&
+            owner.GetBuffState(BattleResourceID.Anger) == null;
     }
 
     static bool VerifyModifiedBulletThroughResolver()
@@ -31055,21 +31297,24 @@ public static class BattleDeckFrozenSemanticsMigrationTests
         abilitySlot.AssignFreeAction(owner, conservation, owner);
         BattleResolveResult activation = BattleResolver.ResolveFreeAction(abilitySlot, null);
         if (activation == null || !activation.isSuccess ||
-            !BattleConservationRules.IsActive(owner) || !owner.conservationPointGrantPending)
+            !BattleConservationRules.IsActive(owner) ||
+            owner.GetBuffStack(BattleResourceID.Conservation) != 1)
         {
             return false;
         }
         BattleCardState melee = State(owner, cards, "atk_001");
         bool meleeRejected = !BattleConservationRules.TryAssignPendingBonus(owner, melee) &&
-            owner.conservationPointGrantPending;
+            owner.GetBuffStack(BattleResourceID.Conservation) == 1;
         BattleCardState shot = State(owner, cards, "shoot_close_001");
         bool assigned = BattleConservationRules.TryAssignPendingBonus(owner, shot) &&
-            shot.conservationPointBonus == 3 && !owner.conservationPointGrantPending;
+            shot.conservationPointBonus == 3 &&
+            owner.GetBuffStack(BattleResourceID.Conservation) == 1;
         BattleResolveResult failure = Complete(Respond(shot, Attack(Unit(
             "mode131_conservation_enemy"), 100
         )));
         return meleeRejected && assigned && failure != null &&
-            !shot.cardUsedCommittedForCurrentAction && !owner.conservationPointGrantPending;
+            !shot.cardUsedCommittedForCurrentAction &&
+            owner.GetBuffStack(BattleResourceID.Conservation) == 1;
     }
 
     static bool VerifyLegacyContradictions(List<CardTestData> cards)
@@ -31584,7 +31829,7 @@ public static class BattleCardKeywordPresentationTests
         BattleBulletRules.AddBulletCapped(owner, 3);
         owner.SetAngerMechanicEnabledForBattle(true);
         BattleAngerRules.AddAnger(owner, 2);
-        owner.AddBuff("mode132_buff", 1, -1);
+        owner.AddBuff("mode132_buff", 1);
         BattleCardState card = BattleTimingMigrationFixture.Card(owner, CardType.Attack, 1);
         card.currentCooldown = 4;
         int hp = owner.currentHP;
@@ -31862,16 +32107,17 @@ public static class BattleHiddenPendingStateTests
         BattleConservationRules.Activate(owner);
         var melee = BattleTimingMigrationFixture.Card(owner, CardType.Attack, 1);
         if (BattleConservationRules.TryAssignPendingBonus(owner, melee) ||
-            !owner.battlePending.conservationPointGrant) return false;
+            owner.GetBuffStack(BattleResourceID.Conservation) != 1) return false;
         var shot = BattleTimingMigrationFixture.Shot(owner, 1);
         var enemy = BattleTimingMigrationFixture.Unit("mode127_conservation_enemy");
         var plan = BattleTimingMigrationFixture.Respond(shot,
             BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 20));
         if (plan == null || !shot.hasConservationPointBonus || shot.conservationPointBonus != 1 ||
-            owner.battlePending.conservationPointGrant ||
+            owner.GetBuffStack(BattleResourceID.Conservation) != 1 ||
             BattleConservationRules.TryAssignPendingBonus(owner, shot)) return false;
         return BattleTimingMigrationFixture.Complete(plan) != null &&
-            !shot.cardUsedCommittedForCurrentAction && !owner.battlePending.conservationPointGrant &&
+            !shot.cardUsedCommittedForCurrentAction &&
+            owner.GetBuffStack(BattleResourceID.Conservation) == 1 &&
             BattleBulletRules.GetBullet(owner) == 6;
     }
 }
@@ -32054,9 +32300,12 @@ public static class BattleResourceSpecialStateNormalizationTests
             usedHeavy,
             BattleTimingMigrationFixture.Card(firstEnemy, CardType.Attack, 1)
         );
+        bool usedPendingBefore = usedPlan != null && usedHeavy.pendingHeavyAngerSpend;
         bool usedRange = usedPlan != null && usedPlan.clashSession.SideAPoint == 7;
         BattleResolveResult usedResult = BattleTimingMigrationFixture.Complete(usedPlan);
-        bool usedSettled = usedResult != null && usedHeavy.cardUsedCommittedForCurrentAction &&
+        // Final Anger = initial 2 + successful damage gain 1 - Heavy spend 1.
+        bool usedSettled = usedResult != null && usedResult.resultType == "PlayerWin" &&
+            usedHeavy.cardUsedCommittedForCurrentAction && usedPendingBefore &&
             BattleAngerRules.GetAnger(usedOwner) == 2 &&
             !usedHeavy.pendingHeavyAngerSpend;
 
@@ -32078,7 +32327,7 @@ public static class BattleResourceSpecialStateNormalizationTests
         bool notUsedKept = losingResult != null &&
             losingResult.resultType == "EnemyWin" &&
             !losingHeavy.cardUsedCommittedForCurrentAction &&
-            BattleAngerRules.GetAnger(loser) == 1 &&
+            BattleAngerRules.GetAnger(loser) == 2 &&
             !losingHeavy.pendingHeavyAngerSpend;
         return usedRange && usedSettled && notUsedKept;
     }
@@ -32137,7 +32386,7 @@ public static class BattleResourceSpecialStateNormalizationTests
             BattleTimingMigrationFixture.Card(enemy, CardType.Attack, 1)
         );
         bool armed = plan != null && shot.conservationKillReloadArmed &&
-            !owner.battlePending.conservationPointGrant;
+            owner.GetBuffStack(BattleResourceID.Conservation) == 1;
         BattleResolveResult result = BattleTimingMigrationFixture.Complete(plan);
         bool exactReloaded = armed && result != null && result.damage == 3 &&
             BattleBulletRules.GetBullet(owner) == 6 &&
@@ -32170,8 +32419,9 @@ public static class BattleResourceSpecialStateNormalizationTests
         BattleBulletRules.AddBulletCapped(owner, 3);
         BattleConservationRules.Activate(owner);
         BattleTurnProcessor.EndTurn(new List<CharacterData> { owner });
-        return owner.currentHP == 92 && !BattleConservationRules.IsActive(owner) &&
-            !owner.battlePending.conservationPointGrant;
+        return owner.currentHP == 92 &&
+            BattleConservationRules.IsActive(owner) &&
+            owner.GetBuffStack(BattleResourceID.Conservation) == 1;
     }
 
     static bool VerifyPendingAndResourceSingleConsumption()

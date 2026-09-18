@@ -1715,16 +1715,6 @@ public static class BattleResolver
         plan.attacker = session.SideB.actor;
         plan.target = session.ActualTarget;
         plan.sourceCardState = session.SideB.cardState;
-        plan.guardUpStackToConsume = GetTriggeredBuffStack(
-            session.SideA.actor,
-            BattleTiming.ClashStart,
-            BuffGuardUp
-        );
-        plan.guardDownStackToConsume = GetTriggeredBuffStack(
-            session.SideA.actor,
-            BattleTiming.ClashStart,
-            BuffGuardDown
-        );
         AddDamageImpacts(
             plan,
             plan.attacker,
@@ -2327,16 +2317,6 @@ public static class BattleResolver
     {
         BattleClashSession session = plan.clashSession;
         CharacterData player = session.SideA.actor;
-        player.ConsumeTriggeredBuffStack(
-            BattleTiming.ClashStart,
-            BuffGuardUp,
-            plan.guardUpStackToConsume
-        );
-        player.ConsumeTriggeredBuffStack(
-            BattleTiming.ClashStart,
-            BuffGuardDown,
-            plan.guardDownStackToConsume
-        );
         ConsumeSuccessfulPointCardBuffs(player, session.SideA.pointSnapshot);
 
         if (!session.UsesKnownSideBPoint)
@@ -2714,32 +2694,6 @@ public static class BattleResolver
         return result ?? (plan != null ? plan.CompletedResult : null);
     }
 
-    static int GetTriggeredBuffStack(
-        CharacterData unit,
-        string timing,
-        string buffID
-    )
-    {
-        if (unit == null || unit.buffs == null)
-        {
-            return 0;
-        }
-
-        int stack = 0;
-        foreach (BuffData buff in unit.buffs)
-        {
-            if (buff != null &&
-                buff.buffID == buffID &&
-                buff.checkTiming == timing &&
-                buff.expireRule == "ConsumeOnTrigger")
-            {
-                stack += buff.stack;
-            }
-        }
-
-        return stack;
-    }
-
     // ResolveUnrespondedEnemyIntent = 正式结算无人响应敌人意图
     // 第一版只处理敌人攻击命中 actualTarget，不触发玩家卡牌式事件链。
     public static BattleResolveResult ResolveUnrespondedEnemyIntent(
@@ -2841,8 +2795,6 @@ public static class BattleResolver
         CardTestData allyCard = allyCardState.cardData;
         CardTestData enemyCard = enemyCardState.cardData;
 
-        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
-        allyUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
 
         int allyPoint = RollCardPoint(allyCard);
         int enemyPoint = RollCardPoint(enemyCard);
@@ -3003,8 +2955,6 @@ public static class BattleResolver
             );
         }
 
-        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
-        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
         return BattleClashSession.CreateAttackVsAttack(
             new BattleClashSideState(
@@ -3481,8 +3431,6 @@ public static class BattleResolver
             defenseResourceSnapshot,
             runtimeInteraction
         );
-        attackAction.actor.CheckBuffsByTiming(BattleTiming.ClashStart, false);
-        defenseAction.actor.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
         return BattleClashSession.CreateDefenseVsAttack(
             new BattleClashSideState(
@@ -3556,7 +3504,6 @@ public static class BattleResolver
             playerResourceSnapshot,
             runtimeInteraction
         );
-        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
         return BattleClashSession.CreateDefenseVsAttack(
             new BattleClashSideState(
@@ -3757,7 +3704,6 @@ public static class BattleResolver
             playerResourceSnapshot,
             runtimeInteraction
         );
-        playerUnit.CheckBuffsByTiming(BattleTiming.ClashStart, false);
 
         return BattleClashSession.CreateDodgeVsAttack(
             new BattleClashSideState(
@@ -4183,15 +4129,6 @@ public static class BattleResolver
             );
         }
 
-        attackAction.actor.CheckBuffsByTiming(BattleTiming.ClashStart, false);
-        if (!isContinuousDodgeContinuation)
-        {
-            dodgeAction.actor.CheckBuffsByTiming(
-                BattleTiming.ClashStart,
-                false
-            );
-        }
-
         return BattleClashSession.CreateDodgeVsAttack(
             new BattleClashSideState(
                 dodgeAction.actor,
@@ -4222,9 +4159,6 @@ public static class BattleResolver
     {
         CardTestData dodgeCard = dodgeCardState.cardData;
         CardTestData enemyCard = enemyCardState.cardData;
-
-        enemyUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
-        allyUnit.CheckBuffsByTiming(BattleTiming.ClashStart);
 
         int dodgePoint = RollCardPoint(dodgeCard);
         int enemyPoint = RollCardPoint(enemyCard);
@@ -4368,16 +4302,6 @@ public static class BattleResolver
         }
     }
 
-    static int ConsumeClashPointBuffs(CharacterData unit)
-    {
-        if (unit == null)
-        {
-            return 0;
-        }
-
-        return unit.ConsumeBuffsByRule(ConsumeRuleFormalClashResolved);
-    }
-
     static int ConsumeClashPointBuffs(CharacterData unit, BattleClashPointSnapshot snapshot)
     {
         if (unit == null)
@@ -4388,18 +4312,8 @@ public static class BattleResolver
         return unit.ConsumeBuffStackByRule(
             BuffNextClashPointUp,
             ConsumeRuleFormalClashResolved,
-            snapshot.nextClashPointStack
+            1
         );
-    }
-
-    static int ConsumeSuccessfulPointCardBuffs(CharacterData unit)
-    {
-        if (unit == null)
-        {
-            return 0;
-        }
-
-        return unit.ConsumeBuffsByRule(ConsumeRuleSuccessfulPointCardUsed);
     }
 
     static int ConsumeSuccessfulPointCardBuffs(CharacterData unit, BattleClashPointSnapshot snapshot)
@@ -4412,7 +4326,7 @@ public static class BattleResolver
         return unit.ConsumeBuffStackByRule(
             BuffNextCardPointUp,
             ConsumeRuleSuccessfulPointCardUsed,
-            snapshot.nextCardPointStack
+            1
         );
     }
 
@@ -4661,9 +4575,9 @@ public static class BattleResolver
         }
 
         snapshot.nextCardPointStack = unit.GetBuffStack(BuffNextCardPointUp);
-        snapshot.nextCardPointModifier = GetBuffModifierFromStack(BuffNextCardPointUp, snapshot.nextCardPointStack);
+        snapshot.nextCardPointModifier = unit.GetBuffIntensity(BuffNextCardPointUp);
         snapshot.nextClashPointStack = unit.GetBuffStack(BuffNextClashPointUp);
-        snapshot.nextClashPointModifier = GetBuffModifierFromStack(BuffNextClashPointUp, snapshot.nextClashPointStack);
+        snapshot.nextClashPointModifier = unit.GetBuffIntensity(BuffNextClashPointUp);
 
         return snapshot;
     }
@@ -4871,23 +4785,6 @@ public static class BattleResolver
                 snapshot.capturedStack
             );
         }
-    }
-
-    static int GetBuffModifierFromStack(string buffID, int stack)
-    {
-        if (string.IsNullOrEmpty(buffID) || stack <= 0)
-        {
-            return 0;
-        }
-
-        BuffDefinitionData definition;
-
-        if (!BuffDefinitionLoader.TryGetDefinition(buffID, out definition) || definition == null)
-        {
-            return 0;
-        }
-
-        return Mathf.RoundToInt(stack * definition.valuePerStack);
     }
 
     static bool IsInvalidPointRange(int minPoint, int maxPoint)

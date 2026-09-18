@@ -94,7 +94,12 @@ public static class CardEffectExecutor
                 continue;
             }
 
-            ExecuteEffect(effectTarget, effect, hasResolvedValue, resolvedValue);
+            ExecuteEffect(
+                effectTarget,
+                effect,
+                hasResolvedValue,
+                resolvedValue
+            );
         }
     }
 
@@ -180,6 +185,7 @@ public static class CardEffectExecutor
         else if (effect.effectType == CardEffectType.EnableAngerMechanic)
         {
             effectTarget.SetAngerMechanicEnabledForBattle(true);
+            effectTarget.EnsureBuffState(BattleResourceID.Anger);
         }
         else if (effect.effectType == CardEffectType.ActivateModification)
         {
@@ -515,7 +521,7 @@ public static class CardEffectExecutor
     // ApplyBuffEffect = 执行添加 Buff 的效果
     // Apply = 应用，BuffEffect = Buff 效果。
     // effectTarget = 被添加 Buff 的角色。
-    // effect = 单个效果数据，里面包含 buffType、stack、duration 等字段。
+    // effect = one canonical Buff mutation.
     static void ApplyBuffEffect(
         CharacterData effectTarget,
         CardEffectData effect,
@@ -530,25 +536,33 @@ public static class CardEffectExecutor
             applyTiming = "Immediate";
         }
 
-        string buffID = effect.buffType;
+        string buffID = effect.buffID;
 
         if (string.IsNullOrEmpty(buffID))
         {
-            Debug.LogError("ApplyBuff 失败：buffType 为空");
+            Debug.LogError("ApplyBuff 失败：buffID 为空");
             return;
         }
 
-        int stack = resolvedStack ?? effect.stack;
-        int duration = effect.duration;
+        int stackDelta = resolvedStack ?? effect.stackDelta;
 
-        if (stack <= 0)
+        if (stackDelta < 0 ||
+            (stackDelta == 0 && !effect.hasIntensityDelta))
         {
-            Debug.LogError("ApplyBuff 失败：" + buffID + " 层数无效：" + stack);
+            Debug.LogError("ApplyBuff 失败：" + buffID + " 层数变化无效：" + stackDelta);
             return;
         }
 
         BuffDefinitionData definition;
-        bool hasDefinition = BuffDefinitionLoader.TryGetDefinition(buffID, out definition);
+        if (!BuffDefinitionLoader.TryGetDefinition(buffID, out definition) || definition == null)
+        {
+            Debug.LogError("ApplyBuff 失败：找不到Buff定义：" + buffID);
+            return;
+        }
+
+        int? intensityDelta = effect.hasIntensityDelta
+            ? (int?)effect.intensityDelta
+            : null;
 
         if (applyTiming == "Delayed")
         {
@@ -579,65 +593,18 @@ public static class CardEffectExecutor
                 intervalTurns = 1;
             }
 
-            if (hasDefinition)
-            {
-                effectTarget.AddPendingBuff(buffID, stack, duration, delayTurns, applyTimes, intervalTurns);
-                return;
-            }
-
-            if (HasCompleteLegacyBuffFields(effect))
-            {
-                Debug.LogWarning("Buff定义不存在，使用旧卡牌字段兼容：" + buffID);
-                effectTarget.AddPendingBuff(
-                    buffID,
-                    effect.buffName,
-                    effect.buffCategory,
-                    stack,
-                    duration,
-                    effect.checkTiming,
-                    effect.expireRule,
-                    delayTurns,
-                    applyTimes,
-                    intervalTurns
-                );
-                return;
-            }
-
-            Debug.LogError("ApplyBuff 失败：找不到Buff定义且legacy字段不完整：" + buffID);
-            return;
-        }
-
-        if (hasDefinition)
-        {
-            effectTarget.AddBuff(buffID, stack, duration);
-            return;
-        }
-
-        if (HasCompleteLegacyBuffFields(effect))
-        {
-            Debug.LogWarning("Buff定义不存在，使用旧卡牌字段兼容：" + buffID);
-            effectTarget.AddBuff(
+            effectTarget.AddPendingBuff(
                 buffID,
-                effect.buffName,
-                effect.buffCategory,
-                stack,
-                duration,
-                effect.checkTiming,
-                effect.expireRule
+                stackDelta,
+                delayTurns,
+                applyTimes,
+                intervalTurns,
+                intensityDelta
             );
             return;
         }
 
-        Debug.LogError("ApplyBuff 失败：找不到Buff定义且legacy字段不完整：" + buffID);
-    }
-
-    static bool HasCompleteLegacyBuffFields(CardEffectData effect)
-    {
-        return effect != null &&
-            !string.IsNullOrEmpty(effect.buffName) &&
-            !string.IsNullOrEmpty(effect.buffCategory) &&
-            !string.IsNullOrEmpty(effect.checkTiming) &&
-            !string.IsNullOrEmpty(effect.expireRule);
+        effectTarget.AddBuff(buffID, stackDelta, intensityDelta);
     }
 
     // ApplyReduceCooldownEffect = 执行减少冷却效果
@@ -656,7 +623,7 @@ public static class CardEffectExecutor
         // 如果 cooldownAmount 没填，就临时兼容 stack
         if (amount <= 0)
         {
-            amount = effect.stack;
+            amount = effect.value;
         }
 
         // 如果还是没填，就默认减少 1
@@ -731,4 +698,3 @@ public static class CardEffectExecutor
         Debug.LogWarning("未知的减少冷却范围：" + cooldownTarget);
     }
 }
-
