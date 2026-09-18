@@ -13,6 +13,7 @@ namespace ProjectGuilt.Story
         public void SetContinueIndicator(bool visible) { }
 
         public void ShowDialogue(
+            string speakerId,
             string speakerName,
             string fullText,
             int visibleCharacterCount,

@@ -85,6 +85,7 @@ namespace ProjectGuilt.Story
 
         // 每次逐字字符数变化时刷新对话文本。
         void ShowDialogue(
+            string speakerId,
             string speakerName,
             string fullText,
             int visibleCharacterCount,

@@ -571,6 +571,7 @@ namespace ProjectGuilt.Story
         private void RenderDialogue()
         {
             view.ShowDialogue(
+                textPresenter.SpeakerId,
                 textPresenter.SpeakerName,
                 textPresenter.FullText,
                 textPresenter.VisibleCharacterCount,

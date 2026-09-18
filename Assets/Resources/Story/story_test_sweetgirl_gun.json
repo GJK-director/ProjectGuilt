@@ -1,0 +1,204 @@
+﻿{
+  "formatVersion": 1,
+  "storyId": "story_test_sweetgirl_gun",
+  "startNodeId": "d001",
+  "skipNodeId": "end",
+  "nodes": [
+    {
+      "nodeId": "d001",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d002",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "text": "当时我只能选一个。"
+      }
+    },
+    {
+      "nodeId": "d002",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d003",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "嗯……我知道。"
+      }
+    },
+    {
+      "nodeId": "d003",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d004",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "text": "我想的是，你应该能自己保护自己。"
+      }
+    },
+    {
+      "nodeId": "d004",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d005",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "还好啦。"
+      }
+    },
+    {
+      "nodeId": "d005",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d006",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "我最后不是也活下来了吗。"
+      }
+    },
+    {
+      "nodeId": "d006",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d007",
+      "dialogue": {
+        "text": "……"
+      }
+    },
+    {
+      "nodeId": "d007",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d008",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "那如果下一次……要选的是杀不杀我呢？"
+      }
+    },
+    {
+      "nodeId": "d008",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d009",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "到时候，你会怎么做？"
+      }
+    },
+    {
+      "nodeId": "d009",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_gun_01",
+      "dialogue": {
+        "text": "她把手伸进了我的衣服里。等我反应过来，枪口已经抵在我脑门上了。"
+      }
+    },
+    {
+      "nodeId": "bg_gun_01",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "d010",
+      "background": {
+        "backgroundId": "sweetgirl_gun_01",
+        "fadeSeconds": 0
+      }
+    },
+    {
+      "nodeId": "d010",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d011",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "如果是我的话，我会杀了你哦。"
+      }
+    },
+    {
+      "nodeId": "d011",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d012",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "一点都不会犹豫。"
+      }
+    },
+    {
+      "nodeId": "d012",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_gun_02",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "……砰。"
+      }
+    },
+    {
+      "nodeId": "bg_gun_02",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "d013",
+      "background": {
+        "backgroundId": "sweetgirl_gun_02",
+        "fadeSeconds": 0
+      }
+    },
+    {
+      "nodeId": "d013",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d014",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "那你呢？"
+      }
+    },
+    {
+      "nodeId": "d014",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d015",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "你有这样的觉悟吗？"
+      }
+    },
+    {
+      "nodeId": "d015",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d016",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "你能保证……至少让我作为一个人死吗？"
+      }
+    },
+    {
+      "nodeId": "d016",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d017",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "真到了那时候……死在你手里，好像也挺不错的。"
+      }
+    },
+    {
+      "nodeId": "d017",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d018",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "约好了。"
+      }
+    },
+    {
+      "nodeId": "d018",
+      "nodeType": "Dialogue",
+      "nextNodeId": "end",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "这次就原谅你了。"
+      }
+    },
+    {
+      "nodeId": "end",
+      "nodeType": "End"
+    }
+  ]
+}

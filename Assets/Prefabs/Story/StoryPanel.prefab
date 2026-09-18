@@ -2768,6 +2768,22 @@ MonoBehaviour:
     foregroundSprite: {fileID: 0}
     foregroundAnchoredPosition: {x: 0, y: 0}
     foregroundSize: {x: 0, y: 0}
+  - backgroundId: sweetgirl_gun_01
+    sprite: {fileID: 21300000, guid: 32aa9ad95c6d0b643a1fbedfcec04e29, type: 3}
+    overlaySprite: {fileID: 0}
+    overlayAnchoredPosition: {x: 0, y: 0}
+    overlaySize: {x: 0, y: 0}
+    foregroundSprite: {fileID: 0}
+    foregroundAnchoredPosition: {x: 0, y: 0}
+    foregroundSize: {x: 0, y: 0}
+  - backgroundId: sweetgirl_gun_02
+    sprite: {fileID: 21300000, guid: d2dcfad71a359da46b92a0393a931396, type: 3}
+    overlaySprite: {fileID: 0}
+    overlayAnchoredPosition: {x: 0, y: 0}
+    overlaySize: {x: 0, y: 0}
+    foregroundSprite: {fileID: 0}
+    foregroundAnchoredPosition: {x: 0, y: 0}
+    foregroundSize: {x: 0, y: 0}
   leftPortrait:
     root: {fileID: 8800661179620957476}
     panel: {fileID: 776643805130359980}

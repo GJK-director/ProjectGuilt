@@ -219,6 +219,7 @@ namespace ProjectGuilt.Story
             );
             context.View.SetContinueIndicator(false);
             context.View.ShowDialogue(
+                context.TextPresenter.SpeakerId,
                 context.TextPresenter.SpeakerName,
                 context.TextPresenter.FullText,
                 context.TextPresenter.VisibleCharacterCount,

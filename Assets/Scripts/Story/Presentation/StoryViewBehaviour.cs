@@ -17,6 +17,7 @@ namespace ProjectGuilt.Story
 
         // fullText 始终是完整文本，视图根据 visibleCharacterCount 决定当前显示范围。
         public abstract void ShowDialogue(
+            string speakerId,
             string speakerName,
             string fullText,
             int visibleCharacterCount,

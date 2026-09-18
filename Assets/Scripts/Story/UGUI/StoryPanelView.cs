@@ -179,6 +179,7 @@ public sealed class StoryPanelView : StoryViewBehaviour
     }
 
     public override void ShowDialogue(
+        string speakerId,
         string speakerName,
         string fullText,
         int visibleCharacterCount,
@@ -187,16 +188,24 @@ public sealed class StoryPanelView : StoryViewBehaviour
     {
         string safeText = fullText ?? string.Empty;
         int count = Mathf.Clamp(visibleCharacterCount, 0, safeText.Length);
+        bool hasSpeakerName = !string.IsNullOrWhiteSpace(speakerName);
+        bool hasSpeakerIdentity = hasSpeakerName ||
+            !string.IsNullOrWhiteSpace(speakerId);
+        bool isInnerThought = !hasSpeakerIdentity;
 
         if (speakerText != null)
         {
-            speakerText.text = string.IsNullOrWhiteSpace(speakerName)
-                ? ""
-                : speakerName;
+            speakerText.text = hasSpeakerName
+                ? speakerName
+                : string.Empty;
         }
 
         if (dialogueText != null)
         {
+            dialogueText.alignment = isInnerThought
+                ? TextAnchor.UpperCenter
+                : TextAnchor.UpperLeft;
+
             dialogueText.text = safeText.Substring(0, count);
         }
     }
