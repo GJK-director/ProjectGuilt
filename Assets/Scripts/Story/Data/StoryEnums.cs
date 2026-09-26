@@ -9,6 +9,7 @@ namespace ProjectGuilt.Story
         WaitingAdvance,    // 当前文本已完整，等待点击或自动推进
         ShowingChoice,     // 正在等待玩家选择
         WaitingTime,       // Wait 节点计时中
+        WaitingSfx,        // 等待 Story SFX AudioSource 实际播放结束
         Ended,             // 剧情通过 End 或 SkipToEnd 正常结束
         Error              // 数据或执行异常，停止继续推进
     }
@@ -21,6 +22,28 @@ namespace ProjectGuilt.Story
         Skip
     }
 
+    public enum StoryBackgroundTransitionMode
+    {
+        Legacy = 0,
+        Cut = 1,
+        FadeIn = 2,
+        CrossFade = 3
+    }
+
+    public enum StorySfxChannel
+    {
+        Primary = 0,
+        Overlay = 1
+    }
+
+    public enum StoryDialoguePresentationMode
+    {
+        Auto = 0,
+        InnerThought = 1,
+        Neutral = 2,
+        CenterScreen = 3
+    }
+
     // 节点处理器返回给 Controller 的统一执行结果类型。
     public enum StoryExecutionKind
     {
@@ -28,6 +51,8 @@ namespace ProjectGuilt.Story
         WaitForDialogue,   // 等待逐字显示和玩家/自动推进
         WaitForChoice,     // 等待选项提交
         WaitForTime,       // 等待指定秒数
+        WaitForSfx,        // 等待 Story SFX AudioSource 实际播放结束
+        WaitForAdvance,    // 等待玩家显式点击推进
         End,               // 正常结束剧情
         Error              // 进入错误状态
     }

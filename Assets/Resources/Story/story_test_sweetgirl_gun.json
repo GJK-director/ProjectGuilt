@@ -1,16 +1,38 @@
-﻿{
+{
   "formatVersion": 1,
   "storyId": "story_test_sweetgirl_gun",
-  "startNodeId": "d001",
+  "startNodeId": "bgm_start",
   "skipNodeId": "end",
   "nodes": [
+    {
+      "nodeId": "bgm_start",
+      "nodeType": "ChangeBgm",
+      "nextNodeId": "bg_black_start",
+      "bgm": {
+        "bgmId": "story_bgm_01",
+        "fadeOutSeconds": 0,
+        "loop": true
+      }
+    },
+    {
+      "nodeId": "bg_black_start",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "d001",
+      "background": {
+        "backgroundId": "black",
+        "fadeSeconds": 0,
+        "transitionMode": "Cut"
+      }
+    },
     {
       "nodeId": "d001",
       "nodeType": "Dialogue",
       "nextNodeId": "d002",
       "dialogue": {
-        "speakerId": "protagonist",
-        "text": "当时我只能选一个。"
+        "speakerId": "",
+        "speakerName": "",
+        "text": "下班的人已经走得差不多了。",
+        "presentationMode": "InnerThought"
       }
     },
     {
@@ -18,9 +40,10 @@
       "nodeType": "Dialogue",
       "nextNodeId": "d003",
       "dialogue": {
-        "speakerId": "sweetgirl",
-        "speakerName": "甜妹",
-        "text": "嗯……我知道。"
+        "speakerId": "",
+        "speakerName": "",
+        "text": "平时总有人说话的地方突然安静下来，反而有点不习惯。",
+        "presentationMode": "InnerThought"
       }
     },
     {
@@ -28,8 +51,10 @@
       "nodeType": "Dialogue",
       "nextNodeId": "d004",
       "dialogue": {
-        "speakerId": "protagonist",
-        "text": "我想的是，你应该能自己保护自己。"
+        "speakerId": "",
+        "speakerName": "",
+        "text": "窗外的光已经快照不到这边了。再待一会，估计连天都要黑了。",
+        "presentationMode": "InnerThought"
       }
     },
     {
@@ -37,9 +62,10 @@
       "nodeType": "Dialogue",
       "nextNodeId": "d005",
       "dialogue": {
-        "speakerId": "sweetgirl",
-        "speakerName": "甜妹",
-        "text": "还好啦。"
+        "speakerId": "",
+        "speakerName": "",
+        "text": "她还没走。",
+        "presentationMode": "InnerThought"
       }
     },
     {
@@ -47,9 +73,10 @@
       "nodeType": "Dialogue",
       "nextNodeId": "d006",
       "dialogue": {
-        "speakerId": "sweetgirl",
-        "speakerName": "甜妹",
-        "text": "我最后不是也活下来了吗。"
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
       }
     },
     {
@@ -57,7 +84,10 @@
       "nodeType": "Dialogue",
       "nextNodeId": "d007",
       "dialogue": {
-        "text": "……"
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "当时我只能选一个。",
+        "presentationMode": "Auto"
       }
     },
     {
@@ -67,7 +97,8 @@
       "dialogue": {
         "speakerId": "sweetgirl",
         "speakerName": "甜妹",
-        "text": "那如果下一次……要选的是杀不杀我呢？"
+        "text": "嗯。||我知道。",
+        "presentationMode": "Auto"
       }
     },
     {
@@ -75,26 +106,21 @@
       "nodeType": "Dialogue",
       "nextNodeId": "d009",
       "dialogue": {
-        "speakerId": "sweetgirl",
-        "speakerName": "甜妹",
-        "text": "到时候，你会怎么做？"
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "我想的是……||你应该还能保护自己。",
+        "presentationMode": "Auto"
       }
     },
     {
       "nodeId": "d009",
       "nodeType": "Dialogue",
-      "nextNodeId": "bg_gun_01",
-      "dialogue": {
-        "text": "她把手伸进了我的衣服里。等我反应过来，枪口已经抵在我脑门上了。"
-      }
-    },
-    {
-      "nodeId": "bg_gun_01",
-      "nodeType": "ChangeBackground",
       "nextNodeId": "d010",
-      "background": {
-        "backgroundId": "sweetgirl_gun_01",
-        "fadeSeconds": 0
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "还好啦。||最后不是也活下来了吗。",
+        "presentationMode": "Auto"
       }
     },
     {
@@ -102,9 +128,10 @@
       "nodeType": "Dialogue",
       "nextNodeId": "d011",
       "dialogue": {
-        "speakerId": "sweetgirl",
-        "speakerName": "甜妹",
-        "text": "如果是我的话，我会杀了你哦。"
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
       }
     },
     {
@@ -112,28 +139,21 @@
       "nodeType": "Dialogue",
       "nextNodeId": "d012",
       "dialogue": {
-        "speakerId": "sweetgirl",
-        "speakerName": "甜妹",
-        "text": "一点都不会犹豫。"
+        "speakerId": "",
+        "speakerName": "",
+        "text": "她说得跟平时差不多。",
+        "presentationMode": "InnerThought"
       }
     },
     {
       "nodeId": "d012",
       "nodeType": "Dialogue",
-      "nextNodeId": "bg_gun_02",
-      "dialogue": {
-        "speakerId": "sweetgirl",
-        "speakerName": "甜妹",
-        "text": "……砰。"
-      }
-    },
-    {
-      "nodeId": "bg_gun_02",
-      "nodeType": "ChangeBackground",
       "nextNodeId": "d013",
-      "background": {
-        "backgroundId": "sweetgirl_gun_02",
-        "fadeSeconds": 0
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "甚至还笑了一下。",
+        "presentationMode": "InnerThought"
       }
     },
     {
@@ -141,9 +161,10 @@
       "nodeType": "Dialogue",
       "nextNodeId": "d014",
       "dialogue": {
-        "speakerId": "sweetgirl",
-        "speakerName": "甜妹",
-        "text": "那你呢？"
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "你不用这么说。",
+        "presentationMode": "Auto"
       }
     },
     {
@@ -153,7 +174,8 @@
       "dialogue": {
         "speakerId": "sweetgirl",
         "speakerName": "甜妹",
-        "text": "你有这样的觉悟吗？"
+        "text": "什么？",
+        "presentationMode": "Auto"
       }
     },
     {
@@ -161,9 +183,10 @@
       "nodeType": "Dialogue",
       "nextNodeId": "d016",
       "dialogue": {
-        "speakerId": "sweetgirl",
-        "speakerName": "甜妹",
-        "text": "你能保证……至少让我作为一个人死吗？"
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "“反正最后也活下来了。”",
+        "presentationMode": "Auto"
       }
     },
     {
@@ -173,7 +196,8 @@
       "dialogue": {
         "speakerId": "sweetgirl",
         "speakerName": "甜妹",
-        "text": "真到了那时候……死在你手里，好像也挺不错的。"
+        "text": "……",
+        "presentationMode": "Auto"
       }
     },
     {
@@ -181,19 +205,1308 @@
       "nodeType": "Dialogue",
       "nextNodeId": "d018",
       "dialogue": {
-        "speakerId": "sweetgirl",
-        "speakerName": "甜妹",
-        "text": "约好了。"
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "你知道我为什么没选你。",
+        "presentationMode": "Auto"
       }
     },
     {
       "nodeId": "d018",
       "nodeType": "Dialogue",
-      "nextNodeId": "end",
+      "nextNodeId": "d019",
       "dialogue": {
         "speakerId": "sweetgirl",
         "speakerName": "甜妹",
-        "text": "这次就原谅你了。"
+        "text": "嗯。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d019",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d020",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "我也知道你知道。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d020",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d021",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "……",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d021",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d022",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "她低头看了一会桌面。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d022",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d023",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "你这人有时候还挺烦的。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d023",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d024",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "你又不是第一天认识我。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d024",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d025",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "不是这个。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d025",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d026",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d026",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d027",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "我知道你没选错。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d027",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d028",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "当时要是换成我……||可能也会那么选。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d028",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d029",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d029",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d030",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "可是知道归知道。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d030",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d031",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "我还是希望你选我啊。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d031",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d032",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d032",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d033",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "我知道。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d033",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d034",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "真的？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d034",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d035",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "嗯。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d035",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d036",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "那你当时有犹豫吗？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d036",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d037",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d037",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d038",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "有。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d038",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d039",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "多久？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d039",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d040",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "这也要算？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d040",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d041",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "当然。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d041",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d042",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "不知道。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d042",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d043",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "骗人。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d043",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d044",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "真不知道。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d044",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d045",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "……||那算了。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d045",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d046",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "她靠回椅背。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d046",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d047",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "刚才一直绷着的肩膀，好像松了一点。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d047",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d048",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "至少你犹豫过，对吧？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d048",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d049",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "这很重要？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d049",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d050",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "对我来说挺重要的。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d050",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d051",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d051",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d052",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "办公室里又安静下来。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d052",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d053",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "不知道谁走的时候忘了关显示器，",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d053",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d054",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "远处还有一块屏幕亮着。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d054",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d055",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "那如果下一次呢？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d055",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d056",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "什么？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d056",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d057",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "下一次要选的……",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d057",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d058",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "不是救谁。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d058",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d059",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "而是杀不杀我呢？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d059",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d060",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d060",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d061",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d061",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d062",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "等到那时候，你会怎么做？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d062",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d063",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "我还没来得及回答。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d063",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d064",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "她已经起身到了我面前。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d064",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_cg01",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "她把手伸进了我的衣服里。||等我反应过来，枪口已经抵在我脑门上了。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "bg_cg01",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "d065",
+      "background": {
+        "backgroundId": "sweetgirl_gun_01",
+        "fadeSeconds": 0.5,
+        "transitionMode": "FadeIn"
+      }
+    },
+    {
+      "nodeId": "d065",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d066",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "如果是我的话，||我会杀了你哦。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d066",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d067",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d067",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d068",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "一点都不会犹豫||……砰。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d068",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d069",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d069",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_cg02",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "她自己笑了一下。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "bg_cg02",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "d070",
+      "background": {
+        "backgroundId": "sweetgirl_gun_02",
+        "fadeSeconds": 0.35,
+        "fadeOutSeconds": 0.15,
+        "transitionMode": "CrossFade"
+      }
+    },
+    {
+      "nodeId": "d070",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d071",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "所以……",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d071",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_cg03",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "那你呢？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "bg_cg03",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "click_cg03",
+      "background": {
+        "backgroundId": "sweetgirl_gun_03",
+        "fadeSeconds": 0.35,
+        "transitionMode": "FadeIn"
+      }
+    },
+    {
+      "nodeId": "click_cg03",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_cg04",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "bg_cg04",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "wait_cg04",
+      "background": {
+        "backgroundId": "sweetgirl_gun_04",
+        "fadeSeconds": 0.35,
+        "transitionMode": "FadeIn"
+      }
+    },
+    {
+      "nodeId": "wait_cg04",
+      "nodeType": "Wait",
+      "nextNodeId": "d072",
+      "wait": {
+        "seconds": 0.35,
+        "skippable": false
+      }
+    },
+    {
+      "nodeId": "d072",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_cg05",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "你有这样的觉悟吗？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "bg_cg05",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "d073",
+      "background": {
+        "backgroundId": "sweetgirl_gun_05",
+        "fadeSeconds": 0.5,
+        "transitionMode": "FadeIn"
+      }
+    },
+    {
+      "nodeId": "d073",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d074",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "她抓住我的手。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d074",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d075",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "力气比我想的要大。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d075",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d076",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "别闹。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d076",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d077",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "我没闹。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d077",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d078",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d078",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d079",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "这次她没笑。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d079",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d080",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "你能保证吗？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d080",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d081",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "保证什么。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d081",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d082",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "如果真的有那么一天。||至少让我作为一个人死。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d082",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d083",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d083",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d084",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "不会到那一步的。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d084",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d085",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "你看。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d085",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d086",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "又来了。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d086",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d087",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "什么？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d087",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d088",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "说一些现在听起来比较舒服的话。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d088",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d089",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d089",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d090",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "我没问你会不会发生。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d090",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d091",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "我是问你——",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d091",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d092",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "发生以后，你会不会做。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d092",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d093",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d093",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d094",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "她把我的手又往前带了一点。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d094",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d095",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "你不是最会分清这种事了吗？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d095",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d096",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "该做什么。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d096",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d097",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "不该做什么。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d097",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d098",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "怎么选才是对的。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d098",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d099",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d099",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d100",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "所以到时候，",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d100",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d101",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "别因为是我就装不知道。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d101",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_cg06",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "bg_cg06",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "d102",
+      "background": {
+        "backgroundId": "sweetgirl_gun_06",
+        "fadeSeconds": 0.5,
+        "transitionMode": "FadeIn"
+      }
+    },
+    {
+      "nodeId": "d102",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d103",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "真到了那时候……||死在你手里，好像也挺不错的。",
+        "presentationMode": "Auto",
+        "inlinePauseActions": [
+          {
+            "pauseIndex": 0,
+            "background": {
+              "backgroundId": "sweetgirl_gun_07",
+              "fadeSeconds": 0.35,
+              "transitionMode": "FadeIn"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "nodeId": "d103",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d104",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d104",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d105",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "把枪放下。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d105",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d106",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "你先答应。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d106",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d107",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d107",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d108",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "不然我今天会一直烦你。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d108",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d109",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "这算威胁？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d109",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d110",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "算啊。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d110",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d111",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d111",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d112",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "……好。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d112",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d113",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "真的？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d113",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d114",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "真的。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d114",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_exit",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "bg_exit",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "wait_exit_black",
+      "background": {
+        "backgroundId": "black",
+        "fadeSeconds": 0.35,
+        "transitionMode": "FadeIn"
+      }
+    },
+    {
+      "nodeId": "wait_exit_black",
+      "nodeType": "Wait",
+      "nextNodeId": "d115",
+      "wait": {
+        "seconds": 0.35,
+        "skippable": false
+      }
+    },
+    {
+      "nodeId": "d115",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d116",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "她终于把枪还给了我。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d116",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d117",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "那就约好了。||这次就原谅你了。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d117",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d118",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "“这次”？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d118",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d119",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "怎么。||你还想有下次？",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d119",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d120",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d120",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d121",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "走啦。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d121",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d122",
+      "dialogue": {
+        "speakerId": "sweetgirl",
+        "speakerName": "甜妹",
+        "text": "再不走天都黑了。",
+        "presentationMode": "Auto"
+      }
+    },
+    {
+      "nodeId": "d122",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d123",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
+      }
+    },
+    {
+      "nodeId": "d123",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d124",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "她已经往门口走了。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d124",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d125",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "就好像刚才什么都没发生一样。",
+        "presentationMode": "InnerThought"
+      }
+    },
+    {
+      "nodeId": "d125",
+      "nodeType": "Dialogue",
+      "nextNodeId": "end",
+      "dialogue": {
+        "speakerId": "",
+        "speakerName": "",
+        "text": "……",
+        "presentationMode": "Neutral"
       }
     },
     {

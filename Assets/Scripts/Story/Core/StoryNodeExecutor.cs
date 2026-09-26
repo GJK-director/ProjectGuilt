@@ -35,6 +35,8 @@ namespace ProjectGuilt.Story
         public string nextNodeId;
         public float waitSeconds;
         public bool skippable;
+        public string sfxId;
+        public StorySfxChannel sfxChannel;
         public string errorMessage;
 
         // 当前节点无需等待，立即转到下一个节点。
@@ -79,6 +81,44 @@ namespace ProjectGuilt.Story
                 nextNodeId = nextNodeId,
                 waitSeconds = Math.Max(0f, seconds),
                 skippable = skippable
+            };
+        }
+
+        // 等待专用 Story SFX AudioSource 的真实播放状态结束。
+        public static StoryNodeExecutionResult WaitForSfx(
+            string nextNodeId,
+            string sfxId
+        )
+        {
+            return WaitForSfx(
+                nextNodeId,
+                sfxId,
+                StorySfxChannel.Primary
+            );
+        }
+
+        public static StoryNodeExecutionResult WaitForSfx(
+            string nextNodeId,
+            string sfxId,
+            StorySfxChannel channel
+        )
+        {
+            return new StoryNodeExecutionResult
+            {
+                kind = StoryExecutionKind.WaitForSfx,
+                nextNodeId = nextNodeId,
+                sfxId = sfxId,
+                sfxChannel = channel
+            };
+        }
+
+        // 等待玩家通过统一 RequestAdvance 入口显式推进。
+        public static StoryNodeExecutionResult WaitForAdvance(string nextNodeId)
+        {
+            return new StoryNodeExecutionResult
+            {
+                kind = StoryExecutionKind.WaitForAdvance,
+                nextNodeId = nextNodeId
             };
         }
 
@@ -181,10 +221,19 @@ namespace ProjectGuilt.Story
             RegisterHandler(new ConditionNodeHandler());
             RegisterHandler(new JumpNodeHandler());
             RegisterHandler(new ChangeBackgroundNodeHandler());
+            RegisterHandler(new ShowForegroundNodeHandler());
+            RegisterHandler(new ChangeBgmNodeHandler());
+            RegisterHandler(new PlaySfxNodeHandler());
+            RegisterHandler(new PlayAmbientNodeHandler());
+            RegisterHandler(new WaitForSfxNodeHandler());
+            RegisterHandler(new FadeDialogueNodeHandler());
+            RegisterHandler(new SetVisualFramingNodeHandler());
+            RegisterHandler(new FadeVisualToBlackNodeHandler());
             RegisterHandler(new ShowPortraitNodeHandler());
             RegisterHandler(new HidePortraitNodeHandler());
             RegisterHandler(new ChangeExpressionNodeHandler());
             RegisterHandler(new WaitNodeHandler());
+            RegisterHandler(new WaitForAdvanceNodeHandler());
             RegisterHandler(new EndNodeHandler());
         }
     }
@@ -210,7 +259,22 @@ namespace ProjectGuilt.Story
                 context.State.CreatePortraitSnapshot(),
                 context.State.ActiveSpeakerId
             );
+            context.View.StopTypingAudio();
             context.TextPresenter.Begin(node.nodeId, node.dialogue);
+
+            if (context.TextPresenter.IsTyping &&
+                !string.IsNullOrWhiteSpace(context.TextPresenter.TypingAudioId) &&
+                !context.View.StartTypingAudio(
+                    context.TextPresenter.TypingAudioId,
+                    context.TextPresenter.TypingAudioVolume
+                ))
+            {
+                return StoryNodeExecutionResult.Error(
+                    node.nodeId + " 找不到 typing audio 绑定：" +
+                    context.TextPresenter.TypingAudioId
+                );
+            }
+
             context.History.AddDialogue(
                 node.nodeId,
                 node.dialogue.speakerId,
@@ -221,7 +285,10 @@ namespace ProjectGuilt.Story
             context.View.ShowDialogue(
                 context.TextPresenter.SpeakerId,
                 context.TextPresenter.SpeakerName,
+                context.TextPresenter.PresentationMode,
+                context.TextPresenter.CenterScreenStyle,
                 context.TextPresenter.FullText,
+                context.TextPresenter.VisibleRichText,
                 context.TextPresenter.VisibleCharacterCount,
                 !context.TextPresenter.IsTyping
             );
@@ -347,12 +414,284 @@ namespace ProjectGuilt.Story
                 return StoryNodeExecutionResult.Error(node.nodeId + " 缺少 background 数据");
             }
 
+            if (node.background.clearDialogueBeforeTransition)
+            {
+                context.View.ClearDialoguePresentation();
+            }
+
             context.State.SetBackground(node.background.backgroundId);
             context.View.SetBackground(
                 node.background.backgroundId,
-                Math.Max(0f, node.background.fadeSeconds)
+                Math.Max(0f, node.background.fadeSeconds),
+                node.background.transitionMode,
+                Math.Max(0f, node.background.fadeOutSeconds)
             );
             return StoryNodeExecutionResult.Continue(node.nextNodeId);
+        }
+    }
+
+    internal sealed class ShowForegroundNodeHandler : IStoryNodeHandler
+    {
+        public string NodeType { get { return StoryNodeTypes.ShowForeground; } }
+
+        public StoryNodeExecutionResult Execute(
+            StoryNodeExecutionContext context,
+            StoryNodeData node
+        )
+        {
+            if (node.foreground == null ||
+                string.IsNullOrWhiteSpace(node.foreground.foregroundId))
+            {
+                return StoryNodeExecutionResult.Error(
+                    node.nodeId + " 缺少 foreground.foregroundId"
+                );
+            }
+
+            float fadeSeconds = Math.Max(0f, node.foreground.fadeSeconds);
+            context.View.SetContinueIndicator(false);
+            context.View.ShowForeground(
+                node.foreground.foregroundId,
+                fadeSeconds,
+                node.foreground.offsetX,
+                node.foreground.offsetY,
+                node.foreground.scale,
+                node.foreground.flipX
+            );
+
+            if (fadeSeconds <= 0f)
+            {
+                return StoryNodeExecutionResult.Continue(node.nextNodeId);
+            }
+
+            return StoryNodeExecutionResult.WaitForTime(
+                node.nextNodeId,
+                fadeSeconds,
+                false
+            );
+        }
+    }
+
+    internal sealed class ChangeBgmNodeHandler : IStoryNodeHandler
+    {
+        public string NodeType { get { return StoryNodeTypes.ChangeBgm; } }
+
+        public StoryNodeExecutionResult Execute(
+            StoryNodeExecutionContext context,
+            StoryNodeData node
+        )
+        {
+            if (node.bgm == null || string.IsNullOrWhiteSpace(node.bgm.bgmId))
+            {
+                return StoryNodeExecutionResult.Error(node.nodeId + " 缺少 bgm.bgmId");
+            }
+
+            context.View.ChangeBgm(
+                node.bgm.bgmId,
+                Math.Max(0f, node.bgm.fadeOutSeconds),
+                node.bgm.loop
+            );
+            return StoryNodeExecutionResult.Continue(node.nextNodeId);
+        }
+    }
+
+    internal sealed class PlaySfxNodeHandler : IStoryNodeHandler
+    {
+        public string NodeType { get { return StoryNodeTypes.PlaySfx; } }
+
+        public StoryNodeExecutionResult Execute(
+            StoryNodeExecutionContext context,
+            StoryNodeData node
+        )
+        {
+            if (node.sfx == null || string.IsNullOrWhiteSpace(node.sfx.sfxId))
+            {
+                return StoryNodeExecutionResult.Error(node.nodeId + " 缺少 sfx.sfxId");
+            }
+
+            if (!context.View.PlaySfx(
+                    node.sfx.sfxId,
+                    node.sfx.volume,
+                    node.sfx.waitUntilComplete,
+                    node.sfx.channel
+                ))
+            {
+                return StoryNodeExecutionResult.Error(
+                    node.nodeId + " 无法播放 Story SFX：" + node.sfx.sfxId
+                );
+            }
+
+            if (!node.sfx.waitUntilComplete ||
+                !context.View.IsStorySfxPlaying(
+                    node.sfx.sfxId,
+                    node.sfx.channel
+                ))
+            {
+                return StoryNodeExecutionResult.Continue(node.nextNodeId);
+            }
+
+            return StoryNodeExecutionResult.WaitForSfx(
+                node.nextNodeId,
+                node.sfx.sfxId,
+                node.sfx.channel
+            );
+        }
+    }
+
+    internal sealed class PlayAmbientNodeHandler : IStoryNodeHandler
+    {
+        public string NodeType { get { return StoryNodeTypes.PlayAmbient; } }
+
+        public StoryNodeExecutionResult Execute(
+            StoryNodeExecutionContext context,
+            StoryNodeData node
+        )
+        {
+            if (node.ambient == null || string.IsNullOrWhiteSpace(node.ambient.audioId))
+            {
+                return StoryNodeExecutionResult.Error(
+                    node.nodeId + " 缺少 ambient.audioId"
+                );
+            }
+
+            if (!context.View.PlayAmbient(
+                    node.ambient.audioId,
+                    node.ambient.volume,
+                    node.ambient.loop,
+                    node.ambient.fadeInSeconds
+                ))
+            {
+                return StoryNodeExecutionResult.Error(
+                    node.nodeId + " 找不到 Ambient Audio 绑定：" +
+                    node.ambient.audioId
+                );
+            }
+
+            return StoryNodeExecutionResult.Continue(node.nextNodeId);
+        }
+    }
+
+    internal sealed class WaitForSfxNodeHandler : IStoryNodeHandler
+    {
+        public string NodeType { get { return StoryNodeTypes.WaitForSfx; } }
+
+        public StoryNodeExecutionResult Execute(
+            StoryNodeExecutionContext context,
+            StoryNodeData node
+        )
+        {
+            if (node.sfx == null || string.IsNullOrWhiteSpace(node.sfx.sfxId))
+            {
+                return StoryNodeExecutionResult.Error(node.nodeId + " 缺少 sfx.sfxId");
+            }
+
+            if (!context.View.IsStorySfxPlaying(
+                    node.sfx.sfxId,
+                    node.sfx.channel
+                ))
+            {
+                return StoryNodeExecutionResult.Continue(node.nextNodeId);
+            }
+
+            return StoryNodeExecutionResult.WaitForSfx(
+                node.nextNodeId,
+                node.sfx.sfxId,
+                node.sfx.channel
+            );
+        }
+    }
+
+    internal sealed class FadeDialogueNodeHandler : IStoryNodeHandler
+    {
+        public string NodeType { get { return StoryNodeTypes.FadeDialogue; } }
+
+        public StoryNodeExecutionResult Execute(
+            StoryNodeExecutionContext context,
+            StoryNodeData node
+        )
+        {
+            if (node.fadeDialogue == null)
+            {
+                return StoryNodeExecutionResult.Error(
+                    node.nodeId + " 缺少 fadeDialogue 数据"
+                );
+            }
+
+            float fadeSeconds = Math.Max(0f, node.fadeDialogue.fadeSeconds);
+            context.View.FadeDialogue(
+                node.fadeDialogue.targetAlpha,
+                fadeSeconds
+            );
+
+            if (fadeSeconds <= 0f)
+            {
+                return StoryNodeExecutionResult.Continue(node.nextNodeId);
+            }
+
+            return StoryNodeExecutionResult.WaitForTime(
+                node.nextNodeId,
+                fadeSeconds,
+                false
+            );
+        }
+    }
+
+    internal sealed class SetVisualFramingNodeHandler : IStoryNodeHandler
+    {
+        public string NodeType { get { return StoryNodeTypes.SetVisualFraming; } }
+
+        public StoryNodeExecutionResult Execute(
+            StoryNodeExecutionContext context,
+            StoryNodeData node
+        )
+        {
+            if (node.visualFraming == null)
+            {
+                return StoryNodeExecutionResult.Error(
+                    node.nodeId + " 缺少 visualFraming 数据"
+                );
+            }
+
+            context.View.SetVisualFraming(
+                node.visualFraming.scale,
+                node.visualFraming.offsetX,
+                node.visualFraming.offsetY
+            );
+            return StoryNodeExecutionResult.Continue(node.nextNodeId);
+        }
+    }
+
+    internal sealed class FadeVisualToBlackNodeHandler : IStoryNodeHandler
+    {
+        public string NodeType { get { return StoryNodeTypes.FadeVisualToBlack; } }
+
+        public StoryNodeExecutionResult Execute(
+            StoryNodeExecutionContext context,
+            StoryNodeData node
+        )
+        {
+            if (node.visualFade == null)
+            {
+                return StoryNodeExecutionResult.Error(
+                    node.nodeId + " 缺少 visualFade 数据"
+                );
+            }
+
+            float fadeSeconds = Math.Max(0f, node.visualFade.fadeSeconds);
+            // FadeVisualToBlack 完成后，当前 Story 背景语义必须是 black，
+            // 不能继续保留即将被淡出的旧 CG 作为 current background。
+            context.State.SetBackground("black");
+            context.View.FadeVisualToBlack(fadeSeconds);
+
+            if (fadeSeconds <= 0f)
+            {
+                return StoryNodeExecutionResult.Continue(node.nextNodeId);
+            }
+
+            return StoryNodeExecutionResult.WaitForTime(
+                node.nextNodeId,
+                fadeSeconds,
+                false
+            );
         }
     }
 
@@ -451,6 +790,20 @@ namespace ProjectGuilt.Story
                 node.wait.seconds,
                 node.wait.skippable
             );
+        }
+    }
+
+    // 不改变当前画面，只等待玩家下一次显式 RequestAdvance。
+    internal sealed class WaitForAdvanceNodeHandler : IStoryNodeHandler
+    {
+        public string NodeType { get { return StoryNodeTypes.WaitForAdvance; } }
+
+        public StoryNodeExecutionResult Execute(
+            StoryNodeExecutionContext context,
+            StoryNodeData node
+        )
+        {
+            return StoryNodeExecutionResult.WaitForAdvance(node.nextNodeId);
         }
     }
 

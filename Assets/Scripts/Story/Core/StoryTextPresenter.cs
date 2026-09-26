@@ -7,29 +7,44 @@ namespace ProjectGuilt.Story
     // 负责当前会话的逐字显示进度，不直接依赖 Unity UI 或 Time。
     public sealed class StoryTextPresenter
     {
-        private const string PauseMarker = "||";
-        private const string FullWidthPauseMarker = "｜｜";
-
         // 使用浮点累计保留不足一个字符的帧间进度，避免低帧率下丢失速度。
         private float visibleCharacterProgress;
         private readonly List<int> inlinePausePositions = new List<int>();
+        private readonly List<StoryTextColorSpan> colorSpans =
+            new List<StoryTextColorSpan>();
+        private readonly List<StoryTimedPause> timedPauses =
+            new List<StoryTimedPause>();
         private int nextInlinePauseIndex;
+        private int nextTimedPauseIndex;
+        private float timedPauseRemaining;
 
         public float CharactersPerSecond { get; set; }
         public string NodeId { get; private set; }
         public string SpeakerId { get; private set; }
         public string SpeakerName { get; private set; }
+        public StoryDialoguePresentationMode PresentationMode { get; private set; }
+        public StoryCenterScreenStyleData CenterScreenStyle { get; private set; }
+        public float CharactersPerSecondOverride { get; private set; }
+        public string TypingAudioId { get; private set; }
+        public float TypingAudioVolume { get; private set; }
         public string FullText { get; private set; }
         public int VisibleCharacterCount { get; private set; }
         public float AutoDelayOverride { get; private set; }
         public bool Skippable { get; private set; }
+
+        public string VisibleRichText
+        {
+            get { return BuildVisibleRichText(); }
+        }
 
         public bool IsTyping
         {
             get
             {
                 return VisibleCharacterCount < FullText.Length ||
-                    HasPauseAtCurrentPosition();
+                    HasPauseAtCurrentPosition() ||
+                    HasTimedPauseAtCurrentPosition() ||
+                    IsWaitingForTimedPause;
             }
         }
 
@@ -37,6 +52,21 @@ namespace ProjectGuilt.Story
         public bool IsWaitingForInlinePause
         {
             get { return HasPauseAtCurrentPosition(); }
+        }
+
+        public int CurrentInlinePauseIndex
+        {
+            get { return IsWaitingForInlinePause ? nextInlinePauseIndex : -1; }
+        }
+
+        public bool IsWaitingForTimedPause
+        {
+            get { return timedPauseRemaining > 0f; }
+        }
+
+        public float TimedPauseRemaining
+        {
+            get { return timedPauseRemaining; }
         }
 
         // 最低速度限制为每秒一个字符，防止配置为零后对白永久停住。
@@ -52,12 +82,41 @@ namespace ProjectGuilt.Story
             NodeId = nodeId ?? string.Empty;
             SpeakerId = dialogue != null ? dialogue.speakerId ?? string.Empty : string.Empty;
             SpeakerName = dialogue != null ? dialogue.speakerName ?? string.Empty : string.Empty;
-            FullText = ParseDisplayText(
-                dialogue != null ? dialogue.text ?? string.Empty : string.Empty
-            );
-            VisibleCharacterCount = 0;
-            visibleCharacterProgress = 0f;
+            PresentationMode = dialogue != null
+                ? dialogue.presentationMode
+                : StoryDialoguePresentationMode.Auto;
+            CenterScreenStyle = dialogue != null ? dialogue.centerScreenStyle : null;
+            CharactersPerSecondOverride = dialogue != null
+                ? dialogue.charactersPerSecondOverride
+                : -1f;
+            TypingAudioId = dialogue != null
+                ? dialogue.typingAudioId ?? string.Empty
+                : string.Empty;
+            TypingAudioVolume = dialogue != null
+                ? dialogue.typingAudioVolume
+                : 1f;
+            string sourceText = dialogue != null ? dialogue.text ?? string.Empty : string.Empty;
+            StoryTextMarkupResult markup;
+            string errorMessage;
+
+            if (!StoryTextMarkupParser.TryParse(sourceText, out markup, out errorMessage))
+            {
+                markup = StoryTextMarkupParser.CreateLegacyFallback(sourceText);
+            }
+
+            FullText = markup.FullText;
+            inlinePausePositions.Clear();
+            inlinePausePositions.AddRange(markup.InlinePausePositions);
+            colorSpans.Clear();
+            colorSpans.AddRange(markup.ColorSpans);
+            timedPauses.Clear();
+            timedPauses.AddRange(markup.TimedPauses);
+            bool instantReveal = dialogue != null && dialogue.instantReveal;
+            VisibleCharacterCount = instantReveal ? FullText.Length : 0;
+            visibleCharacterProgress = VisibleCharacterCount;
             nextInlinePauseIndex = 0;
+            nextTimedPauseIndex = 0;
+            timedPauseRemaining = 0f;
             AutoDelayOverride = dialogue != null ? dialogue.autoDelayOverride : -1f;
             Skippable = dialogue == null || dialogue.skippable;
         }
@@ -65,6 +124,21 @@ namespace ProjectGuilt.Story
         // 推进逐字显示；仅在可见字符数发生变化时返回 true，减少无效 UI 刷新。
         public bool Tick(float deltaTime)
         {
+            if (IsWaitingForTimedPause)
+            {
+                timedPauseRemaining = Math.Max(
+                    0f,
+                    timedPauseRemaining - Math.Max(0f, deltaTime)
+                );
+
+                if (timedPauseRemaining <= 0f)
+                {
+                    nextTimedPauseIndex++;
+                }
+
+                return false;
+            }
+
             if (!IsTyping)
             {
                 return false;
@@ -75,22 +149,53 @@ namespace ProjectGuilt.Story
                 return false;
             }
 
+            if (StartTimedPauseIfNeeded())
+            {
+                return false;
+            }
+
             int previousCount = VisibleCharacterCount;
-            visibleCharacterProgress += Math.Max(0f, deltaTime) * Math.Max(1f, CharactersPerSecond);
+            visibleCharacterProgress += Math.Max(0f, deltaTime) *
+                GetEffectiveCharactersPerSecond();
             int targetCount = Math.Min(
                 FullText.Length,
                 (int)Math.Floor(visibleCharacterProgress)
             );
 
-            if (nextInlinePauseIndex < inlinePausePositions.Count &&
-                inlinePausePositions[nextInlinePauseIndex] <= targetCount)
+            int nextControlPosition = targetCount;
+
+            if (nextInlinePauseIndex < inlinePausePositions.Count)
             {
-                VisibleCharacterCount = inlinePausePositions[nextInlinePauseIndex];
+                nextControlPosition = Math.Min(
+                    nextControlPosition,
+                    inlinePausePositions[nextInlinePauseIndex]
+                );
+            }
+
+            if (nextTimedPauseIndex < timedPauses.Count)
+            {
+                nextControlPosition = Math.Min(
+                    nextControlPosition,
+                    timedPauses[nextTimedPauseIndex].Position
+                );
+            }
+
+            if (nextControlPosition < targetCount)
+            {
+                VisibleCharacterCount = nextControlPosition;
                 visibleCharacterProgress = VisibleCharacterCount;
             }
             else
             {
                 VisibleCharacterCount = targetCount;
+            }
+
+            if (VisibleCharacterCount ==
+                (nextTimedPauseIndex < timedPauses.Count
+                    ? timedPauses[nextTimedPauseIndex].Position
+                    : -1))
+            {
+                StartTimedPauseIfNeeded();
             }
 
             return VisibleCharacterCount != previousCount;
@@ -109,6 +214,11 @@ namespace ProjectGuilt.Story
                 return false;
             }
 
+            if (StartTimedPauseIfNeeded())
+            {
+                return false;
+            }
+
             int targetCount = FullText.Length;
 
             if (nextInlinePauseIndex < inlinePausePositions.Count)
@@ -116,15 +226,32 @@ namespace ProjectGuilt.Story
                 targetCount = inlinePausePositions[nextInlinePauseIndex];
             }
 
+            if (nextTimedPauseIndex < timedPauses.Count)
+            {
+                targetCount = Math.Min(targetCount, timedPauses[nextTimedPauseIndex].Position);
+            }
+
             bool changed = VisibleCharacterCount != targetCount;
             VisibleCharacterCount = targetCount;
             visibleCharacterProgress = targetCount;
+
+            if (nextTimedPauseIndex < timedPauses.Count &&
+                timedPauses[nextTimedPauseIndex].Position == VisibleCharacterCount)
+            {
+                StartTimedPauseIfNeeded();
+            }
+
             return changed;
         }
 
         // 只有普通玩家点击可以解除 || 的断句；Auto 与 Skip 不调用此方法。
         public bool ResumeInlinePause()
         {
+            if (IsWaitingForTimedPause)
+            {
+                return false;
+            }
+
             if (!HasPauseAtCurrentPosition())
             {
                 return false;
@@ -141,43 +268,114 @@ namespace ProjectGuilt.Story
             NodeId = string.Empty;
             SpeakerId = string.Empty;
             SpeakerName = string.Empty;
+            PresentationMode = StoryDialoguePresentationMode.Auto;
+            CenterScreenStyle = null;
+            CharactersPerSecondOverride = -1f;
+            TypingAudioId = string.Empty;
+            TypingAudioVolume = 1f;
             FullText = string.Empty;
             VisibleCharacterCount = 0;
             visibleCharacterProgress = 0f;
             inlinePausePositions.Clear();
+            colorSpans.Clear();
+            timedPauses.Clear();
             nextInlinePauseIndex = 0;
+            nextTimedPauseIndex = 0;
+            timedPauseRemaining = 0f;
             AutoDelayOverride = -1f;
             Skippable = true;
         }
 
-        // “||” / “｜｜” 是隐藏断句标记，不进入 UI 文本和历史记录。
-        private string ParseDisplayText(string sourceText)
+        private bool StartTimedPauseIfNeeded()
         {
-            inlinePausePositions.Clear();
+            while (nextTimedPauseIndex < timedPauses.Count &&
+                timedPauses[nextTimedPauseIndex].Position <= VisibleCharacterCount)
+            {
+                StoryTimedPause timedPause = timedPauses[nextTimedPauseIndex];
 
-            if (string.IsNullOrEmpty(sourceText))
+                if (timedPause.Position < VisibleCharacterCount || timedPause.Seconds <= 0f)
+                {
+                    nextTimedPauseIndex++;
+                    continue;
+                }
+
+                timedPauseRemaining = timedPause.Seconds;
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool HasTimedPauseAtCurrentPosition()
+        {
+            return nextTimedPauseIndex < timedPauses.Count &&
+                timedPauses[nextTimedPauseIndex].Position <= VisibleCharacterCount;
+        }
+
+        private string BuildVisibleRichText()
+        {
+            int visibleCount = Math.Max(
+                0,
+                Math.Min(VisibleCharacterCount, FullText.Length)
+            );
+
+            if (visibleCount == 0)
             {
                 return string.Empty;
             }
 
-            StringBuilder builder = new StringBuilder(sourceText.Length);
-
-            for (int index = 0; index < sourceText.Length; index++)
+            if (colorSpans.Count == 0)
             {
-                bool isPauseMarker = IsPauseMarkerAt(sourceText, index, PauseMarker) ||
-                    IsPauseMarkerAt(sourceText, index, FullWidthPauseMarker);
+                return FullText.Substring(0, visibleCount);
+            }
 
-                if (isPauseMarker)
+            StringBuilder builder = new StringBuilder(visibleCount + 32);
+            int cursor = 0;
+
+            foreach (StoryTextColorSpan span in colorSpans)
+            {
+                if (span == null || span.Start >= visibleCount)
                 {
-                    inlinePausePositions.Add(builder.Length);
-                    index++;
+                    break;
+                }
+
+                int start = Math.Max(cursor, span.Start);
+                int end = Math.Min(visibleCount, span.Start + span.Length);
+
+                if (start > cursor)
+                {
+                    builder.Append(FullText.Substring(cursor, start - cursor));
+                }
+
+                if (end <= start)
+                {
                     continue;
                 }
 
-                builder.Append(sourceText[index]);
+                builder.Append("<color=").Append(span.ColorHex).Append(">");
+                builder.Append(FullText.Substring(start, end - start));
+                builder.Append("</color>");
+                cursor = end;
+            }
+
+            if (cursor < visibleCount)
+            {
+                builder.Append(FullText.Substring(cursor, visibleCount - cursor));
             }
 
             return builder.ToString();
+        }
+
+        private float GetEffectiveCharactersPerSecond()
+        {
+            if (CharactersPerSecondOverride > 0f &&
+                !float.IsNaN(CharactersPerSecondOverride) &&
+                !float.IsInfinity(CharactersPerSecondOverride))
+            {
+                return CharactersPerSecondOverride;
+            }
+
+            return Math.Max(1f, CharactersPerSecond);
         }
 
         private bool HasPauseAtCurrentPosition()
@@ -186,15 +384,5 @@ namespace ProjectGuilt.Story
                 inlinePausePositions[nextInlinePauseIndex] <= VisibleCharacterCount;
         }
 
-        private static bool IsPauseMarkerAt(
-            string sourceText,
-            int index,
-            string marker
-        )
-        {
-            return index + marker.Length <= sourceText.Length &&
-                sourceText[index] == marker[0] &&
-                sourceText[index + 1] == marker[1];
-        }
     }
 }

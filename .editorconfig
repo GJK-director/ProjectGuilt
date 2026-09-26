@@ -1,0 +1,4 @@
+root = true
+
+[Assets/Resources/Story/*.json]
+charset = utf-8

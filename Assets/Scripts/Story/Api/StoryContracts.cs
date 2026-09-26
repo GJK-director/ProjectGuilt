@@ -82,22 +82,59 @@ namespace ProjectGuilt.Story
         // 同步自动/快进按钮与继续提示的表现状态。
         void SetPlaybackMode(StoryPlaybackMode mode);
         void SetContinueIndicator(bool visible);
+        void SetAdvanceInputEnabled(bool enabled);
 
         // 每次逐字字符数变化时刷新对话文本。
         void ShowDialogue(
             string speakerId,
             string speakerName,
+            StoryDialoguePresentationMode presentationMode,
+            StoryCenterScreenStyleData centerScreenStyle,
             string fullText,
+            string visibleRichText,
             int visibleCharacterCount,
             bool isComplete
         );
+
+        // 清除当前对白的视觉表现，但不改变剧情状态或历史记录。
+        void ClearDialoguePresentation();
 
         // 显示或隐藏当前 Choice 节点的选项。
         void ShowChoices(IReadOnlyList<StoryChoiceViewData> choices);
         void HideChoices();
 
         // 资源 ID 由宿主 View 映射为实际背景和立绘资源。
-        void SetBackground(string backgroundId, float fadeSeconds);
+        void SetBackground(
+            string backgroundId,
+            float fadeSeconds,
+            StoryBackgroundTransitionMode transitionMode,
+            float fadeOutSeconds
+        );
+        void ShowForeground(
+            string foregroundId,
+            float fadeSeconds,
+            float offsetX,
+            float offsetY,
+            float scale,
+            bool flipX
+        );
+        bool PlaySfx(string sfxId, float volume, bool waitUntilComplete);
+        bool PlaySfx(
+            string sfxId,
+            float volume,
+            bool waitUntilComplete,
+            StorySfxChannel channel
+        );
+        bool IsStorySfxPlaying(string sfxId);
+        bool IsStorySfxPlaying(string sfxId, StorySfxChannel channel);
+        bool PlayAmbient(string audioId, float volume, bool loop, float fadeInSeconds);
+        void StopAmbient();
+        bool StartTypingAudio(string audioId, float volume);
+        void StopTypingAudio();
+        void FadeDialogue(float targetAlpha, float fadeSeconds);
+        void SetVisualFraming(float scale, float offsetX, float offsetY);
+        void FadeVisualToBlack(float fadeSeconds);
+        void ChangeBgm(string bgmId, float fadeOutSeconds, bool loop);
         void ApplyPortraits(
             IReadOnlyList<StoryPortraitStateData> portraits,
             string activeSpeakerId

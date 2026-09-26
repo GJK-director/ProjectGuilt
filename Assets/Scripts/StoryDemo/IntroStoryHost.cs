@@ -16,9 +16,11 @@ public sealed class IntroStoryHost : MonoBehaviour
     [Header("剧情入口")]
     [SerializeField] private StorySceneFacade storyFacade = null;
     [SerializeField] private string storyId = "prologue_501";
+    [SerializeField] private bool registerLegacyPlaySfxOverride = true;
 
     [Header("剧情结束后")]
     [SerializeField] private string battleSceneName = "BattleScene";
+    [SerializeField] private bool transitionToBattleOnEnd = true;
     [SerializeField] private SceneLoadingOverlay loadingOverlay = null;
 
     private AudioSource audioSource;
@@ -43,7 +45,10 @@ public sealed class IntroStoryHost : MonoBehaviour
             return;
         }
 
-        storyFacade.RegisterNodeHandler(new PlaySfxNodeHandler(this));
+        if (registerLegacyPlaySfxOverride)
+        {
+            storyFacade.RegisterNodeHandler(new PlaySfxNodeHandler(this));
+        }
         storyFacade.StoryEnded += HandleStoryEnded;
         storyFacade.StoryError += HandleStoryError;
     }
@@ -80,6 +85,11 @@ public sealed class IntroStoryHost : MonoBehaviour
 
         transitionStarted = true;
         storyFacade.CloseStoryPanel();
+
+        if (!transitionToBattleOnEnd)
+        {
+            return;
+        }
 
         if (loadingOverlay == null || !loadingOverlay.BeginLoad(battleSceneName))
         {

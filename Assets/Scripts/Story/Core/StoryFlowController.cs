@@ -25,6 +25,9 @@ namespace ProjectGuilt.Story
         private StoryDefinitionData currentDefinition;
         private float playbackTimer;
         private float inputGuardRemaining;
+        private string waitingSfxId = string.Empty;
+        private StorySfxChannel waitingSfxChannel = StorySfxChannel.Primary;
+        private bool requiresExplicitAdvance;
 
         public event Action<string> StoryStarted;
         public event Action<string> StoryEnded;
@@ -81,9 +84,14 @@ namespace ProjectGuilt.Story
 
             history.Clear();
             textPresenter.Clear();
+            view.StopAmbient();
+            view.StopTypingAudio();
             state.Begin(definition.storyId, definition.startNodeId);
             playbackTimer = 0f;
             inputGuardRemaining = 0f;
+            waitingSfxId = string.Empty;
+            waitingSfxChannel = StorySfxChannel.Primary;
+            requiresExplicitAdvance = false;
             ApplyViewState();
 
             if (StoryStarted != null)
@@ -111,9 +119,14 @@ namespace ProjectGuilt.Story
 
             if (state.MainState == StoryMainState.Typing)
             {
+                bool wasWaitingForTimedPause = textPresenter.IsWaitingForTimedPause;
                 bool changed;
 
-                if (state.PlaybackMode == StoryPlaybackMode.Skip && textPresenter.Skippable)
+                if (textPresenter.IsWaitingForTimedPause)
+                {
+                    changed = textPresenter.Tick(deltaTime);
+                }
+                else if (state.PlaybackMode == StoryPlaybackMode.Skip && textPresenter.Skippable)
                 {
                     changed = textPresenter.CompleteImmediately();
                 }
@@ -121,6 +134,8 @@ namespace ProjectGuilt.Story
                 {
                     changed = textPresenter.Tick(deltaTime);
                 }
+
+                SyncTypingAudioForTimedPause(wasWaitingForTimedPause);
 
                 if (changed)
                 {
@@ -142,8 +157,10 @@ namespace ProjectGuilt.Story
 
             if (state.MainState == StoryMainState.WaitingAdvance)
             {
-                if (state.PlaybackMode == StoryPlaybackMode.Auto ||
+                if (!requiresExplicitAdvance &&
+                    (state.PlaybackMode == StoryPlaybackMode.Auto ||
                     state.PlaybackMode == StoryPlaybackMode.Skip)
+                )
                 {
                     playbackTimer -= deltaTime;
 
@@ -171,6 +188,16 @@ namespace ProjectGuilt.Story
                 {
                     AdvanceToPendingNode();
                 }
+
+                return;
+            }
+
+            if (state.MainState == StoryMainState.WaitingSfx)
+            {
+                if (!view.IsStorySfxPlaying(waitingSfxId, waitingSfxChannel))
+                {
+                    AdvanceToPendingNode();
+                }
             }
         }
 
@@ -194,13 +221,21 @@ namespace ProjectGuilt.Story
             {
                 if (textPresenter.IsWaitingForInlinePause)
                 {
+                    ApplyInlinePauseAction();
                     textPresenter.ResumeInlinePause();
                     view.SetContinueIndicator(false);
                     RenderDialogue();
                     return true;
                 }
 
+                if (textPresenter.IsWaitingForTimedPause)
+                {
+                    return false;
+                }
+
+                bool wasWaitingForTimedPause = textPresenter.IsWaitingForTimedPause;
                 textPresenter.CompleteImmediately();
+                SyncTypingAudioForTimedPause(wasWaitingForTimedPause);
                 RenderDialogue();
 
                 if (!textPresenter.IsTyping)
@@ -217,6 +252,8 @@ namespace ProjectGuilt.Story
 
             if (state.MainState == StoryMainState.WaitingAdvance)
             {
+                requiresExplicitAdvance = false;
+                view.SetAdvanceInputEnabled(false);
                 return AdvanceToPendingNode();
             }
 
@@ -282,6 +319,7 @@ namespace ProjectGuilt.Story
             state.SetPlaybackMode(StoryPlaybackMode.Manual);
             view.SetPlaybackMode(StoryPlaybackMode.Manual);
             view.HideChoices();
+            view.SetAdvanceInputEnabled(false);
             return ExecuteFrom(selectedOption.targetNodeId);
         }
 
@@ -386,13 +424,17 @@ namespace ProjectGuilt.Story
         // 主动放弃当前剧情并回到 Idle，同时清空历史、文本和节点映射。
         public void CloseStory()
         {
+            view.StopAmbient();
+            view.StopTypingAudio();
             state.ResetToIdle();
             history.Clear();
             textPresenter.Clear();
             currentDefinition = null;
             nodeMap.Clear();
+            requiresExplicitAdvance = false;
             view.HideChoices();
             view.SetContinueIndicator(false);
+            view.SetAdvanceInputEnabled(false);
             view.SetOverlayOpen(false);
             view.SetStoryVisible(false);
         }
@@ -478,6 +520,7 @@ namespace ProjectGuilt.Story
                         continue;
 
                     case StoryExecutionKind.WaitForDialogue:
+                        requiresExplicitAdvance = false;
                         state.SetPendingNextNode(result.nextNodeId);
 
                         if (textPresenter.IsTyping)
@@ -497,6 +540,7 @@ namespace ProjectGuilt.Story
                         return true;
 
                     case StoryExecutionKind.WaitForChoice:
+                        requiresExplicitAdvance = false;
                         state.SetPendingNextNode(string.Empty);
                         state.SetMainState(StoryMainState.ShowingChoice);
                         state.SetPlaybackMode(StoryPlaybackMode.Manual);
@@ -504,6 +548,7 @@ namespace ProjectGuilt.Story
                         return true;
 
                     case StoryExecutionKind.WaitForTime:
+                        requiresExplicitAdvance = false;
                         state.SetPendingNextNode(result.nextNodeId);
                         state.SetWait(result.waitSeconds, result.skippable);
 
@@ -515,6 +560,35 @@ namespace ProjectGuilt.Story
 
                         state.SetMainState(StoryMainState.WaitingTime);
                         view.SetContinueIndicator(false);
+                        return true;
+
+                    case StoryExecutionKind.WaitForSfx:
+                        requiresExplicitAdvance = false;
+                        state.SetPendingNextNode(result.nextNodeId);
+                        waitingSfxId = result.sfxId ?? string.Empty;
+                        waitingSfxChannel = result.sfxChannel;
+
+                        if (!view.IsStorySfxPlaying(
+                                waitingSfxId,
+                                waitingSfxChannel
+                            ))
+                        {
+                            nextNodeId = result.nextNodeId;
+                            continue;
+                        }
+
+                        state.SetMainState(StoryMainState.WaitingSfx);
+                        view.SetContinueIndicator(false);
+                        return true;
+
+                    case StoryExecutionKind.WaitForAdvance:
+                        requiresExplicitAdvance = true;
+                        state.SetPendingNextNode(result.nextNodeId);
+                        state.SetMainState(StoryMainState.WaitingAdvance);
+                        state.SetPlaybackMode(StoryPlaybackMode.Manual);
+                        view.SetPlaybackMode(StoryPlaybackMode.Manual);
+                        view.SetAdvanceInputEnabled(true);
+                        view.SetContinueIndicator(true);
                         return true;
 
                     case StoryExecutionKind.End:
@@ -541,13 +615,76 @@ namespace ProjectGuilt.Story
             return ExecuteFrom(state.PendingNextNodeId);
         }
 
+        private void ApplyInlinePauseAction()
+        {
+            int pauseIndex = textPresenter.CurrentInlinePauseIndex;
+
+            if (pauseIndex < 0)
+            {
+                return;
+            }
+
+            StoryNodeData node;
+
+            if (!nodeMap.TryGetValue(textPresenter.NodeId, out node) ||
+                node.dialogue == null ||
+                node.dialogue.inlinePauseActions == null)
+            {
+                return;
+            }
+
+            foreach (StoryInlinePauseActionData action in node.dialogue.inlinePauseActions)
+            {
+                if (action == null || action.pauseIndex != pauseIndex ||
+                    action.background == null ||
+                    string.IsNullOrWhiteSpace(action.background.backgroundId))
+                {
+                    continue;
+                }
+
+                state.SetBackground(action.background.backgroundId);
+                view.SetBackground(
+                    action.background.backgroundId,
+                    Math.Max(0f, action.background.fadeSeconds),
+                    action.background.transitionMode,
+                    Math.Max(0f, action.background.fadeOutSeconds)
+                );
+                return;
+            }
+        }
+
         // 当前句显示完成后进入等待推进，并根据播放模式计算下一次推进时间。
         private void EnterWaitingAdvance()
         {
+            view.StopTypingAudio();
+            requiresExplicitAdvance = false;
             state.SetMainState(StoryMainState.WaitingAdvance);
             playbackTimer = GetAdvanceDelay();
             RenderDialogue();
             view.SetContinueIndicator(true);
+        }
+
+        private void SyncTypingAudioForTimedPause(bool wasWaitingForTimedPause)
+        {
+            bool isWaitingForTimedPause = textPresenter.IsWaitingForTimedPause;
+
+            if (!wasWaitingForTimedPause && isWaitingForTimedPause)
+            {
+                view.StopTypingAudio();
+                return;
+            }
+
+            if (wasWaitingForTimedPause &&
+                !isWaitingForTimedPause &&
+                textPresenter.IsTyping &&
+                !textPresenter.IsWaitingForInlinePause &&
+                !string.IsNullOrWhiteSpace(textPresenter.TypingAudioId))
+            {
+                view.StartTypingAudio(
+                    textPresenter.TypingAudioId,
+                    textPresenter.TypingAudioVolume
+                );
+            }
         }
 
         // Skip 使用固定短延迟；Auto 可使用节点覆盖值，否则按文本长度追加等待。
@@ -573,7 +710,10 @@ namespace ProjectGuilt.Story
             view.ShowDialogue(
                 textPresenter.SpeakerId,
                 textPresenter.SpeakerName,
+                textPresenter.PresentationMode,
+                textPresenter.CenterScreenStyle,
                 textPresenter.FullText,
+                textPresenter.VisibleRichText,
                 textPresenter.VisibleCharacterCount,
                 !textPresenter.IsTyping
             );
@@ -586,12 +726,18 @@ namespace ProjectGuilt.Story
             view.SetStoryUiVisible(state.IsStoryUiVisible);
             view.SetOverlayOpen(state.IsOverlayOpen);
             view.SetPlaybackMode(state.PlaybackMode);
+            view.SetAdvanceInputEnabled(false);
             view.SetContinueIndicator(false);
             view.HideChoices();
 
             if (!string.IsNullOrWhiteSpace(state.CurrentBackgroundId))
             {
-                view.SetBackground(state.CurrentBackgroundId, 0f);
+                view.SetBackground(
+                    state.CurrentBackgroundId,
+                    0f,
+                    StoryBackgroundTransitionMode.Cut,
+                    0f
+                );
             }
 
             view.ApplyPortraits(
@@ -613,6 +759,10 @@ namespace ProjectGuilt.Story
         private void FinishStory()
         {
             string storyId = state.StoryId;
+            view.StopAmbient();
+            view.StopTypingAudio();
+            requiresExplicitAdvance = false;
+            view.SetAdvanceInputEnabled(false);
             state.SetMainState(StoryMainState.Ended);
             state.SetPlaybackMode(StoryPlaybackMode.Manual);
             view.SetPlaybackMode(StoryPlaybackMode.Manual);
@@ -632,6 +782,10 @@ namespace ProjectGuilt.Story
             string message = string.IsNullOrWhiteSpace(errorMessage)
                 ? "未知剧情系统错误"
                 : errorMessage;
+            view.StopAmbient();
+            view.StopTypingAudio();
+            requiresExplicitAdvance = false;
+            view.SetAdvanceInputEnabled(false);
             state.SetMainState(StoryMainState.Error);
             view.SetContinueIndicator(false);
             view.HideChoices();

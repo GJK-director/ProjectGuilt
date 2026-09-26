@@ -12,10 +12,19 @@ namespace ProjectGuilt.Story
         public const string Condition = "Condition";
         public const string Jump = "Jump";
         public const string ChangeBackground = "ChangeBackground";
+        public const string ShowForeground = "ShowForeground";
+        public const string ChangeBgm = "ChangeBgm";
+        public const string PlaySfx = "PlaySfx";
+        public const string PlayAmbient = "PlayAmbient";
+        public const string WaitForSfx = "WaitForSfx";
+        public const string FadeDialogue = "FadeDialogue";
+        public const string SetVisualFraming = "SetVisualFraming";
+        public const string FadeVisualToBlack = "FadeVisualToBlack";
         public const string ShowPortrait = "ShowPortrait";
         public const string HidePortrait = "HidePortrait";
         public const string ChangeExpression = "ChangeExpression";
         public const string Wait = "Wait";
+        public const string WaitForAdvance = "WaitForAdvance";
         public const string End = "End";
     }
 
@@ -47,6 +56,13 @@ namespace ProjectGuilt.Story
         public string falseNodeId;
         public string jumpNodeId;
         public StoryBackgroundCommandData background;
+        public StoryForegroundCommandData foreground;
+        public StoryBgmCommandData bgm;
+        public StorySfxCommandData sfx;
+        public StoryAmbientCommandData ambient;
+        public StoryDialogueFadeCommandData fadeDialogue;
+        public StoryVisualFramingCommandData visualFraming;
+        public StoryVisualFadeCommandData visualFade;
         public StoryPortraitCommandData portrait;
         public StoryWaitData wait;
         // 自定义节点使用的宿主参数，例如 encounterId、timelineId、voiceId。
@@ -61,8 +77,32 @@ namespace ProjectGuilt.Story
         public string speakerId;
         public string speakerName;
         public string text;
+        public StoryDialoguePresentationMode presentationMode =
+            StoryDialoguePresentationMode.Auto;
+        public StoryCenterScreenStyleData centerScreenStyle;
+        public bool instantReveal = false;
+        public float charactersPerSecondOverride = -1f;
+        public string typingAudioId = string.Empty;
+        public float typingAudioVolume = 1f;
+        public List<StoryInlinePauseActionData> inlinePauseActions =
+            new List<StoryInlinePauseActionData>();
         public float autoDelayOverride = -1f;
         public bool skippable = true;
+    }
+
+    [Serializable]
+    public sealed class StoryCenterScreenStyleData
+    {
+        public float offsetX = 0f;
+        public float offsetY = 0f;
+        public int fontSize = 0;
+    }
+
+    [Serializable]
+    public sealed class StoryInlinePauseActionData
+    {
+        public int pauseIndex;
+        public StoryBackgroundCommandData background;
     }
 
     // 单个剧情选项，包含可用条件、不可用表现、变量写入和目标节点。
@@ -118,12 +158,74 @@ namespace ProjectGuilt.Story
         }
     }
 
-    // 背景切换命令只保存资源 ID 和淡入时长，不直接引用 Unity 贴图。
+    // 背景切换命令只保存资源 ID、过渡模式和时长，不直接引用 Unity 贴图。
     [Serializable]
     public sealed class StoryBackgroundCommandData
     {
         public string backgroundId;
         public float fadeSeconds;
+        public float fadeOutSeconds;
+        public bool clearDialogueBeforeTransition = false;
+        public StoryBackgroundTransitionMode transitionMode =
+            StoryBackgroundTransitionMode.Legacy;
+    }
+
+    [Serializable]
+    public sealed class StoryForegroundCommandData
+    {
+        public string foregroundId = string.Empty;
+        public float fadeSeconds = 0f;
+        public float offsetX = 0f;
+        public float offsetY = 0f;
+        public float scale = 1f;
+        public bool flipX = false;
+    }
+
+    [Serializable]
+    public sealed class StoryBgmCommandData
+    {
+        public string bgmId;
+        public float fadeOutSeconds;
+        public bool loop = true;
+    }
+
+    [Serializable]
+    public sealed class StorySfxCommandData
+    {
+        public string sfxId = string.Empty;
+        public float volume = 1f;
+        public bool waitUntilComplete = true;
+        public StorySfxChannel channel = StorySfxChannel.Primary;
+    }
+
+    [Serializable]
+    public sealed class StoryAmbientCommandData
+    {
+        public string audioId = string.Empty;
+        public float volume = 1f;
+        public bool loop = true;
+        public float fadeInSeconds = 0f;
+    }
+
+    [Serializable]
+    public sealed class StoryDialogueFadeCommandData
+    {
+        public float targetAlpha = 1f;
+        public float fadeSeconds = 0f;
+    }
+
+    [Serializable]
+    public sealed class StoryVisualFramingCommandData
+    {
+        public float scale = 1f;
+        public float offsetX = 0f;
+        public float offsetY = 0f;
+    }
+
+    [Serializable]
+    public sealed class StoryVisualFadeCommandData
+    {
+        public float fadeSeconds = 0f;
     }
 
     // 立绘命令描述角色、位置、表情和基础显示参数，由宿主 View 映射实际资源。

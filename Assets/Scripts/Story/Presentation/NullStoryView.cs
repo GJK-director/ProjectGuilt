@@ -11,20 +11,56 @@ namespace ProjectGuilt.Story
         public void SetOverlayOpen(bool isOpen) { }
         public void SetPlaybackMode(StoryPlaybackMode mode) { }
         public void SetContinueIndicator(bool visible) { }
+        public void SetAdvanceInputEnabled(bool enabled) { }
 
         public void ShowDialogue(
             string speakerId,
             string speakerName,
+            StoryDialoguePresentationMode presentationMode,
+            StoryCenterScreenStyleData centerScreenStyle,
             string fullText,
+            string visibleRichText,
             int visibleCharacterCount,
             bool isComplete
         )
         {
         }
 
+        public void ClearDialoguePresentation() { }
+
         public void ShowChoices(IReadOnlyList<StoryChoiceViewData> choices) { }
         public void HideChoices() { }
-        public void SetBackground(string backgroundId, float fadeSeconds) { }
+        public void SetBackground(
+            string backgroundId,
+            float fadeSeconds,
+            StoryBackgroundTransitionMode transitionMode,
+            float fadeOutSeconds
+        ) { }
+        public void ShowForeground(
+            string foregroundId,
+            float fadeSeconds,
+            float offsetX,
+            float offsetY,
+            float scale,
+            bool flipX
+        ) { }
+        public bool PlaySfx(string sfxId, float volume, bool waitUntilComplete) { return true; }
+        public bool PlaySfx(
+            string sfxId,
+            float volume,
+            bool waitUntilComplete,
+            StorySfxChannel channel
+        ) { return true; }
+        public bool IsStorySfxPlaying(string sfxId) { return false; }
+        public bool IsStorySfxPlaying(string sfxId, StorySfxChannel channel) { return false; }
+        public bool PlayAmbient(string audioId, float volume, bool loop, float fadeInSeconds) { return true; }
+        public void StopAmbient() { }
+        public bool StartTypingAudio(string audioId, float volume) { return true; }
+        public void StopTypingAudio() { }
+        public void FadeDialogue(float targetAlpha, float fadeSeconds) { }
+        public void SetVisualFraming(float scale, float offsetX, float offsetY) { }
+        public void FadeVisualToBlack(float fadeSeconds) { }
+        public void ChangeBgm(string bgmId, float fadeOutSeconds, bool loop) { }
 
         public void ApplyPortraits(
             IReadOnlyList<StoryPortraitStateData> portraits,

@@ -1,0 +1,537 @@
+{
+  "formatVersion": 1,
+  "storyId": "prologue_501_refactor",
+  "startNodeId": "opening_start_advance",
+  "skipNodeId": "end",
+  "nodes": [
+    {
+      "nodeId": "opening_start_advance",
+      "nodeType": "WaitForAdvance",
+      "nextNodeId": "opening_location"
+    },
+    {
+      "nodeId": "wait_opening",
+      "nodeType": "Wait",
+      "nextNodeId": "opening_location",
+      "wait": {
+        "seconds": 0.5,
+        "skippable": false
+      }
+    },
+    {
+      "nodeId": "opening_location",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_cg01_corridor",
+      "dialogue": {
+        "presentationMode": "CenterScreen",
+        "instantReveal": false,
+        "charactersPerSecondOverride": 4,
+        "typingAudioId": "prologue_typing_daziji",
+        "typingAudioVolume": 1,
+        "centerScreenStyle": {
+          "offsetX": 0,
+          "offsetY": 0,
+          "fontSize": 32
+        },
+        "text": "[color=#4EA72E]10月4日  下午3点20分[[wait=0.5]]\n废弃行车公寓[/color]"
+      }
+    },
+    {
+      "nodeId": "bg_cg01_corridor",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "sfx_kesou_start",
+      "background": {
+        "backgroundId": "prologue_ref_cg01_corridor",
+        "fadeSeconds": 1.25,
+        "fadeOutSeconds": 0,
+        "clearDialogueBeforeTransition": true,
+        "transitionMode": "FadeIn"
+      }
+    },
+    {
+      "nodeId": "sfx_kesou_start",
+      "nodeType": "PlaySfx",
+      "nextNodeId": "wait_cg01_fade",
+      "sfx": {
+        "sfxId": "prologue_sfx_kesou",
+        "volume": 1,
+        "waitUntilComplete": false
+      }
+    },
+    {
+      "nodeId": "wait_cg01_fade",
+      "nodeType": "Wait",
+      "nextNodeId": "d001",
+      "wait": {
+        "seconds": 1.25,
+        "skippable": false
+      }
+    },
+    {
+      "nodeId": "d001",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d002",
+      "dialogue": {
+        "presentationMode": "InnerThought",
+        "charactersPerSecondOverride": 18,
+        "text": "[color=#00B0F0]“既然上班了就该能自己工作吧”[[wait=0.5]]\n他是这样说的，于是就丢下我一个人，自己去爽了[/color]"
+      }
+    },
+    {
+      "nodeId": "d002",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_building_black",
+      "dialogue": {
+        "presentationMode": "InnerThought",
+        "charactersPerSecondOverride": 18,
+        "text": "[color=#00B0F0]老资历就是牛逼啊……[/color]"
+      }
+    },
+    {
+      "nodeId": "bg_building_black",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "building_location",
+      "background": {
+        "backgroundId": "black",
+        "fadeSeconds": 0,
+        "fadeOutSeconds": 0,
+        "clearDialogueBeforeTransition": true,
+        "transitionMode": "Cut"
+      }
+    },
+    {
+      "nodeId": "building_location",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_cg02_cut",
+      "dialogue": {
+        "presentationMode": "CenterScreen",
+        "charactersPerSecondOverride": 4,
+        "typingAudioId": "prologue_typing_daziji",
+        "typingAudioVolume": 1,
+        "centerScreenStyle": {
+          "offsetX": 0,
+          "offsetY": 0,
+          "fontSize": 32
+        },
+        "text": "[color=#4EA72E]3号楼[[wait=0.5]]\n207[/color]"
+      }
+    },
+    {
+      "nodeId": "bg_cg02_cut",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "d003",
+      "background": {
+        "backgroundId": "prologue_ref_cg02_corridor",
+        "fadeSeconds": 0,
+        "fadeOutSeconds": 0,
+        "clearDialogueBeforeTransition": true,
+        "transitionMode": "Cut"
+      }
+    },
+    {
+      "nodeId": "d003",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_cg03_transition",
+      "dialogue": {
+        "presentationMode": "InnerThought",
+        "charactersPerSecondOverride": 18,
+        "text": "[color=#00B0F0]应该是这家没错了[/color]"
+      }
+    },
+    {
+      "nodeId": "bg_cg03_transition",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "wait_cg03_transition",
+      "background": {
+        "backgroundId": "prologue_ref_cg03_corridor",
+        "fadeSeconds": 0.75,
+        "fadeOutSeconds": 0,
+        "clearDialogueBeforeTransition": true,
+        "transitionMode": "Legacy"
+      }
+    },
+    {
+      "nodeId": "wait_cg03_transition",
+      "nodeType": "Wait",
+      "nextNodeId": "resident_profile",
+      "wait": {
+        "seconds": 0.75,
+        "skippable": false
+      }
+    },
+    {
+      "nodeId": "resident_profile",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_cg02_return",
+      "dialogue": {
+        "presentationMode": "InnerThought",
+        "charactersPerSecondOverride": 18,
+        "text": "男，34岁。\n连续旷工多日，所在公司称无法与其取得联系。\n疑似变异。"
+      }
+    },
+    {
+      "nodeId": "bg_cg02_return",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "wait_cg02_return_to_text",
+      "background": {
+        "backgroundId": "prologue_ref_cg02_corridor",
+        "fadeSeconds": 0.75,
+        "fadeOutSeconds": 0,
+        "clearDialogueBeforeTransition": true,
+        "transitionMode": "Legacy"
+      }
+    },
+    {
+      "nodeId": "wait_cg02_return_to_text",
+      "nodeType": "Wait",
+      "nextNodeId": "d004",
+      "wait": {
+        "seconds": 0.375,
+        "skippable": false
+      }
+    },
+    {
+      "nodeId": "d004",
+      "nodeType": "Dialogue",
+      "nextNodeId": "show_cg04_hand",
+      "dialogue": {
+        "presentationMode": "InnerThought",
+        "charactersPerSecondOverride": 18,
+        "text": "[color=#00B0F0]……先敲门看看吧[/color]"
+      }
+    },
+    {
+      "nodeId": "show_cg04_hand",
+      "nodeType": "ShowForeground",
+      "nextNodeId": "sfx_qiaotiemen",
+      "foreground": {
+        "foregroundId": "prologue_ref_cg04_corridor",
+        "fadeSeconds": 0.75,
+        "offsetX": -610,
+        "offsetY": -122,
+        "scale": 0.6,
+        "flipX": true
+      }
+    },
+    {
+      "nodeId": "sfx_qiaotiemen",
+      "nodeType": "PlaySfx",
+      "nextNodeId": "fade_dialogue_after_qiaotiemen",
+      "sfx": {
+        "sfxId": "prologue_sfx_qiaotiemen",
+        "volume": 1,
+        "waitUntilComplete": true
+      }
+    },
+    {
+      "nodeId": "fade_dialogue_after_qiaotiemen",
+      "nodeType": "FadeDialogue",
+      "nextNodeId": "wait_after_qiaotiemen",
+      "fadeDialogue": {
+        "targetAlpha": 0,
+        "fadeSeconds": 0.5
+      }
+    },
+    {
+      "nodeId": "wait_after_qiaotiemen",
+      "nodeType": "Wait",
+      "nextNodeId": "framing_close_01",
+      "wait": {
+        "seconds": 0.75,
+        "skippable": false
+      }
+    },
+    {
+      "nodeId": "framing_close_01",
+      "nodeType": "SetVisualFraming",
+      "nextNodeId": "sfx_paitiemen",
+      "visualFraming": {
+        "scale": 1.2,
+        "offsetX": 0,
+        "offsetY": 0
+      }
+    },
+    {
+      "nodeId": "sfx_paitiemen",
+      "nodeType": "PlaySfx",
+      "nextNodeId": "sfx_kaitiemen_1_start",
+      "sfx": {
+        "sfxId": "prologue_sfx_paitiemen",
+        "volume": 1,
+        "waitUntilComplete": true
+      }
+    },
+    {
+      "nodeId": "sfx_kaitiemen_1_start",
+      "nodeType": "PlaySfx",
+      "nextNodeId": "fade_visual_to_black_01",
+      "sfx": {
+        "sfxId": "prologue_sfx_kaitiemen_1",
+        "volume": 1,
+        "waitUntilComplete": false
+      }
+    },
+    {
+      "nodeId": "fade_visual_to_black_01",
+      "nodeType": "FadeVisualToBlack",
+      "nextNodeId": "wait_sfx_kaitiemen_1",
+      "visualFade": {
+        "fadeSeconds": 0.5
+      }
+    },
+    {
+      "nodeId": "wait_sfx_kaitiemen_1",
+      "nodeType": "WaitForSfx",
+      "nextNodeId": "d005",
+      "sfx": {
+        "sfxId": "prologue_sfx_kaitiemen_1",
+        "volume": 1,
+        "waitUntilComplete": true
+      }
+    },
+    {
+      "nodeId": "d005",
+      "nodeType": "Dialogue",
+      "nextNodeId": "sfx_kaitiemen_start",
+      "dialogue": {
+        "presentationMode": "InnerThought",
+        "charactersPerSecondOverride": 18,
+        "text": "[color=#00B0F0]……没锁[/color]"
+      }
+    },
+    {
+      "nodeId": "sfx_kaitiemen_start",
+      "nodeType": "PlaySfx",
+      "nextNodeId": "fade_dialogue_d005_out",
+      "sfx": {
+        "sfxId": "prologue_sfx_kaitiemen",
+        "volume": 1,
+        "waitUntilComplete": false
+      }
+    },
+    {
+      "nodeId": "fade_dialogue_d005_out",
+      "nodeType": "FadeDialogue",
+      "nextNodeId": "wait_sfx_kaitiemen",
+      "fadeDialogue": {
+        "targetAlpha": 0,
+        "fadeSeconds": 0.5
+      }
+    },
+    {
+      "nodeId": "wait_sfx_kaitiemen",
+      "nodeType": "WaitForSfx",
+      "nextNodeId": "ambient_tv_start",
+      "sfx": {
+        "sfxId": "prologue_sfx_kaitiemen",
+        "volume": 1,
+        "waitUntilComplete": true
+      }
+    },
+    {
+      "nodeId": "ambient_tv_start",
+      "nodeType": "PlayAmbient",
+      "nextNodeId": "sfx_jiaobu_start",
+      "ambient": {
+        "audioId": "prologue_ambient_tv",
+        "volume": 0.1,
+        "loop": true,
+        "fadeInSeconds": 4.0
+      }
+    },
+    {
+      "nodeId": "sfx_jiaobu_start",
+      "nodeType": "PlaySfx",
+      "nextNodeId": "bg_tv_viewer_fadein",
+      "sfx": {
+        "sfxId": "prologue_sfx_jiaobu",
+        "volume": 1,
+        "waitUntilComplete": true
+      }
+    },
+    {
+      "nodeId": "bg_tv_viewer_fadein",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "wait_tv_viewer_fade",
+      "background": {
+        "backgroundId": "prologue_ref_tv_viewer_variant",
+        "fadeSeconds": 1.25,
+        "fadeOutSeconds": 0,
+        "clearDialogueBeforeTransition": false,
+        "transitionMode": "FadeIn"
+      }
+    },
+    {
+      "nodeId": "wait_tv_viewer_fade",
+      "nodeType": "Wait",
+      "nextNodeId": "wait_tv_viewer_advance",
+      "wait": {
+        "seconds": 1.25,
+        "skippable": false
+      }
+    },
+    {
+      "nodeId": "wait_tv_viewer_advance",
+      "nodeType": "WaitForAdvance",
+      "nextNodeId": "d006"
+    },
+    {
+      "nodeId": "d006",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_tv_viewer_reframe_transition",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "charactersPerSecondOverride": 18,
+        "text": "你好？"
+      }
+    },
+    {
+      "nodeId": "bg_tv_viewer_reframe_transition",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "fade_dialogue_reframe_out",
+      "background": {
+        "backgroundId": "prologue_ref_tv_viewer_variant",
+        "fadeSeconds": 0.75,
+        "fadeOutSeconds": 0,
+        "clearDialogueBeforeTransition": false,
+        "transitionMode": "Legacy"
+      }
+    },
+    {
+      "nodeId": "fade_dialogue_reframe_out",
+      "nodeType": "FadeDialogue",
+      "nextNodeId": "framing_close_02",
+      "fadeDialogue": {
+        "targetAlpha": 0,
+        "fadeSeconds": 0.375
+      }
+    },
+    {
+      "nodeId": "framing_close_02",
+      "nodeType": "SetVisualFraming",
+      "nextNodeId": "fade_dialogue_reframe_in",
+      "visualFraming": {
+        "scale": 1.3,
+        "offsetX": 0,
+        "offsetY": 0
+      }
+    },
+    {
+      "nodeId": "fade_dialogue_reframe_in",
+      "nodeType": "FadeDialogue",
+      "nextNodeId": "d007",
+      "fadeDialogue": {
+        "targetAlpha": 1,
+        "fadeSeconds": 0.375
+      }
+    },
+    {
+      "nodeId": "d007",
+      "nodeType": "Dialogue",
+      "nextNodeId": "bg_monster_turn_reveal",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "charactersPerSecondOverride": 18,
+        "text": "先生？"
+      }
+    },
+    {
+      "nodeId": "bg_monster_turn_reveal",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "wait_monster_midpoint",
+      "background": {
+        "backgroundId": "prologue_ref_monster_turn_reveal",
+        "fadeSeconds": 0.75,
+        "fadeOutSeconds": 0,
+        "clearDialogueBeforeTransition": true,
+        "transitionMode": "Legacy"
+      }
+    },
+    {
+      "nodeId": "wait_monster_midpoint",
+      "nodeType": "Wait",
+      "nextNodeId": "sfx_koushui_start",
+      "wait": {
+        "seconds": 0.375,
+        "skippable": false
+      }
+    },
+    {
+      "nodeId": "sfx_koushui_start",
+      "nodeType": "PlaySfx",
+      "nextNodeId": "sfx_sangshi",
+      "sfx": {
+        "sfxId": "prologue_sfx_koushui",
+        "volume": 1,
+        "waitUntilComplete": false,
+        "channel": "Overlay"
+      }
+    },
+    {
+      "nodeId": "sfx_sangshi",
+      "nodeType": "PlaySfx",
+      "nextNodeId": "bg_mutation_black",
+      "sfx": {
+        "sfxId": "prologue_sfx_sangshi",
+        "volume": 1,
+        "waitUntilComplete": true
+      }
+    },
+    {
+      "nodeId": "bg_mutation_black",
+      "nodeType": "ChangeBackground",
+      "nextNodeId": "framing_reset_final",
+      "background": {
+        "backgroundId": "black",
+        "fadeSeconds": 0,
+        "fadeOutSeconds": 0,
+        "clearDialogueBeforeTransition": true,
+        "transitionMode": "Cut"
+      }
+    },
+    {
+      "nodeId": "framing_reset_final",
+      "nodeType": "SetVisualFraming",
+      "nextNodeId": "mutation_status",
+      "visualFraming": {
+        "scale": 1,
+        "offsetX": 0,
+        "offsetY": 0
+      }
+    },
+    {
+      "nodeId": "mutation_status",
+      "nodeType": "Dialogue",
+      "nextNodeId": "d008",
+      "dialogue": {
+        "presentationMode": "CenterScreen",
+        "charactersPerSecondOverride": 4,
+        "typingAudioId": "prologue_typing_daziji",
+        "typingAudioVolume": 1,
+        "centerScreenStyle": {
+          "offsetX": 0,
+          "offsetY": 0,
+          "fontSize": 32
+        },
+        "text": "[color=#4EA72E]确认变异[[wait=0.5]]\n等级：C[/color]"
+      }
+    },
+    {
+      "nodeId": "d008",
+      "nodeType": "Dialogue",
+      "nextNodeId": "end",
+      "dialogue": {
+        "speakerId": "protagonist",
+        "speakerName": "",
+        "charactersPerSecondOverride": 18,
+        "text": "……操"
+      }
+    },
+    {
+      "nodeId": "end",
+      "nodeType": "End"
+    }
+  ]
+}
