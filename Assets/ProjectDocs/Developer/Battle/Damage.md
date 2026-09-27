@@ -52,6 +52,14 @@ Roll / Clash
 | `state` | `Pending`、`Committed` 或 `Skipped` |
 | `runtimeInteraction` | 本段所属的正式 `BattleRuntimeInteraction` identity |
 
+## Combat Dice Split Prototype v0.1（可选分支）
+
+刀枪测试赢得一次 Attack-v-Attack session 后，计划创建两颗独立伤害骰对应的真实 `BattleImpact`，不读取拼点结果作为 `basePower`。初始两颗均未投；胜利表现结束后，规则层 `PrepareDamageDie` 在当前 Impact 请求前捕获一次 `damageDieRoll`，并写入 `basePower`。同步 Resolver 在 Commit 时使用相同 preparation，已投过不会重掷。
+
+每段仍走现有实时 DamageDealt / DamageTaken → DamageModifier → Hit → HP / AfterDamage。第一击产生的状态可以影响第二击。原始 Roll 与实际伤害分别保留；两个 Roll 数字相同也是合法的独立随机结果。第一击 HP 归零仍执行第二次 Hit，ActionComplete 后统一 Defeat Checkpoint。CardUsed / CardResolved 各一次，ClashWin 规则事件不因表现 cue 再触发。
+
+暂停流程新增纯视觉 `ClashWin`，第一击提交后新增 `DamageDieComplete` 等待；其完成前第二颗保持未投状态。旧卡缺少双骰字段时保留原有计划和演出语义。原型不与下面旧多段配置混用；范围及人工验收见 [CombatDicePrototype](CombatDicePrototype.md)。
+
 ## DATA MODEL
 
 `CardTestData` 的多段字段是：

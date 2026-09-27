@@ -42,10 +42,13 @@ public static class BattlePresentationProtocolTests
         bool p = VerifyImmediatePresenterDoesNotCrossBoundary();
         bool q = VerifyTwoImpactsCommitOnePerCompletion();
         bool r = VerifySynchronousResolverBypassesPresenter();
+        bool s = VerifyDicePresentationGates();
+        bool t = VerifyDiceFatalWaitsForActionComplete();
+        bool u = VerifyDiceCancellationStopsSecondHit();
 
         bool[] results =
         {
-            a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r
+            a, b, c, d, e, f, g, h, i, j, k, l, m, n, o, p, q, r, s, t, u
         };
         string[] names =
         {
@@ -66,10 +69,14 @@ public static class BattlePresentationProtocolTests
             "O Cancel后迟到Completion无副作用",
             "P ImmediatePresenter不在同一次推进穿透新Boundary",
             "Q 两个Impact一次Completion最多提交一个",
-            "R 同步Resolver facade不经过Presenter"
+            "R 同步Resolver facade不经过Presenter",
+            "S ClashWin零提交且首击尾段阻止第二颗Roll",
+            "T 首击致命仍完成两颗骰子且ActionComplete后判死",
+            "U 骰子演出取消后不提交第二击"
         };
 
         bool allPassed = true;
+        Debug.Log("========== 以下是测试结果 ==========");
         for (int index = 0; index < results.Length; index++)
         {
             Debug.Log("模式83 " + names[index] + "：" + results[index]);
@@ -391,6 +398,102 @@ public static class BattlePresentationProtocolTests
         return result != null && result.resultType == "PlayerWin" &&
             result.damage == 6 && context.enemy.currentHP == 24 &&
             context.presenter.Requests.Count == 0;
+    }
+
+    public static bool VerifyDicePresentationGates()
+    {
+        TestContext context = CreateDiceContext("presentation83_dice_gates");
+        if (!ReachResolutionPending(context)) return false;
+        BattleExecutionRunner runner = context.controller.ExecutionRunner;
+        BattleResolutionPlan plan = runner.CurrentResolutionPlan;
+        bool clashOnly;
+        int collisionEvents = 0;
+        var previous = BattleEventProcessor.TestEventObserver;
+        try
+        {
+            // Moving a character or playing collision FX must not publish any rule event.
+            BattleEventProcessor.TestEventObserver = _ => collisionEvents++;
+            if (!Advance(context) || !IsExecutingAndWaiting(context, BattlePresentationCue.ClashWin)) return false;
+            for (int i = 0; i < 3; i++) if (!Advance(context)) return false;
+            clashOnly = collisionEvents == 0 && context.enemy.currentHP == 30 &&
+                context.ally.GetBuffStack("Bullet") == 0 &&
+                !plan.impacts[0].damageDieRolled && !plan.impacts[1].damageDieRolled &&
+                plan.State == BattleResolutionPlanState.Pending;
+        }
+        finally { BattleEventProcessor.TestEventObserver = previous; }
+        if (!CompleteCurrent(context) || !Advance(context) || !Advance(context)) return false;
+        BattlePresentationRequest first = runner.CurrentPresentationRequest;
+        bool firstWaiting = first.Cue == BattlePresentationCue.Impact && first.ImpactIndex == 0 &&
+            first.Impact.damageDieRoll == 2 && context.enemy.currentHP == 30 &&
+            !plan.impacts[1].damageDieRolled;
+        if (!CompleteCurrent(context) || !Advance(context)) return false;
+        bool firstCommitted = context.enemy.currentHP == 28 && context.ally.GetBuffStack("Bullet") == 1 &&
+            IsExecutingAndWaiting(context, BattlePresentationCue.DamageDieComplete);
+        for (int i = 0; i < 3; i++) if (!Advance(context)) return false;
+        bool tailHolds = !plan.impacts[1].damageDieRolled && context.enemy.currentHP == 28 &&
+            !context.presenter.TryCompleteRequest(first.RequestId);
+        if (!CompleteCurrent(context) || !Advance(context) || !Advance(context)) return false;
+        bool secondWaiting = IsExecutingAndWaiting(context, BattlePresentationCue.Impact) &&
+            runner.CurrentPresentationRequest.ImpactIndex == 1 && plan.impacts[1].damageDieRoll == 3 &&
+            context.enemy.currentHP == 28;
+        if (!CompleteCurrent(context) || !Advance(context)) return false;
+        bool twoHits = context.enemy.currentHP == 25 && context.ally.GetBuffStack("Bullet") == 2 &&
+            IsExecutingAndWaiting(context, BattlePresentationCue.ActionComplete) && !context.item.isCompleted;
+        return clashOnly && firstWaiting && firstCommitted && tailHolds && secondWaiting && twoHits &&
+            runner.CurrentClashSession.AttemptIndex == 1;
+    }
+
+    public static bool VerifyDiceFatalWaitsForActionComplete()
+    {
+        TestContext context = CreateDiceContext("presentation83_dice_fatal");
+        context.enemy.currentHP = 1;
+        if (!ReachResolutionPending(context) || !Advance(context) ||
+            !CompleteCurrent(context) || !Advance(context) || !Advance(context) ||
+            !CompleteCurrent(context) || !Advance(context)) return false;
+        bool firstPending = context.enemy.currentHP == 0 && !context.enemy.IsDefeated() &&
+            !context.runtimeState.IsBattleEnded && !context.item.isCompleted;
+        if (!CompleteCurrent(context) || !Advance(context) || !Advance(context) ||
+            !CompleteCurrent(context) || !Advance(context)) return false;
+        bool finalPending = IsExecutingAndWaiting(context, BattlePresentationCue.ActionComplete) &&
+            context.ally.GetBuffStack("Bullet") == 2 && !context.enemy.IsDefeated() && !context.item.isCompleted;
+        if (!CompleteCurrent(context) || !Advance(context)) return false;
+        return firstPending && finalPending && context.enemy.IsDefeated() && context.item.isCompleted;
+    }
+
+    public static bool VerifyDiceCancellationStopsSecondHit()
+    {
+        // Cancellation at the visual-only collision must also block the first damage die.
+        TestContext collision = CreateDiceContext("presentation83_collision_cancel");
+        if (!ReachResolutionPending(collision) || !Advance(collision) ||
+            !IsExecutingAndWaiting(collision, BattlePresentationCue.ClashWin)) return false;
+        BattleExecutionRunner collisionRunner = collision.controller.ExecutionRunner;
+        BattleResolutionPlan collisionPlan = collisionRunner.CurrentResolutionPlan;
+        BattlePresentationCompletion collisionToken = collisionRunner.CurrentPresentationCompletion;
+        if (!collision.controller.CancelPausableExecution("Clash collision cancel") ||
+            collisionToken.TryComplete(collisionToken.RequestId) || Advance(collision) ||
+            collisionPlan.impacts[0].damageDieRolled || collisionPlan.impacts[1].damageDieRolled ||
+            collision.enemy.currentHP != 30 || collision.ally.GetBuffStack("Bullet") != 0) return false;
+
+        TestContext context = CreateDiceContext("presentation83_dice_cancel");
+        if (!ReachResolutionPending(context) || !Advance(context) ||
+            !CompleteCurrent(context) || !Advance(context) || !Advance(context) ||
+            !CompleteCurrent(context) || !Advance(context)) return false;
+        BattleExecutionRunner runner = context.controller.ExecutionRunner;
+        BattleResolutionPlan plan = runner.CurrentResolutionPlan;
+        BattlePresentationCompletion token = runner.CurrentPresentationCompletion;
+        if (!token.TryCancel(token.RequestId)) return false;
+        bool rejected = !Advance(context);
+        return rejected && runner.HasFailed && !token.TryComplete(token.RequestId) &&
+            !plan.impacts[1].damageDieRolled && context.enemy.currentHP == 28 &&
+            context.ally.GetBuffStack("Bullet") == 1 && !context.item.isCompleted;
+    }
+
+    static TestContext CreateDiceContext(string prefix)
+    {
+        TestContext context = CreateContext(prefix, CardType.Attack, 1, 5);
+        CardCombatDiceTests.SetFixedDice(context.playerCard.cardData);
+        AddProbeEffect(context.playerCard, BattleTiming.Hit, "Bullet", 1);
+        return context;
     }
 
     static TestContext CreateContext(

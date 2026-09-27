@@ -203,6 +203,11 @@ public static class BattleCalculator
     {
         int minPoint = useSelectedPointRange ? selectedMinPoint : card.minPoint;
         int maxPoint = useSelectedPointRange ? selectedMaxPoint : card.maxPoint;
+        if (!useSelectedPointRange && CardCombatDiceRules.HasDice(card))
+        {
+            minPoint = card.clashDie.min;
+            maxPoint = card.clashDie.max;
+        }
         int basePoint = Rollpoint(minPoint, maxPoint);
 
         int finalPoint = basePoint;
@@ -665,6 +670,11 @@ public static class BattleKnifeCardRules
         CardTestData card = cardState != null ? cardState.cardData : null;
         minPoint = card != null ? card.minPoint : 0;
         maxPoint = card != null ? card.maxPoint : 0;
+        if (CardCombatDiceRules.HasDice(card))
+        {
+            minPoint = card.clashDie.min;
+            maxPoint = card.clashDie.max;
+        }
         int anger = cardState != null && cardState.hasPreResolutionAngerSnapshot
             ? cardState.preResolutionAnger
             : BattleAngerRules.GetAnger(cardState != null ? cardState.owner : null);

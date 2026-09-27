@@ -183,6 +183,8 @@ public sealed class BattleCameraDirector : MonoBehaviour
     private Coroutine activePresentationCoroutine;
     private Coroutine activeBattleActionEffectCoroutine;
     private Coroutine impactShakeCoroutine;
+    // Read-only sequence barrier; prototype retains camera ownership between dice.
+    public bool IsHitFeedbackPlaying => IsBattleActionEffectPlaying || impactShakeCoroutine != null;
     private int impactShakePlaybackVersion;
     private Coroutine anchoredApproachCoroutine;
     private bool isIntroPlaying;
@@ -966,8 +968,15 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
     public bool TryPlayImpactShake(BattleHitPresentationProfile hitProfile)
     {
+        return TryPlayImpactShake(hitProfile, 1f);
+    }
+
+    public bool TryPlayImpactShake(BattleHitPresentationProfile hitProfile, float amplitudeScale)
+    {
+        amplitudeScale = Mathf.Max(0f, amplitudeScale);
         ResolveReferences();
         if (hitProfile == null ||
+            amplitudeScale <= Mathf.Epsilon ||
             !hitProfile.EnableImpactCameraShake ||
             hitProfile.ImpactCameraShakeDuration <= Mathf.Epsilon ||
             (hitProfile.ImpactCameraShakeHorizontalAmplitude <= Mathf.Epsilon &&
@@ -992,7 +1001,7 @@ public sealed class BattleCameraDirector : MonoBehaviour
         cameraController.ClearPresentationImpactShakeOffset();
         int playbackVersion = impactShakePlaybackVersion;
         impactShakeCoroutine = StartCoroutine(
-            PlayImpactShakeSequence(hitProfile, playbackVersion)
+            PlayImpactShakeSequence(hitProfile, playbackVersion, amplitudeScale)
         );
         return true;
     }
@@ -2329,14 +2338,15 @@ public sealed class BattleCameraDirector : MonoBehaviour
 
     private IEnumerator PlayImpactShakeSequence(
         BattleHitPresentationProfile hitProfile,
-        int playbackVersion
+        int playbackVersion,
+        float amplitudeScale
     )
     {
         float duration = hitProfile.ImpactCameraShakeDuration;
         float horizontalAmplitude =
-            hitProfile.ImpactCameraShakeHorizontalAmplitude;
+            hitProfile.ImpactCameraShakeHorizontalAmplitude * amplitudeScale;
         float verticalAmplitude =
-            hitProfile.ImpactCameraShakeVerticalAmplitude;
+            hitProfile.ImpactCameraShakeVerticalAmplitude * amplitudeScale;
         float cycles = hitProfile.ImpactCameraShakeCycles;
         float elapsed = 0f;
 

@@ -11,6 +11,7 @@ Last Verified: 2026-09-16
 | 我想 | 先看哪里 |
 |---|---|
 | 修改已有卡牌 | [卡牌制作](#1-卡牌制作) |
+| 试玩拼点骰 / 伤害骰分离原型 | [刀枪测试原型](Battle/CombatDicePrototype.md#unity-人工操作与验收) |
 | 新增卡牌 | [新增卡牌](#4-新增卡牌) |
 | 修改 Buff | [Buff 实用操作](#2-buff-实用操作) |
 | 修改 Buff 三级面板 | [Buff 三级面板](#21-我要修改-buff-三级面板) |
@@ -67,6 +68,12 @@ Last Verified: 2026-09-16
 - 需要调整数字大小、颜色、寿命时，检查 `BattleScene` 上的 `BattleDamageNumberPresenter` Inspector 字段；当前正式值和生命周期限制见 Damage 文档。
 - HP 变为 0 但尚未正式结束时，按 `HP Depleted` 与 `Defeated` 区分，不要用 `IsDead()` 代替终局判断。
 - 特殊卡视觉 Damage Marker 目前是 `RESERVED / NOT IMPLEMENTED IN v0.1`，不是现有卡的配置入口。
+
+### 1.3.1 试玩分离骰子原型
+
+原型例外：`prototype_sword_gun_001`（刀枪测试）使用可选 `clashDie` 与 `damageDice[]`，不是上述旧卡多段百分比配置。只在开发 Harness 的 `CombatDiceSplitPrototype` 开启，玩家响应普通近战攻击；拼点 1～10，伤害依次 1～5 近战、1～5 抵近射击，不消耗 Bullet。保留点数 Buff，因此实际拼点显示可能高于基础范围。数据、限制、UI 和验收见 [Combat Dice Prototype](Battle/CombatDicePrototype.md)，不要据此迁移旧卡。
+
+拼点胜利先播放无刀光 / 无伤害的碰撞，复用黄色格挡火花，短停顿和轻震屏，敌人小幅弹开，然后开始正式两击。仓库中的 `BattleScene` 测试 `Scenario` 保持 `None`；需要试玩时退出 Play，在 Inspector 临时选择 `CombatDiceSplitPrototype`，结束后改回 `None`，不要保存测试开关。位置和节奏可在 Play 中的 `BattleSceneExecutionPresenter` 对象 → 动态 `BattleCombatDicePrototypePresenter` → `Clash Resolution` 调整；首次胜利请求后组件才出现。`Clash Fx Offset` 独立控制火花偏移，`Clash Contact Bias` 控制双方之间的偏向；不要用共享 Guard Profile 改原型位置。Play 调整退出后不会保存，验收参数需记录后落地。
 
 ### 1.4 我要修改冷却
 

@@ -39,6 +39,17 @@ Last Verified: 2026-09-15
 
 [Presentation](Presentation/README.md)：[BattlePresentation](Presentation/BattlePresentation.md)、[Camera](Presentation/Camera.md)。另见 [UI](UI/README.md)、[BattleUI](UI/BattleUI.md)、[Story](Story/StorySystem.md)、[Settings](Settings/MenuAndSettings.md)。
 
+## Combat Dice Split Prototype v0.1
+
+仅玩家测试卡对普通近战 Attack。契约、任务文件清单与 Unity 操作见 [CombatDicePrototype](Battle/CombatDicePrototype.md)；实现仍待用户 Unity Gate 验收。
+
+- 数据 owner：[CardCombatDiceData](../../Scripts/Battle/Cards/Data/CardCombatDiceData.cs)；`CardTestData` 的可选双骰字段经 `CardDataLoader` 验证，模板仍位于 `CardsTest.json`，没有正式 Deck 成员变化。
+- 规则 owner：`BattleResolver.BuildAttackResolutionPlan / PrepareDamageDie / CommitImpact`；`BattleImpact.damageDieRoll` 保存每段原始投点。`BattleExecutionRunner` 的 `ClashWin`、`DamageDieComplete` cue 管理胜利表现与段间等待。
+- 动态表现入口：`BattleSceneExecutionPresenter` 添加 [BattleCombatDicePrototypePresenter](../../Scripts/Presentation/BattleCombatDicePrototypePresenter.cs)，复用既有 Attack Player、Character、Camera；Camera 提供 `IsHitFeedbackPlaying` 等待条件与单次 shake amplitude。适配器动态添加 [BattleCombatDiceHUD](../../Scripts/UI/BattleCombatDiceHUD.cs)，生成固定屏幕 UGUI / TMP。
+- 拼点碰撞素材入口：既有 `BattleAttackVsGuardPresentationPlayer.PresentationProfile` → [BattlePerfectGuardFxPlayer](../../Scripts/Presentation/BattlePerfectGuardFxPlayer.cs) 的 `TrySpawnAtWorldPosition / Cancel`；复用 `BattleAttackVsGuardPresentationProfile` 绑定的 `Assets/Art/battle/TestHero/tx-3.png` 和 MeleeGuardReactionProfile。普通 Guard 仍用原相对角色坐标入口；原型的 ContactBias / FxOffset / HitStop / Recoil / Shake / Pause 参数在动态原型组件，未改共享 Profile 或 Scene 绑定。
+- 开关 / 输入 owner：`BattleSceneBootstrap` → `BattleFormalPresentationTestHarness.CombatDiceSplitPrototype` → [BattleCombatDicePrototypeSetup](../../Scripts/Debug/BattleCombatDicePrototypeSetup.cs)。同一 Setup 提供后续回合意图；仓库中的 `BattleScene` 序列化值为 `None`，试玩时仅在 Inspector 临时开启，Release 不注入。
+- 测试 owner：[CardCombatDiceTests](../../Tests/Suites/Cards/CardCombatDiceTests.cs) 的 8 个 Case，由 retained Mode82 调用；Mode83 新增 3 个边界 Case。未新增 Mode，未退休旧测试。
+
 ## Data and Asset Locations
 
 - [CardsTest](../../Resources/Data/CardsTest.json)、[CharacterDefinitions](../../Resources/Data/Characters/CharacterDefinitions.json)、[EnemyDefinitions](../../Resources/Data/Enemies/EnemyDefinitions.json)、[EncounterDefinitions](../../Resources/Data/Encounters/EncounterDefinitions.json)、[BuffDefinitions](../../Resources/Data/Buffs/BuffDefinitions.json)。

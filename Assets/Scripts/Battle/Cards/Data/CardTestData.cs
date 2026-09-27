@@ -181,6 +181,10 @@ public class CardTestData
     public int minPoint;        // 最小点数
     public int maxPoint;        // 最大点数
 
+    // Optional prototype path. Legacy cards do not need these fields.
+    public ClashDieData clashDie;
+    public DamageDieData[] damageDice;
+
     public int speedModifier;   // 速度修正
     public int cooldown;        // 冷却
     public int guiltCost;       // 负罪感消耗

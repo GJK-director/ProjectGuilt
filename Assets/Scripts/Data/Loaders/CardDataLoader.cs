@@ -48,6 +48,15 @@ public static class CardDataLoader
             return null;
         }
 
+        foreach (CardTestData card in cards)
+        {
+            if (!CardCombatDiceRules.Validate(card, out string diceError))
+            {
+                Debug.LogError("读取卡牌失败：" + card.cardID + " / " + diceError);
+                return null;
+            }
+        }
+
         // showJsonLog = 是否显示完整 JSON 原文
         if (BattleDebugSettings.ShowJsonLog)
         {

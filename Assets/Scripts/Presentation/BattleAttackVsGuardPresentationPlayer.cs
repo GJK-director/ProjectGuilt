@@ -21,6 +21,7 @@ public sealed class BattleAttackVsGuardPresentationPlayer : MonoBehaviour
 
     public bool IsRunning { get; private set; }
     public bool IsFinished { get; private set; }
+    public BattleAttackVsGuardPresentationProfile PresentationProfile => presentationProfile;
     public float LongRangeReducedCameraFollowRatio => presentationProfile != null
         ? presentationProfile.LongRangeReducedCameraFollowRatio : 0.60f;
     public BattleHitPresentationProfile MeleeGuardReactionProfile =>

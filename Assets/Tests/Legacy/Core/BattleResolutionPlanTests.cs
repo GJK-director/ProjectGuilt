@@ -46,6 +46,31 @@ public static class BattleResolutionPlanTests
         bool s = VerifyFreeAttackUsesOneSidedRollGate();
         bool t = VerifyGenericUnilateralRollPanelSupport();
 
+        bool[] diceResults =
+        {
+            CardCombatDiceTests.OptionalDataAndValidation(),
+            CardCombatDiceTests.ProductionTemplateIsOptIn(),
+            CardCombatDiceTests.ClashRangeAndPointBuffsDoNotBecomeDamage(),
+            CardCombatDiceTests.EachHitHasEventsAndUsesLiveModifiers(),
+            CardCombatDiceTests.FirstLethalStillHitsTwiceAndDefeatsOnce(),
+            CardCombatDiceTests.LossAndTieKeepLegacyOutcome(),
+            CardCombatDiceTests.SynchronousResolutionUsesBothDice(),
+            CardCombatDiceTests.UnsupportedEncountersFailBeforeUse()
+        };
+        string[] diceNames =
+        {
+            "可选数据与混用验证", "唯一原型数据模板", "点数Buff与伤害骰分离且不重掷",
+            "独立Hit与实时伤害修正", "首击致命仍Hit两次且只击杀一次", "失败与平手保留旧逻辑",
+            "同步入口逐颗结算", "范围外对局在使用前拒绝"
+        };
+        bool dicePassed = true;
+        Debug.Log("========== 以下是测试结果 ==========");
+        for (int index = 0; index < diceResults.Length; index++)
+        {
+            Debug.Log("模式82 CombatDice " + diceNames[index] + "：" + diceResults[index]);
+            dicePassed &= diceResults[index];
+        }
+
         Debug.Log("模式82 A Calculate后Plan存在且HP不变：" + a);
         Debug.Log("模式82 B 首次Commit才提交第一个Impact伤害：" + b);
         Debug.Log("模式82 C 已提交Impact重复调用不重复事件与伤害：" + c);
@@ -69,7 +94,7 @@ public static class BattleResolutionPlanTests
         Debug.Log(
             "模式82 聚合结果：" +
             (a && b && c && d && e && f && g && h && i && j && k && l &&
-             m && n && o && p && q && r && s && t)
+             m && n && o && p && q && r && s && t && dicePassed)
         );
     }
 

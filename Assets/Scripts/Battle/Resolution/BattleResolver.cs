@@ -319,6 +319,13 @@ public static class BattleResolver
         CharacterData user = attackAction.actor;
         CharacterData target = attackAction.target;
         CardTestData attackCard = attackAction.cardState.cardData;
+        if (CardCombatDiceRules.HasDice(attackCard))
+        {
+            failureResult = CreateUnsupportedResolveResult(
+                "骰子原型 v0.1 仅支持玩家测试卡响应普通近战攻击，不支持单方面攻击。"
+            );
+            return null;
+        }
         if (target == null)
         {
             failureResult = CreateInvalidResolveResult(
@@ -1106,6 +1113,16 @@ public static class BattleResolver
         CardTestData playerCard = actionSlot.cardState.cardData;
         CardTestData enemyCard = enemyIntent.enemyCardState.cardData;
 
+        if (CardCombatDiceRules.HasDice(enemyCard) ||
+            (CardCombatDiceRules.HasDice(playerCard) &&
+             (enemyCard.cardType != CardType.Attack || !enemyCard.IsMeleeAttack() ||
+              enemyCard.GetPresentationVariant() != BattleCardPresentationVariant.Default)))
+        {
+            return CreateUnsupportedResolveResult(
+                "骰子原型 v0.1 仅支持玩家测试卡响应普通近战攻击。"
+            );
+        }
+
         if (IsResourceUnavailableForExecution(CaptureResourceSnapshot(
                 actionSlot.actor,
                 actionSlot.cardState
@@ -1658,6 +1675,22 @@ public static class BattleResolver
         int winnerPoint = playerWon
             ? session.SideADamagePoint
             : session.SideBDamagePoint;
+        if (CardCombatDiceRules.HasDice(plan.sourceCardState?.cardData))
+        {
+            // Supported encounter shape is checked before starting the clash.
+            plan.requiresClashWinPresentation = true;
+            foreach (DamageDieData die in plan.sourceCardState.cardData.damageDice)
+            {
+                plan.impacts.Add(new BattleImpact(
+                    plan.impacts.Count, plan.attacker, plan.target, plan.sourceCardState,
+                    0, winnerPoint, ClashResult.Win, true, true, plan.runtimeInteraction)
+                {
+                    damageDie = die,
+                    hpDisplayStageCount = 1
+                });
+            }
+            return;
+        }
         bool winnerIsAttack = plan.sourceCardState != null &&
             plan.sourceCardState.cardData != null &&
             plan.sourceCardState.cardData.cardType == CardType.Attack;
@@ -2036,6 +2069,7 @@ public static class BattleResolver
             return true;
         }
 
+        PrepareDamageDie(impact);
         int candidateDamage = impact.usesPrecalculatedDamage
             ? Mathf.Max(0, impact.precalculatedDamage)
             : 0;
@@ -2149,6 +2183,17 @@ public static class BattleResolver
         impact.committedDamage = actualDamage;
         impact.state = BattleImpactState.Committed;
         return true;
+    }
+
+    // Captured by rules before presentation; synchronous resolution uses exactly this seam.
+    // This never commits HP/events and cannot reroll an already prepared die.
+    internal static void PrepareDamageDie(BattleImpact impact)
+    {
+        if (impact == null || impact.damageDie == null || impact.damageDieRolled ||
+            impact.state != BattleImpactState.Pending) return;
+        impact.damageDieRoll = BattleCalculator.Rollpoint(impact.damageDie.min, impact.damageDie.max);
+        impact.basePower = impact.damageDieRoll;
+        impact.damageDieRolled = true;
     }
 
     internal static bool CommitDefeatCheckpoint(BattleResolutionPlan plan)

@@ -10,7 +10,10 @@ public enum BattlePresentationCue
     // 当前 Engagement 表现收尾，并允许 Runner 推进下一 ExecutionItem。
     ActionComplete,
     // 全部ExecutionItem完成后的正式表现闭合。
-    ExecutionComplete
+    ExecutionComplete,
+    // Prototype visual only; never commits the existing ClashWin rule event.
+    ClashWin,
+    DamageDieComplete
 }
 
 public sealed class BattlePresentationRequest

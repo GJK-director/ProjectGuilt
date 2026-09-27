@@ -522,5 +522,24 @@
         "target": "Self"
       }
     ]
+  },
+  {
+    "cardID": "prototype_sword_gun_001",
+    "cardName": "刀枪测试",
+    "description": "骰子说明",
+    "rarity": "White",
+    "cardType": "Attack",
+    "attackDeliveryMode": "Melee",
+    "isClashable": true,
+    "minPoint": 1,
+    "maxPoint": 10,
+    "cooldown": 0,
+    "damageFormula": "PointAsDamage",
+    "clashDie": { "min": 1, "max": 10 },
+    "damageDice": [
+      { "min": 1, "max": 5, "presentation": "Melee" },
+      { "min": 1, "max": 5, "presentation": "CloseRangeShoot" }
+    ],
+    "effects": []
   }
 ]

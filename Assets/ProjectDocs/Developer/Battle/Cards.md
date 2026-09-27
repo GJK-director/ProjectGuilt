@@ -36,6 +36,12 @@ Loader → Factory/Bootstrap → CardState → CardUsed/Effects。
 
 多段伤害由 `CardTestData.damageDistributionMode`、`damageImpactPercents` 和 `damageImpactDelaySeconds` 配置，并由 `BattleResolver.AddDamageImpacts` 建立多个真实 `BattleImpact`。`hpDisplayStageCount` 只负责单个 Impact 的旧 HP 表现分段，不能代替 Gameplay 多段伤害。具体的 Independent / Cumulative 语义、提交顺序和 Damage Number 见 [Damage](Damage.md)。
 
+## Combat Dice Split Prototype v0.1
+
+`prototype_sword_gun_001` 在 `CardsTest.json` 使用可选 `clashDie {min,max}` 与 `damageDice[] {min,max,presentation}`。旧卡两字段均缺省，继续原路径；禁止只提供半组数据或混入旧多段、Trait、资源规则。`CardCombatDiceRules.Validate` 是 loader 验证入口。v0.1 只接受两颗伤害骰：`Melee` → `CloseRangeShoot`。
+
+测试卡仍是普通 Melee Attack；伤害骰中的 presentation 只选择演出，不改变卡牌类型或支付 Bullet。有效 clash 范围来自 `clashDie`，点数 Buff 只进入拼点。独立伤害骰的原始结果再接受当前伤害修正。只有开发 Harness 注入此卡，不增加正式 Deck 成员。二级说明由 `BattleCardUIPreviewBuilder` 生成本卡关键词“骰子说明”。详见 [原型契约与验收](CombatDicePrototype.md)。
+
 ## Invariants
 
 实例不可按同名混同；正式使用后果经 CardUsed 提交；Ability 不进入 clash；显式 preset 与默认牌来源区分。

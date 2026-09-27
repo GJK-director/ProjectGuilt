@@ -6,10 +6,10 @@ Last Verified: 2026-09-11
 
 ## Current Facts
 
-- Formal Suites: 7 C# owners。
-- Formal Cases: 56 public static bool Cases。
-- Formal Suite owners and case counts: `EnemyIntentTests` 5；`DeckPresetBootstrapTests` 11；`CardDeckManifestTests` 6；`FirstStrikeExecutionTests` 13；`BattlePlanningOrderSnapshotTests` 12；`BattleActionSlotOrderViewTests` 5；`BattleActionSlotPairedHoverTests` 4。
-- Formal Cases total only counts these seven suite owners under `Assets/Tests/Suites`; retained Legacy tests and compatibility wrappers are not counted again。
+- Formal Suites: 8 C# owners。
+- Formal Cases: 64 个逻辑 Case（按各 Suite 的 Case / Run 聚合项计数，不把 Run 方法重复计为 Case）。
+- Formal Suite owners and case counts: `EnemyIntentTests` 5；`DeckPresetBootstrapTests` 11；`CardDeckManifestTests` 6；`FirstStrikeExecutionTests` 13；`BattlePlanningOrderSnapshotTests` 12；`BattleActionSlotOrderViewTests` 5；`BattleActionSlotPairedHoverTests` 4；`CardCombatDiceTests` 8。
+- Formal Cases total only counts these eight suite owners under `Assets/Tests/Suites`; retained Legacy tests and compatibility wrappers are not counted again。
 - Shared C#: 6。
 - Legacy/Core C#: 34；Legacy Runner 还包含内嵌测试。
 - Active BattleTestMode: 110；当前有对应的 110 个 dispatch 分支。
@@ -26,6 +26,8 @@ Formal Suite != Unity Test Runner [Test]。目前是 public static bool Case own
 ## Actual Execution
 
 Mode103 → FullBattleIntegrationRegressionTests → EnemyIntent Formal Cases（其余集成检查仍在 Legacy）。
+
+Mode82 → BattleResolutionPlanTests → CardCombatDiceTests（原型新增 8 个规则 Case）。Mode83 的原型表现等待 Case 仍由原 retained protocol wrapper 消费。新增用例 Unity 运行 NOT RUN。
 Mode115 → BattleDeckHandGroupingTests → retained Mode114 wrapper → Cards/Bootstrap Cases → retained Mode109 wrapper → retained Mode89 wrapper → Execution Cases。
 
 SampleScene 是 Legacy runner host；所选 mode 可能随 local working tree 不同，不把本地 Inspector 选择写成正式基线。

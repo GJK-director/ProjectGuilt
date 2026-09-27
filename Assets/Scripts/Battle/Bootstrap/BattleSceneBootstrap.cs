@@ -192,6 +192,11 @@ public sealed class BattleSceneBootstrap : MonoBehaviour
             return false;
         }
 
+        if (formalPresentationTestHarness != null &&
+            formalPresentationTestHarness.HasPreparedScenarioFor(context.runtimeState) &&
+            formalPresentationTestHarness.Scenario == BattleFormalPresentationTestScenario.CombatDiceSplitPrototype)
+            return formalPresentationTestHarness.TryCreateCombatDiceIntents(nextTurnNumber, out intentQueue, out failureMessage);
+
         BattleDefinitionIntentQueueResult result =
             BattleDefinitionBootstrap.CreateIntentQueueForTurn(
                 context.runtimeState,

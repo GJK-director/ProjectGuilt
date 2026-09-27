@@ -17,6 +17,14 @@ Last Verified: 2026-09-11
 | WorldFollowProjectionDiagnostic | 需要在目标角色上人工挂载，并通过现有 Bind 绑定 Camera/anchor/renderer | 手工绘制、人工观察 | anchor 与视觉脚底投影偏差 | Runtime 诊断支持，不是 gameplay owner |
 | IntroStorySceneSetup | Editor 菜单 Validate Prologue 501；另有 Rebuild | 校验/重建工具，人工确认 | Story Host/Facade/Overlay 接线 | Editor 工具；Rebuild 会修改资源，需任务授权 |
 
+## Combat Dice Split Prototype v0.1
+
+仓库中的 BattleScene 测试 `Scenario` 为 `None`。其 `BattleSceneBootstrap` 对象已有 `BattleFormalPresentationTestHarness`：退出 Play，临时选择 `Scenario = CombatDiceSplitPrototype`，再 Play；首回合已安排测试卡，按 Space 开始（自动拼点关闭时再次 Space 投拼点骰）。后续回合将测试卡响应到唯一敌方普通攻击；退出后改回 `None` 即关闭，不要保存测试开关或给正式 Deck 加卡。
+
+检查胜利阶段零伤害，近战 / 原地射击两次命中，固定 HUD 分别显示 Roll，第一击镜头与受击位置保留，第二击短击退且射击镜头 / 火焰 / 震屏完整；验收失败 / 平手、首击致命、取消 / 重载、二级“骰子说明”和旧卡。完整步骤及风险见 [CombatDicePrototype](../Developer/Battle/CombatDicePrototype.md#unity-人工操作与验收)。本任务尚未执行 Unity Gate；`Mode82` 和 `Mode83` 新 Case 需在 SampleScene 运行，随后按影响回归旧卡 / Buff / 资源流程。
+
+碰撞修订额外检查：基础动作无刀光，黄色格挡火花位于武器接触处且不随敌人后退；0.05s Hit Stop / 轻震屏、0.2 世界单位弹开、0.15s 短停顿后才显示 Damage 1。该阶段不显示血 / 伤害数字，不扣血，不掷伤害骰，不触发 Hit。第一刀原地衔接；取消或退出时定点火花、暂停状态、震屏必须清理。再切换现有 `AttackVsGuardFullBlock` 人工入口，确认原防御特效位置、Hit Stop 与普通击退保持旧行为。Mode83 同时覆盖碰撞阶段零规则事件及碰撞中取消；视觉仍由人工验收。
+
 ## Safety and Acceptance
 
 文本/YAML 核验不代替 Editor compile、Missing Script、Play/视觉验证。运行哪种流程由修改影响决定；纯文档不需要启动 Unity。

@@ -29,7 +29,8 @@ public enum BattleFormalPresentationTestScenario
     AttackVsAttackAllyWin,
     AttackVsAttackEnemyWin,
     DualSlotFirstStrikeSequence,
-    OneSidedMeleeFreeAction
+    OneSidedMeleeFreeAction,
+    CombatDiceSplitPrototype
 }
 
 // 正式BattleScene的开发测试输入入口；只准备规则数据，不驱动执行或表现。
@@ -146,6 +147,14 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
     private bool hasPreparedScenario;
     private BattleRuntimeState preparedRuntimeState;
     private bool hasLoggedReleaseSkip;
+    private BattleCombatDicePrototypeSetup combatDiceSetup;
+
+    public bool TryCreateCombatDiceIntents(int turn, out List<BattleEnemyIntent> intents, out string failure)
+    {
+        intents = null;
+        failure = "骰子原型入口未启用。";
+        return combatDiceSetup != null && combatDiceSetup.CreateIntents(turn, out intents, out failure);
+    }
 
     public BattleFormalPresentationTestScenario Scenario => scenario;
 
@@ -184,6 +193,13 @@ public sealed class BattleFormalPresentationTestHarness : MonoBehaviour
 
         switch (scenario)
         {
+            case BattleFormalPresentationTestScenario.CombatDiceSplitPrototype:
+                combatDiceSetup = new BattleCombatDicePrototypeSetup();
+                if (!combatDiceSetup.Prepare(runtimeState, out failureMessage)) return false;
+                hasPreparedScenario = true;
+                preparedRuntimeState = runtimeState;
+                Debug.Log("[CombatDice Prototype] 已准备单人测试。首回合按 Space；后续回合将刀枪测试安排到敌方攻击槽。", this);
+                return true;
             case BattleFormalPresentationTestScenario.AttackTie:
             case BattleFormalPresentationTestScenario.AttackVsAttackAllyWin:
             case BattleFormalPresentationTestScenario.AttackVsAttackEnemyWin:

@@ -31,7 +31,9 @@ enum BattlePresentationContinuation
     AfterRollResult,
     AfterImpact,
     AfterActionComplete,
-    AfterExecutionComplete
+    AfterExecutionComplete,
+    AfterClashWin,
+    AfterDamageDieComplete
 }
 
 [System.Serializable]
@@ -654,6 +656,12 @@ public sealed class BattleExecutionRunner
             return Fail("表现推进失败：当前Presentation Request为空", out failureMessage);
         }
 
+        if (CurrentPresentationCompletion.IsCancelled)
+        {
+            CancelPendingPresentation("Presenter cancelled its request");
+            return Fail("表现请求已取消；未继续提交伤害。", out failureMessage);
+        }
+
         if (!CurrentPresentationCompletion.IsCompleted)
         {
             return true;
@@ -763,6 +771,19 @@ public sealed class BattleExecutionRunner
             return true;
         }
 
+        if (continuation == BattlePresentationContinuation.AfterClashWin)
+        {
+            CurrentResolutionPlan.clashWinPresentationCompleted = true;
+            Phase = BattleExecutionRunnerPhase.ResolutionPending;
+            return true;
+        }
+
+        if (continuation == BattlePresentationContinuation.AfterDamageDieComplete)
+        {
+            Phase = BattleExecutionRunnerPhase.ResolutionPending;
+            return true;
+        }
+
         if (continuation == BattlePresentationContinuation.AfterImpact)
         {
             return CommitOneResolutionStep(out failureMessage);
@@ -817,6 +838,13 @@ public sealed class BattleExecutionRunner
             return Fail("Resolution推进失败：ResolutionPlan为空", out failureMessage);
         }
 
+        if (CurrentResolutionPlan.requiresClashWinPresentation &&
+            !CurrentResolutionPlan.clashWinPresentationCompleted)
+        {
+            return BeginPresentation(BattlePresentationCue.ClashWin,
+                BattlePresentationContinuation.AfterClashWin, null, CurrentResolutionPlan.resultType);
+        }
+
         BattleImpact impact = CurrentResolutionPlan.GetNextPendingImpact();
         if (impact != null)
         {
@@ -848,6 +876,7 @@ public sealed class BattleExecutionRunner
                     (CurrentItem != null ? CurrentItem.order : 0)
                 );
             }
+            BattleResolver.PrepareDamageDie(impact);
             return BeginPresentation(
                 BattlePresentationCue.Impact,
                 BattlePresentationContinuation.AfterImpact,
@@ -907,6 +936,10 @@ public sealed class BattleExecutionRunner
 
         if (!resolutionCompleted)
         {
+            if (pendingImpact != null && pendingImpact.damageDie != null)
+                return BeginPresentation(BattlePresentationCue.DamageDieComplete,
+                    BattlePresentationContinuation.AfterDamageDieComplete, pendingImpact,
+                    CurrentResolutionPlan.resultType);
             Phase = BattleExecutionRunnerPhase.ResolutionPending;
             return true;
         }

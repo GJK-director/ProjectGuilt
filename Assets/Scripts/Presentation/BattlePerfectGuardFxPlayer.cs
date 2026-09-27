@@ -18,6 +18,37 @@ public sealed class BattlePerfectGuardFxPlayer : MonoBehaviour
         Func<bool> isPlaybackCurrent = null
     )
     {
+        return TrySpawnInternal(profile, target, attackDirectionSign, null,
+            out _, completion, isPlaybackCurrent);
+    }
+
+    // A collision stays at the captured contact point even while its character recoils.
+    // Ordinary guard callers retain the original target-relative placement.
+    public static bool TrySpawnAtWorldPosition(
+        BattleAttackVsGuardPresentationProfile profile,
+        BattleCharacterPresentationController target,
+        float attackDirectionSign,
+        Vector3 worldPosition,
+        out BattlePerfectGuardFxPlayer spawnedPlayer,
+        Action completion = null,
+        Func<bool> isPlaybackCurrent = null
+    )
+    {
+        return TrySpawnInternal(profile, target, attackDirectionSign, worldPosition,
+            out spawnedPlayer, completion, isPlaybackCurrent);
+    }
+
+    private static bool TrySpawnInternal(
+        BattleAttackVsGuardPresentationProfile profile,
+        BattleCharacterPresentationController target,
+        float attackDirectionSign,
+        Vector3? worldPosition,
+        out BattlePerfectGuardFxPlayer spawnedPlayer,
+        Action completion,
+        Func<bool> isPlaybackCurrent
+    )
+    {
+        spawnedPlayer = null;
         if (profile == null || target == null || !target.isActiveAndEnabled ||
             target.CharacterSpriteRenderer == null)
         {
@@ -34,12 +65,19 @@ public sealed class BattlePerfectGuardFxPlayer : MonoBehaviour
 
         float direction = attackDirectionSign >= 0f ? 1f : -1f;
         GameObject fxObject = new GameObject("PerfectGuardFx");
-        fxObject.transform.SetParent(target.transform, false);
-        fxObject.transform.localPosition = new Vector3(
-            -direction * profile.PerfectGuardFxHorizontalOffset,
-            profile.PerfectGuardFxVerticalOffset,
-            0f
-        );
+        if (worldPosition.HasValue)
+        {
+            fxObject.transform.position = worldPosition.Value;
+        }
+        else
+        {
+            fxObject.transform.SetParent(target.transform, false);
+            fxObject.transform.localPosition = new Vector3(
+                -direction * profile.PerfectGuardFxHorizontalOffset,
+                profile.PerfectGuardFxVerticalOffset,
+                0f
+            );
+        }
         fxObject.transform.localRotation = Quaternion.identity;
         fxObject.transform.localScale = Vector3.one * profile.PerfectGuardFxBaseScale;
 
@@ -57,6 +95,7 @@ public sealed class BattlePerfectGuardFxPlayer : MonoBehaviour
         player.fxRenderer = renderer;
         player.onFinished = completion;
         player.isPlaybackCurrent = isPlaybackCurrent;
+        spawnedPlayer = player;
         player.StartCoroutine(player.PlaySequence(profile));
         return true;
     }
@@ -95,6 +134,11 @@ public sealed class BattlePerfectGuardFxPlayer : MonoBehaviour
     }
 
     private void OnDisable()
+    {
+        Cancel();
+    }
+
+    public void Cancel()
     {
         StopAllCoroutines();
         Finish();

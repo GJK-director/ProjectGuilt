@@ -137,6 +137,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
     [SerializeField] private bool verboseLogging = false;
 
     private ActionPresentationContext activeContext;
+    private BattleCombatDicePrototypePresenter combatDicePresenter;
     private Coroutine activePresentationCoroutine;
     private BattleSpecialLongRangeDuelPresentationPlayer
         specialLongRangeDuelPresentationPlayer;
@@ -178,6 +179,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
 
     void OnDisable()
     {
+        combatDicePresenter?.Cancel();
         if (activePresentationCoroutine != null)
         {
             StopCoroutine(activePresentationCoroutine);
@@ -215,6 +217,13 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         BattlePresentationRouter.TryCreateRoute(request, out var route);
+        if (request.ResolutionPlan != null && request.ResolutionPlan.requiresClashWinPresentation &&
+            (request.Cue == BattlePresentationCue.ClashWin || request.Cue == BattlePresentationCue.Impact ||
+             request.Cue == BattlePresentationCue.DamageDieComplete || request.Cue == BattlePresentationCue.ActionComplete))
+        {
+            HandleCombatDicePresentation(request, completion, route);
+            return;
+        }
         switch (request.Cue)
         {
             case BattlePresentationCue.ActionBegin:
@@ -257,6 +266,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
                 : null;
         if (cancellingContext != null)
         {
+            combatDicePresenter?.Cancel();
             cancellingContext.Cancelled = true;
             ClearAttackVsAttackParallelBeginState(cancellingContext);
             CancelSpecialLongRangeDuelForContext(cancellingContext);
@@ -311,6 +321,25 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         }
 
         completion.TryCancel(request.RequestId);
+    }
+
+    private void HandleCombatDicePresentation(BattlePresentationRequest request,
+        BattlePresentationCompletion completion, BattlePresentationRoute route)
+    {
+        ActionPresentationContext context = EnsureContext(request);
+        RefreshRequestState(context, request);
+        context.Route = route;
+        activePresentationRequestId = request.RequestId;
+        if (combatDicePresenter == null)
+            combatDicePresenter = gameObject.AddComponent<BattleCombatDicePrototypePresenter>();
+        BattleResolutionPlan plan = request.ResolutionPlan;
+        System.Action finished = request.Cue == BattlePresentationCue.ActionComplete
+            ? () => CompleteActionWithCameraTail(request, completion, context)
+            : (System.Action)null;
+        combatDicePresenter.Present(request, completion, attackVsAttackPresentationPlayer,
+            attackVsGuardPresentationPlayer != null ? attackVsGuardPresentationPlayer.PresentationProfile : null,
+            ResolveBattleCameraDirector(), unitViewSpawner?.GetHandle(plan.attacker),
+            unitViewSpawner?.GetHandle(plan.target), finished);
     }
 
     private void HandleActionBegin(
@@ -2931,6 +2960,7 @@ public sealed class BattleSceneExecutionPresenter : MonoBehaviour,
         int finalHp
     )
     {
+        combatDicePresenter?.ObserveImpact(impact);
         if (impact == null || impact.target == null || unitViewSpawner == null)
         {
             return;

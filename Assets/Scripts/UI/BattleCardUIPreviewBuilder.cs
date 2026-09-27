@@ -74,6 +74,18 @@ public static class BattleCardUIPreviewBuilder
         data.descriptionText = cardData.description ?? "";
         data.keywords = cardData.keywords;
 
+        if (CardCombatDiceRules.HasDice(cardData))
+        {
+            string diceDescription = CardCombatDiceRules.Describe(cardData);
+            data.descriptionText = diceDescription + "\n骰子说明";
+            data.keywords = new[] { new CardKeywordData
+            {
+                keywordID = "PrototypeDice", displayName = "骰子说明",
+                tooltipText = cardData.cardName + "\n" + diceDescription +
+                    "\n拼点胜利后逐颗投伤害骰，各自命中一次。"
+            } };
+        }
+
         return data;
     }
 
@@ -123,6 +135,11 @@ public static class BattleCardUIPreviewBuilder
 
         int minPoint = cardData.minPoint;
         int maxPoint = cardData.maxPoint;
+        if (CardCombatDiceRules.HasDice(cardData))
+        {
+            minPoint = cardData.clashDie.min;
+            maxPoint = cardData.clashDie.max;
+        }
 
         int resourcePointModifier = GetResourcePointModifier(owner, cardData, ref minPoint, ref maxPoint);
         int buffModifier = GetCurrentBuffPointModifier(owner, cardData);

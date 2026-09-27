@@ -63,6 +63,9 @@ public sealed class BattleImpact
     public CharacterData target;
     public BattleCardState sourceCardState;
     public int basePower;
+    public DamageDieData damageDie;
+    public bool damageDieRolled;
+    public int damageDieRoll;
     public int clashPoint;
     public string clashResult;
     public bool allowsDamage;
@@ -153,6 +156,8 @@ public sealed class BattleResolutionPlan
 
     public readonly List<BattleImpact> impacts = new List<BattleImpact>();
     public BattleImpact pendingDefeatImpact;
+    public bool requiresClashWinPresentation;
+    public bool clashWinPresentationCompleted;
 
     public BattleResolutionPlanState State { get; internal set; }
     public BattleResolveResult CompletedResult { get; internal set; }

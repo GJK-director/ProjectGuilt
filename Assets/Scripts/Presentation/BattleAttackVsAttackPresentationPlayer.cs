@@ -68,6 +68,8 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
     private float attackDirectionSign;
     private float tieDirectionSign;
     private bool resolvedWinnerUsesCloseRangeShoot;
+    private float resolvedKnockbackScale = 1f;
+    private bool resolvedUsesShootHitFx;
 
     void OnDisable()
     {
@@ -282,6 +284,17 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         );
     }
 
+    public bool TryPlayDamageDie(
+        BattleCharacterPresentationController attacker,
+        BattleCharacterPresentationController target,
+        Transform targetRoot, float direction, bool shoot, float knockbackScale,
+        Action cameraImpact, Action commitPermission, Action finished)
+    {
+        return TryStartResolvedWinnerAttack(attacker, target, targetRoot, direction,
+            shoot, cameraImpact, commitPermission, finished, nameof(TryPlayDamageDie),
+            knockbackScale, shoot);
+    }
+
     private bool TryStartResolvedWinnerAttack(
         BattleCharacterPresentationController winnerController,
         BattleCharacterPresentationController loserController,
@@ -291,7 +304,9 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         Action trueVisualImpactCallback,
         Action visualImpactCallback,
         Action finishedCallback,
-        string requestName
+        string requestName,
+        float knockbackScale = 1f,
+        bool useShootHitFx = false
     )
     {
         if (!ValidatePresentationProfile(requestName))
@@ -319,6 +334,8 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
         loserWorldRoot = loserRoot;
         attackDirectionSign = directionSign >= 0f ? 1f : -1f;
         resolvedWinnerUsesCloseRangeShoot = useCloseRangeShoot;
+        resolvedKnockbackScale = Mathf.Max(0f, knockbackScale);
+        resolvedUsesShootHitFx = useShootHitFx;
         onTrueVisualImpact = trueVisualImpactCallback;
         onVisualImpact = visualImpactCallback;
         onFinished = finishedCallback;
@@ -792,7 +809,9 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             loser.SetHit();
             BattleNormalHitFxPlayer.TrySpawn(
                 presentationProfile.NormalHitProfile,
-                presentationProfile.NormalHitProfile.MeleeHitFxSprite,
+                resolvedUsesShootHitFx
+                    ? presentationProfile.NormalHitProfile.ShootHitFxSprite
+                    : presentationProfile.NormalHitProfile.MeleeHitFxSprite,
                 loser,
                 loserWorldRoot,
                 attackDirectionSign
@@ -827,7 +846,10 @@ public sealed class BattleAttackVsAttackPresentationPlayer : MonoBehaviour
             yield return loser.PlaySustainedHitReaction(
                 loserWorldRoot,
                 attackDirectionSign,
-                presentationProfile.NormalHitProfile
+                presentationProfile.NormalHitProfile,
+                presentationProfile.NormalHitProfile.FollowKnockbackDistance,
+                true,
+                resolvedKnockbackScale
             );
         }
 

@@ -621,7 +621,8 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
         float recoilDirectionSign,
         BattleHitPresentationProfile profile,
         float followKnockbackDistance,
-        bool applyHitTint
+        bool applyHitTint,
+        float distanceScale = 1f
     )
     {
         SetHit();
@@ -639,9 +640,9 @@ public sealed class BattleCharacterPresentationController : MonoBehaviour
 
         float direction = recoilDirectionSign >= 0f ? 1f : -1f;
         float startX = worldRoot.position.x;
-        float burstTargetX = startX + direction * profile.ImpactBurstDistance;
+        float burstTargetX = startX + direction * profile.ImpactBurstDistance * Mathf.Max(0f, distanceScale);
         float finalTargetX = burstTargetX + direction *
-            Mathf.Max(0f, followKnockbackDistance);
+            Mathf.Max(0f, followKnockbackDistance) * Mathf.Max(0f, distanceScale);
         float impactBurstDuration = profile.ImpactBurstDuration;
         float followKnockbackDuration = profile.FollowKnockbackDuration;
         float activeHitDuration = impactBurstDuration + followKnockbackDuration;
